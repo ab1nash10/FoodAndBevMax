@@ -365,6 +365,10 @@ export class UsersService {
       await tx.user.update({
         data: {
           deletedAt: new Date(),
+          // Free the login identifiers for reuse: mobile and email are unique, so a deleted user
+          // kept blocking them for good. The originals stay in the audit log's oldValue below.
+          email: null,
+          mobile: `deleted:${id}`,
           status: UserStatus.DISABLED,
           updatedBy: context.actorId,
         },
@@ -915,7 +919,22 @@ export class UsersService {
 
   private handlePrismaError(error: unknown, entityName: string): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
+      // Name the clashing field: "User already exists" read as though the save itself were a
+      // duplicate, when the real cause was a number or email held by another (often disabled) user.
+      const target = [error.meta?.target].flat().join(' ');
+      const field = /mobile/i.test(target)
+        ? 'mobile number'
+        : /email/i.test(target)
+          ? 'email'
+          : /employee_?code/i.test(target)
+            ? 'employee code'
+            : undefined;
+
+      throw new ConflictException(
+        field
+          ? `This ${field} is already assigned to another user, including disabled users`
+          : `${entityName} already exists`,
+      );
     }
 
     throw error;
