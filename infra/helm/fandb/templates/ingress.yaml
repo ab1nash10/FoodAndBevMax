@@ -1,0 +1,108 @@
+{{- if .Values.ingress.enabled }}
+{{- /*
+Routing for the whole platform, as two Ingress objects sharing one ALB.
+
+Two rather than one because the ALB health-check path is per-Ingress, and the backends and
+the portal do not agree on it: Nest mounts its controllers under <basePath>/api/v1, so a
+service answers at /fandb/api/v1/health, while the portal's route handler is at
+/fandb/api/health. A single Ingress would health-check one of them at the other's path and
+mark those targets unhealthy.
+
+They join the same ALB through group.name; group.order decides which is evaluated first, so
+the API rules win over the portal's catch-all.
+
+An ALB cannot strip a prefix the way an NGINX ingress can, so the pods serve under basePath
+themselves and these rules match it.
+*/ -}}
+{{- $base := trimSuffix "/" .Values.basePath -}}
+{{- $listenPorts := `[{"HTTP": 80}, {"HTTPS": 443}]` -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fandb-api
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.scheme }}
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName }}
+    alb.ingress.kubernetes.io/group.order: {{ .Values.ingress.groupOrder | quote }}
+    alb.ingress.kubernetes.io/listen-ports: {{ $listenPorts | quote }}
+    alb.ingress.kubernetes.io/healthcheck-path: {{ $base }}/api/v1/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    {{- if .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    {{- if .Values.ingress.sslRedirect }}
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    {{- end }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    {{- if .Values.ingress.host }}
+    - host: {{ .Values.ingress.host }}
+      http:
+    {{- else }}
+    - http:
+    {{- end }}
+        paths:
+          {{- range $svc := .Values.services }}
+          {{- range $svc.apiPaths }}
+          - path: {{ $base }}{{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $svc.name }}
+                port:
+                  number: 80
+          {{- end }}
+          {{- end }}
+{{- if .Values.portal.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fandb-portal
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.scheme }}
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName }}
+    # Evaluated after the API rules, so it only catches what they did not match.
+    alb.ingress.kubernetes.io/group.order: {{ add1 (.Values.ingress.groupOrder | int) | quote }}
+    alb.ingress.kubernetes.io/listen-ports: {{ $listenPorts | quote }}
+    alb.ingress.kubernetes.io/healthcheck-path: {{ $base }}/api/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    {{- if .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    {{- if .Values.ingress.sslRedirect }}
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    {{- end }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    {{- if .Values.ingress.host }}
+    - host: {{ .Values.ingress.host }}
+      http:
+    {{- else }}
+    - http:
+    {{- end }}
+        paths:
+          # The UI, its own route handlers at /api/health and /api/uploads/*, and its assets.
+          - path: {{ $base }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.portal.name }}
+                port:
+                  number: 80
+{{- end }}
+{{- end }}

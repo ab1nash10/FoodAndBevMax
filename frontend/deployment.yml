@@ -1,0 +1,163 @@
+# NOT THE DEPLOYED PATH. AAHAR is deployed by the Helm chart in infra/helm/fandb, as the
+# release `fandb` in namespace `dev`. That is what the Jenkins pipeline runs and what the
+# cluster runs. This file is the raw-manifest alternative, kept for reference only.
+#
+# Do not apply it alongside the chart: both create an ingress in the ALB group
+# `dev-external`, and the controller rejects the conflict. This file also deploys into
+# namespace `aahar`, so applying it gives you a second, half-configured copy of everything.
+#
+# Frontend workloads:
+#   kubectl apply -f frontend/deployment.yml
+#
+# Depends on the shared resources in infra/k8s (namespace and config), which are applied
+# once per cluster rather than by either pipeline.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-portal
+  namespace: aahar
+  labels:
+    app.kubernetes.io/name: admin-portal
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: aahar
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: admin-portal
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: admin-portal
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: aahar
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Spread replicas across nodes so a single node failure cannot take the portal down.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: admin-portal
+      containers:
+        - name: admin-portal
+          # Replace :latest with the commit SHA the pipeline built; a rollout cannot be
+          # rolled back safely against a moving tag.
+          image: 013929206983.dkr.ecr.ap-south-1.amazonaws.com/max-ai-repo:admin-portal-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: PORT
+              value: '3000'
+            - name: NODE_ENV
+              value: 'production'
+            - name: HOSTNAME
+              value: '0.0.0.0'
+          # Liveness is a socket check on purpose: the portal renders independently of the
+          # APIs, so a backend outage must not restart these pods.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /fandb/api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ['ALL']
+          # Uploads land on the pod filesystem today. The volume makes that visible rather
+          # than hiding writes in the image layer; they are still lost on restart and are
+          # invisible to other replicas until the routes move to S3.
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/frontend/apps/admin-portal/public/uploads
+      volumes:
+        - name: uploads
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-portal
+  namespace: aahar
+  labels:
+    app.kubernetes.io/name: admin-portal
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: aahar
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: admin-portal
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin-portal
+  namespace: aahar
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: admin-portal
+---
+# Requires metrics-server. CPU only: Node holds heap until GC, so memory-based scaling
+# tends to ratchet up and never scale back down.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: admin-portal
+  namespace: aahar
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: admin-portal
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

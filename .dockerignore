@@ -1,0 +1,23 @@
+.git
+coverage
+node_modules
+pnpm-debug.log
+
+# Nested build output must be excluded explicitly. A bare `dist` matches only a top-level
+# directory, so `backend/packages/*/dist` from a local build used to leak into the image and
+# mask the fact that the Dockerfile never built the workspace packages.
+**/.next
+**/.turbo
+**/dist
+**/node_modules
+**/*.tsbuildinfo
+**/src/generated
+
+# Developer .env files must never reach a build. Next loads them at build time and inlines
+# NEXT_PUBLIC_* into the bundle, so a local .env would silently bake localhost API URLs
+# into a production image. Deployed values come from the --build-arg flags.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example

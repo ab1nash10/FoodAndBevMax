@@ -1,0 +1,54 @@
+# CodeBuild spec for the frontend pipeline.
+#
+# Wire this to a CodePipeline whose source stage filters on `frontend/**` so a backend-only
+# commit does not rebuild the portal.
+#
+# Required environment variables on the CodeBuild project:
+#   AWS_ACCOUNT_ID, AWS_DEFAULT_REGION, ECR_REPOSITORY (defaults to the shared max-ai-repo),
+#   EKS_CLUSTER_NAME, and the NEXT_PUBLIC_* values for the target environment.
+#
+# The build role needs ECR push and `eks:DescribeCluster`, and must be mapped in the
+# cluster's aws-auth so kubectl can apply.
+version: 0.2
+
+env:
+  variables:
+    NODE_ENV: production
+  exported-variables:
+    - IMAGE_TAG
+
+phases:
+  pre_build:
+    commands:
+      # Immutable tag: the commit SHA, never `latest`, so a rollback is a real rollback.
+      - IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION:0:12}"
+      - REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      # One shared repository holds every image; the app lives in the tag prefix.
+      - IMAGE="${REGISTRY}/${ECR_REPOSITORY:-max-ai-repo}:admin-portal"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+
+  build:
+    commands:
+      # Quality gates run before the image is built, so a failing check cannot produce an
+      # artifact that is deployable.
+      - corepack enable
+      - pnpm install --frozen-lockfile
+      - pnpm --filter @aahar/admin-portal... typecheck
+      - pnpm --filter @aahar/admin-portal... lint
+      - pnpm --filter @aahar/admin-portal... test
+      - |
+        docker build -f frontend/Dockerfile \
+          --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL" \
+          --build-arg NEXT_PUBLIC_AUTH_API_URL="$NEXT_PUBLIC_AUTH_API_URL" \
+          --build-arg NEXT_PUBLIC_USER_API_URL="$NEXT_PUBLIC_USER_API_URL" \
+          --build-arg NEXT_PUBLIC_ORGANIZATION_API_URL="$NEXT_PUBLIC_ORGANIZATION_API_URL" \
+          -t "${IMAGE}-${IMAGE_TAG}" .
+      - docker push "${IMAGE}-${IMAGE_TAG}"
+
+  post_build:
+    commands:
+      - aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_DEFAULT_REGION"
+      - kubectl apply -f frontend/deployment.yml
+      # Pin the freshly built tag rather than relying on the manifest's placeholder.
+      - kubectl -n aahar set image deployment/admin-portal "admin-portal=${IMAGE}-${IMAGE_TAG}"
+      - kubectl -n aahar rollout status deployment/admin-portal --timeout=300s

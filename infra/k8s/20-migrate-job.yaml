@@ -1,0 +1,53 @@
+# Applies pending Prisma migrations. All three services share one schema, so this must
+# complete before any service rollout, and only one copy may run at a time.
+#
+#   kubectl -n aahar apply -f 20-migrate-job.yaml
+#   kubectl -n aahar wait --for=condition=complete job/aahar-migrate --timeout=300s
+#
+# The job name is fixed, so delete the previous one before re-running:
+#   kubectl -n aahar delete job aahar-migrate --ignore-not-found
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aahar-migrate
+  namespace: aahar
+  labels:
+    app.kubernetes.io/part-of: aahar
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: 2
+  # Keep finished jobs briefly so the logs remain reachable after a deploy.
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: aahar
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: migrate
+          image: 013929206983.dkr.ecr.ap-south-1.amazonaws.com/max-ai-repo:migrate-latest
+          imagePullPolicy: IfNotPresent
+          command: ['pnpm', 'db:deploy']
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: aahar-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ['ALL']

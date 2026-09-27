@@ -1,0 +1,91 @@
+# One-time bootstrap. Run this once per environment, after the migration Job and before
+# anyone tries to sign in.
+#
+# Migrations create the schema but no data, so without this there are no permissions, no
+# roles and no users - nothing to log in as, and `admin:password` has no account to target.
+#
+# It is deliberately NOT part of the backend pipeline. The seed upserts and clears
+# deletedAt, so running it on every deploy would resurrect master data an administrator had
+# removed. Apply it by hand:
+#
+#   kubectl -n aahar apply -f infra/k8s/21-seed-job.yaml
+#   kubectl -n aahar wait --for=condition=complete job/aahar-seed --timeout=300s
+#
+# Afterwards the Super Admin account exists but has no password. Give it one:
+#
+#   kubectl -n aahar run admin-password --rm -it --restart=Never \
+#     --image=<registry>/max-ai-repo:migrate-<tag> \
+#     --env="DATABASE_URL=..." --env="ADMIN_EMAIL=aahar@admin.local" \
+#     --env="ADMIN_PASSWORD=..." -- pnpm admin:password
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aahar-seed
+  namespace: aahar
+  labels:
+    app.kubernetes.io/part-of: aahar
+    app.kubernetes.io/component: bootstrap
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: aahar
+        app.kubernetes.io/component: bootstrap
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: 013929206983.dkr.ecr.ap-south-1.amazonaws.com/max-ai-repo:migrate-latest
+          imagePullPolicy: IfNotPresent
+          # Seed the catalogue, then give the Super Admin a password if one was supplied.
+          # The password comes from the Secret (i.e. AWS Secrets Manager), never from the
+          # repository, so it differs per environment. Leave ADMIN_PASSWORD unset and the
+          # account is created without one, to be set later with `pnpm admin:password`.
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              pnpm db:seed
+              if [ -n "$ADMIN_PASSWORD" ]; then
+                pnpm admin:password
+              else
+                echo "ADMIN_PASSWORD not set: the Super Admin has no password yet."
+                echo "Set one with: pnpm admin:password"
+              fi
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: aahar-secrets
+                  key: DATABASE_URL
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: aahar-secrets
+                  key: ADMIN_EMAIL
+                  optional: true
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aahar-secrets
+                  key: ADMIN_PASSWORD
+                  optional: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ['ALL']

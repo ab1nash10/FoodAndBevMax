@@ -1,0 +1,136 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aahar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aahar_password}
+      POSTGRES_USER: ${POSTGRES_USER:-aahar}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  auth-service:
+    build:
+      args:
+        SERVICE: auth-service
+      context: ../..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://aahar:aahar_password@postgres:5432/aahar?schema=public}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:4001,http://localhost:4002,http://localhost:4003}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-replace-with-a-strong-access-secret-before-deploying}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-30m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-replace-with-a-strong-refresh-secret-before-deploying}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-7d}
+      NODE_ENV: production
+      OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-300}
+      PORT: 4001
+      REDIS_URL: redis://redis:6379
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+    ports:
+      - '${AUTH_SERVICE_PORT:-4001}:4001'
+    restart: unless-stopped
+
+  user-service:
+    build:
+      args:
+        SERVICE: user-service
+      context: ../..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://aahar:aahar_password@postgres:5432/aahar?schema=public}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:4001,http://localhost:4002,http://localhost:4003}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-replace-with-a-strong-access-secret-before-deploying}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-30m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-replace-with-a-strong-refresh-secret-before-deploying}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-7d}
+      NODE_ENV: production
+      PORT: 4002
+      REDIS_URL: redis://redis:6379
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+    ports:
+      - '${USER_SERVICE_PORT:-4002}:4002'
+    restart: unless-stopped
+
+  organization-service:
+    build:
+      args:
+        SERVICE: organization-service
+      context: ../..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://aahar:aahar_password@postgres:5432/aahar?schema=public}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:4001,http://localhost:4002,http://localhost:4003}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-replace-with-a-strong-access-secret-before-deploying}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-30m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-replace-with-a-strong-refresh-secret-before-deploying}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-7d}
+      NODE_ENV: production
+      PORT: 4003
+      REDIS_URL: redis://redis:6379
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+    ports:
+      - '${ORGANIZATION_SERVICE_PORT:-4003}:4003'
+    restart: unless-stopped
+
+  admin-portal:
+    build:
+      context: ../..
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      auth-service:
+        condition: service_started
+      organization-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4001/api/v1}
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - '${ADMIN_PORTAL_PORT:-3000}:3000'
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

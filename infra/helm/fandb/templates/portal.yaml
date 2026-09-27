@@ -1,0 +1,99 @@
+{{- if .Values.portal.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.portal.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.portal.name }}
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: {{ .Values.portal.replicas | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.portal.name }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.maxUnavailable }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.portal.name }}
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: fandb
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+{{ toYaml .Values.securityContext.pod | indent 8 }}
+      containers:
+        - name: {{ .Values.portal.name }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.portal.tagPrefix }}-{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.portal.port }}
+          # The portal takes no ConfigMap or Secret: it calls the APIs from the browser, and
+          # its NEXT_PUBLIC_* values are inlined into the bundle at build time.
+          env:
+            - name: PORT
+              value: {{ .Values.portal.port | quote }}
+            - name: NODE_ENV
+              value: production
+            - name: HOSTNAME
+              value: 0.0.0.0
+          # Liveness is a socket check: the portal renders independently of the APIs, so a
+          # backend outage must not restart these pods.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ printf "%s/api/health" (trimSuffix "/" .Values.basePath) }}
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.securityContext.container | indent 12 }}
+          # Uploads land on the pod filesystem today; ephemeral per replica until the
+          # routes move to S3.
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/frontend/apps/admin-portal/public/uploads
+      volumes:
+        - name: uploads
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.portal.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.portal.name }}
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: fandb
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ .Values.portal.name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}

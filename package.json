@@ -1,0 +1,65 @@
+{
+  "name": "aahar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AAHAR production monorepo for web, services, and shared packages.",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "admin:password": "pnpm --filter @aahar/auth admin:password",
+    "build": "turbo build",
+    "clean": "turbo clean",
+    "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio --schema prisma/schema.prisma",
+    "dev": "turbo dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "turbo lint",
+    "predev": "prisma migrate deploy --schema prisma/schema.prisma && prisma generate --schema prisma/schema.prisma",
+    "prepare": "husky",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck"
+  },
+  "lint-staged": {
+    "*.{css,json,md,yaml,yml}": "prettier --write",
+    "*.{js,cjs,mjs,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@prisma/client": "^6.8.2"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@eslint/js": "^9.28.0",
+    "@next/eslint-plugin-next": "^15.5.26",
+    "@types/node": "^22.15.29",
+    "eslint": "^9.28.0",
+    "eslint-config-prettier": "^10.1.5",
+    "globals": "^16.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.0",
+    "prettier": "^3.5.3",
+    "prisma": "^6.8.2",
+    "turbo": "^2.5.4",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.33.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser@2": "^2.3.0",
+      "js-yaml@4": "^4.3.2",
+      "multer@2": "^2.3.0",
+      "qs@6": "^6.16.0"
+    }
+  }
+}

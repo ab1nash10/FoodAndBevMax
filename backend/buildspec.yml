@@ -1,0 +1,75 @@
+# CodeBuild spec for the backend pipeline.
+#
+# Wire this to a CodePipeline whose source stage filters on `backend/**` and `prisma/**` so
+# a frontend-only commit does not rebuild the services. prisma/ is included deliberately:
+# the services compile against the generated client and share one schema.
+#
+# Required environment variables on the CodeBuild project:
+#   AWS_ACCOUNT_ID, AWS_DEFAULT_REGION, EKS_CLUSTER_NAME
+#
+# The build role needs ECR push and `eks:DescribeCluster`, and must be mapped in the
+# cluster's aws-auth so kubectl can apply.
+version: 0.2
+
+env:
+  variables:
+    NODE_ENV: production
+  exported-variables:
+    - IMAGE_TAG
+
+phases:
+  pre_build:
+    commands:
+      - IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION:0:12}"
+      - REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+
+  build:
+    commands:
+      # Quality gates first: a failing check must not produce a deployable image.
+      - corepack enable
+      - pnpm install --frozen-lockfile
+      - pnpm db:generate
+      - pnpm --filter "./backend/**" typecheck
+      - pnpm --filter "./backend/**" lint
+      - pnpm --filter "./backend/**" test
+
+      # One image per service, each pruned to its own dependency subtree.
+      - |
+        for SERVICE in auth-service user-service organization-service; do
+          echo "building $SERVICE"
+          docker build -f backend/Dockerfile \
+            --target runner \
+            --build-arg SERVICE="$SERVICE" \
+            -t "${REGISTRY}/max-ai-repo:${SERVICE}-${IMAGE_TAG}" .
+          docker push "${REGISTRY}/max-ai-repo:${SERVICE}-${IMAGE_TAG}"
+        done
+
+      # Migration/admin tooling image, used by the Job below and by `pnpm admin:password`.
+      - |
+        docker build -f backend/Dockerfile \
+          --target migrate \
+          --build-arg SERVICE=user-service \
+          -t "${REGISTRY}/max-ai-repo:migrate-${IMAGE_TAG}" .
+      - docker push "${REGISTRY}/max-ai-repo:migrate-${IMAGE_TAG}"
+
+  post_build:
+    commands:
+      - aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_DEFAULT_REGION"
+
+      # Migrations must complete before any service starts: all three share one schema.
+      - kubectl -n aahar delete job aahar-migrate --ignore-not-found
+      - |
+        sed "s|max-ai-repo:migrate-latest|max-ai-repo:migrate-${IMAGE_TAG}|" infra/k8s/20-migrate-job.yaml \
+          | kubectl apply -f -
+      - kubectl -n aahar wait --for=condition=complete job/aahar-migrate --timeout=600s
+      - kubectl apply -f backend/deployment.yml
+      - |
+        for SERVICE in auth-service user-service organization-service; do
+          kubectl -n aahar set image "deployment/${SERVICE}" \
+            "${SERVICE}=${REGISTRY}/max-ai-repo:${SERVICE}-${IMAGE_TAG}"
+        done
+      - |
+        for SERVICE in auth-service user-service organization-service; do
+          kubectl -n aahar rollout status "deployment/${SERVICE}" --timeout=300s
+        done

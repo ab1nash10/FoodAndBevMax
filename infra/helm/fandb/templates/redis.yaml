@@ -1,0 +1,84 @@
+{{- if .Values.redis.enabled }}
+{{- /*
+Redis backs OTP storage and refresh-token revocation. The services validate REDIS_URL at
+startup and refuse to boot without it, so a namespace with no Redis cannot run the platform
+at all - this is here so a dev environment works without provisioning ElastiCache first.
+
+ponytail: one replica, memory only, no auth and no persistence. OTPs expire in minutes and
+refresh-token revocation is a denylist, so losing it on restart signs people out rather than
+corrupting anything. Use ElastiCache in production: set redis.enabled=false and put the real
+endpoint in config.secrets.REDIS_URL.
+*/ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.redis.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.redis.name }}
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.redis.name }}
+  strategy:
+    # Two Redis pods would split the OTP store between them, so the old one goes first.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.redis.name }}
+        app.kubernetes.io/component: cache
+        app.kubernetes.io/part-of: fandb
+    spec:
+      securityContext:
+{{ toYaml .Values.securityContext.pod | indent 8 }}
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          imagePullPolicy: IfNotPresent
+          args: ['--save', '', '--appendonly', 'no']
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.port }}
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            exec:
+              command: ['redis-cli', 'ping']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+{{ toYaml .Values.securityContext.container | indent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.redis.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.redis.name }}
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: fandb
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ .Values.redis.name }}
+  ports:
+    - name: redis
+      port: {{ .Values.redis.port }}
+      targetPort: redis
+{{- end }}

@@ -1,0 +1,31 @@
+# Non-secret configuration only. Anything credential-like belongs in the Secret,
+# which is populated from AWS Secrets Manager rather than from this repository.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aahar-config
+  namespace: aahar
+  labels:
+    app.kubernetes.io/part-of: aahar
+data:
+  NODE_ENV: 'production'
+
+  # Routing prefix the platform is served under. Must match the ingress paths and the
+  # portal's NEXT_PUBLIC_BASE_PATH build arg.
+  BASE_PATH: '/fandb'
+  LOG_LEVEL: 'info'
+
+  # Access tokens are short-lived because permissions are resolved per request;
+  # refresh tokens carry the session length.
+  JWT_ACCESS_TOKEN_TTL: '30m'
+  JWT_REFRESH_TOKEN_TTL: '7d'
+
+  OTP_TTL_SECONDS: '300'
+
+  # Per-instance limits. With several replicas the effective limit is this value
+  # multiplied by the replica count until the throttler is moved to Redis storage.
+  THROTTLE_TTL: '60000'
+  THROTTLE_LIMIT: '100'
+
+  # Browser origins allowed to call the APIs. Replace with the real hostname.
+  CORS_ORIGINS: 'https://k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com'

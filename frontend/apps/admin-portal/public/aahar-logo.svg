@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="72" viewBox="0 0 240 72" role="img" aria-labelledby="title desc">
+  <title id="title">AAHAR logo placeholder</title>
+  <desc id="desc">Food and cafeteria management platform logo placeholder.</desc>
+  <rect width="240" height="72" rx="18" fill="#0B5CAD"/>
+  <circle cx="36" cy="36" r="18" fill="#ECFDF5"/>
+  <path d="M30 28h12M30 34h12M32 40h8M27 47h18" stroke="#0F766E" stroke-width="4" stroke-linecap="round"/>
+  <text x="66" y="34" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">AAHAR</text>
+  <text x="66" y="52" fill="#ECFDF5" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="500">Food &amp; Cafeteria Management</text>
+</svg>
