@@ -3,20 +3,17 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AccessRole, AccessUser, AccessUserInput } from '@aahar/api-client';
-import { Loader2, MapPin, Upload, X } from 'lucide-react';
-import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { Loader2, MapPin, X } from 'lucide-react';
+import { useState } from 'react';
 import { LocationPickerDialog } from '@/components/access/location-picker-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel, Select } from '@/components/ui';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
-import { withBasePath } from '@/lib/base-path';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
 
 interface FormValues {
-  avatarUrl: string;
   designation: string;
   email: string;
   employeeCode: string;
@@ -29,7 +26,6 @@ interface FormValues {
 
 function toFormValues(user: AccessUser | null): FormValues {
   return {
-    avatarUrl: user?.avatarUrl ?? '',
     designation: user?.designation ?? '',
     email: user?.email ?? '',
     employeeCode: user?.employeeCode ?? '',
@@ -39,21 +35,6 @@ function toFormValues(user: AccessUser | null): FormValues {
     password: '',
     roleId: user?.roles[0]?.id ?? '',
   };
-}
-
-async function uploadAvatar(file: File): Promise<string> {
-  const body = new FormData();
-  body.append('file', file);
-
-  // withBasePath: Next's basePath does not apply to a raw fetch.
-  const response = await fetch(withBasePath('/api/uploads/avatars'), { body, method: 'POST' });
-  const payload = (await response.json()) as { message?: string; url?: string };
-
-  if (!response.ok || !payload.url) {
-    throw new Error(payload.message ?? 'The avatar could not be uploaded.');
-  }
-
-  return payload.url;
 }
 
 function Toggle({
@@ -89,8 +70,6 @@ export function UserDialog({
     () => user?.hospitals.map((hospital) => hospital.id) ?? [],
   );
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
@@ -140,21 +119,6 @@ export function UserDialog({
     );
   };
 
-  async function onAvatarPicked(file: File) {
-    setIsUploading(true);
-    try {
-      update('avatarUrl', await uploadAvatar(file));
-    } catch (error) {
-      showToast({
-        description: error instanceof Error ? error.message : 'Upload failed.',
-        title: 'Avatar was not uploaded',
-        variant: 'error',
-      });
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
   function submit() {
     if (
       !values.name.trim() ||
@@ -201,8 +165,9 @@ export function UserDialog({
       return;
     }
 
+    // No avatarUrl: the field was removed from this dialog, and leaving it out means an edit
+    // keeps whatever avatar a user already has.
     const payload: AccessUserInput = {
-      avatarUrl: values.avatarUrl || undefined,
       designation: values.designation.trim() || undefined,
       email: values.email.trim().toLowerCase(),
       employeeCode: values.employeeCode.trim(),
@@ -242,54 +207,6 @@ export function UserDialog({
           </div>
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-            <Field label="Avatar" name="avatar">
-              <div className="flex items-center gap-3">
-                {values.avatarUrl ? (
-                  <Image
-                    alt=""
-                    className="h-12 w-12 rounded-full object-cover"
-                    height={48}
-                    src={withBasePath(values.avatarUrl)}
-                    width={48}
-                  />
-                ) : (
-                  <span className="grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800">
-                    <Upload className="h-4 w-4" />
-                  </span>
-                )}
-                <input
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void onAvatarPicked(file);
-                  }}
-                  ref={fileRef}
-                  type="file"
-                />
-                <Button
-                  disabled={isUploading}
-                  onClick={() => fileRef.current?.click()}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Choose
-                </Button>
-                {values.avatarUrl ? (
-                  <Button
-                    onClick={() => update('avatarUrl', '')}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    Remove
-                  </Button>
-                ) : null}
-              </div>
-            </Field>
-
             <Field label="Name" name="name">
               <Input
                 id="name"
