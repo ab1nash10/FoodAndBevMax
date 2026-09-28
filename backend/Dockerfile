@@ -3,7 +3,12 @@
 # Build from the repository root so the workspace is visible:
 #   docker build -f backend/Dockerfile --build-arg SERVICE=user-service -t aahar-user-service .
 #
-# SERVICE is one of: auth-service | user-service | organization-service
+# SERVICE is one of: auth-service | user-service | organization-service | all
+#
+# `all` bundles the three services into one image whose entrypoint (backend/all-services.mjs)
+# runs them as child processes behind a single port, routed by path. It exists for pipelines
+# that deploy exactly one backend image per application; the Helm chart's one-image-per-service
+# deployment remains the norm everywhere else.
 #
 # The build is pruned to the chosen service and the backend packages it depends on, so a
 # frontend-only change does not invalidate these layers and the backend pipeline can run
@@ -40,13 +45,14 @@ RUN test -f pnpm-workspace.yaml -a -f package.json || { \
 # "Invalid scope. Package with name @aahar/<x> not found", which does not say what the
 # valid names are. /fandb in the URLs is the platform route prefix, not a service name.
 RUN case "$SERVICE" in \
-      auth-service|user-service|organization-service) ;; \
+      all) SCOPES="@aahar/auth-service @aahar/user-service @aahar/organization-service" ;; \
+      auth-service|user-service|organization-service) SCOPES="@aahar/${SERVICE}" ;; \
       *) echo "ERROR: SERVICE='$SERVICE' is not an AAHAR backend service."; \
-         echo "Valid: auth-service | user-service | organization-service"; \
+         echo "Valid: auth-service | user-service | organization-service | all"; \
          echo "SERVICE is the --build-arg on the docker build step in the CI job."; \
          exit 1;; \
-    esac
-RUN pnpm dlx turbo@2.9.16 prune "@aahar/${SERVICE}" --docker
+    esac \
+ && pnpm dlx turbo@2.9.16 prune $SCOPES --docker
 
 # ---- install --------------------------------------------------------------------------
 FROM base AS installer
@@ -102,10 +108,15 @@ ENV NODE_ENV=production
 # service into / would break every runtime import.
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/backend/packages ./backend/packages
-COPY --from=builder --chown=node:node /app/backend/services/${SERVICE} ./backend/services/${SERVICE}
+# The pruned workspace holds only the chosen service(s), so copying the whole directory is
+# exact for a single service and carries all three for SERVICE=all.
+COPY --from=builder --chown=node:node /app/backend/services ./backend/services
+# From the pruner: turbo prune carries only workspace packages, and this root-level script is
+# the SERVICE=all entrypoint (a harmless single file in single-service images).
+COPY --from=pruner --chown=node:node /app/backend/all-services.mjs ./backend/all-services.mjs
 
-# ARG is build-time only, so the entrypoint reads the path from the environment instead.
-ENV SERVICE_MAIN=backend/services/${SERVICE}/dist/main.js
+# ARG is build-time only, so the entrypoint reads the name from the environment instead.
+ENV SERVICE=${SERVICE}
 
 USER node
 
@@ -116,4 +127,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
 
 # `exec` so node replaces the shell and becomes PID 1, otherwise SIGTERM never reaches it
 # and enableShutdownHooks() cannot drain in-flight requests.
-CMD ["sh", "-c", "exec node $SERVICE_MAIN"]
+CMD ["sh", "-c", "if [ \"$SERVICE\" = all ]; then exec node backend/all-services.mjs; else exec node \"backend/services/$SERVICE/dist/main.js\"; fi"]

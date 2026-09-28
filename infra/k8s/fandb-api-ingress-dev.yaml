@@ -1,0 +1,40 @@
+# Routes the API to the backend for the shared dev-cluster deployment (the `fandb` /
+# `fandb-api` Helm releases from the platform Jenkins, namespace `dev`).
+#
+# That deployment's only ingress sends /fandb to the frontend, so every browser call to
+# /fandb/api/v1/* landed on the portal and 404'd. This adds the one missing rule. A single
+# rule is enough because the backend image is built with SERVICE=all and routes internally
+# (backend/all-services.mjs).
+#
+#   kubectl apply -f infra/k8s/fandb-api-ingress-dev.yaml
+#
+# The name sorts before fandb-ext-ing so the AWS LB controller orders this rule ahead of
+# the frontend's /fandb catch-all within the shared dev-external group.
+#
+# DELETE THIS INGRESS before deploying via the Helm chart (infra/helm/fandb): the chart
+# creates its own fandb-api ingress for the same paths, and two owners of one path in the
+# same ALB group conflict.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fandb-api-ext-ing
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: fandb-backend
+    app.kubernetes.io/part-of: fandb
+  annotations:
+    alb.ingress.kubernetes.io/group.name: dev-external
+    alb.ingress.kubernetes.io/healthcheck-path: /fandb/api/v1/health
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb-dev
+  rules:
+    - http:
+        paths:
+          - path: /fandb/api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: fandb-backend-service
+                port:
+                  number: 80
