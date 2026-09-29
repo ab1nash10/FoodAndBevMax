@@ -1362,10 +1362,12 @@ export function useRestaurantOptions(hospitalId?: string) {
 export function useEntityTotal(
   queryKey: string | readonly unknown[],
   queryFn: () => Promise<ApiResponse<ApiList<unknown>>>,
+  enabled = true,
 ) {
   const queryKeyParts = typeof queryKey === 'string' ? [queryKey] : queryKey;
 
   return useQuery({
+    enabled,
     queryFn: async () => {
       const response = await queryFn();
 
