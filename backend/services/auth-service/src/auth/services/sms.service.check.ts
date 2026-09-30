@@ -10,9 +10,10 @@ import { SmsService } from './sms.service';
 
 const config = new ConfigService({
   SMS_FEED_ID: '354105',
-  SMS_PASSWORD: 'p@ss word',
+  // Padded the way a Secret made with `echo … | base64` pads it.
+  SMS_PASSWORD: ' p@ss word\n',
   SMS_SENDER_ID: 'MAXHSP',
-  SMS_USERNAME: '9000000000',
+  SMS_USERNAME: '9000000000\n',
 });
 const sms = new SmsService(config);
 let requested = '';
@@ -33,7 +34,11 @@ async function main(): Promise<void> {
   const url = new URL(requested);
   assert.equal(url.origin + url.pathname, 'https://bulkpush.mytoday.com/BulkSms/SingleMsgApi');
   assert.equal(url.searchParams.get('To'), '8178201584');
-  assert.equal(url.searchParams.get('password'), 'p@ss word', 'credentials survive encoding');
+  assert.equal(
+    url.searchParams.get('password'),
+    'p@ss word',
+    'credentials survive encoding, and stray whitespace from a Secret is trimmed',
+  );
   assert.equal(url.searchParams.get('senderid'), 'MAXHSP');
   assert.match(url.searchParams.get('Text') ?? '', /^Dear User, 042917 is your OTP for logging/);
   assert.ok(requested.includes('Dear%20User%2C%20042917'), 'spaces as %20, like the sample');

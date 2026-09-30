@@ -27,18 +27,18 @@ export class SmsService {
 
   isConfigured(): boolean {
     return ['SMS_FEED_ID', 'SMS_USERNAME', 'SMS_PASSWORD', 'SMS_SENDER_ID'].every((key) =>
-      Boolean(this.config.get<string>(key)),
+      Boolean(this.setting(key)),
     );
   }
 
   async sendOtp(mobile: string, otp: string): Promise<void> {
     const params: Record<string, string> = {
-      feedid: this.config.getOrThrow<string>('SMS_FEED_ID'),
-      password: this.config.getOrThrow<string>('SMS_PASSWORD'),
-      senderid: this.config.getOrThrow<string>('SMS_SENDER_ID'),
+      feedid: this.setting('SMS_FEED_ID'),
+      password: this.setting('SMS_PASSWORD'),
+      senderid: this.setting('SMS_SENDER_ID'),
       Text: otpMessage(otp),
       To: mobile,
-      username: this.config.getOrThrow<string>('SMS_USERNAME'),
+      username: this.setting('SMS_USERNAME'),
     };
     // encodeURIComponent rather than URLSearchParams: spaces go out as %20, exactly as the
     // provider's own sample request does, instead of `+`.
@@ -68,6 +68,12 @@ export class SmsService {
       });
       throw new ServiceUnavailableException('Could not send the OTP. Please try again.');
     }
+  }
+
+  // Trimmed: a Secret made with `echo value | base64` carries a trailing newline, which the
+  // gateway takes as part of the credential and answers with an authentication failure.
+  private setting(key: string): string {
+    return (this.config.get<string>(key) ?? '').trim();
   }
 
   private logFailure(details: Record<string, unknown>): void {
