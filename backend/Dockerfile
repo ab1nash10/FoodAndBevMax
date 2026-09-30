@@ -114,6 +114,10 @@ COPY --from=builder --chown=node:node /app/backend/services ./backend/services
 # From the pruner: turbo prune carries only workspace packages, and this root-level script is
 # the SERVICE=all entrypoint (a harmless single file in single-service images).
 COPY --from=pruner --chown=node:node /app/backend/all-services.mjs ./backend/all-services.mjs
+# Schema, migrations and seed. SERVICE=all applies them itself on startup, because the
+# one-image pipelines it exists for have no separate migration step; for single-service
+# images the Helm chart's hooks do it and these few files go unused.
+COPY --from=builder --chown=node:node /app/prisma ./prisma
 
 # ARG is build-time only, so the entrypoint reads the name from the environment instead.
 ENV SERVICE=${SERVICE}

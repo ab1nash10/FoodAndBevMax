@@ -11,11 +11,17 @@
  * longest prefix first - to the three unchanged services, each running as a child process on a
  * loopback port with its own guards, configuration and logging.
  *
+ * Before starting anything it brings the database up to date - `prisma migrate deploy`, then
+ * the seed - because those pipelines have no migration step: the first deploy through one
+ * found no tables at all, so sign-in failed with "public.users does not exist". Both steps
+ * are idempotent and migrate deploy takes an advisory lock, so every restart and every
+ * replica may run them. A failure stops the pod before it serves anything, rather than
+ * serving against a half-migrated schema. Set DB_SETUP_ON_START=false to skip both.
+ *
  * The Helm chart in infra/helm/fandb remains the full deployment: separate images roll and
- * scale per service, and its hooks run the migration and seed. This mode trades that away to
- * fit a one-image pipeline, and migrations must be run separately (the migrate image).
+ * scale per service, and its hooks run the migration and seed instead.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
 
 const basePath = (process.env.BASE_PATH ?? '').replace(/\/+$/, '');
@@ -131,6 +137,32 @@ function shutdown(code) {
 
   // A child that will not drain must not keep the pod alive forever.
   setTimeout(() => process.exit(code), 10_000).unref();
+}
+
+/** Runs one setup step to completion; a failed step fails the pod. */
+function runSetupStep(label, args) {
+  console.info(JSON.stringify({ event: 'db_setup_started', step: label }));
+  const result = spawnSync(process.execPath, args, { env: process.env, stdio: 'inherit' });
+
+  if (result.status !== 0) {
+    console.error(JSON.stringify({ event: 'db_setup_failed', status: result.status, step: label }));
+    process.exit(1);
+  }
+
+  console.info(JSON.stringify({ event: 'db_setup_done', step: label }));
+}
+
+if (process.env.DB_SETUP_ON_START !== 'false') {
+  runSetupStep('migrate', [
+    'node_modules/prisma/build/index.js',
+    'migrate',
+    'deploy',
+    '--schema',
+    'prisma/schema.prisma',
+  ]);
+  // The seed gives the Super Admin its first password from ADMIN_PASSWORD, only while the
+  // account has none; without it the account exists and `set-admin-password` sets one.
+  runSetupStep('seed', ['node_modules/tsx/dist/cli.mjs', 'prisma/seed.ts']);
 }
 
 for (const service of services) {
