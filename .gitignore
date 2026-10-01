@@ -1,7 +1,7 @@
 # Dependencies
 node_modules
 .pnpm-store
-
+docs
 # Build output
 .next
 .turbo
