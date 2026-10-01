@@ -21,9 +21,13 @@
   --brand-warning: 38 92% 50%;
   --brand-danger: 0 84% 60%;
   --brand-info: 221 83% 53%;
+  --scrollbar-thumb: 215 20% 65% / 0.45;
+  --scrollbar-thumb-hover: 215 16% 47% / 0.7;
 }
 
 .dark {
+  --scrollbar-thumb: 215 19% 35% / 0.6;
+  --scrollbar-thumb-hover: 215 16% 47% / 0.85;
   --background: 222 47% 7%;
   --border: 217 33% 18%;
   --foreground: 210 40% 98%;
@@ -64,6 +68,38 @@ body {
 
 ::selection {
   background: hsl(var(--primary) / 0.16);
+}
+
+/* Slim scrollbars everywhere: a thin rounded thumb, no track, no arrow buttons. */
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  /* The transparent border insets the thumb, so it reads as 4px until hovered. */
+  background-clip: content-box;
+  background-color: hsl(var(--scrollbar-thumb));
+  border: 2px solid transparent;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--scrollbar-thumb-hover));
+}
+
+/* Firefox has no ::-webkit-scrollbar. The standard properties are set only there, because
+   Chromium ignores the ::-webkit-scrollbar styling above wherever they apply. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
+    scrollbar-width: thin;
+  }
 }
 
 html {
