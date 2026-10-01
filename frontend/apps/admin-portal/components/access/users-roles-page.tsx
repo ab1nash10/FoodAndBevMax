@@ -3,9 +3,10 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AccessUser } from '@aahar/api-client';
-import { Loader2, Pencil, Plus, RefreshCw, ShieldCheck, UsersRound, X } from 'lucide-react';
+import { Loader2, Pencil, Plus, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { AppPageHeader } from '@/components/design-system';
 import { BulkLocationBar } from '@/components/access/bulk-location-bar';
 import { UserDialog } from '@/components/access/user-dialog';
 import { useToast } from '@/components/toast-provider';
@@ -195,27 +196,18 @@ export function UsersRolesPageClient() {
       return next;
     });
   return (
-    <section className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-mint text-brand-teal">
-            <UsersRound className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-teal">Access</p>
-            <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
-              Users / Roles
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Create users, assign roles, and manage individual permission overrides.
-            </p>
-          </div>
-        </div>
-        <Button onClick={() => setEditingUser(null)} type="button">
-          <Plus className="h-4 w-4" />
-          Create User
-        </Button>
-      </div>
+    <section className="space-y-5">
+      <AppPageHeader
+        action={
+          <Button className="h-cta px-5" onClick={() => setEditingUser(null)} type="button">
+            <Plus className="h-[18px] w-[18px]" />
+            Create user
+          </Button>
+        }
+        description="Create users, assign roles, and manage individual permission overrides."
+        eyebrow="Access"
+        title="Users / Roles"
+      />
       <Panel>
         <div className="flex gap-3 border-b p-4">
           <Input
@@ -240,7 +232,7 @@ export function UsersRolesPageClient() {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">
+                <th className="px-4 py-2.5">
                   <input
                     aria-label="Select all users"
                     checked={allSelected}
@@ -255,12 +247,12 @@ export function UsersRolesPageClient() {
                     type="checkbox"
                   />
                 </th>
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Employee Code</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Locations</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Actions</th>
+                <th className="px-4 py-2.5">User</th>
+                <th className="px-4 py-2.5">Employee Code</th>
+                <th className="px-4 py-2.5">Role</th>
+                <th className="px-4 py-2.5">Locations</th>
+                <th className="px-4 py-2.5">Status</th>
+                <th className="px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -273,7 +265,7 @@ export function UsersRolesPageClient() {
               ) : null}
               {users.map((user) => (
                 <tr className="hover:bg-slate-50" key={user.id}>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-3">
                     <input
                       aria-label={`Select ${user.name}`}
                       checked={selectedIds.has(user.id)}
@@ -283,15 +275,15 @@ export function UsersRolesPageClient() {
                       type="checkbox"
                     />
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-3">
                     <p className="font-medium text-slate-950 dark:text-slate-100">{user.name}</p>
                     <p className="text-slate-500">{user.email ?? user.mobile}</p>
                   </td>
-                  <td className="px-4 py-4 text-slate-600">{user.employeeCode}</td>
-                  <td className="px-4 py-4 text-slate-600">
+                  <td className="px-4 py-3 text-slate-600">{user.employeeCode}</td>
+                  <td className="px-4 py-3 text-slate-600">
                     {user.roles.map((role) => role.name).join(', ') || 'Unassigned'}
                   </td>
-                  <td className="px-4 py-4 text-slate-600">
+                  <td className="px-4 py-3 text-slate-600">
                     {user.locationScope === 'ALL' ? (
                       <Badge variant="info">All locations</Badge>
                     ) : user.hospitals.length === 0 ? (
@@ -300,12 +292,12 @@ export function UsersRolesPageClient() {
                       user.hospitals.map((hospital) => hospital.name).join(', ')
                     )}
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-3">
                     <Badge variant={user.status === 'ACTIVE' ? 'success' : 'danger'}>
                       {user.status.toLowerCase()}
                     </Badge>
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       <Button
                         disabled={isLocked(user)}

@@ -23,6 +23,7 @@ import { PrismaService } from './common/prisma/prisma.service';
 import { HealthController } from './health.controller';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { PreferencesModule } from './preferences/preferences.module';
 import { RolesModule } from './roles/roles.module';
 import { UsersModule } from './users/users.module';
 
@@ -42,6 +43,7 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     PermissionsModule,
+    PreferencesModule,
     RolesModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],

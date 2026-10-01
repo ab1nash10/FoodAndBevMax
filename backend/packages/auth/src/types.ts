@@ -2,8 +2,11 @@ export interface JwtPayload {
   sub: string;
   email?: string | null;
   mobile?: string | null;
+  name?: string;
   permissions?: string[];
   roles?: string[];
+  /** The user's session version at issue; see isSessionCurrent. */
+  sv?: number;
   /** Set only on refresh tokens. */
   type?: 'refresh';
 }

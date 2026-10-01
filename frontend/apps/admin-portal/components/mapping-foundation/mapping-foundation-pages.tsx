@@ -42,6 +42,7 @@ import type {
   TimeSlot,
   TimeSlotInput,
 } from '@aahar/api-client';
+import { AppPageHeader } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Field, Input, Panel, Select, Skeleton } from '@/components/ui';
@@ -331,21 +332,8 @@ function BooleanBadge({
   return <Badge variant={value ? 'success' : 'neutral'}>{value ? trueLabel : falseLabel}</Badge>;
 }
 
-function PageHeader({ icon: Icon, subtitle, title }: PageHeaderProps) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100">
-        <Icon className="h-5 w-5" />
-      </span>
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-normal text-teal-700">
-          Mapping Foundation
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{title}</h1>
-        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-      </div>
-    </div>
-  );
+function PageHeader({ subtitle, title }: PageHeaderProps) {
+  return <AppPageHeader description={subtitle} eyebrow="Item Mapping" title={title} />;
 }
 
 function SearchInput({
@@ -441,7 +429,7 @@ function QueryState({
       <>
         {skeletonRows.map((row) => (
           <tr key={row}>
-            <td className="px-4 py-4" colSpan={colSpan}>
+            <td className="px-4 py-3" colSpan={colSpan}>
               <Skeleton className="h-8 w-full" />
             </td>
           </tr>
@@ -533,7 +521,7 @@ function SubmitButton({
   label: string;
 }>) {
   return (
-    <Button className="bg-teal-600 hover:bg-teal-700" disabled={isPending} type="submit">
+    <Button disabled={isPending} type="submit">
       {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
       {label}
     </Button>
@@ -730,7 +718,7 @@ function TimeSlotFormFields({ form }: Readonly<{ form: UseFormReturn<TimeSlotFor
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field error={form.formState.errors.slotName?.message} label="Slot Name" name="slot-name">
           <Input id="slot-name" {...form.register('slotName')} />
         </Field>
@@ -788,7 +776,7 @@ function MappingFormFields({
 }>) {
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field error={form.formState.errors.parentId?.message} label={parentLabel} name="parent-id">
           <Select id="parent-id" {...form.register('parentId')}>
             <option value="">Select {parentLabel.toLowerCase()}</option>
@@ -866,7 +854,7 @@ function RestaurantMenuFormFields({
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.restaurantId?.message}
           label="Restaurant"
@@ -892,7 +880,7 @@ function RestaurantMenuFormFields({
           </Select>
         </Field>
       </div>
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Field
           error={form.formState.errors.timeSlotIds?.message}
           label="Time Slots"
@@ -944,7 +932,7 @@ function RestaurantMenuFormFields({
           </div>
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.positionType?.message}
           label="Position Type"
@@ -1123,14 +1111,14 @@ export function TimeSlotsPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         icon={CalendarClock}
         subtitle="Manage reusable availability windows for restaurant menu publishing."
         title="Time Slots"
       />
 
-      <Panel className="p-5">
+      <Panel className="p-4">
         <div className="mb-5">
           <h2 className="text-lg font-semibold tracking-normal text-slate-950">
             {editingSlot ? 'Edit Time Slot' : 'Create Time Slot'}
@@ -1140,7 +1128,7 @@ export function TimeSlotsPageClient() {
           </p>
         </div>
         <form
-          className="grid gap-5"
+          className="grid gap-4"
           onSubmit={(event) => {
             void handleSubmit(event);
           }}
@@ -1161,7 +1149,7 @@ export function TimeSlotsPageClient() {
       </Panel>
 
       <Panel>
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_150px_170px_170px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -1216,34 +1204,38 @@ export function TimeSlotsPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[17%] px-4 py-3">Slot Name</th>
-                <th className="w-[18%] px-4 py-3">Time Range</th>
-                <th className="w-[14%] px-4 py-3">Availability</th>
-                <th className="w-[10%] px-4 py-3">Status</th>
-                <th className="w-[16%] px-4 py-3">Created Date Time</th>
-                <th className="w-[16%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[18%] px-4 py-3">Actions</th>
+                <th className="w-[17%] px-4 py-2.5">Slot Name</th>
+                <th className="w-[18%] px-4 py-2.5">Time Range</th>
+                <th className="w-[14%] px-4 py-2.5">Availability</th>
+                <th className="w-[10%] px-4 py-2.5">Status</th>
+                <th className="w-[16%] px-4 py-2.5">Created Date Time</th>
+                <th className="w-[16%] px-4 py-2.5">Updated Date Time</th>
+                <th className="w-[18%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {slots.length > 0 ? (
                 slots.map((slot) => (
                   <tr className="hover:bg-slate-50" key={slot.id}>
-                    <td className="px-4 py-4 font-medium text-slate-950">{slot.slotName}</td>
-                    <td className="px-4 py-4 text-slate-600">{timeRange(slot)}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3 font-medium text-slate-950">{slot.slotName}</td>
+                    <td className="px-4 py-3 text-slate-600">{timeRange(slot)}</td>
+                    <td className="px-4 py-3">
                       <BooleanBadge
                         falseLabel="Scheduled"
                         trueLabel="Always"
                         value={slot.isAlwaysAvailable}
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={slot.isActive} />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(slot.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(slot.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(slot.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(slot.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() => startEditingSlot(slot)}
@@ -1472,13 +1464,13 @@ export function StoreItemsPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         icon={StoreIcon}
         subtitle="Map MRP items to stores for future sales and stock flows."
         title="Store Items"
       />
-      <Panel className="p-5">
+      <Panel className="p-4">
         <div className="mb-5">
           <h2 className="text-lg font-semibold tracking-normal text-slate-950">
             {editingMapping ? 'Edit Store Item' : 'Create Store Item'}
@@ -1486,7 +1478,7 @@ export function StoreItemsPageClient() {
           <p className="text-sm text-slate-500">Only MRP items are available for store mapping.</p>
         </div>
         <form
-          className="grid gap-5"
+          className="grid gap-4"
           onSubmit={(event) => {
             void handleSubmit(event);
           }}
@@ -1512,7 +1504,7 @@ export function StoreItemsPageClient() {
         </form>
       </Panel>
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_150px_180px_180px_180px_170px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -1591,22 +1583,22 @@ export function StoreItemsPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[15%] px-4 py-3">Location</th>
-                <th className="w-[15%] px-4 py-3">Store</th>
-                <th className="w-[16%] px-4 py-3">Item</th>
-                <th className="w-[12%] px-4 py-3">Category</th>
-                <th className="w-[10%] px-4 py-3">Status</th>
-                <th className="w-[14%] px-4 py-3">Active / Inactive</th>
-                <th className="w-[15%] px-4 py-3">Created Date Time</th>
-                <th className="w-[15%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[18%] px-4 py-3">Actions</th>
+                <th className="w-[15%] px-4 py-2.5">Location</th>
+                <th className="w-[15%] px-4 py-2.5">Store</th>
+                <th className="w-[16%] px-4 py-2.5">Item</th>
+                <th className="w-[12%] px-4 py-2.5">Category</th>
+                <th className="w-[10%] px-4 py-2.5">Status</th>
+                <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
+                <th className="w-[15%] px-4 py-2.5">Created Date Time</th>
+                <th className="w-[15%] px-4 py-2.5">Updated Date Time</th>
+                <th className="w-[18%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {mappings.length > 0 ? (
                 mappings.map((mapping) => (
                   <tr className="hover:bg-slate-50" key={mapping.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">
                         {mapping.store.hospital.hospitalName}
                       </p>
@@ -1614,30 +1606,34 @@ export function StoreItemsPageClient() {
                         {mapping.store.hospital.hospitalCode}
                       </p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{mapping.store.storeName}</p>
                       <p className="text-xs text-slate-500">{mapping.store.storeCode}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{mapping.item.itemName}</p>
                       <p className="text-xs text-slate-500">{mapping.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {mapping.item.category?.categoryName ?? '-'}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={mapping.isActive} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusToggleButton
                         isActive={mapping.isActive}
                         isPending={toggleMappingStatusMutation.isPending}
                         onToggle={() => toggleMappingStatus(mapping)}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(mapping.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(mapping.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(mapping.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(mapping.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() => startEditingMapping(mapping)}
@@ -1859,13 +1855,13 @@ export function KitchenItemsPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         icon={ChefHat}
         subtitle="Map readymade items to kitchens for future production handoff."
         title="Kitchen Items"
       />
-      <Panel className="p-5">
+      <Panel className="p-4">
         <div className="mb-5">
           <h2 className="text-lg font-semibold tracking-normal text-slate-950">
             {editingMapping ? 'Edit Kitchen Item' : 'Create Kitchen Item'}
@@ -1875,7 +1871,7 @@ export function KitchenItemsPageClient() {
           </p>
         </div>
         <form
-          className="grid gap-5"
+          className="grid gap-4"
           onSubmit={(event) => {
             void handleSubmit(event);
           }}
@@ -1901,7 +1897,7 @@ export function KitchenItemsPageClient() {
         </form>
       </Panel>
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_150px_180px_180px_180px_170px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -1980,22 +1976,22 @@ export function KitchenItemsPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[15%] px-4 py-3">Location</th>
-                <th className="w-[15%] px-4 py-3">Kitchen</th>
-                <th className="w-[16%] px-4 py-3">Item</th>
-                <th className="w-[12%] px-4 py-3">Category</th>
-                <th className="w-[10%] px-4 py-3">Status</th>
-                <th className="w-[14%] px-4 py-3">Active / Inactive</th>
-                <th className="w-[15%] px-4 py-3">Created Date Time</th>
-                <th className="w-[15%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[18%] px-4 py-3">Actions</th>
+                <th className="w-[15%] px-4 py-2.5">Location</th>
+                <th className="w-[15%] px-4 py-2.5">Kitchen</th>
+                <th className="w-[16%] px-4 py-2.5">Item</th>
+                <th className="w-[12%] px-4 py-2.5">Category</th>
+                <th className="w-[10%] px-4 py-2.5">Status</th>
+                <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
+                <th className="w-[15%] px-4 py-2.5">Created Date Time</th>
+                <th className="w-[15%] px-4 py-2.5">Updated Date Time</th>
+                <th className="w-[18%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {mappings.length > 0 ? (
                 mappings.map((mapping) => (
                   <tr className="hover:bg-slate-50" key={mapping.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">
                         {mapping.kitchen.hospital.hospitalName}
                       </p>
@@ -2003,30 +1999,34 @@ export function KitchenItemsPageClient() {
                         {mapping.kitchen.hospital.hospitalCode}
                       </p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{mapping.kitchen.kitchenName}</p>
                       <p className="text-xs text-slate-500">{mapping.kitchen.kitchenCode}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{mapping.item.itemName}</p>
                       <p className="text-xs text-slate-500">{mapping.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {mapping.item.category?.categoryName ?? '-'}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={mapping.isActive} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusToggleButton
                         isActive={mapping.isActive}
                         isPending={toggleMappingStatusMutation.isPending}
                         onToggle={() => toggleMappingStatus(mapping)}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(mapping.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(mapping.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(mapping.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(mapping.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() => startEditingMapping(mapping)}
@@ -2301,13 +2301,13 @@ export function RestaurantMenusPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         icon={Utensils}
         subtitle="Map items to restaurant menus with optional time-slot availability."
         title="Restaurant Menus"
       />
-      <Panel className="p-5">
+      <Panel className="p-4">
         <div className="mb-5">
           <h2 className="text-lg font-semibold tracking-normal text-slate-950">
             {editingMenu ? 'Edit Restaurant Menu' : 'Create Restaurant Menu'}
@@ -2315,7 +2315,7 @@ export function RestaurantMenusPageClient() {
           <p className="text-sm text-slate-500">MRP, readymade, and live items can be published.</p>
         </div>
         <form
-          className="grid gap-5"
+          className="grid gap-4"
           onSubmit={(event) => {
             void handleSubmit(event);
           }}
@@ -2342,7 +2342,7 @@ export function RestaurantMenusPageClient() {
         </form>
       </Panel>
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_150px_150px_170px_170px_150px_170px_150px_150px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -2477,25 +2477,25 @@ export function RestaurantMenusPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[14%] px-4 py-3">Location</th>
-                <th className="w-[14%] px-4 py-3">Restaurant</th>
-                <th className="w-[15%] px-4 py-3">Item</th>
-                <th className="w-[10%] px-4 py-3">Item Type</th>
-                <th className="w-[13%] px-4 py-3">Time Slots</th>
-                <th className="w-[12%] px-4 py-3">Days</th>
-                <th className="w-[10%] px-4 py-3">Available</th>
-                <th className="w-[10%] px-4 py-3">Status</th>
-                <th className="w-[14%] px-4 py-3">Active / Inactive</th>
-                <th className="w-[15%] px-4 py-3">Created Date Time</th>
-                <th className="w-[15%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[18%] px-4 py-3">Actions</th>
+                <th className="w-[14%] px-4 py-2.5">Location</th>
+                <th className="w-[14%] px-4 py-2.5">Restaurant</th>
+                <th className="w-[15%] px-4 py-2.5">Item</th>
+                <th className="w-[10%] px-4 py-2.5">Item Type</th>
+                <th className="w-[13%] px-4 py-2.5">Time Slots</th>
+                <th className="w-[12%] px-4 py-2.5">Days</th>
+                <th className="w-[10%] px-4 py-2.5">Available</th>
+                <th className="w-[10%] px-4 py-2.5">Status</th>
+                <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
+                <th className="w-[15%] px-4 py-2.5">Created Date Time</th>
+                <th className="w-[15%] px-4 py-2.5">Updated Date Time</th>
+                <th className="w-[18%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {menus.length > 0 ? (
                 menus.map((menu) => (
                   <tr className="hover:bg-slate-50" key={menu.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">
                         {menu.restaurant.hospital.hospitalName}
                       </p>
@@ -2503,45 +2503,49 @@ export function RestaurantMenusPageClient() {
                         {menu.restaurant.hospital.hospitalCode}
                       </p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{menu.restaurant.restaurantName}</p>
                       <p className="text-xs text-slate-500">{menu.restaurant.restaurantCode}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{menu.item.itemName}</p>
                       <p className="text-xs text-slate-500">{menu.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatEnum(menu.item.itemType)}</td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">{formatEnum(menu.item.itemType)}</td>
+                    <td className="px-4 py-3 text-slate-600">
                       {menu.timeSlots.length
                         ? menu.timeSlots.map((timeSlot) => timeSlot.slotName).join(', ')
                         : 'All day'}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {menu.daysOfWeek.length
                         ? menu.daysOfWeek.map((day) => formatEnum(day)).join(', ')
                         : 'Every day'}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <BooleanBadge
                         falseLabel="Unavailable"
                         trueLabel="Available"
                         value={menu.isAvailable}
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={menu.isActive} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusToggleButton
                         isActive={menu.isActive}
                         isPending={toggleMenuStatusMutation.isPending}
                         onToggle={() => toggleMenuStatus(menu)}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(menu.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(menu.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(menu.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(menu.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() => startEditingMenu(menu)}

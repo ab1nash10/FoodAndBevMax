@@ -127,6 +127,17 @@ export class UsersService {
     );
   }
 
+  /**
+   * Ends every session the users have open, so they sign in again and pick up the change.
+   * Their tokens carry the old session version, which the auth layer then refuses.
+   */
+  private async endSessions(userIds: string[], tx: Prisma.TransactionClient): Promise<void> {
+    await tx.user.updateMany({
+      data: { sessionVersion: { increment: 1 } },
+      where: { id: { in: userIds } },
+    });
+  }
+
   async list(query: ListUsersQueryDto, context: ActorContext) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -257,6 +268,18 @@ export class UsersService {
 
         if (roleChanged || hospitalsChanged || statusChanged) {
           assertNotSelf(id, context.actor, 'role, locations or status');
+        }
+
+        const detailsChanged =
+          dto.password !== undefined ||
+          (dto.avatarUrl !== undefined && dto.avatarUrl !== existing.avatarUrl) ||
+          (dto.designation !== undefined && dto.designation !== existing.designation) ||
+          (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
+          (dto.mobile !== undefined && dto.mobile !== existing.mobile) ||
+          (dto.name !== undefined && dto.name !== existing.name);
+
+        if (detailsChanged || roleChanged || hospitalsChanged || statusChanged) {
+          await this.endSessions([id], tx);
         }
 
         const data: Prisma.UserUpdateInput = {};
@@ -425,6 +448,7 @@ export class UsersService {
         ...hospitalIdsOf(existing).filter((hospitalId) => hospitalId !== existing.hospitalId),
       ];
       await this.replaceUserHospitals(id, role, homeFirst, context, tx);
+      await this.endSessions([id], tx);
 
       const userWithRoles = await tx.user.findFirstOrThrow({
         include: userInclude,
@@ -522,6 +546,8 @@ export class UsersService {
         updated.push({ id: user.id, name: user.name });
       }
 
+      await this.endSessions(userIds, tx);
+
       return { updated, updatedCount: updated.length };
     });
   }
@@ -576,6 +602,7 @@ export class UsersService {
 
       await this.writeOverrides(id, grants, true, context, tx);
       await this.writeOverrides(id, revokes, false, context, tx);
+      await this.endSessions([id], tx);
 
       await this.auditLog.record(
         {

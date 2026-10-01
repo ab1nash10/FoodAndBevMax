@@ -221,10 +221,10 @@ export function RestaurantsPageClient() {
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild>
             <Link href="/masters/restaurants/new">
               <Plus className="h-4 w-4" />
               Create
@@ -629,7 +629,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
       >
         <div className="space-y-4">
           <SectionHeading title="Basic Information" />
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.hospitalId?.message}
               label="Location"
@@ -703,7 +703,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
 
         <div className="space-y-4 border-t border-slate-100 pt-6">
           <SectionHeading title="Images" />
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <ImageUploadField
               error={imageErrors.thumbnail}
               id="restaurant-thumbnail"
@@ -723,7 +723,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
 
         <div className="space-y-4 border-t border-slate-100 pt-6">
           <SectionHeading title="GST Information" />
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.panNumber?.message}
               label="PAN Number"
@@ -764,7 +764,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
 
         <div className="space-y-4 border-t border-slate-100 pt-6">
           <SectionHeading title="Banking Information" />
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.unitNameForQr?.message}
               label="Unit Name for QR Code"
@@ -838,7 +838,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
 
         <div className="space-y-4 border-t border-slate-100 pt-6">
           <SectionHeading title="Sodexo Information" />
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.sodexoMid?.message}
               label="Sodexo MID"
@@ -858,7 +858,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
 
         <div className="space-y-4 border-t border-slate-100 pt-6">
           <SectionHeading title="ERP Fields" />
-          <div className="grid gap-5 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field
               error={form.formState.errors.sunBu?.message}
               label="Field SUN BU"

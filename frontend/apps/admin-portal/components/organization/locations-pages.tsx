@@ -138,7 +138,7 @@ export function LocationCreatePageClient() {
       title="Create Service Area"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
@@ -161,7 +161,7 @@ export function LocationCreatePageClient() {
             ))}
           </Select>
         </Field>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.locationName?.message}
             label="Location Name"
@@ -177,7 +177,7 @@ export function LocationCreatePageClient() {
             <Input id="location-building" {...form.register('building')} />
           </Field>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field error={form.formState.errors.floor?.message} label="Floor" name="location-floor">
             <Input id="location-floor" {...form.register('floor')} />
           </Field>

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { hashPassword, verifyPassword } from '@aahar/auth';
+import { hashPassword, isSessionCurrent, verifyPassword } from '@aahar/auth';
 import { UserStatus } from '@prisma/client';
 import { AuthAuditLogService } from '../common/audit/auth-audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -141,6 +141,12 @@ export class AuthService {
     const payload = await this.tokens.verifyRefreshToken(dto.refreshToken);
     const user = await this.findUserById(payload.sub);
 
+    // An admin changed this user after sign-in: end the session instead of renewing it.
+    if (!isSessionCurrent(payload.sv, user.sessionVersion)) {
+      await this.tokens.revokeRefreshToken(payload.jti);
+      throw new UnauthorizedException('Your account was updated. Please sign in again.');
+    }
+
     // ponytail: not an atomic spend. Several portal tabs waking together all refresh with the
     // same token, and each tab clears the shared session on a 401, so failing all but one would
     // sign every tab out. Make this atomic only once the portal serialises refresh across tabs.
@@ -234,8 +240,10 @@ export class AuthService {
       email: user.email,
       id: user.id,
       mobile: user.mobile,
+      name: user.name,
       permissions,
       roles,
+      sessionVersion: user.sessionVersion,
     };
   }
 }

@@ -12,8 +12,10 @@ interface TokenUser {
   email?: string | null;
   id: string;
   mobile?: string | null;
+  name: string;
   permissions: string[];
   roles: string[];
+  sessionVersion: number;
 }
 
 @Injectable()
@@ -29,13 +31,16 @@ export class TokenService {
     const accessPayload: JwtPayload = {
       email: user.email,
       mobile: user.mobile,
+      name: user.name,
       permissions: user.permissions,
       roles: user.roles,
       sub: user.id,
+      sv: user.sessionVersion,
     };
     const refreshPayload: RefreshTokenPayload = {
       jti: refreshTokenId,
       sub: user.id,
+      sv: user.sessionVersion,
       type: 'refresh',
     };
 

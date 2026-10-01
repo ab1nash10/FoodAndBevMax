@@ -14,6 +14,15 @@ export interface ResolvedAccess {
   locationScope: LocationScopeName;
   permissions: string[];
   roles: string[];
+  sessionVersion: number;
+}
+
+/**
+ * True while a token still belongs to the user's current session. Tokens issued before session
+ * versions existed carry none, which counts as 0, so they stay valid until the first bump.
+ */
+export function isSessionCurrent(tokenVersion: number | undefined, userVersion: number): boolean {
+  return (tokenVersion ?? 0) === userVersion;
 }
 
 /** The widest scope any of the user's roles carries wins. */
@@ -114,6 +123,7 @@ export class AccessResolver {
       locationScope,
       permissions: mergePermissionCodes(inheritedCodes, overrides),
       roles: user.roles.map((userRole) => userRole.role.name),
+      sessionVersion: user.sessionVersion,
     };
   }
 }

@@ -24,7 +24,7 @@ import type {
   RestaurantInput,
   SortOrder,
 } from '@aahar/api-client';
-import {} from '@/components/design-system';
+import { AppPageHeader } from '@/components/design-system';
 import { Badge, Field, FieldError, Input, Label, Panel, Select, Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
@@ -626,29 +626,14 @@ export function StatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
   );
 }
 
-export function PageHeader({ action, eyebrow, icon: Icon, subtitle, title }: PageHeaderProps) {
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-mint text-brand-teal ring-1 ring-emerald-100">
-          <Icon className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-normal text-brand-teal">
-            {eyebrow}
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-brand-navy">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
-        </div>
-      </div>
-      {action ? <div className="flex shrink-0">{action}</div> : null}
-    </div>
-  );
+export function PageHeader({ action, eyebrow, subtitle, title }: PageHeaderProps) {
+  return <AppPageHeader action={action} description={subtitle} eyebrow={eyebrow} title={title} />;
 }
 
 export function ToolbarGrid({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <div className="grid gap-3 border-b p-4 md:grid-cols-[minmax(0,1fr)_160px_180px_130px_auto]">
+    // One wrapping row: search grows, filters keep a fixed width, buttons keep their own size.
+    <div className="flex flex-wrap items-center gap-3 border-b border-ds-divider p-4 [&>*]:w-full sm:[&>*:first-child]:min-w-[200px] sm:[&>*:first-child]:flex-1 sm:[&>*]:w-36 [&>button]:w-auto sm:[&>*:first-child]:w-auto">
       {children}
     </div>
   );
@@ -656,7 +641,7 @@ export function ToolbarGrid({ children }: Readonly<{ children: ReactNode }>) {
 
 export function FlexibleToolbar({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <div className="grid gap-3 border-b p-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,1fr)_150px_170px_170px_170px_150px_130px_auto]">
+    <div className="grid gap-3 border-b border-ds-divider p-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,1fr)_150px_170px_170px_170px_150px_130px_auto]">
       {children}
     </div>
   );
@@ -676,10 +661,8 @@ export function StatusToggleButton({
       aria-checked={isActive}
       aria-label={isActive ? 'Set inactive' : 'Set active'}
       className={cn(
-        'inline-flex h-7 w-12 items-center rounded-full border p-1 transition focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60',
-        isActive
-          ? 'border-brand-blue bg-brand-blue'
-          : 'border-slate-300 bg-slate-200 dark:border-slate-700 dark:bg-slate-800',
+        'inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary/40 disabled:cursor-not-allowed disabled:opacity-60',
+        isActive ? 'border-ds-teal bg-ds-teal' : 'border-ds-input bg-ds-divider',
       )}
       disabled={disabled}
       onClick={onToggle}
@@ -688,7 +671,7 @@ export function StatusToggleButton({
     >
       <span
         className={cn(
-          'h-5 w-5 rounded-full bg-white shadow-sm transition',
+          'h-[18px] w-[18px] rounded-full bg-white shadow-sm transition',
           isActive ? 'translate-x-5' : 'translate-x-0',
         )}
       />
@@ -714,7 +697,9 @@ export function StatusToggleCell({
         <StatusToggleButton disabled={disabled} isActive={isActive} onToggle={onToggle} />
       </div>
       {showFrozenMessage ? (
-        <p className="max-w-xs text-xs font-medium text-amber-700">{inactiveLocationMessage}</p>
+        <p className="max-w-xs text-xs font-medium text-ds-pending-fg dark:text-amber-300">
+          {inactiveLocationMessage}
+        </p>
       ) : null}
     </div>
   );
@@ -729,9 +714,9 @@ export function SearchInput({
 }>) {
   return (
     <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-muted" />
       <Input
-        className="pl-9"
+        className="pl-10"
         onChange={(event) => onChange(event.target.value)}
         placeholder="Search"
         type="search"
@@ -790,7 +775,7 @@ export function QueryState({
       <>
         {skeletonRows.map((row) => (
           <tr key={row}>
-            <td className="px-4 py-4" colSpan={colSpan}>
+            <td className="px-4 py-3" colSpan={colSpan}>
               <Skeleton className="h-8 w-full" />
             </td>
           </tr>
@@ -802,7 +787,10 @@ export function QueryState({
   if (isError) {
     return (
       <tr>
-        <td className="px-4 py-12 text-center text-sm text-red-600" colSpan={colSpan}>
+        <td
+          className="px-4 py-12 text-center text-sm text-ds-rejected-fg dark:text-red-400"
+          colSpan={colSpan}
+        >
           {getApiErrorMessage(error)}
         </td>
       </tr>
@@ -813,8 +801,8 @@ export function QueryState({
     <tr>
       <td className="px-4 py-12 text-center" colSpan={colSpan}>
         <div className="mx-auto max-w-sm">
-          <p className="text-sm font-semibold text-slate-900">No {label} found</p>
-          <p className="mt-1 text-sm text-slate-500">Create a record or adjust the filters.</p>
+          <p className="text-sm font-bold text-ds-text">No {label} found</p>
+          <p className="mt-1 text-sm text-ds-muted">Create a record or adjust the filters.</p>
         </div>
       </td>
     </tr>
@@ -831,7 +819,7 @@ export function PaginationControls({
   const safeTotalPages = Math.max(totalPages, 1);
 
   return (
-    <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-t border-ds-divider px-4 py-3 text-sm text-ds-text-3 sm:flex-row sm:items-center sm:justify-between">
       <span>
         Page {page} of {safeTotalPages} - {total} records - {limit} per page
       </span>
@@ -883,14 +871,14 @@ export function FormShell({
         </Link>
       </Button>
       <PageHeader eyebrow="Organization" icon={Icon} subtitle={subtitle} title={title} />
-      <Panel className="p-5 sm:p-6">{children}</Panel>
+      <Panel className="p-4 sm:p-5">{children}</Panel>
     </section>
   );
 }
 
 export function SectionHeading({ title }: Readonly<{ title: string }>) {
   return (
-    <h2 className="text-sm font-semibold uppercase tracking-normal text-brand-teal">{title}</h2>
+    <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-ds-teal-text">{title}</h2>
   );
 }
 
@@ -923,7 +911,7 @@ export function FormWarning({
   }
 
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+    <div className="rounded-control bg-ds-pending-bg px-4 py-3 text-sm font-medium text-ds-pending-fg">
       {message}
     </div>
   );
@@ -937,7 +925,7 @@ export function CheckboxLine({
   input: ReactNode;
 }>) {
   return (
-    <label className="flex min-h-10 items-center gap-3 rounded-md border bg-white px-3 text-sm font-medium text-slate-700 shadow-sm">
+    <label className="flex min-h-control items-center gap-3 rounded-control border border-ds-border bg-ds-surface px-3.5 text-sm font-medium text-ds-text-2">
       {input}
       {children}
     </label>
@@ -948,7 +936,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        'min-h-28 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm shadow-slate-900/5 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
+        'min-h-28 w-full rounded-control border border-ds-input bg-ds-surface px-3.5 py-2.5 text-sm text-ds-text outline-none transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/15 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted',
         className,
       )}
       {...props}
@@ -976,7 +964,7 @@ export function LocationMasterFormFields({
   return (
     <div className="grid gap-6">
       <SectionHeading title="Add/Update Location" />
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         <Field error={form.formState.errors.title?.message} label="Title" name="location-title">
           <Input disabled={disabled} id="location-title" {...form.register('title')} />
         </Field>
@@ -993,7 +981,7 @@ export function LocationMasterFormFields({
           />
         </Field>
       </div>
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         <Field
           error={form.formState.errors.displayName?.message}
           label="Display Name"
@@ -1017,7 +1005,7 @@ export function LocationMasterFormFields({
       <Field error={form.formState.errors.address?.message} label="Address" name="location-address">
         <Textarea disabled={disabled} id="location-address" {...form.register('address')} />
       </Field>
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         <Field error={form.formState.errors.state?.message} label="State" name="location-state">
           <Select disabled={disabled} id="location-state" {...form.register('state')}>
             <option value="">Select state</option>
@@ -1057,7 +1045,7 @@ export function LocationMasterFormFields({
           />
         </Field>
       </div>
-      <div className="grid gap-5 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4">
         <Field error={form.formState.errors.latitude?.message} label="Latitude" name="latitude">
           <Input disabled={disabled} id="latitude" {...form.register('latitude')} />
         </Field>
@@ -1217,10 +1205,10 @@ export function EntityListPage<TItem extends { id: string; isActive: boolean; up
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild>
             <Link href={config.createHref}>
               <Plus className="h-4 w-4" />
               {config.createLabel ?? 'Create'}
@@ -1282,8 +1270,8 @@ export function EntityListPage<TItem extends { id: string; isActive: boolean; up
                     {column.header}
                   </th>
                 ))}
-                <th className="w-[120px] px-4 py-3">Status</th>
-                <th className="w-[160px] px-4 py-3">Updated</th>
+                <th className="w-[120px] px-4 py-2.5">Status</th>
+                <th className="w-[160px] px-4 py-2.5">Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -1291,14 +1279,16 @@ export function EntityListPage<TItem extends { id: string; isActive: boolean; up
                 items.map((item) => (
                   <tr className="hover:bg-slate-50" key={item.id}>
                     {config.columns.map((column) => (
-                      <td className="px-4 py-4 text-slate-600" key={column.header}>
+                      <td className="px-4 py-3 text-slate-600" key={column.header}>
                         {column.render(item)}
                       </td>
                     ))}
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={item.isActive} />
                     </td>
-                    <td className="px-4 py-4 text-slate-500">{formatDate(item.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                      {formatDate(item.updatedAt)}
+                    </td>
                   </tr>
                 ))
               ) : (

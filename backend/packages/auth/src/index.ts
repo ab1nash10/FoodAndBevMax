@@ -1,4 +1,4 @@
-export { AUTH_PRISMA, AccessResolver } from './access-resolver';
+export { AUTH_PRISMA, AccessResolver, isSessionCurrent } from './access-resolver';
 export type { ResolvedAccess } from './access-resolver';
 export { AuditLoggerService } from './audit-logger.service';
 export type { AuditLogEvent } from './audit-logger.service';

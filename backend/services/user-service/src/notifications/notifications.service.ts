@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { parsePreferences } from '../common/preferences';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 
@@ -35,9 +36,9 @@ export class NotificationsService {
   async list(userId: string, query: ListNotificationsQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    const visible = await this.visibleWhere(userId);
     const where: Prisma.NotificationWhereInput = {
-      deletedAt: null,
-      userId,
+      ...visible,
       ...(query.unreadOnly ? { readAt: null } : {}),
     };
 
@@ -49,7 +50,7 @@ export class NotificationsService {
         where,
       }),
       this.prisma.notification.count({ where }),
-      this.prisma.notification.count({ where: { deletedAt: null, readAt: null, userId } }),
+      this.prisma.notification.count({ where: { ...visible, readAt: null } }),
     ]);
 
     return {
@@ -67,8 +68,23 @@ export class NotificationsService {
   async unreadCount(userId: string) {
     return {
       unreadCount: await this.prisma.notification.count({
-        where: { deletedAt: null, readAt: null, userId },
+        where: { ...(await this.visibleWhere(userId)), readAt: null },
       }),
+    };
+  }
+
+  /** The user's notifications minus any categories they muted in Preferences. */
+  private async visibleWhere(userId: string): Promise<Prisma.NotificationWhereInput> {
+    const user = await this.prisma.user.findFirst({
+      select: { preferences: true },
+      where: { id: userId },
+    });
+    const muted = parsePreferences(user?.preferences).mutedNotificationCategories;
+
+    return {
+      deletedAt: null,
+      userId,
+      ...(muted.length ? { category: { notIn: muted } } : {}),
     };
   }
 

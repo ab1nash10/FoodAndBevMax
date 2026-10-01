@@ -184,6 +184,27 @@ export interface NotificationListQuery {
   unreadOnly?: boolean;
 }
 
+export type ThemePreference = 'dark' | 'light' | 'system';
+
+/** Unset fields are null: the portal then keeps its usual behaviour. */
+export interface UserPreferences {
+  /** "all", a location id, or null. */
+  defaultLocationId: string | null;
+  /** Categories hidden from the bell; ACCESS can never be muted. */
+  mutedNotificationCategories: string[];
+  /** A portal path such as /inventory/grns, or null for the dashboard. */
+  startPage: string | null;
+  theme: ThemePreference | null;
+}
+
+/** Partial update: omitted fields are kept, null resets a field to its default. */
+export type UserPreferencesInput = Partial<UserPreferences>;
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface UnreadCount {
   unreadCount: number;
 }
@@ -1732,6 +1753,21 @@ export function createUserApi(options: ApiClientOptions) {
     },
     markAllNotificationsRead() {
       return client.request<ApiResponse<UnreadCount>>('/notifications/read-all', {
+        method: 'POST',
+      });
+    },
+    getMyPreferences() {
+      return client.request<ApiResponse<UserPreferences>>('/users/me/preferences');
+    },
+    updateMyPreferences(body: UserPreferencesInput) {
+      return client.request<ApiResponse<UserPreferences>>('/users/me/preferences', {
+        body,
+        method: 'PATCH',
+      });
+    },
+    changeMyPassword(body: ChangePasswordInput) {
+      return client.request<ApiResponse<{ changed: true }>>('/users/me/password', {
+        body,
         method: 'POST',
       });
     },

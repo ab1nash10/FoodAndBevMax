@@ -2,22 +2,33 @@
 
 import { Button } from '@aahar/ui';
 import { Moon, Sun } from 'lucide-react';
+import { useSavePreferences } from '@/components/preferences/use-preferences';
 import { useTheme } from '@/components/theme-provider';
 
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === 'dark';
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const savePreferences = useSavePreferences();
+  const isDark = resolvedTheme === 'dark';
 
   return (
     <Button
       aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-      className="border-slate-200 bg-white text-brand-navy shadow-sm shadow-slate-900/5 hover:border-brand-blue/30 hover:bg-brand-mint hover:text-brand-blue dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
-      onClick={toggleTheme}
+      className="text-ds-text-2"
+      onClick={() => {
+        toggleTheme();
+        // Remembered on the account too, so other devices follow. A failed save only means
+        // this device keeps the switch locally, as before Preferences existed.
+        savePreferences.mutate({ theme: isDark ? 'light' : 'dark' });
+      }}
       size="icon"
       type="button"
       variant="outline"
     >
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {isDark ? (
+        <Sun className="h-[18px] w-[18px]" strokeWidth={1.8} />
+      ) : (
+        <Moon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+      )}
     </Button>
   );
 }

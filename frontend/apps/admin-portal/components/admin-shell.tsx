@@ -5,6 +5,7 @@ import type { Hospital } from '@aahar/api-client';
 import {
   ArrowRightLeft,
   Boxes,
+  Building2,
   CalendarClock,
   ChefHat,
   Check,
@@ -15,14 +16,19 @@ import {
   CreditCard,
   IndianRupee,
   LayoutDashboard,
+  LayoutGrid,
+  Link2,
   ListChecks,
   LogOut,
   Menu,
   MapPin,
+  NotebookText,
+  Package,
   PackageOpen,
   PanelLeft,
   Search,
   Settings,
+  ShieldCheck,
   Store,
   Tags,
   Utensils,
@@ -38,6 +44,8 @@ import { NotificationBell } from '@/components/notification-bell';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useAuth } from '@/components/auth-provider';
 import { formatGlobalLocationLabel, useLocationContext } from '@/components/location-context';
+import { PreferencesDialog } from '@/components/preferences/preferences-dialog';
+import { useApplyThemePreference } from '@/components/preferences/use-preferences';
 import { Input, Skeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
@@ -191,6 +199,20 @@ const navigationGroups: Array<{ items: NavigationItem[]; label: string }> = [
   },
 ];
 
+/**
+ * Pages a user may choose as their start page: the sidebar's own entries, filtered by the same
+ * permissions the sidebar uses, so a start page is always one the user can actually open.
+ */
+export function getStartPageOptions(
+  hasPermission: (permission: string | string[]) => boolean,
+): Array<{ group: string; href: string; label: string }> {
+  return navigationGroups.flatMap((group) =>
+    group.items
+      .filter((item) => !item.permissions || hasPermission(item.permissions))
+      .map((item) => ({ group: group.label, href: item.href, label: item.label })),
+  );
+}
+
 const collapsedNavigationLabels: Record<(typeof navigationGroups)[number]['label'], string> = {
   Overview: 'OVR',
   Organization: 'ORG',
@@ -199,6 +221,17 @@ const collapsedNavigationLabels: Record<(typeof navigationGroups)[number]['label
   Inventory: 'INV',
   'Kitchen Operations': 'KIT',
   Access: 'ACC',
+};
+
+// Module icons for the sidebar rows, as in the UI concepts.
+const moduleIcons: Record<(typeof navigationGroups)[number]['label'], LucideIcon> = {
+  Overview: LayoutGrid,
+  Organization: Building2,
+  'Item & Menu Setup': NotebookText,
+  'Item Mapping': Link2,
+  Inventory: Package,
+  'Kitchen Operations': ChefHat,
+  Access: ShieldCheck,
 };
 
 const breadcrumbLabels: Record<string, string> = {
@@ -246,6 +279,7 @@ function SidebarContent({
   onNavigate?: () => void;
 }>) {
   const pathname = usePathname();
+  const { availableLocations } = useLocationContext();
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
     return (
       navigationGroups.find((group) =>
@@ -277,7 +311,21 @@ function SidebarContent({
         </Link>
       ) : null}
 
-      <nav className={cn('flex flex-1 flex-col gap-3', hideBrand ? 'mt-3' : 'mt-7')}>
+      {!collapsed ? (
+        <p
+          className={cn(
+            'px-3 text-[11px] font-bold uppercase tracking-[0.1em] text-ds-muted',
+            hideBrand ? 'mt-1' : 'mt-5',
+          )}
+        >
+          Modules
+        </p>
+      ) : null}
+
+      <nav
+        aria-label="Modules"
+        className={cn('flex flex-1 flex-col gap-1', collapsed ? 'mt-2 gap-3' : 'mt-2')}
+      >
         {navigationGroups.map((group) => {
           const visibleItems = group.items.filter(
             (item) => !item.permissions || hasPermission(item.permissions),
@@ -287,73 +335,115 @@ function SidebarContent({
             return null;
           }
 
+          const isItemActive = (item: NavigationItem) =>
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           const isExpanded = expandedGroup === group.label;
+          const isGroupActive = visibleItems.some(isItemActive);
           const groupId = `sidebar-group-${group.label.toLowerCase().replaceAll(' ', '-')}`;
+          const ModuleIcon = moduleIcons[group.label] ?? LayoutGrid;
+          const rowClass =
+            'flex min-h-10 w-full items-center gap-3 rounded-control-lg px-3 text-left text-sm font-medium text-ds-text-2 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary';
 
-          return (
-            <div
-              className="border-b border-slate-100 pb-3 last:border-b-0 dark:border-slate-800"
-              key={group.label}
-            >
-              {!collapsed ? (
-                <button
-                  aria-controls={groupId}
-                  aria-expanded={isExpanded}
-                  className="flex w-full items-center justify-between rounded-lg bg-slate-50/80 px-3 py-2 text-left text-xs font-semibold uppercase tracking-normal text-slate-500 transition hover:bg-brand-mint hover:text-brand-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-teal-950 dark:hover:text-teal-200"
-                  onClick={() =>
-                    setExpandedGroup((current) => (current === group.label ? null : group.label))
-                  }
-                  type="button"
-                >
-                  <span>{group.label}</span>
-                  <ChevronDown
-                    aria-hidden="true"
-                    className={cn(
-                      'h-4 w-4 transition-transform duration-200',
-                      !isExpanded && '-rotate-90',
-                    )}
-                  />
-                </button>
-              ) : (
+          if (collapsed) {
+            // Collapsed rail: every page as an icon, grouped under the module's short label.
+            return (
+              <div className="flex flex-col items-center gap-1" key={group.label}>
                 <div
                   aria-label={group.label}
-                  className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500"
+                  className="mb-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-ds-muted"
                   title={group.label}
                 >
                   {collapsedNavigationLabels[group.label]}
                 </div>
-              )}
-              <div
-                className={cn(
-                  'flex flex-col gap-1',
-                  !collapsed && !isExpanded && 'hidden',
-                  !collapsed && 'mt-1 border-l border-slate-200 pl-2 dark:border-slate-800',
-                  collapsed && 'items-center',
-                )}
-                id={groupId}
-              >
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
                   return (
                     <Link
+                      aria-label={item.label}
                       className={cn(
-                        'group flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-600 transition hover:bg-brand-mint hover:text-brand-teal dark:text-slate-300 dark:hover:bg-teal-950 dark:hover:text-teal-200',
-                        collapsed && 'justify-center px-2',
-                        isActive &&
-                          'bg-brand-blue text-white shadow-sm shadow-brand-blue/20 hover:bg-brand-blue hover:text-white dark:bg-sky-600 dark:text-white',
+                        'grid h-10 w-10 place-items-center rounded-control-lg text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary',
+                        isItemActive(item) &&
+                          'bg-ds-primary text-white hover:bg-ds-primary hover:text-white',
                       )}
                       href={item.href}
                       key={item.href}
                       onClick={onNavigate}
-                      title={collapsed ? item.label : undefined}
+                      title={item.label}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                      <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     </Link>
                   );
                 })}
+              </div>
+            );
+          }
+
+          // Overview holds only the Dashboard, which the concepts show as a plain link.
+          const singleItem = group.label === 'Overview' ? visibleItems[0] : undefined;
+
+          if (singleItem) {
+            return (
+              <Link
+                className={cn(
+                  rowClass,
+                  isItemActive(singleItem) &&
+                    'bg-ds-primary font-semibold text-white shadow-sm shadow-ds-primary/20 hover:bg-ds-primary hover:text-white',
+                )}
+                href={singleItem.href}
+                key={group.label}
+                onClick={onNavigate}
+              >
+                <ModuleIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} />
+                <span className="truncate">{singleItem.label}</span>
+              </Link>
+            );
+          }
+
+          return (
+            <div key={group.label}>
+              <button
+                aria-controls={groupId}
+                aria-expanded={isExpanded}
+                className={cn(
+                  rowClass,
+                  isGroupActive &&
+                    'bg-ds-primary-soft font-semibold text-ds-link hover:bg-ds-primary-soft hover:text-ds-link',
+                )}
+                onClick={() =>
+                  setExpandedGroup((current) => (current === group.label ? null : group.label))
+                }
+                type="button"
+              >
+                <ModuleIcon className="h-5 w-5 shrink-0" strokeWidth={1.8} />
+                <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className={cn(
+                    'h-4 w-4 shrink-0 text-ds-muted transition-transform duration-200',
+                    isExpanded && 'rotate-90',
+                  )}
+                />
+              </button>
+              <div
+                className={cn('mt-1 flex flex-col gap-0.5 pl-9', !isExpanded && 'hidden')}
+                id={groupId}
+              >
+                {visibleItems.map((item) => (
+                  <Link
+                    aria-current={isItemActive(item) ? 'page' : undefined}
+                    className={cn(
+                      'flex min-h-9 items-center rounded-control px-3 text-sm font-medium text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary',
+                      isItemActive(item) &&
+                        'bg-ds-primary font-semibold text-white hover:bg-ds-primary hover:text-white',
+                    )}
+                    href={item.href}
+                    key={item.href}
+                    onClick={onNavigate}
+                  >
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ))}
               </div>
             </div>
           );
@@ -361,12 +451,17 @@ function SidebarContent({
       </nav>
 
       {!collapsed ? (
-        <div className="mt-6 rounded-lg border border-emerald-100 bg-brand-mint p-4 text-sm text-brand-navy dark:border-teal-900 dark:bg-teal-950 dark:text-teal-100">
-          <MaxHealthcareMark className="mb-3 w-full justify-center bg-white/85 dark:bg-slate-950/75" />
-          <p className="font-semibold">AAHAR</p>
-          <p className="mt-1 text-xs text-brand-teal dark:text-teal-300">
-            Food & Cafeteria Management Platform
-          </p>
+        <div className="mt-6 flex items-center gap-3 rounded-tile border border-ds-teal-border bg-ds-teal-soft p-3">
+          <MaxHealthcareMark />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-ds-text">Max Healthcare</p>
+            <p className="truncate text-xs text-ds-text-3">
+              Client workspace
+              {availableLocations.length
+                ? ` · ${availableLocations.length} location${availableLocations.length === 1 ? '' : 's'}`
+                : ''}
+            </p>
+          </div>
         </div>
       ) : null}
     </div>
@@ -444,27 +539,28 @@ function HeaderLocationSelector() {
         aria-expanded={isOpen}
         aria-label={`Select Location. Current selection: ${locationLabel}`}
         className={cn(
-          'relative border-slate-200 bg-white text-brand-teal hover:bg-brand-mint hover:text-brand-teal dark:border-slate-800 dark:bg-slate-950 dark:text-teal-300 dark:hover:bg-teal-950',
-          !allLocationsSelected && 'border-teal-200 bg-brand-mint dark:border-teal-900',
+          'w-11 px-0 text-ds-text-2 lg:w-auto lg:px-3.5',
+          !allLocationsSelected && 'border-ds-teal-border bg-ds-teal-soft',
         )}
         disabled={isLoadingLocations}
         onClick={() => setIsOpen((current) => !current)}
-        size="icon"
         title={locationLabel}
         type="button"
         variant="outline"
       >
-        <MapPin className="h-4 w-4" />
-        {!allLocationsSelected ? (
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-emerald" />
-        ) : null}
+        <MapPin className="h-[18px] w-[18px] shrink-0 text-ds-teal-text" strokeWidth={1.8} />
+        <span className="hidden max-w-40 truncate lg:inline">{locationLabel}</span>
+        <ChevronDown
+          aria-hidden="true"
+          className="hidden h-4 w-4 shrink-0 text-ds-muted lg:block"
+        />
       </Button>
 
       {isOpen ? (
-        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/12 dark:border-slate-800 dark:bg-slate-950">
-          <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <p className="text-sm font-semibold text-slate-950 dark:text-white">Select Location</p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-xl shadow-ds-text/10">
+          <div className="border-b border-ds-divider px-4 py-3">
+            <p className="text-sm font-bold text-ds-text">Select Location</p>
+            <p className="mt-1 text-xs text-ds-muted">
               Choose a location to view location-specific data
             </p>
           </div>
@@ -472,25 +568,23 @@ function HeaderLocationSelector() {
             {canSelectAllLocations ? (
               <button
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900',
-                  allLocationsSelected && 'bg-brand-mint text-brand-navy dark:bg-teal-950/70',
+                  'flex w-full items-center gap-3 rounded-control-lg px-3 py-3 text-left transition hover:bg-ds-subtle',
+                  allLocationsSelected && 'bg-ds-teal-soft',
                 )}
                 onClick={() => selectLocation(null)}
                 type="button"
               >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-brand-blue shadow-sm dark:bg-slate-950 dark:text-sky-300">
-                  <MapPin className="h-4 w-4" />
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-ds-primary-soft text-ds-link">
+                  <MapPin className="h-4 w-4" strokeWidth={1.8} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-slate-950 dark:text-white">
-                    All Locations
-                  </span>
-                  <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                  <span className="block text-sm font-semibold text-ds-text">All Locations</span>
+                  <span className="mt-0.5 block text-xs text-ds-muted">
                     View consolidated data across all locations
                   </span>
                 </span>
                 {allLocationsSelected ? (
-                  <Check className="h-4 w-4 shrink-0 text-brand-teal" />
+                  <Check className="h-4 w-4 shrink-0 text-ds-teal-text" />
                 ) : null}
               </button>
             ) : null}
@@ -501,32 +595,32 @@ function HeaderLocationSelector() {
               return (
                 <button
                   className={cn(
-                    'mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900',
-                    isSelected && 'bg-brand-mint text-brand-navy dark:bg-teal-950/70',
+                    'mt-1 flex w-full items-center gap-3 rounded-control-lg px-3 py-3 text-left transition hover:bg-ds-subtle',
+                    isSelected && 'bg-ds-teal-soft',
                   )}
                   key={location.id}
                   onClick={() => selectLocation(location.id)}
                   title={formatGlobalLocationLabel(location)}
                   type="button"
                 >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-brand-teal dark:bg-teal-950 dark:text-teal-300">
-                    <MapPin className="h-4 w-4" />
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-ds-tile-locations-bg text-ds-tile-locations-fg dark:bg-teal-950 dark:text-teal-300">
+                    <MapPin className="h-4 w-4" strokeWidth={1.8} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-950 dark:text-white">
+                    <span className="block truncate text-sm font-semibold text-ds-text">
                       {getLocationName(location)}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
+                    <span className="mt-0.5 block truncate text-xs text-ds-muted">
                       {getLocationMeta(location)}
                     </span>
                   </span>
-                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-brand-teal" /> : null}
+                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-ds-teal-text" /> : null}
                 </button>
               );
             })}
 
             {!isLoadingLocations && availableLocations.length === 0 ? (
-              <div className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+              <div className="px-3 py-6 text-center text-sm text-ds-muted">
                 No active locations available.
               </div>
             ) : null}
@@ -539,11 +633,30 @@ function HeaderLocationSelector() {
 
 export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const { currentUser, hasPermission, isAuthenticated, isReady, logout, roles } = useAuth();
+  useApplyThemePreference();
   const pathname = usePathname();
   const router = useRouter();
   const breadcrumbs = useMemo(() => getBreadcrumbs(pathname), [pathname]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDetailsElement>(null);
+
+  // The profile menu is a <details>, which only closes from its own button; close it on any
+  // click outside it too.
+  useEffect(() => {
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const menu = profileMenuRef.current;
+
+      if (menu?.open && !menu.contains(event.target as Node)) {
+        menu.open = false;
+      }
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick);
+  }, []);
 
   useEffect(() => {
     const storedPreference = window.localStorage.getItem('aahar-sidebar-collapsed');
@@ -569,7 +682,8 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     return <LoadingShell />;
   }
 
-  const displayName = currentUser?.email ?? currentUser?.mobile ?? 'AAHAR User';
+  const displayName =
+    currentUser?.name ?? currentUser?.email ?? currentUser?.mobile ?? 'AAHAR User';
   const initials = displayName
     .split(/[.@\s]+/)
     .filter(Boolean)
@@ -579,11 +693,11 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const roleLabel = roles[0] ?? 'Active user';
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-ds-page text-ds-text">
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 hidden overflow-y-auto border-r border-slate-200 bg-white/95 px-4 py-5 shadow-sm shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:block',
-          isCollapsed ? 'w-24' : 'w-72',
+          'fixed inset-y-0 left-0 hidden overflow-y-auto border-r border-ds-border bg-ds-surface px-3 py-4 nav:block',
+          isCollapsed ? 'w-24' : 'w-sidebar',
         )}
       >
         <div
@@ -596,7 +710,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             // Collapsed rail: the logo turns into the expand icon on hover or keyboard focus.
             <button
               aria-label="Expand sidebar"
-              className="group relative grid h-11 w-11 place-items-center rounded-lg text-slate-500 transition hover:bg-brand-mint hover:text-brand-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 dark:hover:bg-teal-950 dark:hover:text-teal-200"
+              className="group relative grid h-11 w-11 place-items-center rounded-tile text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary"
               onClick={() => setIsCollapsed(false)}
               title="Expand navigation"
               type="button"
@@ -618,14 +732,14 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
               </Link>
               <Button
                 aria-label="Collapse sidebar"
-                className="shrink-0 text-slate-500 hover:bg-brand-mint hover:text-brand-teal"
+                className="shrink-0 text-ds-text-3"
                 onClick={() => setIsCollapsed(true)}
                 size="icon"
                 title="Collapse navigation"
                 type="button"
-                variant="ghost"
+                variant="outline"
               >
-                <PanelLeft className="h-4 w-4" />
+                <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.8} />
               </Button>
             </>
           )}
@@ -634,22 +748,23 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       </aside>
 
       {isMobileMenuOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-40 nav:hidden">
           <button
             aria-label="Close navigation"
-            className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm"
+            className="absolute inset-0 bg-ds-text/45 backdrop-blur-sm"
             onClick={() => setIsMobileMenuOpen(false)}
             type="button"
           />
-          <aside className="relative h-full w-[min(22rem,86vw)] overflow-y-auto border-r border-slate-200 bg-white px-5 py-6 shadow-xl dark:border-slate-800 dark:bg-slate-950">
-            <div className="mb-6 flex items-center justify-between">
-              <BrandMark />
+          <aside className="relative h-full w-[min(18rem,86vw)] overflow-y-auto border-r border-ds-border bg-ds-surface px-4 py-5 shadow-xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <BrandMark className="min-w-0" />
               <Button
                 aria-label="Close navigation"
+                className="shrink-0 text-ds-text-3"
                 onClick={() => setIsMobileMenuOpen(false)}
                 size="icon"
                 type="button"
-                variant="ghost"
+                variant="outline"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -664,93 +779,83 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       ) : null}
 
       <div
-        className={cn('transition-[padding] duration-200', isCollapsed ? 'lg:pl-24' : 'lg:pl-72')}
+        className={cn(
+          'transition-[padding] duration-200',
+          isCollapsed ? 'nav:pl-24' : 'nav:pl-sidebar',
+        )}
       >
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-4 py-3 shadow-sm shadow-slate-900/5 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90 lg:px-6">
-          <div className="flex min-h-12 items-center justify-between gap-4">
+        <header className="sticky top-0 z-30 border-b border-ds-border bg-ds-surface/95 px-4 backdrop-blur-xl nav:px-8">
+          <div className="flex min-h-16 items-center justify-between gap-3 lg:gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <Button
                 aria-label="Open navigation"
-                className="lg:hidden"
+                className="shrink-0 nav:hidden"
                 onClick={() => setIsMobileMenuOpen(true)}
                 size="icon"
                 type="button"
-                variant="ghost"
+                variant="outline"
               >
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {breadcrumbs.map((crumb, index) => (
-                    <span className="inline-flex items-center gap-1" key={`${crumb}-${index}`}>
-                      {index > 0 ? <ChevronRight className="h-3 w-3" /> : null}
-                      <span
-                        className={
-                          index === breadcrumbs.length - 1
-                            ? 'text-brand-blue dark:text-sky-300'
-                            : ''
-                        }
-                      >
-                        {crumb}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-1 truncate text-sm font-semibold text-brand-navy dark:text-white">
-                  Max Healthcare
+                <p className="truncate text-xs font-semibold text-ds-link">
+                  {breadcrumbs.join(' / ')}
                 </p>
+                <p className="mt-0.5 truncate text-[15px] font-bold text-ds-text">Max Healthcare</p>
               </div>
             </div>
 
-            <div className="hidden min-w-48 max-w-sm flex-1 lg:block">
+            <div className="hidden min-w-48 max-w-md flex-1 xl:block">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ds-muted"
+                  strokeWidth={1.8}
+                />
                 <Input
                   aria-label="Search workspace"
-                  className="border-slate-200 bg-slate-50/80 pl-9 focus:bg-white dark:bg-slate-900/70"
+                  className="border-ds-border bg-ds-subtle pl-11 focus:bg-ds-surface"
                   placeholder="Search locations, items, transfers..."
                   type="search"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <HeaderLocationSelector />
               <NotificationBell />
               <ThemeToggle />
-              <div className="hidden xl:block">
-                <MaxHealthcareMark />
-              </div>
-              <details className="relative">
-                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 shadow-sm shadow-slate-900/5 transition hover:border-brand-blue/30 hover:bg-brand-mint dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900 [&::-webkit-details-marker]:hidden">
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-sm font-semibold text-brand-blue dark:bg-sky-950 dark:text-sky-300">
+              <details className="relative" ref={profileMenuRef}>
+                <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2.5 rounded-full border border-ds-border bg-ds-surface p-1 transition hover:border-ds-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary sm:pr-3.5 [&::-webkit-details-marker]:hidden">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-xs font-bold text-ds-link">
                     {initials || 'AU'}
                   </span>
-                  <span className="hidden text-left sm:block">
-                    <span className="block text-sm font-semibold leading-4 text-slate-900 dark:text-white">
+                  <span className="hidden min-w-0 text-left sm:block">
+                    <span className="block max-w-40 truncate text-sm font-bold leading-4 text-ds-text">
                       {displayName}
                     </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    <span className="block max-w-40 truncate text-xs text-ds-muted">
                       {roleLabel}
                     </span>
                   </span>
                 </summary>
-                <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950">
+                <div className="absolute right-0 mt-2 w-56 rounded-card border border-ds-border bg-ds-surface p-2 shadow-xl shadow-ds-text/10">
                   <div className="px-3 py-2">
-                    <p className="text-sm font-semibold text-slate-950 dark:text-white">
-                      {displayName}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{roleLabel}</p>
+                    <p className="text-sm font-bold text-ds-text">{displayName}</p>
+                    <p className="text-xs text-ds-muted">{roleLabel}</p>
                   </div>
-                  <Link
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
-                    href="/dashboard"
+                  <button
+                    className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-left text-sm text-ds-text-2 hover:bg-ds-subtle"
+                    onClick={(event) => {
+                      event.currentTarget.closest('details')?.removeAttribute('open');
+                      setIsPreferencesOpen(true);
+                    }}
+                    type="button"
                   >
                     <Settings className="h-4 w-4" />
                     Preferences
-                  </Link>
+                  </button>
                   <button
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950"
+                    className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-left text-sm text-ds-rejected-fg hover:bg-ds-rejected-bg dark:text-red-300 dark:hover:bg-red-950"
                     onClick={() => {
                       void logout().then(() => router.replace('/auth/login'));
                     }}
@@ -764,8 +869,9 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             </div>
           </div>
         </header>
-        <main className="px-4 py-6 lg:px-6 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-content px-4 py-5 nav:px-6">{children}</main>
       </div>
+      {isPreferencesOpen ? <PreferencesDialog onClose={() => setIsPreferencesOpen(false)} /> : null}
     </div>
   );
 }

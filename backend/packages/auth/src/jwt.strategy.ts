@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { AccessResolver } from './access-resolver';
+import { AccessResolver, isSessionCurrent } from './access-resolver';
 import type { JwtPayload, JwtRequestUser } from './types';
 
 interface AuthorizationHeaderRequest {
@@ -53,6 +53,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     if (!access) {
       throw new UnauthorizedException('User is not registered or active');
+    }
+
+    // An admin changed this user after the token was issued; they must sign in again.
+    if (!isSessionCurrent(payload.sv, access.sessionVersion)) {
+      throw new UnauthorizedException('Your account was updated. Please sign in again.');
     }
 
     return {

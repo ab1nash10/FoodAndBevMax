@@ -173,15 +173,15 @@ export function NotificationBell() {
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
-        className="relative"
+        className="relative text-ds-text-2"
         onClick={() => setIsOpen((open) => !open)}
         size="icon"
         type="button"
         variant="outline"
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />
         {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-warning px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-ds-stage-late px-1 text-[10px] font-bold leading-none text-white ring-2 ring-ds-surface">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         ) : null}
@@ -190,7 +190,7 @@ export function NotificationBell() {
       {isOpen ? (
         <div
           aria-label="Notifications"
-          className="absolute right-0 z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950"
+          className="absolute right-0 z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-xl shadow-ds-text/10"
           role="dialog"
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">

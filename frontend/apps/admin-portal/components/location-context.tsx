@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { usePreferences } from '@/components/preferences/use-preferences';
 import { organizationApi } from '@/lib/api';
 
 const LOCATION_STORAGE_KEY = 'aahar.location-context';
@@ -104,6 +105,8 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
     queryKey: ['global-location-context', 'active-locations'],
     staleTime: 60_000,
   });
+  const preferencesQuery = usePreferences();
+  const preferredLocationId = preferencesQuery.data?.defaultLocationId ?? null;
 
   const availableLocations = useMemo(() => {
     const locations = locationsQuery.data ?? [];
@@ -122,17 +125,32 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
       return;
     }
 
-    if (locationsQuery.isLoading || locationsQuery.isError) {
+    // Wait for the saved preferences too, so the first pick after sign-in can honour them; a
+    // failed preferences request just falls through to the usual default.
+    if (locationsQuery.isLoading || locationsQuery.isError || preferencesQuery.isLoading) {
       return;
     }
 
     const locationIds = new Set(availableLocations.map((location) => location.id));
     const storedLocationValue = readStoredLocationValue();
-    const defaultLocationValue = canSelectAllLocations
-      ? allLocationsValue
-      : assignedLocationId && locationIds.has(assignedLocationId)
-        ? assignedLocationId
-        : (availableLocations[0]?.id ?? allLocationsValue);
+    // The Preferences default applies at sign-in (the stored pick is cleared on sign-out); a
+    // location chosen in the header during the session still wins over it. A saved location
+    // the user can no longer reach is ignored.
+    const preferredLocationValue =
+      preferredLocationId === allLocationsValue
+        ? canSelectAllLocations
+          ? allLocationsValue
+          : null
+        : preferredLocationId && locationIds.has(preferredLocationId)
+          ? preferredLocationId
+          : null;
+    const defaultLocationValue =
+      preferredLocationValue ??
+      (canSelectAllLocations
+        ? allLocationsValue
+        : assignedLocationId && locationIds.has(assignedLocationId)
+          ? assignedLocationId
+          : (availableLocations[0]?.id ?? allLocationsValue));
     const nextLocationValue =
       storedLocationValue === allLocationsValue && canSelectAllLocations
         ? allLocationsValue
@@ -149,6 +167,8 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
     isAuthenticated,
     locationsQuery.isError,
     locationsQuery.isLoading,
+    preferencesQuery.isLoading,
+    preferredLocationId,
   ]);
 
   const selectedLocation = useMemo(

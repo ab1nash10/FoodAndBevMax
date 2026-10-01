@@ -112,21 +112,27 @@ enum StockReferenceType {
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  employeeCode String     @unique @map("employee_code")
-  name         String
-  email        String?    @unique
-  mobile       String     @unique
-  passwordHash String?    @map("password_hash")
-  designation  String?
-  avatarUrl    String?    @map("avatar_url")
-  status       UserStatus @default(ACTIVE)
-  hospitalId   String?    @map("hospital_id") @db.Uuid
-  createdAt    DateTime   @default(now()) @map("created_at")
-  createdBy    String?    @map("created_by") @db.Uuid
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  updatedBy    String?    @map("updated_by") @db.Uuid
-  deletedAt    DateTime?  @map("deleted_at")
+  id             String     @id @default(uuid()) @db.Uuid
+  employeeCode   String     @unique @map("employee_code")
+  name           String
+  email          String?    @unique
+  mobile         String     @unique
+  passwordHash   String?    @map("password_hash")
+  designation    String?
+  avatarUrl      String?    @map("avatar_url")
+  /// Per-user portal preferences (theme, default location, start page, muted notification
+  /// categories). Null means every default; see user-service src/preferences.
+  preferences    Json?
+  /// Bumped whenever an admin changes the user. Tokens carry the version they were issued at,
+  /// so a bump ends every session the user has open and they must sign in again.
+  sessionVersion Int        @default(0) @map("session_version")
+  status         UserStatus @default(ACTIVE)
+  hospitalId     String?    @map("hospital_id") @db.Uuid
+  createdAt      DateTime   @default(now()) @map("created_at")
+  createdBy      String?    @map("created_by") @db.Uuid
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  updatedBy      String?    @map("updated_by") @db.Uuid
+  deletedAt      DateTime?  @map("deleted_at")
 
   auditLogs                AuditLog[]
   assignedHospitals        UserHospital[]

@@ -4,6 +4,7 @@ import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  Eye,
   IndianRupee,
   Loader2,
   PackageOpen,
@@ -11,9 +12,12 @@ import {
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   Tags,
   Trash2,
   UsersRound,
+  Utensils,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -40,10 +44,13 @@ import type {
   Restaurant,
   SortOrder,
 } from '@aahar/api-client';
+import { AppPageHeader, EmptyState, FoodTypeMarker } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Badge, Field, Input, Panel, Select, Skeleton } from '@/components/ui';
+import { Badge, Field, FieldError, Input, Panel, Select, Skeleton } from '@/components/ui';
+import { FilterTabs, Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import {
   invalidateEmployeeQueries,
   invalidateItemCategoryQueries,
@@ -223,6 +230,9 @@ const dateFormatter = new Intl.DateTimeFormat('en-IN', {
 const dateOnlyFormatter = new Intl.DateTimeFormat('en-IN', {
   dateStyle: 'medium',
 });
+const timeOnlyFormatter = new Intl.DateTimeFormat('en-IN', {
+  timeStyle: 'short',
+});
 
 function activeFilterToBoolean(value: ActiveFilter): boolean | undefined {
   if (value === 'active') {
@@ -271,6 +281,10 @@ function formatDate(value: string): string {
 
 function formatDateOnly(value: string | null): string {
   return value ? dateOnlyFormatter.format(new Date(value)) : 'Open ended';
+}
+
+function formatTimeOnly(value: string): string {
+  return timeOnlyFormatter.format(new Date(value));
 }
 
 function formatEnum(value: string): string {
@@ -342,24 +356,8 @@ function StatusToggleButton({
   );
 }
 
-function PageHeader({ action, eyebrow, icon: Icon, subtitle, title }: PageHeaderProps) {
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-mint text-brand-teal ring-1 ring-emerald-100">
-          <Icon className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-normal text-brand-teal">
-            {eyebrow}
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-normal text-brand-navy">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
-        </div>
-      </div>
-      {action ? <div className="flex shrink-0">{action}</div> : null}
-    </div>
-  );
+function PageHeader({ action, eyebrow, subtitle, title }: PageHeaderProps) {
+  return <AppPageHeader action={action} description={subtitle} eyebrow={eyebrow} title={title} />;
 }
 
 function SearchInput({
@@ -432,7 +430,7 @@ function QueryState({
       <>
         {skeletonRows.map((row) => (
           <tr key={row}>
-            <td className="px-4 py-4" colSpan={colSpan}>
+            <td className="px-4 py-3" colSpan={colSpan}>
               <Skeleton className="h-8 w-full" />
             </td>
           </tr>
@@ -557,7 +555,7 @@ function FormShell({
         </Link>
       </Button>
       <PageHeader eyebrow="Master Data" icon={Icon} subtitle={subtitle} title={title} />
-      <Panel className="p-5 sm:p-6">{children}</Panel>
+      <Panel className="p-4 sm:p-5">{children}</Panel>
     </section>
   );
 }
@@ -691,6 +689,12 @@ function emptyItemFormValues(): ItemFormValues {
   };
 }
 
+const foodTypeFormLabels: Record<(typeof foodTypeValues)[number], string> = {
+  EGGETARIAN: 'Egg',
+  NON_VEG: 'Non-veg',
+  VEG: 'Veg',
+};
+
 function ItemFormFields({
   categories,
   form,
@@ -698,13 +702,14 @@ function ItemFormFields({
   categories: ItemCategory[] | undefined;
   form: UseFormReturn<ItemFormValues>;
 }>) {
+  // At most two columns, so the same fields fit the create page and the side panel.
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field error={form.formState.errors.itemName?.message} label="Item Name" name="item-name">
-          <Input id="item-name" {...form.register('itemName')} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field error={form.formState.errors.itemName?.message} label="Item name" name="item-name">
+          <Input id="item-name" placeholder="e.g. Veg Thali" {...form.register('itemName')} />
         </Field>
-        <Field label="Item Code" name="item-code">
+        <Field label="Item code" name="item-code">
           <Input
             disabled
             id="item-code"
@@ -713,7 +718,7 @@ function ItemFormFields({
           />
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.categoryId?.message}
           label="Category"
@@ -728,19 +733,9 @@ function ItemFormFields({
             ))}
           </Select>
         </Field>
-        <Field error={form.formState.errors.type?.message} label="Type" name="item-type">
-          <Select id="item-type" {...form.register('type')}>
-            <option value="">Select type</option>
-            {foodTypeValues.map((type) => (
-              <option key={type} value={type}>
-                {formatEnum(type)}
-              </option>
-            ))}
-          </Select>
-        </Field>
         <Field
           error={form.formState.errors.itemType?.message}
-          label="Item Type"
+          label="Item type"
           name="item-item-type"
         >
           <Select id="item-item-type" {...form.register('itemType')}>
@@ -753,10 +748,25 @@ function ItemFormFields({
           </Select>
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <fieldset className="space-y-2">
+        <legend className="text-[13px] font-semibold leading-none text-ds-text-2">Food type</legend>
+        <div className="grid grid-cols-3 gap-2 pt-2">
+          {foodTypeValues.map((type) => (
+            <label
+              className="flex min-h-control cursor-pointer items-center gap-2 rounded-control border border-ds-input bg-ds-surface px-3 text-sm font-medium text-ds-text-2 transition has-[:checked]:border-ds-primary has-[:checked]:bg-ds-primary-soft has-[:checked]:text-ds-link has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ds-primary"
+              key={type}
+            >
+              <input className="h-4 w-4" type="radio" value={type} {...form.register('type')} />
+              {foodTypeFormLabels[type]}
+            </label>
+          ))}
+        </div>
+        <FieldError>{form.formState.errors.type?.message}</FieldError>
+      </fieldset>
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.preparationTimeMinutes?.message}
-          label="Preparation Time"
+          label="Preparation time"
           name="item-preparation-time"
         >
           <Input
@@ -767,7 +777,7 @@ function ItemFormFields({
             {...form.register('preparationTimeMinutes')}
           />
         </Field>
-        <Field error={form.formState.errors.hsnCode?.message} label="HSN Code" name="item-hsn-code">
+        <Field error={form.formState.errors.hsnCode?.message} label="HSN code" name="item-hsn-code">
           <Input id="item-hsn-code" {...form.register('hsnCode')} />
         </Field>
       </div>
@@ -946,7 +956,7 @@ function ItemPriceFormFields({
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.hospitalId?.message}
           label="Location"
@@ -988,7 +998,7 @@ function ItemPriceFormFields({
           </Select>
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <ItemPriceItemCombobox
           error={form.formState.errors.itemId?.message}
           form={form}
@@ -1012,7 +1022,7 @@ function ItemPriceFormFields({
           </Select>
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field error={form.formState.errors.price?.message} label="Price" name="price-value">
           <Input
             id="price-value"
@@ -1102,7 +1112,7 @@ function emptyEmployeeFormValues(): EmployeeFormValues {
 function EmployeeFormFields({ form }: Readonly<{ form: UseFormReturn<EmployeeFormValues> }>) {
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.employeeCode?.message}
           label="Employee Code"
@@ -1118,7 +1128,7 @@ function EmployeeFormFields({ form }: Readonly<{ form: UseFormReturn<EmployeeFor
           <Input id="employee-name" {...form.register('employeeName')} />
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.department?.message}
           label="Department"
@@ -1316,10 +1326,10 @@ export function ItemCategoriesPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild>
             <Link href="/masters/item-categories/new">
               <Plus className="h-4 w-4" />
               Create
@@ -1333,13 +1343,13 @@ export function ItemCategoriesPageClient() {
       />
 
       {editingCategory ? (
-        <Panel className="p-5">
+        <Panel className="p-4">
           <div className="mb-5">
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">Edit Category</h2>
             <p className="text-sm text-slate-500">Update category details and status.</p>
           </div>
           <form
-            className="grid gap-5"
+            className="grid gap-4"
             onSubmit={(event) => {
               void handleSubmit(event);
             }}
@@ -1399,34 +1409,38 @@ export function ItemCategoriesPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[24%] px-4 py-3">Category Name</th>
-                <th className="w-[11%] px-4 py-3">Status</th>
-                <th className="w-[14%] px-4 py-3">Active / Inactive</th>
-                <th className="w-[18%] px-4 py-3">Created Date Time</th>
-                <th className="w-[18%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[15%] px-4 py-3">Actions</th>
+                <th className="w-[24%] px-4 py-2.5">Category Name</th>
+                <th className="w-[11%] px-4 py-2.5">Status</th>
+                <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
+                <th className="w-[18%] px-4 py-2.5">Created Date Time</th>
+                <th className="w-[18%] px-4 py-2.5">Updated Date Time</th>
+                <th className="w-[15%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((category) => (
                   <tr className="hover:bg-slate-50" key={category.id}>
-                    <td className="px-4 py-4 font-medium text-slate-950">
+                    <td className="px-4 py-3 font-medium text-slate-950">
                       {category.categoryName}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={category.isActive} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusToggleButton
                         isActive={category.isActive}
                         isPending={toggleCategoryStatusMutation.isPending}
                         onToggle={() => toggleCategoryStatus(category)}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(category.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(category.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(category.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(category.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() => startEditingCategory(category)}
@@ -1534,7 +1548,7 @@ export function ItemCategoryCreatePageClient() {
       title="Create Item Category"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
@@ -1552,6 +1566,27 @@ export function ItemCategoryCreatePageClient() {
   );
 }
 
+// Card header tints: one of the concepts' tile colours, picked from the category id so a
+// category always keeps the same colour. Dark mode keeps the portal's existing dark shades.
+const categoryTints = [
+  'bg-ds-tile-locations-bg text-ds-tile-locations-fg dark:bg-teal-950 dark:text-teal-300',
+  'bg-ds-tile-kitchens-bg text-ds-tile-kitchens-fg dark:bg-amber-950 dark:text-amber-300',
+  'bg-ds-tile-items-bg text-ds-tile-items-fg dark:bg-sky-950 dark:text-sky-300',
+  'bg-ds-tile-restaurants-bg text-ds-tile-restaurants-fg dark:bg-violet-950 dark:text-violet-300',
+  'bg-ds-tile-employees-bg text-ds-tile-employees-fg dark:bg-rose-950 dark:text-rose-300',
+  'bg-ds-tile-stores-bg text-ds-tile-stores-fg dark:bg-emerald-950 dark:text-emerald-300',
+];
+
+function categoryTint(categoryId: string): string {
+  let hash = 0;
+
+  for (const character of categoryId) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return categoryTints[hash % categoryTints.length] ?? '';
+}
+
 export function ItemsPageClient() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -1562,6 +1597,7 @@ export function ItemsPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const categoryOptionsQuery = useItemCategoryOptions();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -1728,231 +1764,330 @@ export function ItemsPageClient() {
     toggleItemStatusMutation.mutate({ isActive: nextIsActive, item });
   }
 
+  const advancedFilterCount = [activeFilter, foodTypeFilter, itemTypeFilter].filter(Boolean).length;
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild className="h-cta px-5">
             <Link href="/masters/items/new">
-              <Plus className="h-4 w-4" />
-              Create
+              <Plus className="h-[18px] w-[18px]" />
+              Add item
             </Link>
           </Button>
         }
-        eyebrow="Master Data"
+        eyebrow="Item & Menu Setup"
         icon={PackageOpen}
-        subtitle="Maintain global items reusable across all hospitals."
-        title="Items"
+        subtitle="Create items once, then map them to restaurants and kitchens across every location."
+        title="Menu items"
       />
 
-      {editingItem ? (
-        <Panel className="p-5">
-          <div className="mb-5">
-            <h2 className="text-lg font-semibold tracking-normal text-slate-950">Edit Item</h2>
-            <p className="text-sm text-slate-500">Update item details and status.</p>
-          </div>
-          <form
-            className="grid gap-5"
-            onSubmit={(event) => {
-              void handleSubmit(event);
-            }}
-          >
-            <ItemFormFields categories={categoryOptionsQuery.data} form={form} />
-            {categoryOptionsQuery.isError ? (
-              <p className="text-sm font-medium text-red-600">
-                {getApiErrorMessage(categoryOptionsQuery.error)}
-              </p>
-            ) : null}
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button onClick={cancelEditingItem} type="button" variant="outline">
-                Cancel
-              </Button>
-              <SubmitButton isPending={saveItemMutation.isPending} label="Update Item" />
-            </div>
-          </form>
-        </Panel>
-      ) : null}
-
-      <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_150px_190px_150px_150px_150px_auto]">
-          <SearchInput
-            onChange={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            value={search}
-          />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setCategoryFilter(event.target.value);
-              setPage(1);
-            }}
-            value={categoryFilter}
-          >
-            <option value="">All categories</option>
-            {categoryOptionsQuery.data?.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.categoryName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setFoodTypeFilter(event.target.value as FoodTypeFilter);
-              setPage(1);
-            }}
-            value={foodTypeFilter}
-          >
-            <option value="">All types</option>
-            {foodTypeValues.map((type) => (
-              <option key={type} value={type}>
-                {formatEnum(type)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setItemTypeFilter(event.target.value as ItemTypeFilter);
-              setPage(1);
-            }}
-            value={itemTypeFilter}
-          >
-            <option value="">All item types</option>
-            {itemTypeValues.map((itemType) => (
-              <option key={itemType} value={itemType}>
-                {formatEnum(itemType)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="itemName">Item name</option>
-            <option value="itemCode">Item code</option>
-            <option value="itemType">Item type</option>
-            <option value="type">Type</option>
-            <option value="preparationTimeMinutes">Preparation time</option>
-            <option value="hsnCode">HSN code</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="isActive">Status</option>
-          </Select>
-          <div className="flex gap-2">
-            <SortOrderSelect
+      <div
+        className={cn(
+          'grid grid-cols-1 items-start gap-5',
+          editingItem && 'xl:grid-cols-[minmax(0,1fr)_400px]',
+        )}
+      >
+        <Panel className="min-w-0 overflow-hidden">
+          <div className="border-b border-ds-divider p-4">
+            <FilterTabs
+              label="Item category"
               onChange={(value) => {
-                setSortOrder(value);
+                setCategoryFilter(value);
                 setPage(1);
               }}
-              value={sortOrder}
+              options={[
+                { label: 'All', value: '' },
+                ...(categoryOptionsQuery.data ?? []).map((category) => ({
+                  label: category.categoryName,
+                  value: category.id,
+                })),
+              ].map((option) =>
+                option.value === categoryFilter && !itemsQuery.isLoading
+                  ? { ...option, count: meta.total }
+                  : option,
+              )}
+              value={categoryFilter}
             />
-            <Button onClick={() => void itemsQuery.refetch()} type="button" variant="outline">
+          </div>
+          <div className="flex flex-wrap items-center gap-3 border-b border-ds-divider p-4">
+            <div className="min-w-[220px] flex-1">
+              <SearchInput
+                onChange={(value) => {
+                  setSearch(value);
+                  setPage(1);
+                }}
+                value={search}
+              />
+            </div>
+            <div className="w-full sm:w-44">
+              <Select
+                aria-label="Sort by"
+                onChange={(event) => {
+                  setSortBy(event.target.value);
+                  setPage(1);
+                }}
+                value={sortBy}
+              >
+                <option value="createdAt">Recently added</option>
+                <option value="itemName">Item name</option>
+                <option value="itemCode">Item code</option>
+                <option value="itemType">Item type</option>
+                <option value="type">Food type</option>
+                <option value="preparationTimeMinutes">Preparation time</option>
+                <option value="hsnCode">HSN code</option>
+                <option value="updatedAt">Updated date</option>
+                <option value="isActive">Status</option>
+              </Select>
+            </div>
+            <div className="w-full sm:w-40">
+              <SortOrderSelect
+                onChange={(value) => {
+                  setSortOrder(value);
+                  setPage(1);
+                }}
+                value={sortOrder}
+              />
+            </div>
+            <Button
+              aria-expanded={showMoreFilters}
+              onClick={() => setShowMoreFilters((current) => !current)}
+              type="button"
+              variant="outline"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              More filters
+              {advancedFilterCount ? (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ds-primary px-1.5 text-xs font-bold text-white">
+                  {advancedFilterCount}
+                </span>
+              ) : null}
+            </Button>
+            <Button
+              aria-label="Refresh items"
+              onClick={() => void itemsQuery.refetch()}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
-              <tr>
-                <th className="w-[16%] px-4 py-3">Item Name</th>
-                <th className="w-[13%] px-4 py-3">Category</th>
-                <th className="w-[10%] px-4 py-3">Type</th>
-                <th className="w-[11%] px-4 py-3">Item Type</th>
-                <th className="w-[11%] px-4 py-3">Preparation Time</th>
-                <th className="w-[8%] px-4 py-3">HSN Code</th>
-                <th className="w-[9%] px-4 py-3">Status</th>
-                <th className="w-[13%] px-4 py-3">Active / Inactive</th>
-                <th className="w-[14%] px-4 py-3">Created Date Time</th>
-                <th className="w-[14%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[16%] px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {items.length > 0 ? (
-                items.map((item) => (
-                  <tr className="hover:bg-slate-50" key={item.id}>
-                    <td className="px-4 py-4">
-                      <div>
-                        <p className="font-medium text-slate-950">{item.itemName}</p>
-                        <p className="text-xs text-slate-500">{item.itemCode}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">{item.category.categoryName}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatEnum(item.type)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatEnum(item.itemType)}</td>
-                    <td className="px-4 py-4 text-slate-600">
-                      {item.preparationTimeMinutes ?? 'Not set'}
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">{item.hsnCode || 'Not set'}</td>
-                    <td className="px-4 py-4">
-                      <StatusBadge isActive={item.isActive} />
-                    </td>
-                    <td className="px-4 py-4">
-                      <StatusToggleButton
-                        isActive={item.isActive}
-                        isPending={toggleItemStatusMutation.isPending}
-                        onToggle={() => toggleItemStatus(item)}
-                      />
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(item.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(item.updatedAt)}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          onClick={() => startEditingItem(item)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Edit
-                        </Button>
-                        <Button
-                          className="border-red-200 text-red-700 hover:bg-red-50"
-                          disabled={deleteItemMutation.isPending}
-                          onClick={() => deleteItem(item)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <QueryState
-                  colSpan={11}
-                  error={itemsQuery.error}
-                  isError={itemsQuery.isError}
-                  isLoading={itemsQuery.isLoading}
-                  label="items"
+            <p className="text-sm text-ds-muted" aria-live="polite">
+              {itemsQuery.isLoading
+                ? 'Loading…'
+                : `${meta.total} item${meta.total === 1 ? '' : 's'}`}
+            </p>
+            {showMoreFilters ? (
+              <div className="grid w-full gap-3 sm:grid-cols-3">
+                <ActiveFilterSelect
+                  onChange={(value) => {
+                    setActiveFilter(value);
+                    setPage(1);
+                  }}
+                  value={activeFilter}
                 />
-              )}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          limit={meta.limit}
-          onPageChange={setPage}
-          page={meta.page}
-          total={meta.total}
-          totalPages={meta.totalPages}
-        />
-      </Panel>
+                <Select
+                  aria-label="Food type"
+                  onChange={(event) => {
+                    setFoodTypeFilter(event.target.value as FoodTypeFilter);
+                    setPage(1);
+                  }}
+                  value={foodTypeFilter}
+                >
+                  <option value="">All food types</option>
+                  {foodTypeValues.map((type) => (
+                    <option key={type} value={type}>
+                      {foodTypeFormLabels[type]}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Item type"
+                  onChange={(event) => {
+                    setItemTypeFilter(event.target.value as ItemTypeFilter);
+                    setPage(1);
+                  }}
+                  value={itemTypeFilter}
+                >
+                  <option value="">All item types</option>
+                  {itemTypeValues.map((itemType) => (
+                    <option key={itemType} value={itemType}>
+                      {formatEnum(itemType)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="p-4">
+            {itemsQuery.isLoading ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton className="h-64 rounded-card" key={`item-skeleton-${index}`} />
+                ))}
+              </div>
+            ) : itemsQuery.isError ? (
+              <p className="rounded-tile bg-ds-rejected-bg px-4 py-6 text-center text-sm font-medium text-ds-rejected-fg dark:bg-red-950 dark:text-red-300">
+                {getApiErrorMessage(itemsQuery.error)}
+              </p>
+            ) : items.length > 0 ? (
+              <div
+                className={cn(
+                  'grid gap-4 sm:grid-cols-2',
+                  editingItem ? '2xl:grid-cols-3' : 'lg:grid-cols-3 2xl:grid-cols-4',
+                )}
+              >
+                {items.map((item) => {
+                  const tint = categoryTint(item.categoryId);
+
+                  return (
+                    <article
+                      className={cn(
+                        'flex flex-col overflow-hidden rounded-card border border-ds-border bg-ds-surface',
+                        editingItem?.id === item.id && 'ring-2 ring-ds-primary',
+                      )}
+                      key={item.id}
+                    >
+                      <div className={cn('relative grid h-20 place-items-center', tint)}>
+                        <span className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] truncate rounded-full bg-ds-surface/90 px-2.5 py-1 text-xs font-semibold text-ds-text-2">
+                          {item.category.categoryName}
+                        </span>
+                        <Utensils aria-hidden="true" className="h-7 w-7" strokeWidth={1.8} />
+                      </div>
+                      <div className="flex flex-1 flex-col p-4">
+                        <div className="flex items-start gap-2">
+                          <span className="pt-0.5">
+                            <FoodTypeMarker type={item.type} />
+                          </span>
+                          <h3 className="min-w-0 break-words font-bold leading-5 text-ds-text">
+                            {item.itemName}
+                          </h3>
+                        </div>
+                        <p className="mt-1 text-xs text-ds-muted">
+                          {item.itemCode} · {formatEnum(item.itemType)}
+                        </p>
+                        {item.preparationTimeMinutes || item.hsnCode ? (
+                          <p className="mt-1 text-xs text-ds-muted">
+                            {[
+                              item.preparationTimeMinutes
+                                ? `${item.preparationTimeMinutes} min prep`
+                                : null,
+                              item.hsnCode ? `HSN ${item.hsnCode}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        ) : null}
+                        <div className="mt-auto pt-4">
+                          <div className="flex items-center justify-between gap-2 border-t border-ds-divider pt-3">
+                            <span
+                              className={cn(
+                                'text-[13px] font-medium',
+                                item.isActive ? 'text-ds-teal-text' : 'text-ds-muted',
+                              )}
+                            >
+                              {item.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                aria-label={`Edit ${item.itemName}`}
+                                onClick={() => startEditingItem(item)}
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                aria-label={`Delete ${item.itemName}`}
+                                className="text-ds-rejected-fg hover:bg-ds-rejected-bg hover:text-ds-rejected-fg dark:text-red-300"
+                                disabled={deleteItemMutation.isPending}
+                                onClick={() => deleteItem(item)}
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                              <span className="pl-1">
+                                <Toggle
+                                  ariaLabel={`${item.itemName} active`}
+                                  checked={item.isActive}
+                                  disabled={toggleItemStatusMutation.isPending}
+                                  onChange={() => toggleItemStatus(item)}
+                                />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                description="Create an item or adjust the filters."
+                title="No items found"
+              />
+            )}
+          </div>
+          <PaginationControls
+            limit={meta.limit}
+            onPageChange={setPage}
+            page={meta.page}
+            total={meta.total}
+            totalPages={meta.totalPages}
+          />
+        </Panel>
+
+        {editingItem ? (
+          <Panel className="order-first p-4 xl:order-none">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-ds-teal-text">
+                  Edit item
+                </p>
+                <h2 className="mt-1 break-words text-xl font-extrabold text-ds-text">
+                  {editingItem.itemName}
+                </h2>
+                <p className="mt-1 text-[13px] text-ds-muted">Update item details and status.</p>
+              </div>
+              <Button
+                aria-label="Close edit panel"
+                className="shrink-0"
+                onClick={cancelEditingItem}
+                size="icon"
+                type="button"
+                variant="outline"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                void handleSubmit(event);
+              }}
+            >
+              <ItemFormFields categories={categoryOptionsQuery.data} form={form} />
+              {categoryOptionsQuery.isError ? (
+                <p className="text-sm font-medium text-ds-rejected-fg dark:text-red-300">
+                  {getApiErrorMessage(categoryOptionsQuery.error)}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3 border-t border-ds-divider pt-5">
+                <Button onClick={cancelEditingItem} type="button" variant="outline">
+                  Cancel
+                </Button>
+                <SubmitButton isPending={saveItemMutation.isPending} label="Save item" />
+              </div>
+            </form>
+          </Panel>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -2028,7 +2163,7 @@ export function ItemCreatePageClient() {
       title="Create Item"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
@@ -2185,10 +2320,10 @@ export function ItemPricesPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild>
             <Link href="/masters/item-prices/new">
               <Plus className="h-4 w-4" />
               Create
@@ -2202,7 +2337,7 @@ export function ItemPricesPageClient() {
       />
 
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_210px_190px_150px_150px_150px_160px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -2316,76 +2451,80 @@ export function ItemPricesPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[17%] px-4 py-3">Location</th>
-                <th className="w-[14%] px-4 py-3">Restaurant</th>
-                <th className="w-[16%] px-4 py-3">Item</th>
-                <th className="w-[11%] px-4 py-3">Item Type</th>
-                <th className="w-[10%] px-4 py-3">Rate Type</th>
-                <th className="w-[10%] px-4 py-3">Price</th>
-                <th className="w-[10%] px-4 py-3">Tax Inclusive</th>
-                <th className="w-[9%] px-4 py-3">GST %</th>
-                <th className="w-[12%] px-4 py-3">Effective From</th>
-                <th className="w-[12%] px-4 py-3">Effective To</th>
-                <th className="w-[9%] px-4 py-3">Status</th>
-                <th className="w-[13%] px-4 py-3">Active / Inactive</th>
-                <th className="w-[15%] px-4 py-3">Created Date Time</th>
-                <th className="w-[15%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[16%] px-4 py-3">Actions</th>
+                <th className="w-[17%] px-4 py-2.5">Location</th>
+                <th className="w-[14%] px-4 py-2.5">Restaurant</th>
+                <th className="w-[16%] px-4 py-2.5">Item</th>
+                <th className="w-[11%] px-4 py-2.5">Item Type</th>
+                <th className="w-[10%] px-4 py-2.5">Rate Type</th>
+                <th className="w-[10%] px-4 py-2.5">Price</th>
+                <th className="w-[10%] px-4 py-2.5">Tax Inclusive</th>
+                <th className="w-[9%] px-4 py-2.5">GST %</th>
+                <th className="w-[12%] px-4 py-2.5">Effective From</th>
+                <th className="w-[12%] px-4 py-2.5">Effective To</th>
+                <th className="w-[9%] px-4 py-2.5">Status</th>
+                <th className="w-[13%] px-4 py-2.5">Active / Inactive</th>
+                <th className="w-[15%] px-4 py-2.5">Created Date Time</th>
+                <th className="w-[15%] px-4 py-2.5">Updated Date Time</th>
+                <th className="w-[16%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((price) => (
                   <tr className="hover:bg-slate-50" key={price.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">
                         {price.hospital.displayName ?? price.hospital.hospitalName}
                       </p>
                       <p className="text-xs text-slate-500">{price.hospital.hospitalCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {price.restaurant ? price.restaurant.restaurantName : 'All restaurants'}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{price.item.itemName}</p>
                       <p className="text-xs text-slate-500">{price.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatEnum(price.item.itemType)}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3 text-slate-600">{formatEnum(price.item.itemType)}</td>
+                    <td className="px-4 py-3">
                       <Badge className="border-cyan-200 bg-cyan-50 text-cyan-700">
                         {formatEnum(price.rateType)}
                       </Badge>
                     </td>
-                    <td className="px-4 py-4 font-semibold text-slate-950">
+                    <td className="px-4 py-3 font-semibold text-slate-950">
                       {formatCurrency(price.price)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Badge variant={price.isTaxInclusive ? 'success' : 'neutral'}>
                         {price.isTaxInclusive ? 'Yes' : 'No'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {price.gstPercent === null ? '-' : `${price.gstPercent}%`}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDateOnly(price.effectiveFrom)}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDateOnly(price.effectiveTo)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={price.isActive} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusToggleButton
                         isActive={price.isActive}
                         isPending={toggleItemPriceStatusMutation.isPending}
                         onToggle={() => toggleItemPriceStatus(price)}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(price.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(price.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(price.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(price.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button asChild size="sm" type="button" variant="outline">
                           <Link href={`/masters/item-prices/${price.id}/edit`}>
@@ -2506,7 +2645,7 @@ export function ItemPriceCreatePageClient() {
       title="Create Item Price"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
@@ -2656,7 +2795,7 @@ export function ItemPriceEditPageClient({ itemPriceId }: Readonly<{ itemPriceId:
       title="Edit Item Price"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
@@ -2696,6 +2835,11 @@ export function ItemPriceEditPageClient({ itemPriceId }: Readonly<{ itemPriceId:
   );
 }
 
+type EmployeeDialog =
+  | { mode: 'create' }
+  | { employee: Employee; mode: 'edit' }
+  | { employee: Employee; mode: 'view' };
+
 export function EmployeesPageClient() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -2703,7 +2847,9 @@ export function EmployeesPageClient() {
   const [discountFilter, setDiscountFilter] = useState<DiscountFilter>('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  // One pop-up for create, view and edit.
+  const [dialog, setDialog] = useState<EmployeeDialog | null>(null);
+  const editingEmployee = dialog?.mode === 'edit' ? dialog.employee : null;
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -2756,26 +2902,7 @@ export function EmployeesPageClient() {
         title: editingEmployee ? 'Employee updated' : 'Employee created',
         variant: 'success',
       });
-      setEditingEmployee(null);
-      form.reset(emptyEmployeeFormValues());
-    },
-  });
-
-  const deleteEmployeeMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteEmployee(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Employee was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      invalidateEmployeeQueries(queryClient);
-      showToast({
-        title: 'Employee deleted',
-        variant: 'success',
-      });
+      closeDialog();
     },
   });
 
@@ -2786,6 +2913,9 @@ export function EmployeesPageClient() {
     total: 0,
     totalPages: 1,
   };
+  const formValues = form.watch();
+  const canSave =
+    Boolean(formValues.employeeCode?.trim()) && Boolean(formValues.employeeName?.trim());
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = employeeSchema.safeParse(values);
@@ -2806,33 +2936,35 @@ export function EmployeesPageClient() {
     });
   });
 
-  function startEditingEmployee(employee: Employee) {
-    setEditingEmployee(employee);
-    form.reset(employeeToFormValues(employee));
+  function openCreate() {
+    form.reset(emptyEmployeeFormValues());
+    setDialog({ mode: 'create' });
   }
 
-  function cancelEditingEmployee() {
-    setEditingEmployee(null);
+  function openEdit(employee: Employee) {
+    form.reset(employeeToFormValues(employee));
+    setDialog({ employee, mode: 'edit' });
+  }
+
+  function closeDialog() {
+    setDialog(null);
     form.reset(emptyEmployeeFormValues());
   }
 
-  function deleteEmployee(employee: Employee) {
-    const shouldDelete = window.confirm(`Delete ${employee.employeeName}?`);
-
-    if (shouldDelete) {
-      deleteEmployeeMutation.mutate(employee.id);
-    }
-  }
+  const dialogTitle =
+    dialog?.mode === 'create'
+      ? 'Create employee'
+      : dialog?.mode === 'edit'
+        ? 'Edit employee'
+        : 'Employee details';
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
-            <Link href="/masters/employees/new">
-              <Plus className="h-4 w-4" />
-              Create
-            </Link>
+          <Button onClick={openCreate} type="button">
+            <Plus className="h-4 w-4" />
+            Create
           </Button>
         }
         eyebrow="Master Data"
@@ -2841,33 +2973,8 @@ export function EmployeesPageClient() {
         title="Employees"
       />
 
-      {editingEmployee ? (
-        <Panel className="p-5">
-          <div className="mb-5">
-            <h2 className="text-lg font-semibold tracking-normal text-slate-950">Edit Employee</h2>
-            <p className="text-sm text-slate-500">
-              Update employee profile and discount eligibility.
-            </p>
-          </div>
-          <form
-            className="grid gap-5"
-            onSubmit={(event) => {
-              void handleSubmit(event);
-            }}
-          >
-            <EmployeeFormFields form={form} />
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button onClick={cancelEditingEmployee} type="button" variant="outline">
-                Cancel
-              </Button>
-              <SubmitButton isPending={saveEmployeeMutation.isPending} label="Update Employee" />
-            </div>
-          </form>
-        </Panel>
-      ) : null}
-
-      <Panel>
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_160px_190px_180px_130px_auto]">
+      <Panel className="overflow-hidden">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -2917,70 +3024,84 @@ export function EmployeesPageClient() {
             }}
             value={sortOrder}
           />
-          <Button onClick={() => void employeesQuery.refetch()} type="button" variant="outline">
+          <Button
+            aria-label="Refresh employees"
+            onClick={() => void employeesQuery.refetch()}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
+          {/* The created date/time sits on two lines so the table stays narrow; the updated
+              time is in the View pop-up. */}
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="bg-ds-subtle text-left">
               <tr>
-                <th className="w-[13%] px-4 py-3">Employee Code</th>
-                <th className="w-[16%] px-4 py-3">Employee Name</th>
-                <th className="w-[12%] px-4 py-3">Department</th>
-                <th className="w-[12%] px-4 py-3">Designation</th>
-                <th className="w-[11%] px-4 py-3">Mobile</th>
-                <th className="w-[13%] px-4 py-3">Eligible For Discount</th>
-                <th className="w-[9%] px-4 py-3">Status</th>
-                <th className="w-[15%] px-4 py-3">Created Date Time</th>
-                <th className="w-[15%] px-4 py-3">Updated Date Time</th>
-                <th className="w-[17%] px-4 py-3">Actions</th>
+                <th className="px-3 py-2.5">Employee</th>
+                <th className="px-2.5 py-2.5">Department</th>
+                <th className="px-2.5 py-2.5">Designation</th>
+                <th className="px-2.5 py-2.5">Mobile</th>
+                <th className="px-2.5 py-2.5">Discount</th>
+                <th className="px-2.5 py-2.5">Status</th>
+                <th className="px-2.5 py-2.5">Created</th>
+                <th className="px-3 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-slate-100">
               {employees.length > 0 ? (
                 employees.map((employee) => (
-                  <tr className="hover:bg-slate-50" key={employee.id}>
-                    <td className="px-4 py-4 font-medium text-slate-950">
-                      {employee.employeeCode}
+                  <tr key={employee.id}>
+                    <td className="px-3 py-3">
+                      <p className="font-semibold text-ds-text">{employee.employeeName}</p>
+                      <p className="text-xs text-ds-muted">{employee.employeeCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{employee.employeeName}</td>
-                    <td className="px-4 py-4 text-slate-600">{employee.department || 'Not set'}</td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-2.5 py-3 text-ds-text-3">
+                      {employee.department || 'Not set'}
+                    </td>
+                    <td className="px-2.5 py-3 text-ds-text-3">
                       {employee.designation || 'Not set'}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{employee.mobile || 'Not set'}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-2.5 py-3 text-ds-text-3">
+                      {employee.mobile || 'Not set'}
+                    </td>
+                    <td className="px-2.5 py-3">
                       <Badge variant={employee.eligibleForDiscount ? 'success' : 'neutral'}>
                         {employee.eligibleForDiscount ? 'Eligible' : 'Not eligible'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-2.5 py-3">
                       <StatusBadge isActive={employee.isActive} />
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(employee.createdAt)}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(employee.updatedAt)}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
+                    <td className="whitespace-nowrap px-2.5 py-3">
+                      <p className="text-ds-text-3">{formatDateOnly(employee.createdAt)}</p>
+                      <p className="text-xs text-ds-muted">{formatTimeOnly(employee.createdAt)}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex justify-end gap-2">
                         <Button
-                          onClick={() => startEditingEmployee(employee)}
-                          size="sm"
+                          aria-label={`View ${employee.employeeName}`}
+                          className="h-9 w-9"
+                          onClick={() => setDialog({ employee, mode: 'view' })}
+                          size="icon"
+                          title="View"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          aria-label={`Edit ${employee.employeeName}`}
+                          className="h-9 w-9"
+                          onClick={() => openEdit(employee)}
+                          size="icon"
+                          title="Edit"
                           type="button"
                           variant="outline"
                         >
                           <Pencil className="h-4 w-4" />
-                          Edit
-                        </Button>
-                        <Button
-                          className="border-red-200 text-red-700 hover:bg-red-50"
-                          disabled={deleteEmployeeMutation.isPending}
-                          onClick={() => deleteEmployee(employee)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
                         </Button>
                       </div>
                     </td>
@@ -2988,7 +3109,7 @@ export function EmployeesPageClient() {
                 ))
               ) : (
                 <QueryState
-                  colSpan={10}
+                  colSpan={8}
                   error={employeesQuery.error}
                   isError={employeesQuery.isError}
                   isLoading={employeesQuery.isLoading}
@@ -3006,6 +3127,98 @@ export function EmployeesPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+
+      <Modal
+        footer={
+          dialog?.mode === 'view' ? (
+            // Separate keys: React must not reuse the Edit button as the form's submit button,
+            // or the click that switches to edit mode would also submit the form.
+            <div
+              className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+              key="view-footer"
+            >
+              <Button onClick={closeDialog} type="button" variant="outline">
+                Close
+              </Button>
+              <Button onClick={() => openEdit(dialog.employee)} type="button">
+                <Pencil className="h-4 w-4" />
+                Edit employee
+              </Button>
+            </div>
+          ) : (
+            <div
+              className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+              key="form-footer"
+            >
+              <Button onClick={closeDialog} type="button" variant="outline">
+                Cancel
+              </Button>
+              <Button
+                disabled={!canSave || saveEmployeeMutation.isPending}
+                form="employee-form"
+                type="submit"
+              >
+                {saveEmployeeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : dialog?.mode === 'create' ? (
+                  <Plus className="h-4 w-4" />
+                ) : null}
+                {dialog?.mode === 'create' ? 'Create employee' : 'Save changes'}
+              </Button>
+            </div>
+          )
+        }
+        onClose={closeDialog}
+        open={dialog !== null}
+        title={dialogTitle}
+      >
+        {dialog?.mode === 'view' ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-lg font-bold text-ds-text">{dialog.employee.employeeName}</p>
+              <p className="text-[13px] text-ds-muted">{dialog.employee.employeeCode}</p>
+            </div>
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              {[
+                ['Department', dialog.employee.department || 'Not set'],
+                ['Designation', dialog.employee.designation || 'Not set'],
+                ['Mobile', dialog.employee.mobile || 'Not set'],
+                ['Created', formatDate(dialog.employee.createdAt)],
+                ['Updated', formatDate(dialog.employee.updatedAt)],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold text-ds-muted">{label}</dt>
+                  <dd className="mt-0.5 break-words text-sm font-medium text-ds-text">{value}</dd>
+                </div>
+              ))}
+              <div>
+                <dt className="text-xs font-semibold text-ds-muted">Discount</dt>
+                <dd className="mt-1">
+                  <Badge variant={dialog.employee.eligibleForDiscount ? 'success' : 'neutral'}>
+                    {dialog.employee.eligibleForDiscount ? 'Eligible' : 'Not eligible'}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold text-ds-muted">Status</dt>
+                <dd className="mt-1">
+                  <StatusBadge isActive={dialog.employee.isActive} />
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ) : dialog ? (
+          <form
+            className="grid gap-4"
+            id="employee-form"
+            onSubmit={(event) => {
+              void handleSubmit(event);
+            }}
+          >
+            <EmployeeFormFields form={form} />
+          </form>
+        ) : null}
+      </Modal>
     </section>
   );
 }
@@ -3068,7 +3281,7 @@ export function EmployeeCreatePageClient() {
       title="Create Employee"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}

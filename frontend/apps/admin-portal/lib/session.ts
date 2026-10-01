@@ -3,6 +3,7 @@ export interface SessionUser {
   hospitalId: string | null;
   id: string;
   mobile: string | null;
+  name: string | null;
   permissions: string[];
   roles: string[];
 }
@@ -13,6 +14,7 @@ interface JwtSessionPayload {
   hospital_id?: string | null;
   hospitalId?: string | null;
   mobile?: string | null;
+  name?: string | null;
   permissions?: unknown;
   roles?: unknown;
   sub?: string;
@@ -80,6 +82,7 @@ export function sessionUserFromAccessToken(token: string): SessionUser | null {
     hospitalId: payload.hospitalId ?? payload.hospital_id ?? null,
     id: payload.sub,
     mobile: payload.mobile ?? null,
+    name: payload.name ?? null,
     permissions: stringArray(payload.permissions),
     roles: stringArray(payload.roles),
   };

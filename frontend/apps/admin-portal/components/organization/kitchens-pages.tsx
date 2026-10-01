@@ -127,10 +127,10 @@ export function KitchensPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild>
             <Link href="/masters/kitchens/new">
               <Plus className="h-4 w-4" />
               Create
@@ -191,37 +191,35 @@ export function KitchensPageClient() {
             <option value="updatedAt">Updated date</option>
             <option value="kitchenName">Name</option>
           </Select>
-        </ToolbarGrid>
-        <div className="flex justify-end border-b px-4 py-3">
           <Button onClick={() => void kitchensQuery.refetch()} type="button" variant="outline">
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-        </div>
+        </ToolbarGrid>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[28%] px-4 py-3">Kitchen</th>
-                <th className="w-[26%] px-4 py-3">Location</th>
-                <th className="w-[22%] px-4 py-3">Status</th>
-                <th className="w-[16%] px-4 py-3">Updated</th>
+                <th className="w-[28%] px-4 py-2.5">Kitchen</th>
+                <th className="w-[26%] px-4 py-2.5">Location</th>
+                <th className="w-[22%] px-4 py-2.5">Status</th>
+                <th className="w-[16%] px-4 py-2.5">Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((kitchen) => (
                   <tr className="hover:bg-slate-50" key={kitchen.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-slate-950">{kitchen.kitchenName}</p>
                         <p className="text-xs text-slate-500">{kitchen.kitchenCode}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {getLocationDisplayName(kitchen.hospital)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <StatusToggleCell
                         disabled={statusMutation.isPending && statusUpdatingId === kitchen.id}
                         isActive={kitchen.isActive}
@@ -229,7 +227,9 @@ export function KitchensPageClient() {
                         showFrozenMessage={!kitchen.hospital.isActive}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-500">{formatDate(kitchen.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                      {formatDate(kitchen.updatedAt)}
+                    </td>
                   </tr>
                 ))
               ) : (
@@ -322,12 +322,12 @@ export function KitchenCreatePageClient() {
       title="Create Kitchen"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.hospitalId?.message}
             label="Location"
@@ -347,7 +347,7 @@ export function KitchenCreatePageClient() {
             </Select>
           </Field>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.kitchenName?.message}
             label="Kitchen Name"

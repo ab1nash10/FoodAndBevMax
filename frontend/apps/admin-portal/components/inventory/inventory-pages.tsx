@@ -4,15 +4,19 @@ import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRightLeft,
+  ChefHat,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   Loader2,
-  PackageCheck,
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  Store as StoreIcon,
   Trash2,
+  Utensils,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
@@ -43,10 +47,14 @@ import type {
   TransferInput,
   TransferStatus,
 } from '@aahar/api-client';
+import { AppPageHeader, EmptyState } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Field, Input, Panel, Select, Skeleton } from '@/components/ui';
+import { FilterTabs, QuantityStepper } from '@/components/ui-controls';
+import { Textarea } from '@/components/organization/shared';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { invalidateGrnQueries, invalidateTransferQueries } from '@/lib/query-invalidation';
 
 const listLimit = 10;
@@ -285,23 +293,7 @@ function PageHeader({
   subtitle,
   title,
 }: Readonly<{ action?: ReactNode; subtitle: string; title: string }>) {
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-4">
-        <span className="grid h-12 w-12 place-items-center rounded-lg border border-emerald-100 bg-brand-mint text-brand-teal">
-          <PackageCheck className="h-6 w-6" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-normal text-brand-teal">
-            Store Inventory
-          </p>
-          <h1 className="text-2xl font-semibold tracking-normal text-brand-navy">{title}</h1>
-          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-        </div>
-      </div>
-      {action}
-    </div>
-  );
+  return <AppPageHeader action={action} description={subtitle} eyebrow="Inventory" title={title} />;
 }
 
 function SearchInput({
@@ -381,7 +373,7 @@ function QueryState({
       <>
         {skeletonRows.map((row) => (
           <tr key={row}>
-            <td className="px-4 py-4" colSpan={colSpan}>
+            <td className="px-4 py-3" colSpan={colSpan}>
               <Skeleton className="h-10 w-full" />
             </td>
           </tr>
@@ -449,7 +441,7 @@ function useItems(itemType?: ItemType) {
     queryFn: async () => {
       const response = await organizationApi.listItems({
         itemType,
-        limit: 200,
+        limit: 100,
         sortBy: 'itemName',
         sortOrder: 'asc',
       });
@@ -644,7 +636,7 @@ export function GrnsPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
           <Button onClick={() => router.push('/inventory/grns/new')} type="button">
@@ -656,7 +648,7 @@ export function GrnsPageClient() {
         title="GRNs"
       />
       <Panel>
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -715,37 +707,39 @@ export function GrnsPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[14%] px-4 py-3">GRN Number</th>
-                <th className="w-[16%] px-4 py-3">Store</th>
-                <th className="w-[16%] px-4 py-3">Vendor / PO</th>
-                <th className="w-[16%] px-4 py-3">Received Date</th>
-                <th className="w-[12%] px-4 py-3">Status</th>
-                <th className="w-[12%] px-4 py-3">Lines</th>
-                <th className="w-[24%] px-4 py-3">Actions</th>
+                <th className="w-[14%] px-4 py-2.5">GRN Number</th>
+                <th className="w-[16%] px-4 py-2.5">Store</th>
+                <th className="w-[16%] px-4 py-2.5">Vendor / PO</th>
+                <th className="w-[16%] px-4 py-2.5">Received Date</th>
+                <th className="w-[12%] px-4 py-2.5">Status</th>
+                <th className="w-[12%] px-4 py-2.5">Lines</th>
+                <th className="w-[24%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {grns.length > 0 ? (
                 grns.map((grn) => (
                   <tr className="hover:bg-slate-50" key={grn.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-semibold text-slate-950">{grn.grnNumber}</p>
                       <p className="text-xs text-slate-500">{grn.hospital.hospitalName}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{grn.store.storeName}</p>
                       <p className="text-xs text-slate-500">{grn.store.storeCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       <p>{grn.vendorName || '-'}</p>
                       <p className="text-xs text-slate-500">{grn.poNumber || 'No PO'}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(grn.receivedDate)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(grn.receivedDate)}
+                    </td>
+                    <td className="px-4 py-3">
                       <Badge variant={statusVariant(grn.status)}>{formatEnum(grn.status)}</Badge>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{grn.lines.length}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3 text-slate-600">{grn.lines.length}</td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           disabled={
@@ -1008,7 +1002,7 @@ export function CreateGrnPageClient() {
   });
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
           <Button onClick={() => router.push('/inventory/grns')} type="button" variant="outline">
@@ -1051,7 +1045,7 @@ export function CreateGrnPageClient() {
         </Panel>
       ) : null}
 
-      <Panel className="p-5">
+      <Panel className="p-4">
         <form
           className="space-y-6"
           onSubmit={(event) => {
@@ -1064,7 +1058,7 @@ export function CreateGrnPageClient() {
               Select the location and store before adding item batches.
             </p>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <Field
               error={form.formState.errors.hospitalId?.message}
               label="Location"
@@ -1257,7 +1251,7 @@ export function CreateGrnPageClient() {
                       </div>
                       {line.batches.map((batch, batchIndex) => (
                         <div
-                          className="grid gap-3 rounded-md border bg-slate-50 p-3 lg:grid-cols-[1fr_150px_150px_130px_130px_130px_1fr_auto]"
+                          className="grid gap-3 rounded-md border bg-slate-50 p-3 min-[1400px]:grid-cols-[1fr_150px_150px_130px_130px_130px_1fr_auto]"
                           key={batch.clientId}
                         >
                           <Input
@@ -1439,13 +1433,13 @@ export function StoreStockPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         subtitle="Current store stock summarized by store and item, with batch details on expand."
         title="Store Stock"
       />
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_170px_170px_160px_180px_150px_160px_150px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -1552,15 +1546,15 @@ export function StoreStockPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[6%] px-4 py-3">View</th>
-                <th className="w-[18%] px-4 py-3">Store</th>
-                <th className="w-[20%] px-4 py-3">Item</th>
-                <th className="w-[14%] px-4 py-3">Category</th>
-                <th className="w-[12%] px-4 py-3">Total Available</th>
-                <th className="w-[12%] px-4 py-3">Reserved Qty</th>
-                <th className="w-[10%] px-4 py-3">Batches</th>
-                <th className="w-[14%] px-4 py-3">Nearest Expiry</th>
-                <th className="w-[12%] px-4 py-3">Status</th>
+                <th className="w-[6%] px-4 py-2.5">View</th>
+                <th className="w-[18%] px-4 py-2.5">Store</th>
+                <th className="w-[20%] px-4 py-2.5">Item</th>
+                <th className="w-[14%] px-4 py-2.5">Category</th>
+                <th className="w-[12%] px-4 py-2.5">Total Available</th>
+                <th className="w-[12%] px-4 py-2.5">Reserved Qty</th>
+                <th className="w-[10%] px-4 py-2.5">Batches</th>
+                <th className="w-[14%] px-4 py-2.5">Nearest Expiry</th>
+                <th className="w-[12%] px-4 py-2.5">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -1572,7 +1566,7 @@ export function StoreStockPageClient() {
                   return (
                     <Fragment key={rowKey}>
                       <tr className="hover:bg-slate-50">
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <Button
                             aria-expanded={isExpanded}
                             aria-label={isExpanded ? 'Collapse batches' : 'Expand batches'}
@@ -1588,33 +1582,33 @@ export function StoreStockPageClient() {
                             )}
                           </Button>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <p className="font-medium text-slate-950">{summary.storeName}</p>
                           <p className="text-xs text-slate-500">{summary.storeCode ?? '-'}</p>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <p className="font-medium text-slate-950">{summary.itemName}</p>
                           <p className="text-xs text-slate-500">{summary.itemCode}</p>
                         </td>
-                        <td className="px-4 py-4 text-slate-600">{summary.categoryName ?? '-'}</td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3 text-slate-600">{summary.categoryName ?? '-'}</td>
+                        <td className="px-4 py-3">
                           <p className="text-lg font-semibold text-slate-950">
                             {formatQuantity(summary.totalAvailableQty)}
                           </p>
                           <p className="text-xs text-slate-500">{formatEnum(summary.itemType)}</p>
                         </td>
-                        <td className="px-4 py-4 text-slate-600">
+                        <td className="px-4 py-3 text-slate-600">
                           {formatQuantity(summary.totalReservedQty)}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <Badge className="border-cyan-200 bg-cyan-50 text-cyan-700">
                             {summary.batchCount}
                           </Badge>
                         </td>
-                        <td className="px-4 py-4 text-slate-600">
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                           {formatDateOnly(summary.nearestExpiryDate)}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <Badge variant={statusVariant(summary.status)}>
                             {formatEnum(summary.status)}
                           </Badge>
@@ -1622,7 +1616,7 @@ export function StoreStockPageClient() {
                       </tr>
                       {isExpanded ? (
                         <tr key={`${rowKey}:batches`} className="bg-slate-50/70">
-                          <td className="px-4 py-4" colSpan={9}>
+                          <td className="px-4 py-3" colSpan={9}>
                             <div className="rounded-lg border bg-white p-3 shadow-sm">
                               <div className="mb-3 flex items-center justify-between gap-3">
                                 <div>
@@ -1651,7 +1645,7 @@ export function StoreStockPageClient() {
                                         <td className="px-3 py-3 font-medium text-slate-950">
                                           {batch.batchNumber ?? '-'}
                                         </td>
-                                        <td className="px-3 py-3 text-slate-600">
+                                        <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                                           {formatDateOnly(batch.expiryDate)}
                                         </td>
                                         <td className="px-3 py-3 font-semibold text-slate-950">
@@ -2088,6 +2082,194 @@ function allocateFefo(
   return allocations;
 }
 
+const transferStatusLabels: Record<TransferStatus, string> = {
+  ACKNOWLEDGED: 'Acknowledged',
+  CANCELLED: 'Cancelled',
+  DRAFT: 'Draft',
+  PENDING_ACKNOWLEDGEMENT: 'Pending ack',
+};
+
+// Chip colours from the concepts: pending, in transit (draft), received, rejected (cancelled).
+const transferChipVariant: Record<TransferStatus, 'danger' | 'info' | 'success' | 'warning'> = {
+  ACKNOWLEDGED: 'success',
+  CANCELLED: 'danger',
+  DRAFT: 'info',
+  PENDING_ACKNOWLEDGEMENT: 'warning',
+};
+
+/** Right-hand transfer details from the transfers concept, built from the transfer record. */
+function TransferDetailPanel({
+  children,
+  isLoading,
+  restaurantName,
+  sourceName,
+  transfer,
+}: Readonly<{
+  children?: ReactNode;
+  isLoading: boolean;
+  restaurantName: string;
+  sourceName: string;
+  transfer: Transfer | undefined;
+}>) {
+  if (!transfer) {
+    return (
+      <Panel className="p-4">
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        ) : (
+          <EmptyState
+            description="Transfers you can view will show their details here."
+            title="No transfer selected"
+          />
+        )}
+      </Panel>
+    );
+  }
+
+  const { status } = transfer;
+  const SourceIcon = transfer.sourceType === 'KITCHEN' ? ChefHat : StoreIcon;
+  const steps: Array<{
+    detail?: string;
+    label: string;
+    state: 'current' | 'done' | 'stopped' | 'todo';
+  }> = [
+    { detail: formatDate(transfer.createdAt), label: 'Created', state: 'done' },
+    {
+      detail: status === 'PENDING_ACKNOWLEDGEMENT' ? formatDate(transfer.updatedAt) : undefined,
+      label:
+        transfer.sourceType === 'KITCHEN' ? 'Dispatched from kitchen' : 'Dispatched from store',
+      state: status === 'PENDING_ACKNOWLEDGEMENT' || status === 'ACKNOWLEDGED' ? 'done' : 'todo',
+    },
+    status === 'CANCELLED'
+      ? { detail: formatDate(transfer.updatedAt), label: 'Cancelled', state: 'stopped' }
+      : {
+          detail:
+            status === 'ACKNOWLEDGED'
+              ? formatDate(transfer.updatedAt)
+              : status === 'PENDING_ACKNOWLEDGEMENT'
+                ? 'Awaiting'
+                : undefined,
+          label: 'Acknowledged by restaurant',
+          state:
+            status === 'ACKNOWLEDGED'
+              ? 'done'
+              : status === 'PENDING_ACKNOWLEDGEMENT'
+                ? 'current'
+                : 'todo',
+        },
+  ];
+  const dotClass = {
+    current: 'bg-ds-stage-preparing',
+    done: 'bg-ds-teal',
+    stopped: 'bg-ds-stage-late',
+    todo: 'bg-ds-input',
+  };
+
+  return (
+    <Panel aria-label="Transfer details" className="overflow-hidden" role="region">
+      <div className="border-b border-ds-divider p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-ds-teal-text">
+            Transfer details
+          </p>
+          <Badge className="normal-case" variant={transferChipVariant[status]}>
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+            {transferStatusLabels[status]}
+          </Badge>
+        </div>
+        <h2 className="mt-2 text-2xl font-extrabold text-ds-text">{transfer.transferNumber}</h2>
+        <p className="mt-1 text-[13px] text-ds-muted">
+          Created {formatDate(transfer.createdAt)} · {transfer.hospital.hospitalName}
+        </p>
+      </div>
+
+      <div className="space-y-3 border-b border-ds-divider p-4">
+        {[
+          {
+            icon: SourceIcon,
+            label: 'From',
+            tile: 'bg-ds-tile-stores-bg text-ds-tile-stores-fg dark:bg-emerald-950 dark:text-emerald-300',
+            value: sourceName,
+          },
+          {
+            icon: Utensils,
+            label: 'To',
+            tile: 'bg-ds-tile-restaurants-bg text-ds-tile-restaurants-fg dark:bg-violet-950 dark:text-violet-300',
+            value: restaurantName,
+          },
+        ].map((end) => (
+          <div className="flex items-center gap-3" key={end.label}>
+            <span
+              className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-control', end.tile)}
+            >
+              <end.icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-ds-muted">
+                {end.label}
+              </p>
+              <p className="truncate font-semibold text-ds-text">{end.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-b border-ds-divider p-4">
+        <h3 className="text-sm font-bold text-ds-text">Items · {transfer.lines.length}</h3>
+        <ul className="mt-3 divide-y divide-slate-100">
+          {transfer.lines.map((line) => (
+            <li className="flex items-center justify-between gap-3 py-2 text-sm" key={line.id}>
+              <span className="min-w-0 truncate text-ds-text-2">{line.item.itemName}</span>
+              <span className="shrink-0 font-bold text-ds-text">
+                {formatQuantity(line.sentQty)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="p-4">
+        <h3 className="text-sm font-bold text-ds-text">Timeline</h3>
+        <ol className="mt-3">
+          {steps.map((step, index) => (
+            <li className="relative flex gap-3 pb-4 last:pb-0" key={step.label}>
+              {index < steps.length - 1 ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute left-[5px] top-4 h-[calc(100%-12px)] w-px bg-ds-border"
+                />
+              ) : null}
+              <span
+                aria-hidden="true"
+                className={cn('mt-1 h-[11px] w-[11px] shrink-0 rounded-full', dotClass[step.state])}
+              />
+              <div>
+                <p
+                  className={cn(
+                    'text-sm font-semibold',
+                    step.state === 'todo' ? 'text-ds-muted' : 'text-ds-text',
+                  )}
+                >
+                  {step.label}
+                </p>
+                {step.detail ? <p className="text-xs text-ds-muted">{step.detail}</p> : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {children ? (
+        <div className="grid grid-cols-2 gap-3 border-t border-ds-divider p-4">{children}</div>
+      ) : null}
+    </Panel>
+  );
+}
+
 export function TransfersPageClient() {
   const { scopedHospitalId } = useLocationContext();
   const router = useRouter();
@@ -2106,6 +2288,8 @@ export function TransfersPageClient() {
   const [partialRemarks, setPartialRemarks] = useState('');
   const [partialLines, setPartialLines] = useState<AcknowledgementLineDraft[]>([]);
   const [partialError, setPartialError] = useState('');
+  const [selectedTransferId, setSelectedTransferId] = useState<string | null>(null);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const hospitalsQuery = useHospitals();
   const storesQuery = useStores(hospitalFilter);
   const kitchensQuery = useKitchens(hospitalFilter);
@@ -2314,336 +2498,526 @@ export function TransfersPageClient() {
     });
   }
 
+  const selectedTransfer =
+    transfers.find((transfer) => transfer.id === selectedTransferId) ?? transfers[0];
+  const advancedFilterCount = [
+    sourceTypeFilter,
+    storeFilter,
+    kitchenFilter,
+    restaurantFilter,
+  ].filter(Boolean).length;
+  // Lines received short of what was sent; the acknowledge button shows how many.
+  const shortLineCount = partialTransfer
+    ? partialTransfer.lines.filter(
+        (line, index) => line.sentQty - Number(partialLines[index]?.acceptedQty || 0) >= 0.0005,
+      ).length
+    : 0;
+
+  function sourceName(transfer: Transfer): string {
+    return transfer.sourceType === 'KITCHEN'
+      ? (kitchenMap.get(transfer.sourceId)?.kitchenName ?? transfer.sourceId)
+      : (storeMap.get(transfer.sourceId)?.storeName ?? transfer.sourceId);
+  }
+
+  function restaurantName(transfer: Transfer): string {
+    return restaurantMap.get(transfer.destinationId)?.restaurantName ?? transfer.destinationId;
+  }
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button onClick={() => router.push('/inventory/transfers/new')} type="button">
-            <Plus className="h-4 w-4" />
-            New Transfer
+          <Button
+            className="h-cta px-5"
+            onClick={() => router.push('/inventory/transfers/new')}
+            type="button"
+          >
+            <Plus className="h-[18px] w-[18px]" />
+            New transfer
           </Button>
         }
-        subtitle="Move Store MRP stock or Kitchen READYMADE stock to restaurants with acknowledgement."
-        title="Transfers"
+        subtitle="Review movements from stores and kitchens to restaurants, and follow up on pending acknowledgements."
+        title="Stock transfers"
       />
-      <Panel>
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_160px_140px_170px_170px_170px_120px_auto]">
-          <SearchInput
-            onChange={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            value={search}
-          />
-          <HospitalSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setSourceTypeFilter('');
-              setStoreFilter('');
-              setKitchenFilter('');
-              setRestaurantFilter('');
-              setPage(1);
-            }}
-            value={hospitalFilter}
-          />
-          <Select
-            disabled={!hospitalFilter}
-            onChange={(event) => {
-              setSourceTypeFilter(event.target.value as '' | InventoryLocationType);
-              setStoreFilter('');
-              setKitchenFilter('');
-              setPage(1);
-            }}
-            value={sourceTypeFilter}
-          >
-            <option value="">All sources</option>
-            <option value="STORE">Store</option>
-            <option value="KITCHEN">Kitchen</option>
-          </Select>
-          {sourceTypeFilter === 'KITCHEN' ? (
-            <KitchenSelect
-              disabled={!hospitalFilter}
-              kitchens={kitchensQuery.data ?? []}
+      <div className="grid grid-cols-1 items-start gap-5 min-[1320px]:grid-cols-[minmax(0,1fr)_340px]">
+        <Panel className="min-w-0 overflow-hidden">
+          <div className="border-b border-ds-divider p-4">
+            <FilterTabs
+              label="Transfer status"
               onChange={(value) => {
-                setKitchenFilter(value);
+                setStatusFilter(value);
                 setPage(1);
               }}
-              value={kitchenFilter}
-            />
-          ) : (
-            <StoreSelect
-              disabled={!hospitalFilter || sourceTypeFilter === ''}
-              onChange={(value) => {
-                setStoreFilter(value);
-                setPage(1);
-              }}
-              stores={storesQuery.data ?? []}
-              value={storeFilter}
-            />
-          )}
-          <RestaurantSelect
-            disabled={!hospitalFilter}
-            onChange={(value) => {
-              setRestaurantFilter(value);
-              setPage(1);
-            }}
-            restaurants={restaurantsQuery.data ?? []}
-            value={restaurantFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStatusFilter(event.target.value as '' | TransferStatus);
-              setPage(1);
-            }}
-            value={statusFilter}
-          >
-            <option value="">All statuses</option>
-            {transferStatuses.map((status) => (
-              <option key={status} value={status}>
-                {formatEnum(status)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortOrder(event.target.value as SortOrder);
-              setPage(1);
-            }}
-            value={sortOrder}
-          >
-            <option value="desc">Newest</option>
-            <option value="asc">Oldest</option>
-          </Select>
-          <Button onClick={() => void transfersQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
-              <tr>
-                <th className="w-[13%] px-4 py-3">Transfer</th>
-                <th className="w-[15%] px-4 py-3">Source</th>
-                <th className="w-[15%] px-4 py-3">Restaurant</th>
-                <th className="w-[14%] px-4 py-3">Transfer Date</th>
-                <th className="w-[12%] px-4 py-3">Status</th>
-                <th className="w-[9%] px-4 py-3">Lines</th>
-                <th className="w-[22%] px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {transfers.length > 0 ? (
-                transfers.map((transfer) => (
-                  <tr className="hover:bg-slate-50" key={transfer.id}>
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-slate-950">{transfer.transferNumber}</p>
-                      <p className="text-xs text-slate-500">{transfer.hospital.hospitalName}</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="font-medium text-slate-950">
-                        {transfer.sourceType === 'KITCHEN'
-                          ? (kitchenMap.get(transfer.sourceId)?.kitchenName ?? transfer.sourceId)
-                          : (storeMap.get(transfer.sourceId)?.storeName ?? transfer.sourceId)}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {transfer.sourceType === 'KITCHEN'
-                          ? (kitchenMap.get(transfer.sourceId)?.kitchenCode ?? 'Kitchen')
-                          : (storeMap.get(transfer.sourceId)?.storeCode ?? 'Store')}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="font-medium text-slate-950">
-                        {restaurantMap.get(transfer.destinationId)?.restaurantName ??
-                          transfer.destinationId}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {restaurantMap.get(transfer.destinationId)?.restaurantCode ?? 'Restaurant'}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">
-                      {formatDate(transfer.transferDate)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <Badge variant={statusVariant(transfer.status)}>
-                        {formatEnum(transfer.status)}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">{transfer.lines.length}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          disabled={transfer.status !== 'DRAFT' || dispatchMutation.isPending}
-                          onClick={() => dispatchMutation.mutate(transfer.id)}
-                          size="sm"
-                          type="button"
-                        >
-                          Dispatch
-                        </Button>
-                        <Button
-                          disabled={
-                            transfer.status !== 'PENDING_ACKNOWLEDGEMENT' ||
-                            acknowledgeMutation.isPending
-                          }
-                          onClick={() =>
-                            acknowledgeMutation.mutate({
-                              items: acknowledgementItems(transfer, 'ACCEPT_FULL'),
-                              transferId: transfer.id,
-                            })
-                          }
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          Accept Full
-                        </Button>
-                        <Button
-                          disabled={
-                            transfer.status !== 'PENDING_ACKNOWLEDGEMENT' ||
-                            acknowledgeMutation.isPending
-                          }
-                          onClick={() => startPartial(transfer)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          Partial
-                        </Button>
-                        <Button
-                          className="border-red-200 text-red-700 hover:bg-red-50"
-                          disabled={
-                            transfer.status !== 'PENDING_ACKNOWLEDGEMENT' ||
-                            acknowledgeMutation.isPending
-                          }
-                          onClick={() =>
-                            acknowledgeMutation.mutate({
-                              items: acknowledgementItems(transfer, 'REJECT_FULL'),
-                              transferId: transfer.id,
-                            })
-                          }
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          Reject Full
-                        </Button>
-                        <Button
-                          disabled={transfer.status !== 'DRAFT' || cancelMutation.isPending}
-                          onClick={() => cancelMutation.mutate(transfer.id)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <QueryState
-                  colSpan={7}
-                  error={transfersQuery.error}
-                  isError={transfersQuery.isError}
-                  isLoading={transfersQuery.isLoading}
-                  label="transfers"
-                />
+              options={[
+                { label: 'All', value: '' as const },
+                ...transferStatuses.map((status) => ({
+                  label: transferStatusLabels[status],
+                  value: status,
+                })),
+              ].map((option) =>
+                option.value === statusFilter && !transfersQuery.isLoading
+                  ? { ...option, count: meta.total }
+                  : option,
               )}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          limit={meta.limit}
-          onPageChange={setPage}
-          page={meta.page}
-          total={meta.total}
-          totalPages={meta.totalPages}
-        />
-      </Panel>
-
-      {partialTransfer ? (
-        <Panel className="p-5">
-          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold tracking-normal text-slate-950">
-                Accept Partial - {partialTransfer.transferNumber}
-              </h2>
-              <p className="text-sm text-slate-500">
-                Accepted plus rejected quantity must equal sent quantity for each line.
-              </p>
-            </div>
-            <Button onClick={() => setPartialTransfer(null)} type="button" variant="outline">
-              Close
-            </Button>
+              value={statusFilter}
+            />
           </div>
-          <div className="space-y-3">
-            {partialTransfer.lines.map((line, index) => (
-              <div
-                className="grid gap-3 rounded-lg border bg-slate-50 p-3 lg:grid-cols-[1fr_110px_130px_130px_1fr]"
-                key={line.id}
+          <div className="flex flex-wrap gap-3 border-b border-ds-divider p-4">
+            <div className="min-w-[220px] flex-1">
+              <SearchInput
+                onChange={(value) => {
+                  setSearch(value);
+                  setPage(1);
+                }}
+                value={search}
+              />
+            </div>
+            <div className="w-full sm:w-48">
+              <HospitalSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setSourceTypeFilter('');
+                  setStoreFilter('');
+                  setKitchenFilter('');
+                  setRestaurantFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </div>
+            <div className="w-full sm:w-36">
+              <Select
+                aria-label="Sort order"
+                onChange={(event) => {
+                  setSortOrder(event.target.value as SortOrder);
+                  setPage(1);
+                }}
+                value={sortOrder}
               >
-                <div>
-                  <p className="font-medium text-slate-950">{line.item.itemName}</p>
-                  <p className="text-xs text-slate-500">
-                    {line.batchNumber ?? 'No batch'} - {formatDateOnly(line.expiryDate)} - Sent{' '}
-                    {line.sentQty.toFixed(3)}
+                <option value="desc">Newest</option>
+                <option value="asc">Oldest</option>
+              </Select>
+            </div>
+            <Button
+              aria-expanded={showMoreFilters}
+              onClick={() => setShowMoreFilters((current) => !current)}
+              type="button"
+              variant="outline"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              More filters
+              {advancedFilterCount ? (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ds-primary px-1.5 text-xs font-bold text-white">
+                  {advancedFilterCount}
+                </span>
+              ) : null}
+            </Button>
+            <Button
+              aria-label="Refresh transfers"
+              onClick={() => void transfersQuery.refetch()}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            {showMoreFilters ? (
+              <div className="grid w-full gap-3 sm:grid-cols-3">
+                <Select
+                  aria-label="Source type"
+                  disabled={!hospitalFilter}
+                  onChange={(event) => {
+                    setSourceTypeFilter(event.target.value as '' | InventoryLocationType);
+                    setStoreFilter('');
+                    setKitchenFilter('');
+                    setPage(1);
+                  }}
+                  value={sourceTypeFilter}
+                >
+                  <option value="">All sources</option>
+                  <option value="STORE">Store</option>
+                  <option value="KITCHEN">Kitchen</option>
+                </Select>
+                {sourceTypeFilter === 'KITCHEN' ? (
+                  <KitchenSelect
+                    disabled={!hospitalFilter}
+                    kitchens={kitchensQuery.data ?? []}
+                    onChange={(value) => {
+                      setKitchenFilter(value);
+                      setPage(1);
+                    }}
+                    value={kitchenFilter}
+                  />
+                ) : (
+                  <StoreSelect
+                    disabled={!hospitalFilter || sourceTypeFilter === ''}
+                    onChange={(value) => {
+                      setStoreFilter(value);
+                      setPage(1);
+                    }}
+                    stores={storesQuery.data ?? []}
+                    value={storeFilter}
+                  />
+                )}
+                <RestaurantSelect
+                  disabled={!hospitalFilter}
+                  onChange={(value) => {
+                    setRestaurantFilter(value);
+                    setPage(1);
+                  }}
+                  restaurants={restaurantsQuery.data ?? []}
+                  value={restaurantFilter}
+                />
+                {!hospitalFilter ? (
+                  <p className="text-xs text-ds-muted sm:col-span-3">
+                    Choose a location to filter by source and restaurant.
                   </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] table-fixed text-sm">
+              <thead className="bg-ds-subtle text-left">
+                <tr>
+                  <th className="w-[15%] px-3 py-2.5">Transfer</th>
+                  <th className="w-[31%] px-3 py-2.5">Route</th>
+                  <th className="w-[10%] px-3 py-2.5">Items</th>
+                  <th className="w-[18%] px-3 py-2.5">Status</th>
+                  <th className="w-[26%] px-3 py-2.5">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transfers.length > 0 ? (
+                  transfers.map((transfer) => {
+                    const isSelected = transfer.id === selectedTransfer?.id;
+
+                    return (
+                      <tr
+                        className={cn('cursor-pointer', isSelected && 'bg-ds-selected')}
+                        key={transfer.id}
+                        onClick={() => setSelectedTransferId(transfer.id)}
+                      >
+                        <td className="px-3 py-2.5">
+                          <button
+                            aria-current={isSelected ? 'true' : undefined}
+                            className="rounded font-bold text-ds-link underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-primary"
+                            onClick={() => setSelectedTransferId(transfer.id)}
+                            type="button"
+                          >
+                            {transfer.transferNumber}
+                          </button>
+                          <p className="truncate text-xs text-ds-muted">
+                            {transfer.hospital.hospitalName}
+                          </p>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <p className="truncate font-semibold text-ds-text">
+                            {sourceName(transfer)}
+                          </p>
+                          <p className="truncate text-xs text-ds-muted">
+                            → {restaurantName(transfer)}
+                          </p>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-ds-text-3">
+                          {transfer.lines.length} item{transfer.lines.length === 1 ? '' : 's'}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <Badge
+                            className="normal-case"
+                            variant={transferChipVariant[transfer.status]}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="h-1.5 w-1.5 rounded-full bg-current"
+                            />
+                            {transferStatusLabels[transfer.status]}
+                          </Badge>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-ds-muted">
+                          {formatDate(transfer.transferDate)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <QueryState
+                    colSpan={5}
+                    error={transfersQuery.error}
+                    isError={transfersQuery.isError}
+                    isLoading={transfersQuery.isLoading}
+                    label="transfers"
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
+          <PaginationControls
+            limit={meta.limit}
+            onPageChange={setPage}
+            page={meta.page}
+            total={meta.total}
+            totalPages={meta.totalPages}
+          />
+        </Panel>
+
+        <TransferDetailPanel
+          isLoading={transfersQuery.isLoading}
+          restaurantName={selectedTransfer ? restaurantName(selectedTransfer) : ''}
+          sourceName={selectedTransfer ? sourceName(selectedTransfer) : ''}
+          transfer={selectedTransfer}
+        >
+          {selectedTransfer?.status === 'DRAFT' ? (
+            <>
+              <Button
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate(selectedTransfer.id)}
+                type="button"
+                variant="outline"
+              >
+                Cancel transfer
+              </Button>
+              <Button
+                disabled={dispatchMutation.isPending}
+                onClick={() => dispatchMutation.mutate(selectedTransfer.id)}
+                type="button"
+              >
+                Dispatch
+              </Button>
+            </>
+          ) : null}
+          {selectedTransfer?.status === 'PENDING_ACKNOWLEDGEMENT' ? (
+            <>
+              <Button
+                className="text-ds-rejected-fg hover:text-ds-rejected-fg dark:text-red-300"
+                disabled={acknowledgeMutation.isPending}
+                onClick={() =>
+                  acknowledgeMutation.mutate({
+                    items: acknowledgementItems(selectedTransfer, 'REJECT_FULL'),
+                    transferId: selectedTransfer.id,
+                  })
+                }
+                type="button"
+                variant="outline"
+              >
+                Reject full
+              </Button>
+              <Button
+                disabled={acknowledgeMutation.isPending}
+                onClick={() => startPartial(selectedTransfer)}
+                type="button"
+                variant="outline"
+              >
+                Partial
+              </Button>
+              <Button
+                className="col-span-2"
+                disabled={acknowledgeMutation.isPending}
+                onClick={() =>
+                  acknowledgeMutation.mutate({
+                    items: acknowledgementItems(selectedTransfer, 'ACCEPT_FULL'),
+                    transferId: selectedTransfer.id,
+                  })
+                }
+                type="button"
+              >
+                Accept full
+              </Button>
+            </>
+          ) : null}
+        </TransferDetailPanel>
+      </div>
+      {partialTransfer ? (
+        // !mt-0: the page's space-y-6 would otherwise push this fixed overlay down 24px.
+        <div className="fixed inset-0 z-50 !mt-0 flex justify-end">
+          <button
+            aria-label="Close acknowledgement"
+            className="absolute inset-0 hidden cursor-default bg-ds-text/45 backdrop-blur-sm sm:block"
+            onClick={() => setPartialTransfer(null)}
+            tabIndex={-1}
+            type="button"
+          />
+          <div
+            aria-labelledby="acknowledge-title"
+            aria-modal="true"
+            className="relative flex h-full w-full flex-col bg-ds-page shadow-xl sm:max-w-md"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setPartialTransfer(null);
+              }
+            }}
+            role="dialog"
+          >
+            <header className="flex items-center gap-3 border-b border-ds-border bg-ds-surface px-4 py-3">
+              <Button
+                aria-label="Back to transfers"
+                autoFocus
+                className="shrink-0"
+                onClick={() => setPartialTransfer(null)}
+                size="icon"
+                type="button"
+                variant="outline"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-extrabold text-ds-text" id="acknowledge-title">
+                  Acknowledge transfer
+                </h2>
+                <p className="truncate text-[13px] text-ds-muted">
+                  {restaurantName(partialTransfer)} · {partialTransfer.hospital.hospitalName}
+                </p>
+              </div>
+            </header>
+
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              <section className="rounded-card border border-ds-border bg-ds-surface p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xl font-extrabold text-ds-text">
+                    {partialTransfer.transferNumber}
+                  </p>
+                  <Badge className="normal-case" variant="warning">
+                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {transferStatusLabels[partialTransfer.status]}
+                  </Badge>
                 </div>
-                <Input disabled value={line.sentQty.toFixed(3)} />
-                <Input
-                  min="0"
-                  onChange={(event) =>
-                    updatePartialLine(index, { acceptedQty: event.target.value })
-                  }
-                  placeholder="Accepted"
-                  type="number"
-                  value={partialLines[index]?.acceptedQty ?? ''}
-                />
-                <Input
-                  min="0"
-                  onChange={(event) =>
-                    updatePartialLine(index, { rejectedQty: event.target.value })
-                  }
-                  placeholder="Rejected"
-                  type="number"
-                  value={partialLines[index]?.rejectedQty ?? ''}
-                />
-                <Input
-                  onChange={(event) =>
-                    updatePartialLine(index, { rejectionReason: event.target.value })
-                  }
-                  placeholder="Rejection reason"
-                  value={partialLines[index]?.rejectionReason ?? ''}
+                <dl className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-ds-muted">
+                      From
+                    </dt>
+                    <dd className="mt-0.5 font-semibold text-ds-text">
+                      {sourceName(partialTransfer)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-ds-muted">
+                      Transfer date
+                    </dt>
+                    <dd className="mt-0.5 font-semibold text-ds-text">
+                      {formatDate(partialTransfer.transferDate)}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="overflow-hidden rounded-card border border-ds-border bg-ds-surface">
+                <div className="flex items-center justify-between gap-3 border-b border-ds-divider px-4 py-3">
+                  <h3 className="font-bold text-ds-text">Check received quantity</h3>
+                  <span className="text-[13px] text-ds-muted">
+                    {partialTransfer.lines.length} item
+                    {partialTransfer.lines.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <ul className="divide-y divide-slate-100">
+                  {partialTransfer.lines.map((line, index) => {
+                    const draft = partialLines[index];
+                    const received = Number(draft?.acceptedQty || 0);
+                    const shortBy = Number((line.sentQty - received).toFixed(3));
+
+                    return (
+                      <li className="space-y-3 px-4 py-3" key={line.id}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-ds-text">
+                              {line.item.itemName}
+                            </p>
+                            <p
+                              className={cn(
+                                'text-[13px]',
+                                shortBy > 0
+                                  ? 'font-semibold text-ds-pending-fg dark:text-amber-300'
+                                  : 'text-ds-muted',
+                              )}
+                            >
+                              Sent {formatQuantity(line.sentQty)} ·{' '}
+                              {shortBy > 0 ? `Short by ${formatQuantity(shortBy)}` : 'matches'}
+                            </p>
+                            {line.batchNumber || line.expiryDate ? (
+                              <p className="text-xs text-ds-muted">
+                                {line.batchNumber ?? 'No batch'} · {formatDateOnly(line.expiryDate)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <QuantityStepper
+                            label={`received quantity of ${line.item.itemName}`}
+                            max={line.sentQty}
+                            onChange={(value) =>
+                              updatePartialLine(index, {
+                                acceptedQty: value,
+                                rejectedQty: String(
+                                  Number((line.sentQty - Number(value || 0)).toFixed(3)),
+                                ),
+                              })
+                            }
+                            value={draft?.acceptedQty ?? ''}
+                          />
+                        </div>
+                        {shortBy > 0 ? (
+                          <Input
+                            aria-label={`Reason ${line.item.itemName} is short`}
+                            onChange={(event) =>
+                              updatePartialLine(index, { rejectionReason: event.target.value })
+                            }
+                            placeholder="Reason for the shortfall (required)"
+                            value={draft?.rejectionReason ?? ''}
+                          />
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+
+              <div className="space-y-2">
+                <label
+                  className="text-[13px] font-semibold text-ds-text-2"
+                  htmlFor="acknowledge-remarks"
+                >
+                  Note for the store (optional)
+                </label>
+                <Textarea
+                  id="acknowledge-remarks"
+                  onChange={(event) => setPartialRemarks(event.target.value)}
+                  placeholder="Mention shortages, damage or quality issues"
+                  value={partialRemarks}
                 />
               </div>
-            ))}
-          </div>
-          <div className="mt-4">
-            <Field label="Remarks" name="partialRemarks">
-              <Input
-                onChange={(event) => setPartialRemarks(event.target.value)}
-                placeholder="Optional"
-                value={partialRemarks}
-              />
-            </Field>
-          </div>
-          {partialError ? (
-            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
-              {partialError}
+
+              {partialError ? (
+                <p
+                  className="rounded-control bg-ds-rejected-bg p-3 text-sm font-medium text-ds-rejected-fg dark:bg-red-950 dark:text-red-300"
+                  role="alert"
+                >
+                  {partialError}
+                </p>
+              ) : null}
             </div>
-          ) : null}
-          <div className="mt-5 flex justify-end">
-            <Button disabled={acknowledgeMutation.isPending} onClick={submitPartial} type="button">
-              {acknowledgeMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ClipboardCheck className="h-4 w-4" />
-              )}
-              Submit Acknowledgement
-            </Button>
+
+            <footer className="grid grid-cols-[auto_1fr] gap-3 border-t border-ds-border bg-ds-surface p-4">
+              <Button onClick={() => setPartialTransfer(null)} type="button" variant="outline">
+                Cancel
+              </Button>
+              <Button
+                className="h-cta"
+                disabled={acknowledgeMutation.isPending}
+                onClick={submitPartial}
+                type="button"
+              >
+                {acknowledgeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ClipboardCheck className="h-4 w-4" />
+                )}
+                {shortLineCount > 0
+                  ? `Acknowledge · ${shortLineCount} short`
+                  : 'Acknowledge receipt'}
+              </Button>
+            </footer>
           </div>
-        </Panel>
+        </div>
       ) : null}
     </section>
   );
@@ -2934,7 +3308,7 @@ export function CreateTransferPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         subtitle="Create a Store or Kitchen to Restaurant stock transfer from available source stock."
         title="Create Transfer"
@@ -2974,7 +3348,7 @@ export function CreateTransferPageClient() {
         </Panel>
       ) : null}
 
-      <Panel className="p-5">
+      <Panel className="p-4">
         <form
           className="space-y-6"
           onSubmit={(event) => {
@@ -2989,7 +3363,7 @@ export function CreateTransferPageClient() {
               Select location, source type, source, and receiving restaurant.
             </p>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <Field
               error={form.formState.errors.hospitalId?.message}
               label="Location"
@@ -3334,15 +3708,15 @@ export function CreateTransferPageClient() {
                           <table className="min-w-full divide-y divide-slate-200 text-sm">
                             <thead className="bg-white text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
                               <tr>
-                                <th className="px-4 py-3">Batch Number</th>
-                                <th className="px-4 py-3">
+                                <th className="px-4 py-2.5">Batch Number</th>
+                                <th className="px-4 py-2.5">
                                   {selectedSourceType === 'KITCHEN'
                                     ? 'Business Date'
                                     : 'Expiry Date'}
                                 </th>
-                                <th className="px-4 py-3">Allocated Qty</th>
-                                <th className="px-4 py-3">Available Qty</th>
-                                <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-2.5">Allocated Qty</th>
+                                <th className="px-4 py-2.5">Available Qty</th>
+                                <th className="px-4 py-2.5">Status</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -3472,13 +3846,13 @@ export function RestaurantStockPageClient() {
   const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         subtitle="Current restaurant stock received from acknowledged transfers."
         title="Restaurant Stock"
       />
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_170px_170px_140px_150px_180px_150px_160px_150px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -3594,42 +3968,42 @@ export function RestaurantStockPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[18%] px-4 py-3">Restaurant</th>
-                <th className="w-[12%] px-4 py-3">Source</th>
-                <th className="w-[20%] px-4 py-3">Item</th>
-                <th className="w-[14%] px-4 py-3">Batch</th>
-                <th className="w-[14%] px-4 py-3">Expiry / Date</th>
-                <th className="w-[12%] px-4 py-3">Available Qty</th>
-                <th className="w-[10%] px-4 py-3">Status</th>
+                <th className="w-[18%] px-4 py-2.5">Restaurant</th>
+                <th className="w-[12%] px-4 py-2.5">Source</th>
+                <th className="w-[20%] px-4 py-2.5">Item</th>
+                <th className="w-[14%] px-4 py-2.5">Batch</th>
+                <th className="w-[14%] px-4 py-2.5">Expiry / Date</th>
+                <th className="w-[12%] px-4 py-2.5">Available Qty</th>
+                <th className="w-[10%] px-4 py-2.5">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((stock) => (
                   <tr className="hover:bg-slate-50" key={stock.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{stock.location.name}</p>
                       <p className="text-xs text-slate-500">{stock.location.code}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Badge className="border-cyan-200 bg-cyan-50 text-cyan-700">
                         {stock.itemType === 'READYMADE' ? 'Kitchen' : 'Store'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{stock.item.itemName}</p>
                       <p className="text-xs text-slate-500">{stock.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{stock.batchNumber ?? 'No batch'}</td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">{stock.batchNumber ?? 'No batch'}</td>
+                    <td className="px-4 py-3 text-slate-600">
                       {stock.itemType === 'READYMADE'
                         ? formatDateOnly(stock.businessDate)
                         : formatDateOnly(stock.expiryDate)}
                     </td>
-                    <td className="px-4 py-4 font-semibold text-slate-950">
+                    <td className="px-4 py-3 font-semibold text-slate-950">
                       {stock.availableQty.toFixed(3)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Badge variant={statusVariant(stock.status)}>
                         {formatEnum(stock.status)}
                       </Badge>
@@ -3752,13 +4126,13 @@ export function StockLedgersPageClient() {
   const meta = ledgersQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         subtitle="Read-only movement history across store, kitchen, and restaurant stock."
         title="Stock Ledgers"
       />
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_170px_150px_170px_180px_170px_160px_150px_150px_150px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -3903,54 +4277,54 @@ export function StockLedgersPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[16%] px-4 py-3">Location</th>
-                <th className="w-[16%] px-4 py-3">Item</th>
-                <th className="w-[11%] px-4 py-3">Transaction</th>
-                <th className="w-[11%] px-4 py-3">Reference</th>
-                <th className="w-[10%] px-4 py-3">Qty In</th>
-                <th className="w-[10%] px-4 py-3">Qty Out</th>
-                <th className="w-[10%] px-4 py-3">Balance</th>
-                <th className="w-[12%] px-4 py-3">Batch</th>
-                <th className="w-[12%] px-4 py-3">Business Date</th>
-                <th className="w-[15%] px-4 py-3">Transaction Date</th>
+                <th className="w-[16%] px-4 py-2.5">Location</th>
+                <th className="w-[16%] px-4 py-2.5">Item</th>
+                <th className="w-[11%] px-4 py-2.5">Transaction</th>
+                <th className="w-[11%] px-4 py-2.5">Reference</th>
+                <th className="w-[10%] px-4 py-2.5">Qty In</th>
+                <th className="w-[10%] px-4 py-2.5">Qty Out</th>
+                <th className="w-[10%] px-4 py-2.5">Balance</th>
+                <th className="w-[12%] px-4 py-2.5">Batch</th>
+                <th className="w-[12%] px-4 py-2.5">Business Date</th>
+                <th className="w-[15%] px-4 py-2.5">Transaction Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {ledgers.length > 0 ? (
                 ledgers.map((ledger: StockLedger) => (
                   <tr className="hover:bg-slate-50" key={ledger.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{ledger.location.name}</p>
                       <p className="text-xs text-slate-500">
                         {formatEnum(ledger.locationType)} - {ledger.location.code ?? '-'}
                       </p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{ledger.item.itemName}</p>
                       <p className="text-xs text-slate-500">{ledger.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Badge className="border-cyan-200 bg-cyan-50 text-cyan-700">
                         {formatEnum(ledger.transactionType)}
                       </Badge>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       {ledger.referenceType ? formatEnum(ledger.referenceType) : '-'}
                     </td>
-                    <td className="px-4 py-4 font-semibold text-emerald-700">
+                    <td className="px-4 py-3 font-semibold text-emerald-700">
                       {ledger.qtyIn.toFixed(3)}
                     </td>
-                    <td className="px-4 py-4 font-semibold text-red-700">
+                    <td className="px-4 py-3 font-semibold text-red-700">
                       {ledger.qtyOut.toFixed(3)}
                     </td>
-                    <td className="px-4 py-4 font-semibold text-slate-950">
+                    <td className="px-4 py-3 font-semibold text-slate-950">
                       {ledger.balanceAfter.toFixed(3)}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{ledger.batchNumber ?? '-'}</td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">{ledger.batchNumber ?? '-'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDateOnly(ledger.businessDate)}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDate(ledger.transactionDateTime)}
                     </td>
                   </tr>

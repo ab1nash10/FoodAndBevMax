@@ -2,7 +2,18 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CookingPot, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  ChefHat,
+  Clock,
+  CookingPot,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
@@ -19,15 +30,17 @@ import type {
   SortOrder,
   StockBalanceStatus,
 } from '@aahar/api-client';
+import { AppPageHeader } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Field, Input, Panel, Select, Skeleton } from '@/components/ui';
+import { FilterTabs } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { invalidateKitchenProductionQueries } from '@/lib/query-invalidation';
 
 const listLimit = 10;
 const skeletonRows = ['row-1', 'row-2', 'row-3', 'row-4', 'row-5'];
-const productionStatuses: KitchenProductionStatus[] = ['DRAFT', 'POSTED', 'CANCELLED'];
 const kitchenStockStatuses: StockBalanceStatus[] = ['AVAILABLE', 'LOW_STOCK', 'OUT_OF_STOCK'];
 
 const headerSchema = z.object({
@@ -186,21 +199,12 @@ function PageHeader({
   title,
 }: Readonly<{ action?: ReactNode; subtitle: string; title: string }>) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-4">
-        <span className="grid h-12 w-12 place-items-center rounded-lg border border-emerald-100 bg-brand-mint text-brand-teal">
-          <CookingPot className="h-6 w-6" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-normal text-brand-teal">
-            Kitchen Operations
-          </p>
-          <h1 className="text-2xl font-semibold tracking-normal text-brand-navy">{title}</h1>
-          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-        </div>
-      </div>
-      {action}
-    </div>
+    <AppPageHeader
+      action={action}
+      description={subtitle}
+      eyebrow="Kitchen Operations"
+      title={title}
+    />
   );
 }
 
@@ -281,7 +285,7 @@ function QueryState({
       <>
         {skeletonRows.map((row) => (
           <tr key={row}>
-            <td className="px-4 py-4" colSpan={colSpan}>
+            <td className="px-4 py-3" colSpan={colSpan}>
               <Skeleton className="h-10 w-full" />
             </td>
           </tr>
@@ -349,7 +353,7 @@ function useItems(itemType?: ItemType) {
     queryFn: async () => {
       const response = await organizationApi.listItems({
         itemType,
-        limit: 200,
+        limit: 100,
         sortBy: 'itemName',
         sortOrder: 'asc',
       });
@@ -437,6 +441,26 @@ function productionTotals(production: KitchenProduction) {
     }),
     { accepted: 0, produced: 0, wastage: 0 },
   );
+}
+
+// Board columns from the kitchen concept, one per production status.
+const productionColumns: Array<{ dot: string; label: string; status: KitchenProductionStatus }> = [
+  { dot: 'bg-ds-stage-preparing', label: 'Draft', status: 'DRAFT' },
+  { dot: 'bg-ds-stage-ready', label: 'Posted', status: 'POSTED' },
+  { dot: 'bg-ds-stage-queued', label: 'Cancelled', status: 'CANCELLED' },
+];
+
+function formatProductionQuantity(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3);
+}
+
+function personInitials(name: string): string {
+  return name
+    .split(/s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
 }
 
 export function KitchenProductionsPageClient() {
@@ -543,173 +567,264 @@ export function KitchenProductionsPageClient() {
     }
   }
 
+  const visibleColumns = productionColumns.filter(
+    (column) => !statusFilter || column.status === statusFilter,
+  );
+  const notPostedCount = productions.filter((production) => production.status === 'DRAFT').length;
+  const selectedKitchen = (kitchensQuery.data ?? []).find(
+    (kitchen) => kitchen.id === kitchenFilter,
+  );
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button onClick={() => router.push('/kitchen/productions/new')} type="button">
-            <Plus className="h-4 w-4" />
-            New Production
-          </Button>
+          <>
+            <FilterTabs
+              label="Production status"
+              onChange={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+              }}
+              options={[
+                { label: 'All', value: '' as const },
+                ...productionColumns.map((column) => ({
+                  label: column.label,
+                  value: column.status,
+                })),
+              ]}
+              value={statusFilter}
+            />
+            <Button
+              className="h-cta px-5"
+              onClick={() => router.push('/kitchen/productions/new')}
+              type="button"
+            >
+              <Plus className="h-[18px] w-[18px]" />
+              New production
+            </Button>
+          </>
         }
         subtitle="Produce mapped READYMADE items and post accepted quantity into kitchen stock."
-        title="Kitchen Production"
+        title="Production board"
       />
+
       <Panel>
-        <div className="grid gap-3 border-b p-4 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_130px_auto]">
-          <SearchInput
-            onChange={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            value={search}
-          />
-          <HospitalSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setKitchenFilter('');
-              setPage(1);
-            }}
-            value={hospitalFilter}
-          />
-          <KitchenSelect
-            disabled={!hospitalFilter}
-            kitchens={kitchensQuery.data ?? []}
-            onChange={(value) => {
-              setKitchenFilter(value);
-              setPage(1);
-            }}
-            value={kitchenFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStatusFilter(event.target.value as '' | KitchenProductionStatus);
-              setPage(1);
-            }}
-            value={statusFilter}
+        <div className="flex flex-wrap gap-3 border-b border-ds-divider p-4">
+          <div className="min-w-[220px] flex-1">
+            <SearchInput
+              onChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              value={search}
+            />
+          </div>
+          <div className="w-full sm:w-48">
+            <HospitalSelect
+              disabled={Boolean(scopedHospitalId)}
+              hospitals={hospitalsQuery.data ?? []}
+              onChange={(value) => {
+                setHospitalFilter(value);
+                setKitchenFilter('');
+                setPage(1);
+              }}
+              value={hospitalFilter}
+            />
+          </div>
+          <div className="w-full sm:w-48">
+            <KitchenSelect
+              disabled={!hospitalFilter}
+              kitchens={kitchensQuery.data ?? []}
+              onChange={(value) => {
+                setKitchenFilter(value);
+                setPage(1);
+              }}
+              value={kitchenFilter}
+            />
+          </div>
+          <div className="w-full sm:w-36">
+            <Select
+              aria-label="Sort order"
+              onChange={(event) => {
+                setSortOrder(event.target.value as SortOrder);
+                setPage(1);
+              }}
+              value={sortOrder}
+            >
+              <option value="desc">Newest</option>
+              <option value="asc">Oldest</option>
+            </Select>
+          </div>
+          <Button
+            aria-label="Refresh productions"
+            onClick={() => void productionsQuery.refetch()}
+            size="icon"
+            type="button"
+            variant="outline"
           >
-            <option value="">All statuses</option>
-            {productionStatuses.map((status) => (
-              <option key={status} value={status}>
-                {formatEnum(status)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortOrder(event.target.value as SortOrder);
-              setPage(1);
-            }}
-            value={sortOrder}
-          >
-            <option value="desc">Newest</option>
-            <option value="asc">Oldest</option>
-          </Select>
-          <Button onClick={() => void productionsQuery.refetch()} type="button" variant="outline">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
-              <tr>
-                <th className="w-[14%] px-4 py-3">Production</th>
-                <th className="w-[18%] px-4 py-3">Kitchen</th>
-                <th className="w-[13%] px-4 py-3">Business Date</th>
-                <th className="w-[17%] px-4 py-3">Quantities</th>
-                <th className="w-[12%] px-4 py-3">Status</th>
-                <th className="w-[12%] px-4 py-3">Updated</th>
-                <th className="w-[24%] px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {productions.length > 0 ? (
-                productions.map((production) => {
-                  const totals = productionTotals(production);
-
-                  return (
-                    <tr className="hover:bg-slate-50" key={production.id}>
-                      <td className="px-4 py-4">
-                        <p className="font-semibold text-slate-950">
-                          {production.productionNumber}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {formatDate(production.productionDate)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p className="font-medium text-slate-950">
-                          {production.kitchen.kitchenName}
-                        </p>
-                        <p className="text-xs text-slate-500">{production.hospital.hospitalName}</p>
-                      </td>
-                      <td className="px-4 py-4 text-slate-600">
-                        {formatDateOnly(production.businessDate)}
-                      </td>
-                      <td className="px-4 py-4 text-slate-600">
-                        <p>Produced {totals.produced.toFixed(3)}</p>
-                        <p className="text-xs text-slate-500">
-                          Accepted {totals.accepted.toFixed(3)} / Wastage{' '}
-                          {totals.wastage.toFixed(3)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge variant={statusVariant(production.status)}>
-                          {formatEnum(production.status)}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4 text-slate-600">
-                        {formatDate(production.updatedAt)}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            disabled={production.status !== 'DRAFT' || postMutation.isPending}
-                            onClick={() => postMutation.mutate(production.id)}
-                            size="sm"
-                            type="button"
-                          >
-                            Post
-                          </Button>
-                          <Button
-                            disabled={production.status !== 'DRAFT' || cancelMutation.isPending}
-                            onClick={() => cancelMutation.mutate(production.id)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            className="border-red-200 text-red-700 hover:bg-red-50"
-                            disabled={production.status !== 'DRAFT' || deleteMutation.isPending}
-                            onClick={() => deleteProduction(production)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Delete
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <QueryState
-                  colSpan={7}
-                  error={productionsQuery.error}
-                  isError={productionsQuery.isError}
-                  isLoading={productionsQuery.isLoading}
-                  label="kitchen productions"
-                />
-              )}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm text-ds-text-3">
+          <span className="inline-flex items-center gap-2">
+            <ChefHat aria-hidden="true" className="h-4 w-4 text-ds-teal-text" strokeWidth={1.8} />
+            <span className="font-semibold text-ds-text">
+              {selectedKitchen?.kitchenName ?? 'All kitchens'}
+            </span>
+          </span>
+          <span aria-live="polite">
+            {productionsQuery.isLoading
+              ? 'Loading productions…'
+              : `${meta.total} production${meta.total === 1 ? '' : 's'} on the board`}
+          </span>
+          {notPostedCount > 0 ? (
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ds-rejected-bg px-3 py-1 text-xs font-semibold text-ds-rejected-fg dark:bg-red-950 dark:text-red-300">
+              <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
+              {notPostedCount} not posted yet
+            </span>
+          ) : null}
         </div>
+      </Panel>
+
+      {productionsQuery.isError ? (
+        <p className="rounded-tile bg-ds-rejected-bg px-4 py-6 text-center text-sm font-medium text-ds-rejected-fg dark:bg-red-950 dark:text-red-300">
+          {getApiErrorMessage(productionsQuery.error)}
+        </p>
+      ) : (
+        <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 nav:mx-0 nav:px-0 lg:grid lg:grid-cols-3 lg:overflow-visible">
+          {visibleColumns.map((column) => {
+            const columnProductions = productions.filter(
+              (production) => production.status === column.status,
+            );
+
+            return (
+              <section
+                aria-label={`${column.label} productions`}
+                className="flex w-[300px] shrink-0 flex-col rounded-card bg-ds-subtle p-3 lg:w-auto lg:min-w-0"
+                key={column.status}
+              >
+                <header className="flex items-center justify-between gap-2 px-1 pb-3">
+                  <h2 className="flex items-center gap-2 font-bold text-ds-text">
+                    <span aria-hidden="true" className={cn('h-2.5 w-2.5 rounded-sm', column.dot)} />
+                    {column.label}
+                  </h2>
+                  <span className="grid h-6 min-w-6 place-items-center rounded-full bg-ds-surface px-2 text-xs font-bold text-ds-text-3 ring-1 ring-ds-border">
+                    {productionsQuery.isLoading ? '–' : columnProductions.length}
+                  </span>
+                </header>
+                <div className="space-y-3">
+                  {productionsQuery.isLoading ? (
+                    <>
+                      <Skeleton className="h-40 rounded-tile" />
+                      <Skeleton className="h-40 rounded-tile" />
+                    </>
+                  ) : columnProductions.length > 0 ? (
+                    columnProductions.map((production) => {
+                      const totals = productionTotals(production);
+                      const [firstLine, ...otherLines] = production.lines;
+
+                      return (
+                        <article
+                          className="rounded-tile border border-ds-border bg-ds-surface p-4 shadow-sm shadow-ds-text/[0.04] dark:shadow-none"
+                          key={production.id}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold text-ds-text-3">
+                              {production.productionNumber}
+                            </p>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-ds-subtle px-2 py-0.5 text-xs font-semibold text-ds-text-3">
+                              <Clock aria-hidden="true" className="h-3.5 w-3.5" />
+                              {formatDate(production.productionDate)}
+                            </span>
+                          </div>
+                          <h3 className="mt-2 font-bold leading-5 text-ds-text">
+                            {firstLine ? firstLine.item.itemName : 'No items'}
+                            {otherLines.length ? (
+                              <span className="font-semibold text-ds-muted">
+                                {' '}
+                                + {otherLines.length} more
+                              </span>
+                            ) : null}
+                          </h3>
+                          <p className="mt-0.5 text-sm text-ds-text-3">
+                            Produced {formatProductionQuantity(totals.produced)} · Accepted{' '}
+                            {formatProductionQuantity(totals.accepted)}
+                            {totals.wastage
+                              ? ` · Wastage ${formatProductionQuantity(totals.wastage)}`
+                              : ''}
+                          </p>
+                          <p className="mt-2 flex items-center gap-1.5 text-[13px] text-ds-muted">
+                            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">
+                              {production.kitchen.kitchenName} · {production.hospital.hospitalName}
+                            </span>
+                          </p>
+                          <div className="mt-3 flex items-center justify-between gap-2 border-t border-ds-divider pt-3">
+                            <span className="flex min-w-0 items-center gap-2 text-[13px] text-ds-text-2">
+                              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ds-teal-soft text-[11px] font-bold text-ds-teal-text">
+                                {production.chef ? personInitials(production.chef.name) : '?'}
+                              </span>
+                              <span className="truncate">
+                                {production.chef?.name ?? 'No chef assigned'}
+                              </span>
+                            </span>
+                            {production.status === 'POSTED' ? (
+                              <Badge className="normal-case" variant="success">
+                                Posted to stock
+                              </Badge>
+                            ) : production.status === 'CANCELLED' ? (
+                              <Badge className="normal-case" variant="neutral">
+                                Cancelled
+                              </Badge>
+                            ) : null}
+                          </div>
+                          {production.status === 'DRAFT' ? (
+                            <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
+                              <Button
+                                disabled={postMutation.isPending}
+                                onClick={() => postMutation.mutate(production.id)}
+                                type="button"
+                              >
+                                Post
+                              </Button>
+                              <Button
+                                disabled={cancelMutation.isPending}
+                                onClick={() => cancelMutation.mutate(production.id)}
+                                type="button"
+                                variant="outline"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                aria-label={`Delete ${production.productionNumber}`}
+                                className="text-ds-rejected-fg hover:text-ds-rejected-fg dark:text-red-300"
+                                disabled={deleteMutation.isPending}
+                                onClick={() => deleteProduction(production)}
+                                size="icon"
+                                type="button"
+                                variant="outline"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <p className="rounded-tile border border-dashed border-ds-border px-4 py-8 text-center text-sm text-ds-muted">
+                      No {column.label.toLowerCase()} productions
+                    </p>
+                  )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      <Panel className="[&>div]:border-t-0">
         <PaginationControls
           limit={meta.limit}
           onPageChange={setPage}
@@ -893,7 +1008,7 @@ export function CreateKitchenProductionPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         subtitle="Create a draft production entry for READYMADE items mapped to a kitchen."
         title="Create Kitchen Production"
@@ -942,7 +1057,7 @@ export function CreateKitchenProductionPageClient() {
         </Panel>
       ) : null}
 
-      <Panel className="p-5">
+      <Panel className="p-4">
         <form
           className="space-y-6"
           onSubmit={(event) => {
@@ -955,7 +1070,7 @@ export function CreateKitchenProductionPageClient() {
             </h2>
             <p className="text-sm text-slate-500">Select location, kitchen, and business date.</p>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <Field
               error={form.formState.errors.hospitalId?.message}
               label="Location"
@@ -1195,13 +1310,13 @@ export function KitchenStockPageClient() {
   const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         subtitle="Current READYMADE stock posted from kitchen production entries."
         title="Kitchen Stock"
       />
       <Panel>
-        <div className="grid gap-3 border-b p-4 xl:grid-cols-[minmax(0,1fr)_170px_170px_180px_150px_150px_160px_130px_auto]">
+        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -1292,40 +1407,40 @@ export function KitchenStockPageClient() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[20%] px-4 py-3">Kitchen</th>
-                <th className="w-[22%] px-4 py-3">Item</th>
-                <th className="w-[14%] px-4 py-3">Available Qty</th>
-                <th className="w-[14%] px-4 py-3">Reserved Qty</th>
-                <th className="w-[14%] px-4 py-3">Business Date</th>
-                <th className="w-[12%] px-4 py-3">Status</th>
-                <th className="w-[16%] px-4 py-3">Created / Updated</th>
+                <th className="w-[20%] px-4 py-2.5">Kitchen</th>
+                <th className="w-[22%] px-4 py-2.5">Item</th>
+                <th className="w-[14%] px-4 py-2.5">Available Qty</th>
+                <th className="w-[14%] px-4 py-2.5">Reserved Qty</th>
+                <th className="w-[14%] px-4 py-2.5">Business Date</th>
+                <th className="w-[12%] px-4 py-2.5">Status</th>
+                <th className="w-[16%] px-4 py-2.5">Created / Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((stock) => (
                   <tr className="hover:bg-slate-50" key={stock.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{stock.location.name}</p>
                       <p className="text-xs text-slate-500">{stock.location.code}</p>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <p className="font-medium text-slate-950">{stock.item.itemName}</p>
                       <p className="text-xs text-slate-500">{stock.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-4 font-semibold text-slate-950">
+                    <td className="px-4 py-3 font-semibold text-slate-950">
                       {stock.availableQty.toFixed(3)}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{stock.reservedQty.toFixed(3)}</td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">{stock.reservedQty.toFixed(3)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDateOnly(stock.businessDate)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Badge variant={statusVariant(stock.status)}>
                         {formatEnum(stock.status)}
                       </Badge>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">
                       <p>{formatDate(stock.createdAt)}</p>
                       <p className="text-xs text-slate-500">{formatDate(stock.updatedAt)}</p>
                     </td>

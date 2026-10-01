@@ -140,12 +140,12 @@ export function CounterCreatePageClient() {
       title="Create Counter"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.hospitalId?.message}
             label="Location"
@@ -183,7 +183,7 @@ export function CounterCreatePageClient() {
             </Select>
           </Field>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.counterName?.message}
             label="Counter Name"
@@ -199,7 +199,7 @@ export function CounterCreatePageClient() {
             <Input id="counter-code" {...form.register('counterCode')} />
           </Field>
         </div>
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           <Field
             error={form.formState.errors.posDeviceId?.message}
             label="POS Device ID"

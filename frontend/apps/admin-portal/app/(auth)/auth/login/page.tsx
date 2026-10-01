@@ -8,11 +8,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm, type Path, type UseFormReturn } from 'react-hook-form';
 import { z, type ZodError } from 'zod';
+import { getStartPageOptions } from '@/components/admin-shell';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input } from '@/components/ui';
-import { authApi, getApiErrorMessage } from '@/lib/api';
+import { authApi, getApiErrorMessage, userApi } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
+import { sessionUserFromAccessToken } from '@/lib/session';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,6 +57,34 @@ function applyValidationErrors<TFormValues extends Record<string, unknown>>(
 
 export default function LoginPage() {
   const router = useRouter();
+
+  // After sign-in, open the user's chosen start page if it is one they may open. Anything
+  // unexpected - no preference, a slow or failed request, a since-revoked permission - means
+  // the dashboard, exactly as before Preferences existed.
+  const goToStartPage = async (accessToken: string) => {
+    let destination = '/dashboard';
+
+    try {
+      const preferences = await Promise.race([
+        userApi.getMyPreferences().then((response) => response.data),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      const permissions = sessionUserFromAccessToken(accessToken)?.permissions ?? [];
+      const hasPermission = (permission: string | string[]) =>
+        (Array.isArray(permission) ? permission : [permission]).some((code) =>
+          permissions.includes(code),
+        );
+      const startPage = preferences?.startPage;
+
+      if (startPage && getStartPageOptions(hasPermission).some((page) => page.href === startPage)) {
+        destination = startPage;
+      }
+    } catch {
+      // The dashboard it is.
+    }
+
+    router.replace(destination);
+  };
   const { isAuthenticated, isReady, signIn } = useAuth();
   const { showToast } = useToast();
   const [loginMethod, setLoginMethod] = useState<'email' | 'mobile'>('mobile');
@@ -126,7 +156,7 @@ export default function LoginPage() {
         title: 'Signed in',
         variant: 'success',
       });
-      router.replace('/dashboard');
+      void goToStartPage(response.data.accessToken);
     },
   });
 
@@ -145,7 +175,7 @@ export default function LoginPage() {
         title: 'Signed in',
         variant: 'success',
       });
-      router.replace('/dashboard');
+      void goToStartPage(response.data.accessToken);
     },
   });
 

@@ -158,7 +158,7 @@ function TableState({
       <>
         {['one', 'two', 'three', 'four'].map((row) => (
           <tr key={row}>
-            <td className="px-4 py-4" colSpan={colSpan}>
+            <td className="px-4 py-3" colSpan={colSpan}>
               <Skeleton className="h-9 w-full" />
             </td>
           </tr>
@@ -503,12 +503,7 @@ function PosDeviceForm({
           <Button onClick={onClose} type="button" variant="outline">
             Cancel
           </Button>
-          <Button
-            className="bg-teal-600 hover:bg-teal-700"
-            disabled={mutation.isPending}
-            form={posDeviceFormId}
-            type="submit"
-          >
+          <Button disabled={mutation.isPending} form={posDeviceFormId} type="submit">
             {mutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -681,7 +676,6 @@ function RestaurantAccessibilityModal({
             Cancel
           </Button>
           <Button
-            className="bg-teal-600 hover:bg-teal-700"
             disabled={mutation.isPending || !device}
             onClick={() => mutation.mutate(selectedIds)}
             type="button"
@@ -780,7 +774,7 @@ function PosDevicesTab() {
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={openCreateForm} type="button">
+        <Button onClick={openCreateForm} type="button">
           <Plus className="h-4 w-4" />
           New Pos Device
         </Button>
@@ -808,39 +802,39 @@ function PosDevicesTab() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <tr>
-                <th className="w-[16%] px-4 py-3">Name</th>
-                <th className="w-[12%] px-4 py-3">Code</th>
-                <th className="w-[14%] px-4 py-3">Location</th>
-                <th className="w-[16%] px-4 py-3">Restaurants</th>
-                <th className="w-[12%] px-4 py-3">Entity</th>
-                <th className="w-[12%] px-4 py-3">Hostname</th>
-                <th className="w-[8%] px-4 py-3">Status</th>
-                <th className="w-[8%] px-4 py-3">KOT Print</th>
-                <th className="w-[8%] px-4 py-3">Invoice Print</th>
-                <th className="w-[112px] px-4 py-3">Actions</th>
+                <th className="w-[16%] px-4 py-2.5">Name</th>
+                <th className="w-[12%] px-4 py-2.5">Code</th>
+                <th className="w-[14%] px-4 py-2.5">Location</th>
+                <th className="w-[16%] px-4 py-2.5">Restaurants</th>
+                <th className="w-[12%] px-4 py-2.5">Entity</th>
+                <th className="w-[12%] px-4 py-2.5">Hostname</th>
+                <th className="w-[8%] px-4 py-2.5">Status</th>
+                <th className="w-[8%] px-4 py-2.5">KOT Print</th>
+                <th className="w-[8%] px-4 py-2.5">Invoice Print</th>
+                <th className="w-[112px] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
               {items.length > 0 ? (
                 items.map((device) => (
                   <tr className="hover:bg-slate-50 dark:hover:bg-slate-900" key={device.id}>
-                    <td className="px-4 py-4 font-medium text-slate-950 dark:text-white">
+                    <td className="px-4 py-3 font-medium text-slate-950 dark:text-white">
                       {device.name}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{device.code}</td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{device.code}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {device.hospital.hospitalName}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {formatRestaurants(device.restaurants)}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {device.entity ?? 'Not set'}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {device.hostName ?? 'Not set'}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Toggle
                         checked={device.isActive}
                         disabled={flagMutation.isPending}
@@ -849,7 +843,7 @@ function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Toggle
                         checked={device.isKotPrintEnabled}
                         disabled={flagMutation.isPending}
@@ -861,7 +855,7 @@ function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Toggle
                         checked={device.isInvoicePrintEnabled}
                         disabled={flagMutation.isPending}
@@ -873,7 +867,7 @@ function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Button
                           aria-label={`Manage restaurant accessibility for ${device.name}`}
@@ -1058,12 +1052,7 @@ function PaymentMachineForm({
           <Button onClick={onClose} type="button" variant="outline">
             Cancel
           </Button>
-          <Button
-            className="bg-teal-600 hover:bg-teal-700"
-            disabled={mutation.isPending}
-            form={paymentMachineFormId}
-            type="submit"
-          >
+          <Button disabled={mutation.isPending} form={paymentMachineFormId} type="submit">
             {mutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -1269,7 +1258,7 @@ function PaymentMachinesTab() {
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={openCreateForm} type="button">
+        <Button onClick={openCreateForm} type="button">
           <Plus className="h-4 w-4" />
           New Payment Machine
         </Button>
@@ -1293,25 +1282,25 @@ function PaymentMachinesTab() {
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <tr>
-                <th className="w-[15%] px-4 py-3">Name</th>
-                <th className="w-[8%] px-4 py-3">Active</th>
-                <th className="w-[8%] px-4 py-3">Primary</th>
-                <th className="w-[13%] px-4 py-3">Serial Number</th>
-                <th className="w-[11%] px-4 py-3">Merchant ID</th>
-                <th className="w-[13%] px-4 py-3">Store POS Code</th>
-                <th className="w-[15%] px-4 py-3">POS Device</th>
-                <th className="w-[11%] px-4 py-3">Primary UPI</th>
-                <th className="w-[120px] px-4 py-3">Actions</th>
+                <th className="w-[15%] px-4 py-2.5">Name</th>
+                <th className="w-[8%] px-4 py-2.5">Active</th>
+                <th className="w-[8%] px-4 py-2.5">Primary</th>
+                <th className="w-[13%] px-4 py-2.5">Serial Number</th>
+                <th className="w-[11%] px-4 py-2.5">Merchant ID</th>
+                <th className="w-[13%] px-4 py-2.5">Store POS Code</th>
+                <th className="w-[15%] px-4 py-2.5">POS Device</th>
+                <th className="w-[11%] px-4 py-2.5">Primary UPI</th>
+                <th className="w-[120px] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
               {items.length > 0 ? (
                 items.map((machine) => (
                   <tr className="hover:bg-slate-50 dark:hover:bg-slate-900" key={machine.id}>
-                    <td className="px-4 py-4 font-medium text-slate-950 dark:text-white">
+                    <td className="px-4 py-3 font-medium text-slate-950 dark:text-white">
                       {machine.name}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Toggle
                         checked={machine.isActive}
                         disabled={flagMutation.isPending}
@@ -1320,7 +1309,7 @@ function PaymentMachinesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <Toggle
                         checked={machine.isDefault}
                         disabled={flagMutation.isPending}
@@ -1329,22 +1318,22 @@ function PaymentMachinesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {machine.serialNumber ?? 'Not set'}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {machine.pinelabMerchantId ?? 'Not set'}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {machine.pinelabMerchantStorePosCode ?? 'Not set'}
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {machine.posDevice.name} ({machine.posDevice.code})
                     </td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {formatUpiProvider(machine.primaryUpi)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           aria-label={`Edit ${machine.name}`}
@@ -1401,7 +1390,7 @@ export function PosMasterPageClient() {
   );
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <AppPageHeader
         description="Configure POS devices and payment machines for hospital food operations."
         eyebrow="Masters"

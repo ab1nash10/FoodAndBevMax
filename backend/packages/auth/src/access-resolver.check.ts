@@ -1,6 +1,6 @@
 // Self-check for permission merging: `pnpm -C backend/packages/auth build && node dist/access-resolver.check.js`
 import { strict as assert } from 'node:assert';
-import { mergePermissionCodes } from './access-resolver';
+import { isSessionCurrent, mergePermissionCodes } from './access-resolver';
 
 const inherited = ['USER_VIEW', 'USER_UPDATE'];
 
@@ -38,5 +38,13 @@ assert.deepEqual(
   [],
   'revoking something never held is harmless',
 );
+
+assert.ok(
+  isSessionCurrent(undefined, 0),
+  'a token from before session versions survives until the first bump',
+);
+assert.ok(isSessionCurrent(2, 2), 'a token at the current version is valid');
+assert.ok(!isSessionCurrent(undefined, 1), 'an unversioned token dies once the user is changed');
+assert.ok(!isSessionCurrent(1, 2), 'a token from an older session is rejected');
 
 console.log('access-resolver self-check passed');

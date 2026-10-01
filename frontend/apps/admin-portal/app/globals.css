@@ -2,30 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Plus Jakarta Sans, self-hosted (OFL-1.1) so neither the build nor the browser needs Google. */
+@font-face {
+  font-display: swap;
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  src: url('./fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  src: url('./fonts/plus-jakarta-sans-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
 :root {
-  --background: 210 40% 98%;
-  --border: 214 32% 91%;
+  /* Design tokens (UI concepts). RGB channels, used through the ds-* Tailwind colours. */
+  --ds-page: 243 245 248;
+  --ds-surface: 255 255 255;
+  --ds-subtle: 248 250 252;
+  --ds-subtle-2: 250 251 252;
+  --ds-border: 227 232 239;
+  --ds-divider: 238 241 245;
+  --ds-input: 213 220 229;
+  --ds-text: 15 23 42;
+  --ds-text-2: 51 65 85;
+  --ds-text-3: 71 85 105;
+  --ds-muted: 91 101 119;
+  --ds-link: 11 87 164;
+  --ds-primary-soft: 232 240 250;
+  --ds-selected: 241 246 253;
+  --ds-teal-soft: 231 246 241;
+  --ds-teal-border: 205 235 223;
+  --ds-teal-text: 15 107 85;
+
+  /* The same tokens, as the HSL variables the older classes read. */
+  --background: 216 26% 96%;
+  --border: 214 27% 91%;
   --foreground: 222 47% 11%;
-  --muted: 151 81% 96%;
-  --muted-foreground: 215 16% 47%;
-  --primary: 210 88% 36%;
+  --muted: 160 46% 94%;
+  --muted-foreground: 219 13% 41%;
+  --primary: 210 87% 34%;
   --primary-foreground: 0 0% 100%;
   --surface: 0 0% 100%;
   --surface-muted: 210 40% 98%;
-  --ring: 210 88% 36%;
-  --brand-blue: 210 88% 36%;
+  --ring: 210 87% 34%;
+  --brand-blue: 210 87% 34%;
   --brand-navy: 222 47% 11%;
-  --brand-teal: 176 77% 26%;
-  --brand-emerald: 160 84% 39%;
-  --brand-mint: 151 81% 96%;
+  --brand-teal: 167 78% 27%;
+  --brand-emerald: 167 78% 27%;
+  --brand-mint: 160 46% 94%;
   --brand-warning: 38 92% 50%;
-  --brand-danger: 0 84% 60%;
-  --brand-info: 221 83% 53%;
+  --brand-danger: 348 67% 42%;
+  --brand-info: 210 87% 34%;
   --scrollbar-thumb: 215 20% 65% / 0.45;
   --scrollbar-thumb-hover: 215 16% 47% / 0.7;
 }
 
 .dark {
+  /* Dark values come from the portal's existing dark palette. */
+  --ds-page: 9 14 26;
+  --ds-surface: 14 21 37;
+  --ds-subtle: 22 31 44;
+  --ds-subtle-2: 22 31 44;
+  --ds-border: 31 42 61;
+  --ds-divider: 30 41 59;
+  --ds-input: 51 65 85;
+  --ds-text: 248 250 252;
+  --ds-text-2: 203 213 225;
+  --ds-text-3: 148 163 184;
+  --ds-muted: 148 163 184;
+  --ds-link: 73 158 244;
+  --ds-primary-soft: 8 47 73;
+  --ds-selected: 8 47 73;
+  --ds-teal-soft: 4 47 46;
+  --ds-teal-border: 19 78 74;
+  --ds-teal-text: 94 234 212;
   --scrollbar-thumb: 215 19% 35% / 0.6;
   --scrollbar-thumb-hover: 215 16% 47% / 0.85;
   --background: 222 47% 7%;
@@ -41,25 +103,10 @@
 }
 
 body {
-  background: linear-gradient(
-    180deg,
-    hsl(var(--background)) 0%,
-    hsl(var(--brand-mint) / 0.72) 100%
-  );
-  color: hsl(var(--foreground));
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  background: rgb(var(--ds-page));
+  color: rgb(var(--ds-text));
+  font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
   min-height: 100vh;
-}
-
-.dark body {
-  background: hsl(var(--background));
 }
 
 * {
@@ -106,14 +153,6 @@ html {
   scroll-behavior: smooth;
 }
 
-body,
-button,
-input,
-select,
-textarea {
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-}
-
 table {
   border-collapse: separate;
   border-spacing: 0;
@@ -127,12 +166,21 @@ thead th {
 
 thead.bg-slate-50,
 thead[class*='bg-slate-50'] {
-  background-color: #f8fafc;
+  background-color: rgb(var(--ds-subtle));
 }
 
+/* Table headers as in the concepts: sentence case, muted, semibold. Applies to every table. */
 thead th {
-  color: #64748b;
+  color: rgb(var(--ds-muted));
+  font-size: 12.5px;
+  font-weight: 600;
   letter-spacing: 0;
+  text-transform: none;
+}
+
+.divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--ds-divider));
 }
 
 td {
@@ -146,7 +194,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background-color: hsl(var(--brand-mint) / 0.42);
+  background-color: rgb(var(--ds-selected));
 }
 
 input,

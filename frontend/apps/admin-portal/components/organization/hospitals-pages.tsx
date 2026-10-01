@@ -151,10 +151,10 @@ export function HospitalsPageClient() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <PageHeader
         action={
-          <Button asChild className="bg-teal-600 hover:bg-teal-700">
+          <Button asChild>
             <Link href="/masters/locations/new">
               <Plus className="h-4 w-4" />
               Add Location
@@ -252,23 +252,23 @@ export function HospitalsPageClient() {
           <table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[18%] px-4 py-3">Title</th>
-                <th className="w-[13%] px-4 py-3">Location Code</th>
-                <th className="w-[17%] px-4 py-3">Display Name</th>
-                <th className="w-[12%] px-4 py-3">State</th>
-                <th className="w-[12%] px-4 py-3">City</th>
-                <th className="w-[10%] px-4 py-3">Postal Code</th>
-                <th className="w-[12%] px-4 py-3">Online Payment</th>
-                <th className="w-[18%] px-4 py-3">Status</th>
-                <th className="w-[13%] px-4 py-3">Updated</th>
-                <th className="w-[12%] px-4 py-3">Actions</th>
+                <th className="w-[18%] px-4 py-2.5">Title</th>
+                <th className="w-[13%] px-4 py-2.5">Location Code</th>
+                <th className="w-[17%] px-4 py-2.5">Display Name</th>
+                <th className="w-[12%] px-4 py-2.5">State</th>
+                <th className="w-[12%] px-4 py-2.5">City</th>
+                <th className="w-[10%] px-4 py-2.5">Postal Code</th>
+                <th className="w-[12%] px-4 py-2.5">Online Payment</th>
+                <th className="w-[18%] px-4 py-2.5">Status</th>
+                <th className="w-[13%] px-4 py-2.5">Updated</th>
+                <th className="w-[12%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((location) => (
                   <tr className="hover:bg-slate-50" key={location.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-slate-950">{getLocationTitle(location)}</p>
                         <p className="line-clamp-1 text-xs text-slate-500">
@@ -276,15 +276,15 @@ export function HospitalsPageClient() {
                         </p>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{getLocationCode(location)}</td>
-                    <td className="px-4 py-4 text-slate-600">{getLocationDisplayName(location)}</td>
-                    <td className="px-4 py-4 text-slate-600">{nullableText(location.state)}</td>
-                    <td className="px-4 py-4 text-slate-600">{nullableText(location.city)}</td>
-                    <td className="px-4 py-4 text-slate-600">
+                    <td className="px-4 py-3 text-slate-600">{getLocationCode(location)}</td>
+                    <td className="px-4 py-3 text-slate-600">{getLocationDisplayName(location)}</td>
+                    <td className="px-4 py-3 text-slate-600">{nullableText(location.state)}</td>
+                    <td className="px-4 py-3 text-slate-600">{nullableText(location.city)}</td>
+                    <td className="px-4 py-3 text-slate-600">
                       {nullableText(getLocationPostalCode(location))}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{location.onlinePaymentOption}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3 text-slate-600">{location.onlinePaymentOption}</td>
+                    <td className="px-4 py-3">
                       <StatusToggleCell
                         disabled={statusMutation.isPending && statusUpdatingId === location.id}
                         isActive={location.isActive}
@@ -292,8 +292,10 @@ export function HospitalsPageClient() {
                         showFrozenMessage={!location.isActive}
                       />
                     </td>
-                    <td className="px-4 py-4 text-slate-500">{formatDate(location.updatedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                      {formatDate(location.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
                       <Button asChild size="sm" variant="outline">
                         <Link href={`/masters/hospitals/${location.id}/locations#details`}>
                           <Eye className="h-4 w-4" />
@@ -535,7 +537,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <Button asChild variant="ghost">
         <Link href="/masters/locations">
           <ArrowLeft className="h-4 w-4" />
@@ -555,7 +557,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
             Location Details
           </a>
         </Button>
-        <Button asChild className="bg-teal-600 hover:bg-teal-700" size="sm">
+        <Button asChild size="sm">
           <a href="#locations">
             <MapPin className="h-4 w-4" />
             Service Areas
@@ -563,7 +565,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
         </Button>
       </div>
 
-      <Panel className="p-5" id="details">
+      <Panel className="p-4" id="details">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-normal text-slate-950">
@@ -586,7 +588,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
           </p>
         ) : hospital ? (
           <form
-            className="grid gap-5"
+            className="grid gap-4"
             onSubmit={(event) => {
               void handleLocationMasterSubmit(event);
             }}
@@ -605,7 +607,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
         ) : null}
       </Panel>
 
-      <Panel className="p-5" id="locations">
+      <Panel className="p-4" id="locations">
         <div className="mb-5">
           <h2 className="text-lg font-semibold tracking-normal text-slate-950">Service Areas</h2>
           <p className="text-sm text-slate-500">
@@ -613,12 +615,12 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
           </p>
         </div>
         <form
-          className="grid gap-5"
+          className="grid gap-4"
           onSubmit={(event) => {
             void handleSubmit(event);
           }}
         >
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <Field
               error={form.formState.errors.locationName?.message}
               label="Location Name"
@@ -634,7 +636,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
               <Input id="hospital-location-building" {...form.register('building')} />
             </Field>
           </div>
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3">
             <Field
               error={form.formState.errors.floor?.message}
               label="Floor"
@@ -724,19 +726,19 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
           <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
               <tr>
-                <th className="w-[24%] px-4 py-3">Location</th>
-                <th className="w-[18%] px-4 py-3">Building</th>
-                <th className="w-[14%] px-4 py-3">Floor</th>
-                <th className="w-[16%] px-4 py-3">Area</th>
-                <th className="w-[12%] px-4 py-3">Status</th>
-                <th className="w-[16%] px-4 py-3">Actions</th>
+                <th className="w-[24%] px-4 py-2.5">Location</th>
+                <th className="w-[18%] px-4 py-2.5">Building</th>
+                <th className="w-[14%] px-4 py-2.5">Floor</th>
+                <th className="w-[16%] px-4 py-2.5">Area</th>
+                <th className="w-[12%] px-4 py-2.5">Status</th>
+                <th className="w-[16%] px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {items.length > 0 ? (
                 items.map((location) => (
                   <tr className="hover:bg-slate-50" key={location.id}>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-slate-950">{location.locationName}</p>
                         <p className="text-xs text-slate-500">
@@ -744,13 +746,13 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
                         </p>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{nullableText(location.building)}</td>
-                    <td className="px-4 py-4 text-slate-600">{nullableText(location.floor)}</td>
-                    <td className="px-4 py-4 text-slate-600">{nullableText(location.area)}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3 text-slate-600">{nullableText(location.building)}</td>
+                    <td className="px-4 py-3 text-slate-600">{nullableText(location.floor)}</td>
+                    <td className="px-4 py-3 text-slate-600">{nullableText(location.area)}</td>
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={location.isActive} />
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={() => startEditingLocation(location)}
@@ -847,7 +849,7 @@ export function HospitalCreatePageClient() {
       title="Add Location"
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={(event) => {
           void handleSubmit(event);
         }}
