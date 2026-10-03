@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "isolatedModules": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@aahar/api-client": ["./frontend/packages/api-client/src/index.ts"],
+      "@aahar/auth": ["./backend/packages/auth/src/index.ts"],
+      "@aahar/config": ["./backend/packages/config/src/index.ts"],
+      "@aahar/types": ["./frontend/packages/types/src/index.ts"],
+      "@aahar/ui": ["./frontend/packages/ui/src/index.ts"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["node"]
+  }
+}

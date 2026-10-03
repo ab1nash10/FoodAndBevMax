@@ -1,0 +1,63 @@
+{{- if .Values.config.create }}
+{{- /*
+The ConfigMap and Secret the services read through envFrom. A Secret cannot be read across
+namespaces, so both must live alongside the pods - a missing one shows up only as a pod
+crash-looping with "Invalid service environment configuration", which is why the values
+below are `required`: the install fails here instead, naming what is missing.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.config.configMapName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    # A hook, and at a lower weight than the migrate and seed Jobs, because those read this
+    # Secret and pre-install hooks run before the release's ordinary resources. Recreated on
+    # each upgrade; a running pod keeps the values it started with, so the gap is harmless.
+    # The trade is that helm uninstall leaves these behind - delete them by hand.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: '-10'
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  BASE_PATH: {{ .Values.basePath | quote }}
+  NODE_ENV: {{ .Values.config.env.NODE_ENV | quote }}
+  LOG_LEVEL: {{ .Values.config.env.LOG_LEVEL | quote }}
+  CORS_ORIGINS: {{ required "config.env.corsOrigins is required - the browser origin, or every sign-in fails CORS" .Values.config.env.corsOrigins | quote }}
+  SMS_FEED_ID: {{ .Values.config.env.smsFeedId | default "" | quote }}
+  SMS_SENDER_ID: {{ .Values.config.env.smsSenderId | default "" | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.config.secretName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: '-10'
+    helm.sh/hook-delete-policy: before-hook-creation
+type: Opaque
+stringData:
+  DATABASE_URL: {{ required "config.secrets.DATABASE_URL is required" .Values.config.secrets.DATABASE_URL | quote }}
+  JWT_ACCESS_SECRET: {{ required "config.secrets.JWT_ACCESS_SECRET is required (at least 32 characters)" .Values.config.secrets.JWT_ACCESS_SECRET | quote }}
+  JWT_REFRESH_SECRET: {{ required "config.secrets.JWT_REFRESH_SECRET is required (at least 32 characters, different from the access secret)" .Values.config.secrets.JWT_REFRESH_SECRET | quote }}
+  {{- if .Values.config.secrets.ADMIN_PASSWORD }}
+  # Read only by the seed Job: the Super Admin's first password, applied while it has none.
+  ADMIN_PASSWORD: {{ .Values.config.secrets.ADMIN_PASSWORD | quote }}
+  {{- end }}
+  {{- if .Values.config.secrets.SMS_PASSWORD }}
+  SMS_USERNAME: {{ required "config.secrets.SMS_USERNAME is required with SMS_PASSWORD" .Values.config.secrets.SMS_USERNAME | quote }}
+  SMS_PASSWORD: {{ .Values.config.secrets.SMS_PASSWORD | quote }}
+  {{- end }}
+  {{- if .Values.redis.enabled }}
+  # Defaults to the Redis this chart deploys; an explicit value still wins.
+  REDIS_URL: {{ .Values.config.secrets.REDIS_URL | default (printf "redis://%s:%v" .Values.redis.name .Values.redis.port) | quote }}
+  {{- else if .Values.config.secrets.REDIS_URL }}
+  REDIS_URL: {{ .Values.config.secrets.REDIS_URL | quote }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,179 @@
+# AAHAR Helm values.
+#
+# The three backend services are separate processes on separate ports built from the same
+# Dockerfile with different SERVICE build args. They are listed here rather than duplicated
+# as three charts, so adding one is a values change.
+namespace: dev
+
+image:
+  registry: 013929206983.dkr.ecr.ap-south-1.amazonaws.com
+  # One shared ECR repository. The service is encoded in the tag rather than the repository
+  # name, so every image lands in max-ai-repo as <service>-<sha>.
+  repository: max-ai-repo
+  # Overridden per deploy with the commit SHA; "latest" cannot be rolled back.
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Routing prefix the platform is served under. Must match:
+#   * BASE_PATH in the ConfigMap (runtime, backend)
+#   * NEXT_PUBLIC_BASE_PATH baked into the portal image (build time)
+#   * the ingress path rules
+basePath: /fandb
+
+config:
+  configMapName: aahar-config
+  secretName: aahar-secrets
+  # The chart owns both objects by default. A pod whose Secret is missing does not fail
+  # visibly - it crash-loops with "Invalid service environment configuration" - so the
+  # values below are `required`, turning that into an install-time error instead.
+  # Set to false if you create the ConfigMap and Secret outside Helm; Helm will not adopt
+  # objects it did not create.
+  create: true
+  # Plain configuration. BASE_PATH and CORS_ORIGINS have no safe default in a cluster.
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+    # The browser origins, comma-separated. A request from any other origin is rejected -
+    # and today that surfaces as a 500 on sign-in, not a CORS error. Both schemes are
+    # listed because the ALB listens on 80 and 443 with no redirect, so a user who types
+    # the bare hostname arrives over http and would otherwise be unable to sign in.
+    corsOrigins: https://k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com,http://k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com
+    # Bulk SMS gateway for mobile OTPs. Not secret; the login is under secrets below.
+    smsFeedId: '354105'
+    smsSenderId: MAXHSP
+  # Never commit real values. Pass them at install time:
+  #   helm upgrade ... -f secrets.yaml      (git-ignored)
+  # or --set-string config.secrets.DATABASE_URL=...
+  # Both JWT secrets must be at least 32 characters and different from each other.
+  secrets:
+    DATABASE_URL: ''
+    JWT_ACCESS_SECRET: ''
+    JWT_REFRESH_SECRET: ''
+    # Bulk SMS gateway login. Left empty, mobile OTP sign-in is refused; email + password
+    # sign-in is unaffected.
+    # The Super Admin's first password (aahar@admin.local), applied by the seed only while the
+    # account has none, so a later change survives upgrades. At least 8 characters with a
+    # letter and a digit. Left empty, the account signs in by OTP until one is set.
+    ADMIN_PASSWORD: ''
+    SMS_USERNAME: ''
+    SMS_PASSWORD: ''
+    # Redis is commented out in the services for now, so nothing reads this.
+    # REDIS_URL: ''
+
+# Redis is commented out in the services for now, so the chart does not deploy it. Turning
+# this back on also means restoring REDIS_URL in backend/packages/config and the client in
+# auth-service/src/common/redis/redis.service.ts - the services do not read it until then.
+# ponytail: single replica, no persistence, no auth - fine for dev, use ElastiCache in
+# production and set enabled=false with config.secrets.REDIS_URL pointing at it.
+redis:
+  enabled: false
+  name: fandb-redis
+  image: redis:7-alpine
+  port: 6379
+
+# Schema migration and seeding, run as Helm hooks before the Deployments roll. Both use the
+# migrate image, which carries the Prisma CLI, the schema and the seed scripts.
+dbJobs:
+  enabled: true
+  tagPrefix: migrate
+  # One retry: a migration that fails twice is a real failure, not a flake, and the upgrade
+  # should stop rather than keep trying against a database it cannot use.
+  backoffLimit: 1
+
+# Each entry becomes a Deployment plus a Service. `service` is the SERVICE build arg the
+# image was produced with; a pod runs only the service its image contains. `apiPaths` are
+# the ingress prefixes it answers, relative to basePath and matched longest-first.
+services:
+  - name: fandb-auth
+    service: auth-service
+    tagPrefix: auth-service
+    port: 4001
+    replicas: 1
+    apiPaths:
+      - /api/v1/auth
+  - name: fandb-user
+    service: user-service
+    tagPrefix: user-service
+    port: 4002
+    replicas: 1
+    apiPaths:
+      - /api/v1/users
+      - /api/v1/roles
+      - /api/v1/permissions
+      - /api/v1/notifications
+  - name: fandb-organization
+    service: organization-service
+    tagPrefix: organization-service
+    port: 4003
+    replicas: 1
+    # The catch-all for the rest of the API: hospitals, items, GRN, stock, transfers.
+    apiPaths:
+      - /api/v1
+
+portal:
+  enabled: true
+  name: fandb-portal
+  tagPrefix: admin-portal
+  port: 3000
+  replicas: 1
+
+# Path-based routing on the shared ALB. An ALB cannot strip a prefix the way an NGINX
+# ingress can, so the pods serve under basePath themselves and the rules below match it.
+ingress:
+  enabled: true
+  className: alb
+  # Joins the existing shared load balancer instead of provisioning another one.
+  groupName: dev-external
+  groupOrder: 20
+  scheme: internet-facing
+  # No host on purpose: the ALB is reached by its own DNS name, and a host rule would
+  # reject requests to it. Set this once a real domain exists.
+  host: ''
+  # Add an ACM ARN to terminate TLS with a real certificate, then enable the redirect.
+  certificateArn: ''
+  sslRedirect: false
+
+strategy:
+  type: RollingUpdate
+  maxSurge: 1
+  maxUnavailable: 0
+
+revisionHistoryLimit: 2
+terminationGracePeriodSeconds: 30
+
+securityContext:
+  pod:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# Liveness is a socket check on purpose. The health endpoint also probes Postgres,
+# so using it for liveness would restart every pod during a brief database blip instead of
+# just removing them from the load balancer.
+livenessProbe:
+  initialDelaySeconds: 20
+  periodSeconds: 20
+  failureThreshold: 3
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 3
+startupProbe:
+  periodSeconds: 5
+  failureThreshold: 30

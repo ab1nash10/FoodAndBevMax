@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "jsx": "preserve",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./*"],
+      "@aahar/api-client": ["../../packages/api-client/src/index.ts"],
+      "@aahar/types": ["../../packages/types/src/index.ts"],
+      "@aahar/ui": ["../../packages/ui/src/index.ts"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

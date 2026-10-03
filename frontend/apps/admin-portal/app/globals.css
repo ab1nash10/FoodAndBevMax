@@ -1,0 +1,538 @@
+@import 'tailwindcss';
+
+@source '../../../packages/ui/src/**/*.{ts,tsx}';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Theme-aware tokens point at the CSS variables below, so dark mode keeps working. */
+@theme {
+  /* Tailwind's defaults plus nav (900px), where the sidebar stops being a drawer. */
+  --breakpoint-*: initial;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-nav: 900px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+
+  --radius-card: 16px;
+  --radius-control: 10px;
+  --radius-control-lg: 12px;
+  --radius-tile: 14px;
+
+  --color-background: hsl(var(--background));
+  --color-border: hsl(var(--border));
+  --color-foreground: hsl(var(--foreground));
+
+  /* Older names, now pointing at the design tokens below. */
+  --color-brand-blue: #0b57a4;
+  --color-brand-danger: #b4233f;
+  --color-brand-emerald: #0f7b63;
+  --color-brand-info: #0b57a4;
+  --color-brand-mint: #e7f6f1;
+  --color-brand-navy: #0f172a;
+  --color-brand-teal: #0f7b63;
+  --color-brand-warning: #f59e0b;
+
+  /* Design tokens from the UI concepts. Add no colours outside this set. */
+  --color-ds-border: rgb(var(--ds-border));
+
+  /* Dashboard charts: outcome segments, the main series and the wastage line. */
+  --color-ds-chart-full: rgb(var(--ds-chart-full));
+  --color-ds-chart-partial: rgb(var(--ds-chart-partial));
+  --color-ds-chart-rejected: rgb(var(--ds-chart-rejected));
+  --color-ds-chart-pending: rgb(var(--ds-chart-pending));
+  --color-ds-chart-series: rgb(var(--ds-chart-series));
+  --color-ds-chart-wastage: rgb(var(--ds-chart-wastage));
+
+  --color-ds-brand-panel: rgb(var(--ds-brand-panel));
+  --color-ds-brand-panel-accent: rgb(var(--ds-brand-panel-accent));
+  --color-ds-brand-panel-border: rgb(var(--ds-brand-panel-border));
+
+  --color-ds-divider: rgb(var(--ds-divider));
+
+  --color-ds-food-egg: rgb(var(--ds-food-egg));
+  --color-ds-food-egg-dot: rgb(var(--ds-food-egg-dot));
+  --color-ds-food-non-veg: rgb(var(--ds-food-non-veg));
+  --color-ds-food-veg: rgb(var(--ds-food-veg));
+
+  --color-ds-input: rgb(var(--ds-input));
+  --color-ds-link: rgb(var(--ds-link));
+  --color-ds-logo-chip: rgb(var(--ds-logo-chip));
+  --color-ds-muted: rgb(var(--ds-muted));
+  /* Alpha lives in the variable, so no /opacity modifier. */
+  --color-ds-overlay: rgb(var(--ds-overlay));
+  --color-ds-page: rgb(var(--ds-page));
+
+  --color-ds-primary: #0b57a4;
+  --color-ds-primary-hover: #094a8c;
+  --color-ds-primary-soft: rgb(var(--ds-primary-soft));
+
+  --color-ds-ring: rgb(var(--ds-ring));
+  --color-ds-selected: rgb(var(--ds-selected));
+
+  /* Status chips: pending, info (draft / in transit), ok, bad, neutral. */
+  --color-ds-status-pending-bg: rgb(var(--ds-status-pending-bg));
+  --color-ds-status-pending-fg: rgb(var(--ds-status-pending-fg));
+
+  --color-ds-status-info-bg: rgb(var(--ds-status-info-bg));
+  --color-ds-status-info-fg: rgb(var(--ds-status-info-fg));
+
+  --color-ds-status-ok-bg: rgb(var(--ds-status-ok-bg));
+  --color-ds-status-ok-fg: rgb(var(--ds-status-ok-fg));
+
+  --color-ds-status-bad-bg: rgb(var(--ds-status-bad-bg));
+  --color-ds-status-bad-fg: rgb(var(--ds-status-bad-fg));
+
+  --color-ds-status-neutral-bg: rgb(var(--ds-status-neutral-bg));
+  --color-ds-status-neutral-fg: rgb(var(--ds-status-neutral-fg));
+
+  --color-ds-stage-dispatched: #0b57a4;
+  --color-ds-stage-late: #c0264b;
+  --color-ds-stage-preparing: #f59e0b;
+  --color-ds-stage-queued: #94a3b8;
+  --color-ds-stage-ready: #0f7b63;
+
+  --color-ds-subtle: rgb(var(--ds-subtle));
+  --color-ds-subtle-2: rgb(var(--ds-subtle-2));
+  --color-ds-surface: rgb(var(--ds-surface));
+
+  --color-ds-teal: #0f7b63;
+  --color-ds-teal-border: rgb(var(--ds-teal-border));
+  --color-ds-teal-deep: #0f5e4c;
+  --color-ds-teal-soft: rgb(var(--ds-teal-soft));
+  --color-ds-teal-text: rgb(var(--ds-teal-text));
+
+  --color-ds-text-2: rgb(var(--ds-text-2));
+  --color-ds-text-3: rgb(var(--ds-text-3));
+  --color-ds-text: rgb(var(--ds-text));
+
+  --color-ds-tile-employees-bg: rgb(var(--ds-tile-employees-bg));
+  --color-ds-tile-employees-fg: rgb(var(--ds-tile-employees-fg));
+
+  --color-ds-tile-items-bg: rgb(var(--ds-tile-items-bg));
+  --color-ds-tile-items-fg: rgb(var(--ds-tile-items-fg));
+
+  --color-ds-tile-kitchens-bg: rgb(var(--ds-tile-kitchens-bg));
+  --color-ds-tile-kitchens-fg: rgb(var(--ds-tile-kitchens-fg));
+
+  --color-ds-tile-locations-bg: rgb(var(--ds-tile-locations-bg));
+  --color-ds-tile-locations-fg: rgb(var(--ds-tile-locations-fg));
+
+  --color-ds-tile-restaurants-bg: rgb(var(--ds-tile-restaurants-bg));
+  --color-ds-tile-restaurants-fg: rgb(var(--ds-tile-restaurants-fg));
+
+  --color-ds-tile-stores-bg: rgb(var(--ds-tile-stores-bg));
+  --color-ds-tile-stores-fg: rgb(var(--ds-tile-stores-fg));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  /* Subtle in light, none in dark (see --ds-card-shadow). */
+  --shadow-card: var(--ds-card-shadow);
+
+  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+
+  /* Tailwind 3's fixed line heights. v4's are ratios, so text that inherits one at another size
+     (a 12.5px table header under text-xs) grows a pixel. */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+
+  --container-content: 1360px;
+
+  --spacing-control: 40px;
+  --spacing-cta: 42px;
+  /* The collapsed sidebar rail. */
+  --spacing-rail: 72px;
+  --spacing-sidebar: 248px;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* Tailwind CSS v4's preflight sets opacity: 1 on form controls, which drops the browser's
+     dimming of disabled ones (a disabled select at 0.7 in Chrome); v3 left it to the browser. */
+  button,
+  input,
+  select,
+  optgroup,
+  textarea,
+  ::file-selector-button {
+    opacity: revert;
+  }
+
+  /* v3's placeholder colour; v4 uses the text colour at half strength. */
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+  }
+
+  /* Tailwind CSS v4 gives buttons the default cursor; v3 (and this UI) used the pointer. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Plus Jakarta Sans, self-hosted (OFL-1.1) so neither the build nor the browser needs Google. */
+@font-face {
+  font-display: swap;
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  src: url('./fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  src: url('./fonts/plus-jakarta-sans-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+:root {
+  /* Design tokens (UI concepts). RGB channels, used through the ds-* Tailwind colours. */
+  --ds-page: 243 245 248;
+  --ds-surface: 255 255 255;
+  --ds-subtle: 248 250 252;
+  --ds-subtle-2: 250 251 252;
+  --ds-border: 227 232 239;
+  --ds-divider: 238 241 245;
+  --ds-input: 213 220 229;
+  --ds-text: 15 23 42;
+  --ds-text-2: 51 65 85;
+  --ds-text-3: 71 85 105;
+  --ds-muted: 91 101 119;
+  --ds-link: 11 87 164;
+  --ds-primary-soft: 232 240 250;
+  --ds-selected: 241 246 253;
+  /* Dialog backdrop, alpha included: lighter veil in light mode, deeper in dark. */
+  --ds-overlay: 15 23 42 / 0.42;
+  /* Sign-in brand panel: primary blue in light mode, a plain surface in dark. */
+  --ds-brand-panel: 11 87 164;
+  --ds-brand-panel-border: 11 87 164;
+  /* Accent on the brand panel (eyebrow, feature icons): light green, readable on both panels. */
+  --ds-brand-panel-accent: 110 231 183;
+  --ds-teal-soft: 231 246 241;
+  --ds-teal-border: 205 235 223;
+  --ds-teal-text: 15 107 85;
+  /* Status chips, icon tiles and food marks: one variable per theme, so components never
+     need a dark: override. */
+  --ds-status-pending-bg: 254 243 199;
+  --ds-status-pending-fg: 146 64 14;
+  --ds-status-info-bg: 232 240 250;
+  --ds-status-info-fg: 11 87 164;
+  --ds-status-ok-bg: 227 245 238;
+  --ds-status-ok-fg: 15 107 85;
+  --ds-status-bad-bg: 253 236 239;
+  --ds-status-bad-fg: 180 35 63;
+  --ds-status-neutral-bg: 238 242 246;
+  --ds-status-neutral-fg: 71 85 105;
+  --ds-tile-locations-bg: 231 246 241;
+  --ds-tile-locations-fg: 15 123 99;
+  --ds-tile-stores-bg: 227 245 238;
+  --ds-tile-stores-fg: 21 128 61;
+  --ds-tile-kitchens-bg: 255 244 230;
+  --ds-tile-kitchens-fg: 194 87 12;
+  --ds-tile-restaurants-bg: 243 238 255;
+  --ds-tile-restaurants-fg: 109 63 209;
+  --ds-tile-items-bg: 234 241 253;
+  --ds-tile-items-fg: 29 95 201;
+  --ds-tile-employees-bg: 253 236 239;
+  --ds-tile-employees-fg: 192 38 75;
+  /* Charts: transfer outcomes (full / partial / rejected / pending), the main series, kitchen
+     wastage and the empty-step ring. Fills use an opacity modifier (e.g. /10). */
+  --ds-chart-full: 15 123 99;
+  --ds-chart-partial: 245 158 11;
+  --ds-chart-rejected: 225 29 72;
+  --ds-chart-pending: 184 196 211;
+  --ds-chart-series: 11 87 164;
+  --ds-chart-wastage: 194 87 12;
+  --ds-ring: 203 213 225;
+  --ds-food-veg: 21 128 61;
+  --ds-food-non-veg: 154 52 18;
+  --ds-food-egg: 180 83 9;
+  --ds-food-egg-dot: 245 158 11;
+  --ds-card-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+  /* Brand logos sit on white in both themes. */
+  --ds-logo-chip: 255 255 255;
+
+  /* The same tokens, as the HSL variables the older classes read. */
+  --background: 216 26% 96%;
+  --border: 214 27% 91%;
+  --foreground: 222 47% 11%;
+  --muted: 160 46% 94%;
+  --muted-foreground: 219 13% 41%;
+  --primary: 210 87% 34%;
+  --primary-foreground: 0 0% 100%;
+  --surface: 0 0% 100%;
+  --surface-muted: 210 40% 98%;
+  --ring: 210 87% 34%;
+  --brand-blue: 210 87% 34%;
+  --brand-navy: 222 47% 11%;
+  --brand-teal: 167 78% 27%;
+  --brand-emerald: 167 78% 27%;
+  --brand-mint: 160 46% 94%;
+  --brand-warning: 38 92% 50%;
+  --brand-danger: 348 67% 42%;
+  --brand-info: 210 87% 34%;
+  --scrollbar-thumb: 215 20% 65% / 0.45;
+  --scrollbar-thumb-hover: 215 16% 47% / 0.7;
+}
+
+.dark {
+  /* Native controls (checkboxes, select menus, scrollbars) follow the theme. */
+  color-scheme: dark;
+  /* Dark values come from the portal's existing dark palette. */
+  --ds-page: 9 14 26;
+  --ds-surface: 14 21 37;
+  --ds-subtle: 22 31 44;
+  --ds-subtle-2: 22 31 44;
+  --ds-border: 31 42 61;
+  --ds-divider: 30 41 59;
+  --ds-input: 51 65 85;
+  --ds-text: 248 250 252;
+  --ds-text-2: 203 213 225;
+  --ds-text-3: 148 163 184;
+  --ds-muted: 148 163 184;
+  --ds-link: 73 158 244;
+  --ds-primary-soft: 8 47 73;
+  --ds-selected: 12 34 56;
+  --ds-overlay: 2 6 23 / 0.72;
+  --ds-brand-panel: 14 21 37;
+  --ds-brand-panel-border: 31 42 61;
+  --ds-brand-panel-accent: 110 231 183;
+  --ds-teal-soft: 4 47 46;
+  --ds-teal-border: 19 78 74;
+  --ds-teal-text: 94 234 212;
+  --ds-status-pending-bg: 66 32 6;
+  --ds-status-pending-fg: 252 211 77;
+  --ds-status-info-bg: 8 47 73;
+  --ds-status-info-fg: 125 211 252;
+  --ds-status-ok-bg: 4 47 46;
+  --ds-status-ok-fg: 94 234 212;
+  --ds-status-bad-bg: 76 5 25;
+  --ds-status-bad-fg: 253 164 175;
+  --ds-status-neutral-bg: 30 41 59;
+  --ds-status-neutral-fg: 203 213 225;
+  --ds-tile-locations-bg: 4 47 46;
+  --ds-tile-locations-fg: 94 234 212;
+  --ds-tile-stores-bg: 5 46 22;
+  --ds-tile-stores-fg: 134 239 172;
+  --ds-tile-kitchens-bg: 67 20 7;
+  --ds-tile-kitchens-fg: 253 186 116;
+  --ds-tile-restaurants-bg: 46 16 101;
+  --ds-tile-restaurants-fg: 196 181 253;
+  --ds-tile-items-bg: 23 37 84;
+  --ds-tile-items-fg: 147 197 253;
+  --ds-tile-employees-bg: 76 5 25;
+  --ds-tile-employees-fg: 253 164 175;
+  --ds-chart-full: 20 184 166;
+  --ds-chart-partial: 245 158 11;
+  --ds-chart-rejected: 251 113 133;
+  --ds-chart-pending: 71 85 105;
+  --ds-chart-series: 73 158 244;
+  --ds-chart-wastage: 253 186 116;
+  --ds-ring: 51 65 85;
+  --ds-food-veg: 74 222 128;
+  --ds-food-non-veg: 251 146 60;
+  --ds-food-egg: 251 191 36;
+  --ds-food-egg-dot: 251 191 36;
+  --ds-card-shadow: none;
+  --ds-logo-chip: 255 255 255;
+  --scrollbar-thumb: 215 19% 35% / 0.6;
+  --scrollbar-thumb-hover: 215 16% 47% / 0.85;
+  --background: 222 47% 7%;
+  --border: 217 33% 18%;
+  --foreground: 210 40% 98%;
+  --muted: 217 33% 15%;
+  --muted-foreground: 215 20% 65%;
+  --primary: 210 88% 62%;
+  --primary-foreground: 222 47% 7%;
+  --surface: 222 47% 10%;
+  --surface-muted: 217 33% 13%;
+  --ring: 210 88% 62%;
+}
+
+/* The portal's own element and override styles. Tailwind 4 puts utilities in a cascade layer, so
+   these sit in the same layer after them: utilities still win on specificity, as they did in v3. */
+@layer utilities {
+  body {
+    background: rgb(var(--ds-page));
+    color: rgb(var(--ds-text));
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.16);
+  }
+
+  /* Slim scrollbars everywhere: a thin rounded thumb, no track, no arrow buttons. */
+  ::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    /* The transparent border insets the thumb, so it reads as 4px until hovered. */
+    background-clip: content-box;
+    background-color: hsl(var(--scrollbar-thumb));
+    border: 2px solid transparent;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--scrollbar-thumb-hover));
+  }
+
+  /* Firefox has no ::-webkit-scrollbar. The standard properties are set only there, because
+     Chromium ignores the ::-webkit-scrollbar styling above wherever they apply. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
+      scrollbar-width: thin;
+    }
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  thead.bg-slate-50,
+  thead[class*='bg-slate-50'] {
+    background-color: rgb(var(--ds-subtle));
+  }
+
+  /* Table headers as in the concepts: sentence case, muted, semibold. Applies to every table. */
+  thead th {
+    color: rgb(var(--ds-muted));
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .divide-slate-100 > :not(:last-child),
+  .divide-slate-200 > :not(:last-child) {
+    border-color: rgb(var(--ds-divider));
+  }
+
+  td {
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+  }
+
+  tbody tr {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease;
+  }
+
+  tbody tr:hover {
+    background-color: rgb(var(--ds-selected));
+  }
+
+  input,
+  select,
+  textarea {
+    accent-color: hsl(var(--brand-blue));
+  }
+
+  label:has(input[type='checkbox']) {
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  label:has(input[type='checkbox']):hover {
+    border-color: hsl(var(--brand-blue) / 0.24);
+    background-color: hsl(var(--brand-mint) / 0.55);
+  }
+
+  :focus-visible {
+    outline-color: hsl(var(--ring));
+  }
+
+  .dark .bg-white {
+    background-color: hsl(var(--surface));
+  }
+
+  .dark .bg-slate-50,
+  .dark .bg-slate-50\/60,
+  .dark .bg-slate-50\/70 {
+    background-color: hsl(var(--surface-muted));
+  }
+
+  .dark .text-slate-950,
+  .dark .text-slate-900 {
+    color: rgb(248 250 252);
+  }
+
+  .dark .text-slate-700,
+  .dark .text-slate-600 {
+    color: rgb(203 213 225);
+  }
+
+  .dark .text-slate-500 {
+    color: rgb(148 163 184);
+  }
+
+  .dark .border-slate-200,
+  .dark .divide-slate-200 > :not(:last-child),
+  .dark .divide-slate-100 > :not(:last-child) {
+    border-color: rgb(30 41 59);
+  }
+}

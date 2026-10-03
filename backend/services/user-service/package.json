@@ -1,0 +1,47 @@
+{
+  "name": "@aahar/user-service",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "db:generate": "pnpm -w db:generate",
+    "db:migrate": "pnpm -w db:migrate",
+    "dev": "nest start --watch",
+    "lint": "eslint . --max-warnings 0",
+    "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
+    "test": "node -e \"console.log('No tests configured yet')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aahar/auth": "workspace:*",
+    "@aahar/config": "workspace:*",
+    "@nestjs/common": "^12.1.2",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/passport": "^12.0.0",
+    "@nestjs/platform-express": "^12.1.2",
+    "@nestjs/swagger": "^12.0.2",
+    "@nestjs/throttler": "^6.7.1",
+    "@prisma/client": "^7.10.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/schematics": "^12.0.6",
+    "@types/node": "^24.19.1",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/swagger-ui-express": "^4.1.8",
+    "prisma": "^7.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}

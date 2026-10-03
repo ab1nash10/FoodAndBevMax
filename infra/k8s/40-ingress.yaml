@@ -1,0 +1,104 @@
+# AWS Load Balancer Controller ingress, path-based under /fandb.
+#
+# ONLY for the raw-manifest path (backend/deployment.yml + frontend/deployment.yml in
+# namespace `aahar`). If you deploy with the Helm chart, the chart brings its own ingress
+# with the service names it actually creates - do not apply both: they would join the same
+# ALB group `dev-external` at the same group.order and the controller rejects the conflict.
+#
+# An ALB cannot rewrite paths the way an NGINX ingress can - there is no rewrite-target
+# annotation - so the prefix is not stripped before the request reaches a pod. Both apps
+# therefore serve under /fandb themselves:
+#   * the portal via Next's basePath  (NEXT_PUBLIC_BASE_PATH, build time)
+#   * the services via Nest's global prefix (BASE_PATH, runtime)
+# Changing the prefix here alone will break routing; change it in all three places.
+#
+# Compression: an ALB does not compress responses. Next compresses its own output; the
+# NestJS services do not. Put CloudFront in front for compression and edge caching.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aahar
+  namespace: aahar
+  labels:
+    app.kubernetes.io/part-of: aahar
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    # Health checks run against the prefixed paths, because that is what the pods serve.
+    alb.ingress.kubernetes.io/healthcheck-path: /fandb/api/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/target-group-attributes: >-
+      deregistration_delay.timeout_seconds=30
+    # Joins the existing shared load balancer rather than provisioning a new one. The value
+    # must match the group the k8s-devexternal ALB was created with.
+    alb.ingress.kubernetes.io/group.name: dev-external
+    # Ordering within the shared group. Lower numbers are evaluated first.
+    alb.ingress.kubernetes.io/group.order: '20'
+    # The ALB currently terminates TLS with its default certificate. Add an ACM ARN and
+    # re-enable the redirect once a real certificate is attached.
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:013929206983:certificate/...
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:...
+spec:
+  ingressClassName: alb
+  rules:
+    # No host is set on purpose: the ALB is reached by its own DNS name
+    # (k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com), and pinning a
+    # host rule would reject requests to that name. Add `host:` when a real domain exists.
+    - http:
+        paths:
+          # Order matters. The API prefixes must be matched before the portal catch-all,
+          # and the longer service prefixes before the organization-service fallback.
+          - path: /fandb/api/v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 80
+          - path: /fandb/api/v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+          - path: /fandb/api/v1/roles
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+          - path: /fandb/api/v1/permissions
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+          - path: /fandb/api/v1/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+          # Everything else under the API is organisation, master data and inventory.
+          - path: /fandb/api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: organization-service
+                port:
+                  number: 80
+          # The portal, including its own route handlers at /fandb/api/health and
+          # /fandb/api/uploads/*.
+          - path: /fandb
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-portal
+                port:
+                  number: 80

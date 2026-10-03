@@ -1,0 +1,112 @@
+{{- if .Values.dbJobs.enabled }}
+{{- /*
+Schema migration and seeding, as Helm hooks so one `helm upgrade` does the whole deploy in
+the right order: migrate, then seed, then roll the Deployments. All three services share one
+Prisma schema, so the migration has to finish before any of them start.
+
+Both run on every install and upgrade. `prisma migrate deploy` applies only what is
+outstanding, and the seed is written to be re-runnable - upserts, `skipDuplicates` on the
+join tables, and an existence check before creating the sample location - so a repeat is a
+no-op that also picks up any permissions added since.
+
+Without the seed there are no permissions, no roles and no users, so nobody can sign in at
+all; that is why it is not something to remember to run separately.
+*/ -}}
+{{- $image := printf "%s/%s:%s-%s" .Values.image.registry .Values.image.repository .Values.dbJobs.tagPrefix .Values.image.tag -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fandb-migrate
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: fandb-migrate
+    app.kubernetes.io/component: migration
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: '0'
+    # Deleting before re-creating matters: a Job's pod template is immutable, so a second
+    # upgrade against a surviving Job would fail rather than run.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.dbJobs.backoffLimit }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fandb-migrate
+        app.kubernetes.io/component: migration
+        app.kubernetes.io/part-of: fandb
+    spec:
+      restartPolicy: Never
+      securityContext:
+{{ toYaml .Values.securityContext.pod | indent 8 }}
+      containers:
+        - name: migrate
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['pnpm', 'db:deploy']
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.secretName }}
+                  key: DATABASE_URL
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.securityContext.container | indent 12 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fandb-seed
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: fandb-seed
+    app.kubernetes.io/component: seed
+    app.kubernetes.io/part-of: fandb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    # Weight 1 runs this after the migration: there is no schema to seed into before it.
+    helm.sh/hook-weight: '1'
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.dbJobs.backoffLimit }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fandb-seed
+        app.kubernetes.io/component: seed
+        app.kubernetes.io/part-of: fandb
+    spec:
+      restartPolicy: Never
+      securityContext:
+{{ toYaml .Values.securityContext.pod | indent 8 }}
+      containers:
+        - name: seed
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The seed also gives the Super Admin its first password from ADMIN_PASSWORD, but only
+          # while the account has none - see prisma/seed.ts.
+          command: ['pnpm', 'db:seed']
+          env:
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.secretName }}
+                  key: ADMIN_PASSWORD
+                  optional: true
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.secretName }}
+                  key: DATABASE_URL
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          securityContext:
+{{ toYaml .Values.securityContext.container | indent 12 }}
+{{- end }}
