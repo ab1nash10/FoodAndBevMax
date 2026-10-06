@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { Prisma, TimeSlot } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateTimeSlotDto } from './dto/create-time-slot.dto';
-import { ListTimeSlotsQueryDto, TimeSlotSortField } from './dto/list-time-slots-query.dto';
+import { ListTimeSlotsQueryDto } from './dto/list-time-slots-query.dto';
 import { UpdateTimeSlotDto } from './dto/update-time-slot.dto';
 import { TimeSlotsRepository } from './time-slots.repository';
 
@@ -26,14 +27,6 @@ function toTimeSlotResponse(timeSlot: TimeSlot) {
     slotName: timeSlot.slotName,
     startTime: timeSlot.startTime,
     updatedAt: timeSlot.updatedAt,
-  };
-}
-
-function getTimeSlotOrderBy(query: ListTimeSlotsQueryDto): Prisma.TimeSlotOrderByWithRelationInput {
-  const sortBy: TimeSlotSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -73,7 +66,7 @@ export class TimeSlotsService {
 
     const [items, total] = await Promise.all([
       this.timeSlots.findMany({
-        orderBy: getTimeSlotOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -130,7 +123,7 @@ export class TimeSlotsService {
 
       return toTimeSlotResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Time slot');
+      handlePrismaError(error, 'Time slot');
     }
   }
 
@@ -207,7 +200,7 @@ export class TimeSlotsService {
 
       return toTimeSlotResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Time slot');
+      handlePrismaError(error, 'Time slot');
     }
   }
 
@@ -267,13 +260,5 @@ export class TimeSlotsService {
     }
 
     return timeSlot;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

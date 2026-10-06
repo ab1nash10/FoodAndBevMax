@@ -8,11 +8,36 @@ interface ErrorResponseBody {
   message?: string | string[];
 }
 
+/**
+ * body-parser's errors (from "http-errors") are not HttpExceptions; a client error among them,
+ * such as 413 for a body over the size limit, carries `expose: true` and a safe message.
+ */
+function isExposedHttpError(
+  exception: unknown,
+): exception is Error & { expose: true; statusCode: number } {
+  const error = exception as { expose?: unknown; status?: unknown; statusCode?: unknown };
+
+  return (
+    exception instanceof Error &&
+    error.expose === true &&
+    typeof error.statusCode === 'number' &&
+    error.status === error.statusCode
+  );
+}
+
 function normalizeException(exception: unknown): {
   errors: unknown[];
   message: string;
   statusCode: number;
 } {
+  if (isExposedHttpError(exception)) {
+    return {
+      errors: [],
+      message: exception.message,
+      statusCode: exception.statusCode,
+    };
+  }
+
   if (!(exception instanceof HttpException)) {
     return {
       errors: [],

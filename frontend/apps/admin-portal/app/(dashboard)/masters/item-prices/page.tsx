@@ -1,4 +1,4 @@
-import { ItemPricesPageClient } from '@/components/master-data/master-data-pages';
+import { ItemPricesPageClient } from '@/components/master-data/item-prices/item-prices-page';
 
 export default function ItemPricesPage() {
   return <ItemPricesPageClient />;

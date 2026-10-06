@@ -1,4 +1,4 @@
-import { ItemPriceEditPageClient } from '@/components/master-data/master-data-pages';
+import { ItemPriceEditPageClient } from '@/components/master-data/item-prices/item-price-edit-page';
 
 interface EditItemPricePageProps {
   params: Promise<{

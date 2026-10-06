@@ -9,11 +9,13 @@ import { Hospital, OnlinePaymentOption, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
 import { getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateHospitalDto } from './dto/create-hospital.dto';
 import { HospitalSortField, ListHospitalsQueryDto } from './dto/list-hospitals-query.dto';
 import { UpdateHospitalDto } from './dto/update-hospital.dto';
 import { HospitalsRepository } from './hospitals.repository';
+import { optionalText } from '../common/values';
 
 type HospitalClient = Prisma.TransactionClient;
 
@@ -47,12 +49,6 @@ function toHospitalResponse(hospital: Hospital) {
     visitingCardAddress: hospital.visitingCardAddress,
     updatedAt: hospital.updatedAt,
   };
-}
-
-function optionalText(value: string | undefined): string | undefined {
-  const trimmedValue = value?.trim();
-
-  return trimmedValue ? trimmedValue : undefined;
 }
 
 function requiredText(value: string | undefined, message: string): string {
@@ -221,7 +217,7 @@ export class HospitalsService {
 
       return toHospitalResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Location');
+      handlePrismaError(error, 'Location');
     }
   }
 
@@ -348,7 +344,7 @@ export class HospitalsService {
 
       return toHospitalResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Location');
+      handlePrismaError(error, 'Location');
     }
   }
 
@@ -526,13 +522,5 @@ export class HospitalsService {
     }
 
     return hospital;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

@@ -11,8 +11,9 @@ import { BulkLocationBar } from '@/components/access/bulk-location-bar';
 import { UserDialog } from '@/components/access/user-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Input, Panel, Skeleton } from '@/components/ui';
-import { useDebouncedValue, useUrlParam } from '@/lib/use-url-state';
+import { useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, userApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 
 /** Mirrors the server guard: only a Super Admin may change Super Admin access. */
 const SUPER_ADMIN_ROLE = 'Super Admin';
@@ -21,7 +22,7 @@ function PermissionsDialog({ user, onClose }: Readonly<{ onClose: () => void; us
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const permissionsQuery = useQuery({
-    queryKey: ['user-permissions', user.id],
+    queryKey: queryKeys.userPermissions(user.id),
     queryFn: async () => (await userApi.getUserPermissions(user.id)).data,
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -39,7 +40,7 @@ function PermissionsDialog({ user, onClose }: Readonly<{ onClose: () => void; us
     },
     onSuccess(response) {
       setSelected(new Set(response.data.effectivePermissionIds));
-      void queryClient.invalidateQueries({ queryKey: ['user-permissions', user.id] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.userPermissions(user.id) });
       showToast({ title: 'Permissions saved', variant: 'success' });
       onClose();
     },
@@ -167,15 +168,14 @@ export function UsersRolesPageClient() {
   const isSuperAdmin = actorRoles.includes(SUPER_ADMIN_ROLE);
   const [editingUser, setEditingUser] = useState<AccessUser | null | undefined>(undefined);
   const [permissionUser, setPermissionUser] = useState<AccessUser | null>(null);
-  const [searchInput, setSearch] = useUrlParam('q');
-  // Queries wait for a pause in typing; the box and the URL update at once.
-  const search = useDebouncedValue(searchInput);
+  // Queries and the URL wait for a pause in typing; the box updates at once.
+  const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const usersQuery = useQuery({
-    queryKey: ['access-users', search],
+    queryKey: queryKeys.accessUsers(search),
     queryFn: async () => (await userApi.listUsers({ limit: 50, page: 1, search })).data,
   });
   const rolesQuery = useQuery({
-    queryKey: ['access-roles'],
+    queryKey: queryKeys.accessRoles(),
     queryFn: async () => (await userApi.listRoles({ limit: 100, page: 1 })).data,
   });
   const users = usersQuery.data?.items ?? [];

@@ -6,31 +6,20 @@ import {
 } from '@nestjs/common';
 import { Prisma, RateType } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import { CreateItemPriceDto } from './dto/create-item-price.dto';
-import { ItemPriceSortField, ListItemPricesQueryDto } from './dto/list-item-prices-query.dto';
+import { ListItemPricesQueryDto } from './dto/list-item-prices-query.dto';
 import { ResolveItemPriceQueryDto } from './dto/resolve-item-price-query.dto';
 import { UpdateItemPriceDto } from './dto/update-item-price.dto';
 import { ItemPricesRepository, ItemPriceWithRelations } from './item-prices.repository';
+import { toDateOnly, toNumber } from '../common/values';
 
 type ItemPriceClient = Prisma.TransactionClient;
 type PriceSource = 'LOCATION' | 'MISSING' | 'RESTAURANT';
 
 const overlappingPriceMessage =
   'An active price already exists for this item, rate type, and date range.';
-
-function toDateOnly(value: string | Date): Date {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-
-  date.setHours(0, 0, 0, 0);
-
-  return date;
-}
-
-function toNumber(value: Prisma.Decimal | number): number {
-  return Number(value);
-}
 
 function toItemPriceResponse(itemPrice: ItemPriceWithRelations) {
   return {
@@ -51,16 +40,6 @@ function toItemPriceResponse(itemPrice: ItemPriceWithRelations) {
     restaurant: itemPrice.restaurant,
     restaurantId: itemPrice.restaurantId,
     updatedAt: itemPrice.updatedAt,
-  };
-}
-
-function getItemPriceOrderBy(
-  query: ListItemPricesQueryDto,
-): Prisma.ItemPriceOrderByWithRelationInput {
-  const sortBy: ItemPriceSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -135,7 +114,7 @@ export class ItemPricesService {
 
     const [items, total] = await Promise.all([
       this.itemPrices.findMany({
-        orderBy: getItemPriceOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,

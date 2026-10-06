@@ -9,21 +9,19 @@ import {
   TransferStatus,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import {
   CreateTransferAcknowledgementDto,
   CreateTransferAcknowledgementLineDto,
 } from './dto/create-transfer-acknowledgement.dto';
-import {
-  ListTransferAcknowledgementsQueryDto,
-  TransferAcknowledgementSortField,
-} from './dto/list-transfer-acknowledgements-query.dto';
+import { ListTransferAcknowledgementsQueryDto } from './dto/list-transfer-acknowledgements-query.dto';
 import {
   TransferAcknowledgementsRepository,
   TransferAcknowledgementWithRelations,
   TransferForAcknowledgement,
 } from './transfer-acknowledgements.repository';
+import { optionalText, quantitiesMatch, toDate, toDateOnly, toNumber } from '../common/values';
 
 type AcknowledgementClient = Prisma.TransactionClient;
 
@@ -35,44 +33,8 @@ interface PreparedAcknowledgementLine {
   transferLine: TransferForAcknowledgement['lines'][number];
 }
 
-function optionalText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-
-  return trimmed ? trimmed : undefined;
-}
-
-function toDate(value: string): Date {
-  return new Date(value);
-}
-
-function toDateOnly(value: string | Date): Date {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-
-  date.setHours(0, 0, 0, 0);
-
-  return date;
-}
-
-function toNumber(value: Prisma.Decimal | number): number {
-  return Number(value);
-}
-
-function quantitiesMatch(left: number, right: number): boolean {
-  return Math.abs(left - right) < 0.0005;
-}
-
 function itemStockBusinessDate(itemType: ItemType, businessDate: Date): Date | null {
   return itemType === ItemType.READYMADE ? toDateOnly(businessDate) : null;
-}
-
-function getAcknowledgementOrderBy(
-  query: ListTransferAcknowledgementsQueryDto,
-): Prisma.TransferAcknowledgementOrderByWithRelationInput {
-  const sortBy: TransferAcknowledgementSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
 }
 
 function getAcknowledgementStatus(
@@ -181,7 +143,7 @@ export class TransferAcknowledgementsService {
 
     const [items, total] = await Promise.all([
       this.acknowledgements.findMany({
-        orderBy: getAcknowledgementOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,

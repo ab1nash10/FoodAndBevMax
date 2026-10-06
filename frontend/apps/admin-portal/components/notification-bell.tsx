@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { userApi } from '@/lib/api';
 import { canOpenPath, notificationHref } from '@/lib/navigation';
+import { queryKeys } from '@/lib/query-keys';
 
 const POLL_MS = 60_000;
 
@@ -115,7 +116,7 @@ export function NotificationBell() {
   // Cheap poll keeps the badge live; the list is only fetched while the panel is open.
   const countQuery = useQuery({
     queryFn: async () => (await userApi.getUnreadNotificationCount()).data,
-    queryKey: ['notifications', 'unread-count'],
+    queryKey: queryKeys.notificationsUnreadCount(),
     refetchInterval: POLL_MS,
   });
 
@@ -123,11 +124,11 @@ export function NotificationBell() {
     enabled: isOpen,
     queryFn: async () =>
       (await userApi.listNotifications({ limit: 20, unreadOnly: showUnreadOnly })).data,
-    queryKey: ['notifications', 'list', showUnreadOnly],
+    queryKey: queryKeys.notificationsList(showUnreadOnly),
   });
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
   };
 
   const toggleMutation = useMutation({

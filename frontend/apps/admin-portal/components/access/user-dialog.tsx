@@ -9,6 +9,7 @@ import { LocationPickerDialog } from '@/components/access/location-picker-dialog
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel, Select } from '@/components/ui';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
@@ -83,7 +84,7 @@ export function UserDialog({
   // Only the assigned locations are fetched by name; the full list lives in the picker dialog.
   const hospitalsQuery = useQuery({
     queryFn: async () => (await organizationApi.listHospitals({ limit: 100, page: 1 })).data,
-    queryKey: ['access-hospitals'],
+    queryKey: queryKeys.accessHospitals(),
   });
   const hospitals = hospitalsQuery.data?.items ?? [];
   const nameOf = (id: string) =>
@@ -102,7 +103,7 @@ export function UserDialog({
       });
     },
     onSuccess() {
-      void queryClient.invalidateQueries({ queryKey: ['access-users'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.accessUsers() });
       showToast({ title: user ? 'User updated' : 'User created', variant: 'success' });
       onClose();
     },

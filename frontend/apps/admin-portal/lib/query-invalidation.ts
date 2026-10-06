@@ -1,57 +1,62 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 
-function invalidate(queryClient: QueryClient, queryKeys: unknown[][]): void {
-  queryKeys.forEach((queryKey) => {
+function invalidate(queryClient: QueryClient, keys: QueryKey[]): void {
+  keys.forEach((queryKey) => {
     void queryClient.invalidateQueries({ queryKey });
   });
 }
 
 export function invalidateItemCategoryQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [['item-categories'], ['item-category-options']]);
+  invalidate(queryClient, [queryKeys.itemCategories(), queryKeys.itemCategoryOptions()]);
 }
 
 export function invalidateItemQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [['items'], ['item-options'], ['dashboard', 'items']]);
+  invalidate(queryClient, [
+    queryKeys.items(),
+    queryKeys.itemOptions(),
+    queryKeys.dashboard('items'),
+  ]);
 }
 
 export function invalidateItemPriceQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [['item-prices']]);
+  invalidate(queryClient, [queryKeys.itemPrices()]);
 }
 
 export function invalidateEmployeeQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [['employees'], ['dashboard', 'employees']]);
+  invalidate(queryClient, [queryKeys.employees(), queryKeys.dashboard('employees')]);
 }
 
 export function invalidateGrnQueries(queryClient: QueryClient): void {
   invalidate(queryClient, [
-    ['grns'],
-    ['stock-balances'],
-    ['stock-ledgers'],
-    ['transfer-store-stock'],
-    ['dashboard'],
+    queryKeys.grns(),
+    queryKeys.stockBalances(),
+    queryKeys.stockLedgers(),
+    queryKeys.transferStoreStock(),
+    queryKeys.dashboard(),
   ]);
 }
 
 export function invalidateTransferQueries(queryClient: QueryClient): void {
   invalidate(queryClient, [
-    ['transfers'],
-    ['transfer-acknowledgements'],
-    ['stock-balances'],
-    ['stock-ledgers'],
-    ['kitchen-stock'],
-    ['restaurant-stock'],
-    ['transfer-store-stock'],
-    ['transfer-kitchen-stock'],
-    ['dashboard'],
+    queryKeys.transfers(),
+    queryKeys.transferAcknowledgements(),
+    queryKeys.stockBalances(),
+    queryKeys.stockLedgers(),
+    queryKeys.kitchenStock(),
+    queryKeys.restaurantStock(),
+    queryKeys.transferStoreStock(),
+    queryKeys.transferKitchenStock(),
+    queryKeys.dashboard(),
   ]);
 }
 
 export function invalidateKitchenProductionQueries(queryClient: QueryClient): void {
   invalidate(queryClient, [
-    ['kitchen-productions'],
-    ['kitchen-stock'],
-    ['kitchen-stock-ledgers'],
-    ['transfer-kitchen-stock'],
-    ['dashboard'],
+    queryKeys.kitchenProductions(),
+    queryKeys.kitchenStock(),
+    queryKeys.kitchenStockLedgers(),
+    queryKeys.transferKitchenStock(),
+    queryKeys.dashboard(),
   ]);
 }

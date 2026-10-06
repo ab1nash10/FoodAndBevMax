@@ -7,10 +7,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateKitchenDto } from './dto/create-kitchen.dto';
-import { KitchenSortField, ListKitchensQueryDto } from './dto/list-kitchens-query.dto';
+import { ListKitchensQueryDto } from './dto/list-kitchens-query.dto';
 import { UpdateKitchenDto } from './dto/update-kitchen.dto';
 import { KitchensRepository, KitchenWithRelations } from './kitchens.repository';
 
@@ -45,14 +46,6 @@ function toKitchenResponse(kitchen: KitchenWithRelations) {
   };
 }
 
-function getKitchenOrderBy(query: ListKitchensQueryDto): Prisma.KitchenOrderByWithRelationInput {
-  const sortBy: KitchenSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
 @Injectable()
 export class KitchensService {
   constructor(
@@ -84,7 +77,7 @@ export class KitchensService {
 
     const [items, total] = await Promise.all([
       this.kitchens.findMany({
-        orderBy: getKitchenOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -148,7 +141,7 @@ export class KitchensService {
 
       return toKitchenResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Kitchen');
+      handlePrismaError(error, 'Kitchen');
     }
   }
 
@@ -236,7 +229,7 @@ export class KitchensService {
 
       return toKitchenResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Kitchen');
+      handlePrismaError(error, 'Kitchen');
     }
   }
 
@@ -341,13 +334,5 @@ export class KitchensService {
     }
 
     return kitchen;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

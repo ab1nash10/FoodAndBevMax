@@ -1,10 +1,5 @@
 import { NotificationPublisher } from '@aahar/auth';
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   GrnStatus,
   InventoryLocationType,
@@ -15,129 +10,18 @@ import {
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { NOTIFY_ROLES } from '../common/notification-roles';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
 import { CreateGrnDto, CreateGrnLineDto } from './dto/create-grn.dto';
-import { GrnSortField, ListGrnsQueryDto } from './dto/list-grns-query.dto';
+import { ListGrnsQueryDto } from './dto/list-grns-query.dto';
 import { UpdateGrnDto } from './dto/update-grn.dto';
 import { GrnsRepository, GrnWithRelations } from './grns.repository';
+import { optionalText, quantitiesMatch, toDate, toDateOnly, toNumber } from '../common/values';
+import { isExpiredForAcceptance, sum, toGrnResponse, type PreparedGrnLine } from './grns.helpers';
 
 type GrnClient = Prisma.TransactionClient;
-
-interface PreparedGrnBatch {
-  acceptedQty: number;
-  batchNumber: string;
-  expiryDate: Date;
-  manufacturingDate?: Date;
-  receivedQty: number;
-  rejectedQty: number;
-  rejectionReason?: string;
-}
-
-interface PreparedGrnLine {
-  acceptedQty: number;
-  batches: PreparedGrnBatch[];
-  itemId: string;
-  orderedQty?: number;
-  receivedQty: number;
-  rejectedQty: number;
-  rejectionReason?: string;
-  remarks?: string;
-}
-
-function getGrnOrderBy(query: ListGrnsQueryDto): Prisma.GrnOrderByWithRelationInput {
-  const sortBy: GrnSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
-function optionalText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-
-  return trimmed ? trimmed : undefined;
-}
-
-function toDate(value: string): Date {
-  return new Date(value);
-}
-
-function toDateOnly(value: string | Date): Date {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-
-  date.setHours(0, 0, 0, 0);
-
-  return date;
-}
-
-function toNumber(value: Prisma.Decimal | number): number {
-  return Number(value);
-}
-
-function quantitiesMatch(left: number, right: number): boolean {
-  return Math.abs(left - right) < 0.0005;
-}
-
-function sum(values: number[]): number {
-  return Number(values.reduce((total, value) => total + value, 0).toFixed(3));
-}
-
-function isExpiredForAcceptance(expiryDate: Date): boolean {
-  const today = toDateOnly(new Date());
-
-  return toDateOnly(expiryDate) < today;
-}
-
-function toGrnResponse(grn: GrnWithRelations) {
-  return {
-    createdAt: grn.createdAt,
-    deletedAt: grn.deletedAt,
-    grnNumber: grn.grnNumber,
-    hospital: grn.hospital,
-    hospitalId: grn.hospitalId,
-    id: grn.id,
-    invoiceNumber: grn.invoiceNumber,
-    lines: grn.lines.map((line) => ({
-      acceptedQty: toNumber(line.acceptedQty),
-      batches: line.batches.map((batch) => ({
-        acceptedQty: toNumber(batch.acceptedQty),
-        batchNumber: batch.batchNumber,
-        createdAt: batch.createdAt,
-        expiryDate: batch.expiryDate,
-        grnLineId: batch.grnLineId,
-        id: batch.id,
-        itemId: batch.itemId,
-        manufacturingDate: batch.manufacturingDate,
-        receivedQty: toNumber(batch.receivedQty),
-        rejectedQty: toNumber(batch.rejectedQty),
-        rejectionReason: batch.rejectionReason,
-        updatedAt: batch.updatedAt,
-      })),
-      createdAt: line.createdAt,
-      grnId: line.grnId,
-      id: line.id,
-      item: line.item,
-      itemId: line.itemId,
-      orderedQty: line.orderedQty === null ? null : toNumber(line.orderedQty),
-      receivedQty: toNumber(line.receivedQty),
-      rejectedQty: toNumber(line.rejectedQty),
-      rejectionReason: line.rejectionReason,
-      remarks: line.remarks,
-      updatedAt: line.updatedAt,
-    })),
-    poNumber: grn.poNumber,
-    receivedBy: grn.receivedBy,
-    receivedDate: grn.receivedDate,
-    remarks: grn.remarks,
-    status: grn.status,
-    store: grn.store,
-    storeId: grn.storeId,
-    updatedAt: grn.updatedAt,
-    vendorName: grn.vendorName,
-  };
-}
 
 @Injectable()
 export class GrnsService {
@@ -177,7 +61,7 @@ export class GrnsService {
 
     const [items, total] = await Promise.all([
       this.grns.findMany({
-        orderBy: getGrnOrderBy(query),
+        orderBy: getDocumentOrderBy(query, 'grnNumber', 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -239,7 +123,7 @@ export class GrnsService {
         return newValue;
       });
     } catch (error) {
-      this.handlePrismaError(error, 'GRN');
+      handlePrismaError(error, 'GRN');
     }
   }
 
@@ -335,7 +219,7 @@ export class GrnsService {
         return newValue;
       });
     } catch (error) {
-      this.handlePrismaError(error, 'GRN');
+      handlePrismaError(error, 'GRN');
     }
   }
 
@@ -699,13 +583,5 @@ export class GrnsService {
         remarks: optionalText(line.remarks),
       };
     });
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateKitchenItemDto } from './dto/create-kitchen-item.dto';
-import { KitchenItemSortField, ListKitchenItemsQueryDto } from './dto/list-kitchen-items-query.dto';
+import { ListKitchenItemsQueryDto } from './dto/list-kitchen-items-query.dto';
 import { UpdateKitchenItemDto } from './dto/update-kitchen-item.dto';
 import { KitchenItemsRepository, KitchenItemWithRelations } from './kitchen-items.repository';
 
@@ -26,16 +27,6 @@ function toKitchenItemResponse(mapping: KitchenItemWithRelations) {
     kitchen: mapping.kitchen,
     kitchenId: mapping.kitchenId,
     updatedAt: mapping.updatedAt,
-  };
-}
-
-function getKitchenItemOrderBy(
-  query: ListKitchenItemsQueryDto,
-): Prisma.KitchenItemOrderByWithRelationInput {
-  const sortBy: KitchenItemSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -68,7 +59,7 @@ export class KitchenItemsService {
 
     const [items, total] = await Promise.all([
       this.kitchenItems.findMany({
-        orderBy: getKitchenItemOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -121,7 +112,7 @@ export class KitchenItemsService {
 
       return toKitchenItemResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Kitchen item mapping');
+      handlePrismaError(error, 'Kitchen item mapping');
     }
   }
 
@@ -180,7 +171,7 @@ export class KitchenItemsService {
 
       return toKitchenItemResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Kitchen item mapping');
+      handlePrismaError(error, 'Kitchen item mapping');
     }
   }
 
@@ -261,13 +252,5 @@ export class KitchenItemsService {
     }
 
     return mapping;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

@@ -60,20 +60,30 @@ not adopt a ConfigMap or Secret it did not create.
 
 ## Redis
 
-Commented out for now. OTPs and the refresh-token denylist are held in each pod's memory
-instead, so `redis.enabled` is `false` and no `REDIS_URL` is needed.
+Optional, switched by `REDIS_URL`. With it, OTPs (and their cooldowns and attempt counts),
+refresh tokens and the rate limits live in Redis: shared by every pod and kept across
+deploys, so backends can run more than one replica and a deploy signs nobody out. Without
+it each pod keeps them in memory - a deploy signs everyone out, and **every backend must
+stay at one replica**, because a refresh or an OTP check that lands on another pod fails.
 
-That has two consequences while it lasts: the store is lost on restart, so a deploy signs
-everyone out and voids pending OTPs; and it is not shared between pods, so **every backend
-must stay at one replica** - a refresh that lands on a different pod than the one that
-issued the token would be rejected.
+Three ways to run it:
 
-To bring Redis back: set `redis.enabled=true` here (the chart still ships the Deployment and
-Service, and wires `REDIS_URL` automatically), then restore the commented code in
-`backend/services/auth-service/src/common/redis/redis.service.ts`, the Redis check in
-`backend/packages/auth/src/health-check.service.ts`, and `REDIS_URL` in
-`backend/packages/config/src/index.ts`. For production point it at ElastiCache instead:
-`redis.enabled=false` with the endpoint in `config.secrets.REDIS_URL`.
+- **ElastiCache (production).** Redis or Valkey, cluster mode disabled. Put the primary
+  endpoint in `config.secrets.REDIS_URL` - `rediss://` when in-transit encryption is on, with
+  the AUTH token (or an ACL user) in the URL: `rediss://default:<token>@<primary-endpoint>:6379`.
+  The Jenkinsfile passes `REDIS_URL` from the job's environment when one is set. The cluster
+  needs a route and a security-group rule to port 6379. `infra/aws/` has a CloudFormation
+  template that creates all of it, and the step-by-step runbook.
+- **In-cluster (dev).** `redis.enabled=true` deploys `redis:7-alpine` and points `REDIS_URL`
+  at it. One replica, no persistence, no auth.
+- **None.** Leave both unset; everything keeps working on one replica, as before.
+
+A Redis outage does not take the API down: the health endpoint reports it but readiness
+follows the database only, the rate limiter falls back to counting in each pod's memory,
+and sign-in returns an error until Redis is back. Keys are prefixed `aahar:`, so one Redis
+can be shared with other applications.
+
+The single-image deployment (`SERVICE=all`) takes the same `REDIS_URL` environment variable.
 
 ## Routing
 

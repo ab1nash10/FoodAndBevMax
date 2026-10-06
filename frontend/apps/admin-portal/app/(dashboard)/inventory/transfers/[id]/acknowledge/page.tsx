@@ -1,4 +1,4 @@
-import { AcknowledgeTransferPageClient } from '@/components/inventory/inventory-pages';
+import { AcknowledgeTransferPageClient } from '@/components/inventory/transfers/acknowledge-transfer-page';
 
 interface AcknowledgeTransferPageProps {
   params: Promise<{

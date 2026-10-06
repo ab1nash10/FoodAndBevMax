@@ -789,7 +789,7 @@ model Employee {
 
 model Grn {
   id            String    @id @default(uuid()) @db.Uuid
-  grnNumber     String    @unique @default(dbgenerated("'GRN' || lpad((nextval('grn_number_seq'::regclass))::text, 6, '0'::text)")) @map("grn_number")
+  grnNumber     String    @unique @default(dbgenerated("('GRN'::text || regexp_replace(lpad((nextval('grn_number_seq'::regclass))::text, 20, '0'::text), '^0{0,14}'::text, ''::text))")) @map("grn_number")
   hospitalId    String    @map("hospital_id") @db.Uuid
   storeId       String    @map("store_id") @db.Uuid
   receivedDate  DateTime  @map("received_date")
@@ -811,6 +811,7 @@ model Grn {
 
   @@index([deletedAt])
   @@index([hospitalId])
+  @@index([hospitalId, status, deletedAt])
   @@index([receivedDate])
   @@index([status])
   @@index([storeId])
@@ -873,7 +874,7 @@ model GrnBatch {
 
 model KitchenProduction {
   id               String                  @id @default(uuid()) @db.Uuid
-  productionNumber String                  @unique @default(dbgenerated("'PRD' || lpad((nextval('kitchen_production_number_seq'::regclass))::text, 4, '0'::text)")) @map("production_number")
+  productionNumber String                  @unique @default(dbgenerated("('PRD'::text || regexp_replace(lpad((nextval('kitchen_production_number_seq'::regclass))::text, 20, '0'::text), '^0{0,16}'::text, ''::text))")) @map("production_number")
   hospitalId       String                  @map("hospital_id") @db.Uuid
   kitchenId        String                  @map("kitchen_id") @db.Uuid
   productionDate   DateTime                @map("production_date")
@@ -927,7 +928,7 @@ model KitchenProductionLine {
 
 model Transfer {
   id              String                @id @default(uuid()) @db.Uuid
-  transferNumber  String                @unique @default(dbgenerated("'TRF' || lpad((nextval('transfer_number_seq'::regclass))::text, 4, '0'::text)")) @map("transfer_number")
+  transferNumber  String                @unique @default(dbgenerated("('TRF'::text || regexp_replace(lpad((nextval('transfer_number_seq'::regclass))::text, 20, '0'::text), '^0{0,16}'::text, ''::text))")) @map("transfer_number")
   hospitalId      String                @map("hospital_id") @db.Uuid
   sourceType      InventoryLocationType @map("source_type")
   sourceId        String                @map("source_id") @db.Uuid
@@ -951,6 +952,7 @@ model Transfer {
   @@index([deletedAt])
   @@index([destinationType, destinationId])
   @@index([hospitalId])
+  @@index([hospitalId, status, deletedAt])
   @@index([sourceType, sourceId])
   @@index([status])
   @@index([transferDate])
@@ -1073,7 +1075,9 @@ model StockLedger {
   @@index([deletedAt])
   @@index([expiryDate])
   @@index([hospitalId])
+  @@index([hospitalId, locationType, locationId, deletedAt], map: "stock_ledgers_hospital_location_deleted_at_idx")
   @@index([itemId])
+  @@index([itemId, deletedAt])
   @@index([locationType, locationId])
   @@index([referenceType, referenceId])
   @@index([transactionDateTime])

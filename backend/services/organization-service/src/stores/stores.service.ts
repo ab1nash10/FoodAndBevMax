@@ -7,10 +7,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateStoreDto } from './dto/create-store.dto';
-import { ListStoresQueryDto, StoreSortField } from './dto/list-stores-query.dto';
+import { ListStoresQueryDto } from './dto/list-stores-query.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { StoresRepository, StoreWithRelations } from './stores.repository';
 
@@ -42,14 +43,6 @@ function toStoreResponse(store: StoreWithRelations) {
     storeName: store.storeName,
     storeType: store.storeType,
     updatedAt: store.updatedAt,
-  };
-}
-
-function getStoreOrderBy(query: ListStoresQueryDto): Prisma.StoreOrderByWithRelationInput {
-  const sortBy: StoreSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -87,7 +80,7 @@ export class StoresService {
 
     const [items, total] = await Promise.all([
       this.stores.findMany({
-        orderBy: getStoreOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -151,7 +144,7 @@ export class StoresService {
 
       return toStoreResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Store');
+      handlePrismaError(error, 'Store');
     }
   }
 
@@ -237,7 +230,7 @@ export class StoresService {
 
       return toStoreResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Store');
+      handlePrismaError(error, 'Store');
     }
   }
 
@@ -339,13 +332,5 @@ export class StoresService {
     }
 
     return store;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

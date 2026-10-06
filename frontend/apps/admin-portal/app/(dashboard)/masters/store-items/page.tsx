@@ -1,4 +1,4 @@
-import { StoreItemsPageClient } from '@/components/mapping-foundation/mapping-foundation-pages';
+import { StoreItemsPageClient } from '@/components/mapping-foundation/store-items/store-items-page';
 
 export default function StoreItemsPage() {
   return <StoreItemsPageClient />;

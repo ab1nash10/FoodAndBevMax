@@ -1,0 +1,252 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`every prefix stays as it is 1`] = `
+{
+  "accessHospitals": [
+    "access-hospitals",
+  ],
+  "accessRoles": [
+    "access-roles",
+  ],
+  "accessUsers": [
+    "access-users",
+  ],
+  "commandPaletteSearch": [
+    "command-palette",
+    "search",
+  ],
+  "counters": [
+    "counters",
+  ],
+  "dashboard": [
+    "dashboard",
+  ],
+  "dashboardActivity": [
+    "dashboard",
+    "activity",
+  ],
+  "dashboardExpiring": [
+    "dashboard",
+    "expiring",
+  ],
+  "dashboardNavCounts": [
+    "dashboard",
+    "nav-counts",
+  ],
+  "dashboardQueue": [
+    "dashboard",
+    "queue",
+  ],
+  "dashboardSetup": [
+    "dashboard",
+    "setup",
+  ],
+  "dashboardStats": [
+    "dashboard",
+    "stats",
+  ],
+  "employees": [
+    "employees",
+  ],
+  "globalLocationContextActiveLocations": [
+    "global-location-context",
+    "active-locations",
+  ],
+  "grns": [
+    "grns",
+  ],
+  "hospital": [
+    "hospital",
+  ],
+  "hospitalLocations": [
+    "hospital-locations",
+  ],
+  "hospitalOptions": [
+    "hospital-options",
+  ],
+  "hospitals": [
+    "hospitals",
+  ],
+  "inventoryAllKitchens": [
+    "inventory-all-kitchens",
+  ],
+  "inventoryAllRestaurants": [
+    "inventory-all-restaurants",
+  ],
+  "inventoryAllStores": [
+    "inventory-all-stores",
+  ],
+  "inventoryHospitals": [
+    "inventory-hospitals",
+  ],
+  "inventoryItems": [
+    "inventory-items",
+  ],
+  "inventoryKitchens": [
+    "inventory-kitchens",
+  ],
+  "inventoryRestaurants": [
+    "inventory-restaurants",
+  ],
+  "inventoryStoreItems": [
+    "inventory-store-items",
+  ],
+  "inventoryStores": [
+    "inventory-stores",
+  ],
+  "itemCategories": [
+    "item-categories",
+  ],
+  "itemCategoryOptions": [
+    "item-category-options",
+  ],
+  "itemMappings": [
+    "item-mappings",
+  ],
+  "itemOptions": [
+    "item-options",
+  ],
+  "itemPrices": [
+    "item-prices",
+  ],
+  "itemPricesItem": [
+    "item-prices",
+    "item",
+  ],
+  "itemPricesNormal": [
+    "item-prices",
+    "normal",
+  ],
+  "items": [
+    "items",
+  ],
+  "kitchenHospitals": [
+    "kitchen-hospitals",
+  ],
+  "kitchenKitchens": [
+    "kitchen-kitchens",
+  ],
+  "kitchenOptions": [
+    "kitchen-options",
+  ],
+  "kitchenProductionItems": [
+    "kitchen-production-items",
+  ],
+  "kitchenProductions": [
+    "kitchen-productions",
+  ],
+  "kitchenProductionsToday": [
+    "kitchen-productions",
+    "today",
+  ],
+  "kitchenStock": [
+    "kitchen-stock",
+  ],
+  "kitchenStockItems": [
+    "kitchen-stock-items",
+  ],
+  "kitchenStockLedgers": [
+    "kitchen-stock-ledgers",
+  ],
+  "kitchens": [
+    "kitchens",
+  ],
+  "locationOptions": [
+    "location-options",
+  ],
+  "locationPicker": [
+    "location-picker",
+  ],
+  "locations": [
+    "locations",
+  ],
+  "mappingHospitalOptions": [
+    "mapping-hospital-options",
+  ],
+  "notifications": [
+    "notifications",
+  ],
+  "notificationsList": [
+    "notifications",
+    "list",
+  ],
+  "notificationsUnreadCount": [
+    "notifications",
+    "unread-count",
+  ],
+  "paymentMachinePosDeviceOptions": [
+    "payment-machine-pos-device-options",
+  ],
+  "paymentMachines": [
+    "payment-machines",
+  ],
+  "posDevices": [
+    "pos-devices",
+  ],
+  "posLocationOptions": [
+    "pos-location-options",
+  ],
+  "posRestaurantOptions": [
+    "pos-restaurant-options",
+  ],
+  "restaurant": [
+    "restaurant",
+  ],
+  "restaurantMenuReferenceOptions": [
+    "restaurant-menu-reference-options",
+  ],
+  "restaurantMenus": [
+    "restaurant-menus",
+  ],
+  "restaurantOptions": [
+    "restaurant-options",
+  ],
+  "restaurantStock": [
+    "restaurant-stock",
+  ],
+  "restaurants": [
+    "restaurants",
+  ],
+  "stockBalances": [
+    "stock-balances",
+  ],
+  "stockLedgers": [
+    "stock-ledgers",
+  ],
+  "storeOptions": [
+    "store-options",
+  ],
+  "stores": [
+    "stores",
+  ],
+  "timeSlotOptions": [
+    "time-slot-options",
+  ],
+  "timeSlots": [
+    "time-slots",
+  ],
+  "transferAcknowledgements": [
+    "transfer-acknowledgements",
+  ],
+  "transferKitchenStock": [
+    "transfer-kitchen-stock",
+  ],
+  "transferStoreStock": [
+    "transfer-store-stock",
+  ],
+  "transfers": [
+    "transfers",
+  ],
+  "transfersRecentToRestaurant": [
+    "transfers",
+    "recent-to-restaurant",
+  ],
+  "transfersViewCounts": [
+    "transfers",
+    "view-counts",
+  ],
+  "userPermissions": [
+    "user-permissions",
+  ],
+}
+`;

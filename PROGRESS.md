@@ -117,8 +117,8 @@ TanStack Query 5, lucide-react icons, shared primitives in `frontend/apps/admin-
   Stock, Stock Ledgers and Kitchen Stock asked for `limit: 200` (`useItems` in
   `inventory-pages.tsx` and `kitchen-pages.tsx`), but the API caps `limit` at 100 and answered
   400, so the filter listed no items. Both now ask for 100 (predated this work, commit d80a499).
-- Locally `REDIS_URL` is unset, so refresh tokens live in memory and every restart of the
-  auth service signs all browser sessions out on their next renewal.
+- Without `REDIS_URL`, refresh tokens live in memory and every restart of the auth service
+  signs all browser sessions out on their next renewal; with it they survive restarts.
 
 ## Scope (updated by the user mid-run)
 

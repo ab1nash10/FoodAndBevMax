@@ -399,7 +399,7 @@ Restart the PostgreSQL container after changing the port.
 
 ### A backend service fails environment validation
 
-Confirm that `.env` exists in the repository root and contains `DATABASE_URL`, `REDIS_URL`, both JWT secrets, and the service port variables. JWT secrets must contain at least 32 characters.
+Confirm that `.env` exists in the repository root and contains `DATABASE_URL`, both JWT secrets, and the service port variables (`REDIS_URL` is optional). JWT secrets must contain at least 32 characters.
 
 ### OTP is not visible
 

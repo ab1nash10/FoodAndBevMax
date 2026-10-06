@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import { useEntityTotal } from '@/components/organization/shared';
+import { useEntityTotal } from '@/components/organization/shared/hooks';
 import { organizationApi } from '@/lib/api';
 import {
   dashboardMode,
@@ -27,6 +27,7 @@ import {
   type Period,
 } from '@/lib/dashboard-stats';
 import { canOpenPath } from '@/lib/navigation';
+import { queryKeys } from '@/lib/query-keys';
 
 /** Period stats change slowly; the work queue keeps the app's default 30s. */
 const STATS_STALE_MS = 60_000;
@@ -115,7 +116,7 @@ export function useDashboardStats(period: Period) {
         }),
       );
     },
-    queryKey: ['dashboard', 'stats', 'transfers', period, scope],
+    queryKey: queryKeys.dashboardStats('transfers', period, scope),
     staleTime: STATS_STALE_MS,
   });
   const productionsQuery = useQuery({
@@ -135,7 +136,7 @@ export function useDashboardStats(period: Period) {
         }),
       );
     },
-    queryKey: ['dashboard', 'stats', 'productions', period, scope],
+    queryKey: queryKeys.dashboardStats('productions', period, scope),
     staleTime: STATS_STALE_MS,
   });
   const grnsQuery = useQuery({
@@ -155,7 +156,7 @@ export function useDashboardStats(period: Period) {
         }),
       );
     },
-    queryKey: ['dashboard', 'stats', 'grns', period, scope],
+    queryKey: queryKeys.dashboardStats('grns', period, scope),
     staleTime: STATS_STALE_MS,
   });
 
@@ -172,7 +173,7 @@ export function useDashboardStats(period: Period) {
           status: 'PENDING_ACKNOWLEDGEMENT',
         })
       ).data,
-    queryKey: ['dashboard', 'queue', 'transfers', scope],
+    queryKey: queryKeys.dashboardQueue('transfers', scope),
   });
   const grnsToVerifyQuery = useQuery({
     enabled: can.grns,
@@ -187,7 +188,7 @@ export function useDashboardStats(period: Period) {
           status: 'DRAFT',
         })
       ).data,
-    queryKey: ['dashboard', 'queue', 'grns-to-verify', scope],
+    queryKey: queryKeys.dashboardQueue('grns-to-verify', scope),
   });
   const draftProductionsQuery = useQuery({
     enabled: can.productions,
@@ -201,7 +202,7 @@ export function useDashboardStats(period: Period) {
           status: 'DRAFT',
         })
       ).data,
-    queryKey: ['dashboard', 'queue', 'productions', scope],
+    queryKey: queryKeys.dashboardQueue('productions', scope),
   });
   // TODO(api): no audit-log endpoint yet, so activity shows what changed but not who changed it.
   const activityQuery = useQuery({
@@ -218,7 +219,7 @@ export function useDashboardStats(period: Period) {
 
       return { grns, productions, transfers };
     },
-    queryKey: ['dashboard', 'activity', scope],
+    queryKey: queryKeys.dashboardActivity(scope),
   });
   const expiringQuery = useQuery({
     enabled: can.stock,
@@ -235,7 +236,7 @@ export function useDashboardStats(period: Period) {
         (balance): balance is StockBalance & { expiryDate: string } =>
           balance.expiryDate !== null && daysUntil(balance.expiryDate) <= EXPIRY_WINDOW_DAYS,
       ),
-    queryKey: ['dashboard', 'expiring', scope],
+    queryKey: queryKeys.dashboardExpiring(scope),
   });
 
   // ---- Master data totals (the existing keys) and the setup checklist's counts.
@@ -306,7 +307,7 @@ export function useDashboardStats(period: Period) {
           status: 'POSTED_TO_STOCK',
         })
       ).data.items[0] ?? null,
-    queryKey: ['dashboard', 'setup', 'first-grn', scope],
+    queryKey: queryKeys.dashboardSetup('first-grn', scope),
     staleTime: STATS_STALE_MS,
   });
   const firstTransferQuery = useQuery({
@@ -321,7 +322,7 @@ export function useDashboardStats(period: Period) {
           status: 'ACKNOWLEDGED',
         })
       ).data.items[0] ?? null,
-    queryKey: ['dashboard', 'setup', 'first-transfer', scope],
+    queryKey: queryKeys.dashboardSetup('first-transfer', scope),
     staleTime: STATS_STALE_MS,
   });
 

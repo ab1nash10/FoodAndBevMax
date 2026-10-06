@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreatePosDeviceDto } from './dto/create-pos-device.dto';
-import { ListPosDevicesQueryDto, PosDeviceSortField } from './dto/list-pos-devices-query.dto';
+import { ListPosDevicesQueryDto } from './dto/list-pos-devices-query.dto';
 import { UpdatePosDeviceDto } from './dto/update-pos-device.dto';
 import { PosDevicesRepository, PosDeviceWithRelations } from './pos-devices.repository';
 
@@ -57,16 +58,6 @@ function describeHostNameOwner(posDevice: PosDeviceWithRelations): string {
   }
 
   return `POS device ${posDevice.name}`;
-}
-
-function getPosDeviceOrderBy(
-  query: ListPosDevicesQueryDto,
-): Prisma.PosDeviceOrderByWithRelationInput {
-  const sortBy: PosDeviceSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
 }
 
 @Injectable()
@@ -123,7 +114,7 @@ export class PosDevicesService {
 
     const [items, total] = await Promise.all([
       this.posDevices.findMany({
-        orderBy: getPosDeviceOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -191,7 +182,7 @@ export class PosDevicesService {
 
       return toPosDeviceResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'POS device');
+      handlePrismaError(error, 'POS device');
     }
   }
 
@@ -294,7 +285,7 @@ export class PosDevicesService {
 
       return toPosDeviceResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'POS device');
+      handlePrismaError(error, 'POS device');
     }
   }
 
@@ -417,13 +408,5 @@ export class PosDevicesService {
     }
 
     return posDevice;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

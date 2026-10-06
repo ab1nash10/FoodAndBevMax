@@ -7,6 +7,7 @@ import { Loader2, MapPin, X } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/components/toast-provider';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 
 /**
  * Bulk location assignment for the users list.
@@ -25,7 +26,7 @@ export function BulkLocationBar({
 
   const hospitalsQuery = useQuery({
     queryFn: async () => (await organizationApi.listHospitals({ limit: 100, page: 1 })).data,
-    queryKey: ['access-hospitals'],
+    queryKey: queryKeys.accessHospitals(),
   });
   const hospitals = hospitalsQuery.data?.items ?? [];
 
@@ -46,7 +47,7 @@ export function BulkLocationBar({
       });
     },
     onSuccess(response) {
-      void queryClient.invalidateQueries({ queryKey: ['access-users'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.accessUsers() });
       showToast({
         description: `${response.data.updatedCount} user(s) updated.`,
         title: 'Locations assigned',

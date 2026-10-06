@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsOptional } from 'class-validator';
 import { ActivePaginationQueryDto } from '../../common/dto/active-pagination-query.dto';
+import { toOptionalBoolean } from '../../common/values';
 
 export const employeeSortFields = [
   'createdAt',
@@ -16,22 +17,6 @@ export const employeeSortFields = [
 ] as const;
 
 export type EmployeeSortField = (typeof employeeSortFields)[number];
-
-function toOptionalBoolean(value: unknown): unknown {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
-  if (value === true || value === 'true') {
-    return true;
-  }
-
-  if (value === false || value === 'false') {
-    return false;
-  }
-
-  return value;
-}
 
 export class ListEmployeesQueryDto extends ActivePaginationQueryDto {
   @ApiPropertyOptional({ type: Boolean })

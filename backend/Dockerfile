@@ -10,9 +10,11 @@
 # that deploy exactly one backend image per application; the Helm chart's one-image-per-service
 # deployment remains the norm everywhere else.
 #
-# The build is pruned to the chosen service and the backend packages it depends on, so a
+# The build is pruned to the three backend services and the packages they depend on, so a
 # frontend-only change does not invalidate these layers and the backend pipeline can run
-# on its own.
+# on its own. The pruned workspace, its install and its compile are the same whatever
+# SERVICE is, so building the four backend images one after another (as the Jenkinsfile
+# does) installs and compiles once and reuses those layers for the other three.
 #
 # Two targets:
 #   --target runner   (default) the service itself
@@ -23,9 +25,14 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 WORKDIR /app
 
-# ---- prune: reduce the workspace to just what this service needs -----------------------
-FROM base AS pruner
-ARG SERVICE
+# turbo, installed once into a cached layer. Fetched by the prune step itself (`pnpm dlx`),
+# it was downloaded again by every build, since that step reruns on any change to the
+# source. Only the prune uses it, so the images that ship do not carry it.
+FROM base AS tools
+RUN npm install --global turbo@2.9.16
+
+# ---- prune: reduce the workspace to just what the backend needs ------------------------
+FROM tools AS pruner
 COPY . .
 # Fail immediately and legibly if the build context is not the repository root. turbo prune
 # needs the whole workspace (pnpm-workspace.yaml, the lockfile and every package manifest),
@@ -41,18 +48,19 @@ RUN test -f pnpm-workspace.yaml -a -f package.json || { \
       echo "Do NOT cd into backend/ first, and do NOT pass backend/ as the context."; \
       echo "----------------------------------------------------------------"; \
       exit 1; }
-# Reject a bad SERVICE here, where the name is first used. turbo otherwise fails with
-# "Invalid scope. Package with name @aahar/<x> not found", which does not say what the
-# valid names are. /fandb in the URLs is the platform route prefix, not a service name.
+# SERVICE is deliberately not in scope yet: a build arg in scope is part of every following
+# RUN's cache key, which would give each service its own copy of the prune, install and build.
+RUN turbo prune @aahar/auth-service @aahar/user-service @aahar/organization-service --docker
+# Reject a bad SERVICE before anything else is built: every target depends on this stage.
+# /fandb in the URLs is the platform route prefix, not a service name.
+ARG SERVICE
 RUN case "$SERVICE" in \
-      all) SCOPES="@aahar/auth-service @aahar/user-service @aahar/organization-service" ;; \
-      auth-service|user-service|organization-service) SCOPES="@aahar/${SERVICE}" ;; \
+      all|auth-service|user-service|organization-service) ;; \
       *) echo "ERROR: SERVICE='$SERVICE' is not an AAHAR backend service."; \
          echo "Valid: auth-service | user-service | organization-service | all"; \
          echo "SERVICE is the --build-arg on the docker build step in the CI job."; \
          exit 1;; \
-    esac \
- && pnpm dlx turbo@2.9.16 prune $SCOPES --docker
+    esac
 
 # ---- install --------------------------------------------------------------------------
 FROM base AS installer
@@ -61,17 +69,18 @@ RUN pnpm install --frozen-lockfile
 
 # ---- build ----------------------------------------------------------------------------
 FROM installer AS builder
-ARG SERVICE
-COPY --from=pruner /app/out/full/ .
 # turbo prune only carries workspace packages. These live at the repository root: every
 # package tsconfig extends the base, the services need a generated Prisma client, and the
 # Prisma CLI reads the database URL and migrations path from prisma.config.mjs.
 # Taken from the pruner stage rather than the build context: `pruner` is the only stage that
 # reads the context, so the rest of the build works regardless of where it is invoked from.
-COPY --from=pruner /app/tsconfig.base.json ./tsconfig.base.json
+# The client is generated before the source is copied in: it depends only on prisma/ and
+# lands in node_modules, so a code change reuses this layer instead of generating it again.
 COPY --from=pruner /app/prisma ./prisma
 COPY --from=pruner /app/prisma.config.mjs ./prisma.config.mjs
 RUN pnpm exec prisma generate --schema prisma/schema.prisma
+COPY --from=pruner /app/out/full/ .
+COPY --from=pruner /app/tsconfig.base.json ./tsconfig.base.json
 # `-r` builds every package in the pruned workspace in dependency order. Filtering to just
 # the service would compile it against @aahar/auth's TypeScript sources (its `types` entry)
 # while never emitting the `dist/index.js` its `main` points at, so the image builds and
@@ -111,8 +120,8 @@ ENV NODE_ENV=production
 # service into / would break every runtime import.
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/backend/packages ./backend/packages
-# The pruned workspace holds only the chosen service(s), so copying the whole directory is
-# exact for a single service and carries all three for SERVICE=all.
+# All three compiled services come along, a few MB, so this layer is shared by every backend
+# image; SERVICE (below) decides which one runs.
 COPY --from=builder --chown=node:node /app/backend/services ./backend/services
 # From the pruner: turbo prune carries only workspace packages, and this root-level script is
 # the SERVICE=all entrypoint (a harmless single file in single-service images).

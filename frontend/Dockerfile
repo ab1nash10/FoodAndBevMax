@@ -19,8 +19,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable
 WORKDIR /app
 
+# turbo, installed once into a cached layer. Fetched by the prune step itself (`pnpm dlx`),
+# it was downloaded again by every build, since that step reruns on any change to the
+# source. Only the prune uses it, so the image that ships does not carry it.
+FROM base AS tools
+RUN npm install --global turbo@2.9.16
+
 # ---- prune: reduce the workspace to just what the portal needs -------------------------
-FROM base AS pruner
+FROM tools AS pruner
 COPY . .
 # Fail immediately and legibly if the build context is not the repository root. turbo prune
 # needs the whole workspace (pnpm-workspace.yaml, the lockfile and every package manifest),
@@ -36,7 +42,7 @@ RUN test -f pnpm-workspace.yaml -a -f package.json || { \
       echo "Do NOT cd into frontend/ first, and do NOT pass frontend/ as the context."; \
       echo "----------------------------------------------------------------"; \
       exit 1; }
-RUN pnpm dlx turbo@2.9.16 prune @aahar/admin-portal --docker
+RUN turbo prune @aahar/admin-portal --docker
 
 # ---- install: lockfile-only layer, cached until a manifest changes ---------------------
 FROM base AS installer

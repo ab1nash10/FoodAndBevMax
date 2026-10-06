@@ -2,6 +2,7 @@ import {
   AUTH_PRISMA,
   AccessResolver,
   AuditLoggerService,
+  createThrottlerStorage,
   HealthCheckService,
   HospitalScopeGuard,
   HospitalScopeInterceptor,
@@ -62,12 +63,16 @@ import { TransfersModule } from './transfers/transfers.module';
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          limit: config.get<number>('THROTTLE_LIMIT') ?? 100,
-          ttl: config.get<number>('THROTTLE_TTL') ?? 60000,
-        },
-      ],
+      // Counted in Redis when REDIS_URL is set, so the limit holds across every instance.
+      useFactory: (config: ConfigService) => ({
+        storage: createThrottlerStorage(),
+        throttlers: [
+          {
+            limit: config.get<number>('THROTTLE_LIMIT') ?? 100,
+            ttl: config.get<number>('THROTTLE_TTL') ?? 60000,
+          },
+        ],
+      }),
     }),
     CountersModule,
     EmployeesModule,

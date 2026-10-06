@@ -24,6 +24,10 @@ const nextConfig: NextConfig = {
       },
     ]);
   },
+  // Images are served as the files in public/, already sized for the screen. Next 16.3's
+  // optimizer hangs every later request for an image whose first optimization was cancelled
+  // mid-way (a sign-in redirect does that to the logo), until the server restarts.
+  images: { unoptimized: true },
   output: 'standalone',
   poweredByHeader: false,
   reactStrictMode: true,

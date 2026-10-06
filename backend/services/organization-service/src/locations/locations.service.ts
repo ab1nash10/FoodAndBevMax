@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import { CreateLocationDto } from './dto/create-location.dto';
-import { ListLocationsQueryDto, LocationSortField } from './dto/list-locations-query.dto';
+import { ListLocationsQueryDto } from './dto/list-locations-query.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationsRepository, LocationWithHospital } from './locations.repository';
 
@@ -29,14 +29,6 @@ function toLocationResponse(location: LocationWithHospital) {
     isActive: location.isActive,
     locationName: location.locationName,
     updatedAt: location.updatedAt,
-  };
-}
-
-function getLocationOrderBy(query: ListLocationsQueryDto): Prisma.LocationOrderByWithRelationInput {
-  const sortBy: LocationSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -75,7 +67,7 @@ export class LocationsService {
 
     const [items, total] = await Promise.all([
       this.locations.findMany({
-        orderBy: getLocationOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,

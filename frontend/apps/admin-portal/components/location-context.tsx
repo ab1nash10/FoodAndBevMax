@@ -14,6 +14,7 @@ import {
 import { useAuth } from '@/components/auth-provider';
 import { usePreferences } from '@/components/preferences/use-preferences';
 import { organizationApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 
 const LOCATION_STORAGE_KEY = 'aahar.location-context';
 const allLocationsValue = 'all';
@@ -102,7 +103,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
 
       return response.data.items;
     },
-    queryKey: ['global-location-context', 'active-locations'],
+    queryKey: queryKeys.globalLocationContextActiveLocations(),
     staleTime: 60_000,
   });
   const preferencesQuery = usePreferences();

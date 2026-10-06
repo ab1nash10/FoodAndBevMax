@@ -81,10 +81,12 @@ export class TransferAcknowledgementsRepository {
   async create(
     data: Prisma.TransferAcknowledgementUncheckedCreateInput,
     client: AcknowledgementClient,
-  ): Promise<TransferAcknowledgementWithRelations> {
+  ): Promise<{ hospitalId: string; id: string }> {
+    // Callers only need the new row's keys and read the record back once its lines exist, so
+    // loading every relation here was wasted queries.
     return client.transferAcknowledgement.create({
       data,
-      include: acknowledgementInclude,
+      select: { hospitalId: true, id: true },
     });
   }
 

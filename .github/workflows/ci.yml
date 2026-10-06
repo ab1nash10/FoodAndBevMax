@@ -1,0 +1,62 @@
+# Quality gates on every pull request: the same install, generate, lint, typecheck, test and build
+# Jenkins runs, plus a throwaway Postgres so the integration suites (skipped without
+# DATABASE_URL_TEST) characterise the stock, money and sign-in paths against a seeded database.
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: aahar_ci
+          POSTGRES_PASSWORD: aahar_ci
+          POSTGRES_USER: aahar_ci
+        options: >-
+          --health-cmd "pg_isready -U aahar_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 5432:5432
+    env:
+      # A disposable database that exists only for this job; nothing here is a real credential.
+      DATABASE_URL: postgresql://aahar_ci:aahar_ci@localhost:5432/aahar_ci
+      DATABASE_URL_TEST: postgresql://aahar_ci:aahar_ci@localhost:5432/aahar_ci
+      TURBO_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v5
+
+      # Version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          cache: pnpm
+          node-version: 24
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+      - name: Migrate and seed the test database
+        run: |
+          pnpm db:deploy
+          pnpm db:seed
+
+      - run: pnpm test
+      - run: pnpm build

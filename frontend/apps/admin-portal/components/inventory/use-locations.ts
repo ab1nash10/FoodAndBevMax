@@ -5,11 +5,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { organizationApi } from '@/lib/api';
 import { locationHref } from '@/lib/navigation';
+import { queryKeys } from '@/lib/query-keys';
 
 // Every active store, kitchen and restaurant, for turning a transfer's location ids into names.
 // ponytail: first 100 of each, the API's page cap; page through if a group outgrows it.
 
-export function useAllStores(enabled = true) {
+function useAllStores(enabled = true) {
   return useQuery({
     enabled,
     queryFn: async () => {
@@ -22,11 +23,11 @@ export function useAllStores(enabled = true) {
 
       return response.data.items;
     },
-    queryKey: ['inventory-all-stores'],
+    queryKey: queryKeys.inventoryAllStores(),
   });
 }
 
-export function useAllKitchens(enabled = true) {
+function useAllKitchens(enabled = true) {
   return useQuery({
     enabled,
     queryFn: async () => {
@@ -39,11 +40,11 @@ export function useAllKitchens(enabled = true) {
 
       return response.data.items;
     },
-    queryKey: ['inventory-all-kitchens'],
+    queryKey: queryKeys.inventoryAllKitchens(),
   });
 }
 
-export function useAllRestaurants(enabled = true) {
+function useAllRestaurants(enabled = true) {
   return useQuery({
     enabled,
     queryFn: async () => {
@@ -56,7 +57,7 @@ export function useAllRestaurants(enabled = true) {
 
       return response.data.items;
     },
-    queryKey: ['inventory-all-restaurants'],
+    queryKey: queryKeys.inventoryAllRestaurants(),
   });
 }
 

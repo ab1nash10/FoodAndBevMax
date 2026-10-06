@@ -1,11 +1,12 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { createPrismaAdapter } from '@aahar/auth';
+import { countPrismaQueries, createPrismaAdapter, prismaQueryLogOptions } from '@aahar/auth';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    super({ adapter: createPrismaAdapter() });
+    super({ adapter: createPrismaAdapter(), ...prismaQueryLogOptions() });
+    countPrismaQueries(this);
   }
 
   async onModuleInit(): Promise<void> {

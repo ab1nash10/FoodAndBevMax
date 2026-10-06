@@ -21,7 +21,7 @@ const sameOriginApi = `${BASE_PATH}/api/v1`;
 
 // `||`, not `??`: an unset --build-arg is inlined as an empty string, not as undefined, and
 // an empty base URL would send every request to the origin root.
-export const apiConfig = {
+const apiConfig = {
   authBaseUrl:
     process.env.NEXT_PUBLIC_AUTH_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || sameOriginApi,
   organizationBaseUrl: process.env.NEXT_PUBLIC_ORGANIZATION_API_URL || sameOriginApi,

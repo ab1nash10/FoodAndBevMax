@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { Input, Panel } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 
 const PAGE_SIZE = 20;
 
@@ -42,7 +43,7 @@ export function LocationPickerDialog({
     queryFn: async () =>
       (await organizationApi.listHospitals({ limit: PAGE_SIZE, page, search: search || undefined }))
         .data,
-    queryKey: ['location-picker', page, search],
+    queryKey: queryKeys.locationPicker(page, search),
   });
 
   const items = query.data?.items ?? [];

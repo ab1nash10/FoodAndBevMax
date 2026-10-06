@@ -1,277 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InventoryLocationType, Prisma } from '@prisma/client';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { ListStockBalancesQueryDto, StockBalanceStatus } from './dto/list-stock-balances-query.dto';
+import { ListStockLedgersQueryDto } from './dto/list-stock-ledgers-query.dto';
+import { StockLedgerWithRelations, StockRepository } from './stock.repository';
+import { toDate, toDateOnly, toNumber } from '../common/values';
 import {
-  ListStockBalancesQueryDto,
-  StockBalanceSortField,
-  StockBalanceStatus,
-} from './dto/list-stock-balances-query.dto';
-import { ListStockLedgersQueryDto, StockLedgerSortField } from './dto/list-stock-ledgers-query.dto';
-import {
-  StockBalanceWithRelations,
-  StockLedgerWithRelations,
-  StockRepository,
-} from './stock.repository';
-
-function toDate(value: string): Date {
-  return new Date(value);
-}
-
-function toDateOnly(value: string | Date): Date {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-
-  date.setHours(0, 0, 0, 0);
-
-  return date;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-
-  next.setDate(next.getDate() + days);
-
-  return next;
-}
-
-function toNumber(value: Prisma.Decimal | number): number {
-  return Number(value);
-}
-
-function getLedgerOrderBy(
-  query: ListStockLedgersQueryDto,
-): Prisma.StockLedgerOrderByWithRelationInput {
-  const sortBy: StockLedgerSortField = query.sortBy ?? 'transactionDateTime';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
-function getBalanceOrderBy(
-  query: ListStockBalancesQueryDto,
-): Prisma.StockBalanceOrderByWithRelationInput {
-  const sortBy: StockBalanceSortField = query.sortBy ?? 'lastUpdatedOn';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
-function getBalanceStatus(balance: StockBalanceWithRelations): StockBalanceStatus {
-  const availableQty = toNumber(balance.availableQty);
-  const today = toDateOnly(new Date());
-  const nearExpiryCutoff = addDays(today, 30);
-
-  if (availableQty <= 0) {
-    return 'OUT_OF_STOCK';
-  }
-
-  if (balance.expiryDate && toDateOnly(balance.expiryDate) < today) {
-    return 'EXPIRED';
-  }
-
-  if (
-    balance.expiryDate &&
-    toDateOnly(balance.expiryDate) >= today &&
-    toDateOnly(balance.expiryDate) <= nearExpiryCutoff
-  ) {
-    return 'NEAR_EXPIRY';
-  }
-
-  if (balance.locationType === InventoryLocationType.KITCHEN && availableQty <= 10) {
-    return 'LOW_STOCK';
-  }
-
-  return 'AVAILABLE';
-}
-
-function getSummaryStatus(
-  batches: Array<{ availableQty: number; status: StockBalanceStatus }>,
-): StockBalanceStatus {
-  const availableBatches = batches.filter((batch) => batch.availableQty > 0);
-  const totalAvailableQty = batches.reduce((total, batch) => total + batch.availableQty, 0);
-
-  if (totalAvailableQty <= 0) {
-    return 'OUT_OF_STOCK';
-  }
-
-  if (
-    availableBatches.length > 0 &&
-    availableBatches.every((batch) => batch.status === 'EXPIRED')
-  ) {
-    return 'EXPIRED';
-  }
-
-  if (availableBatches.some((batch) => batch.status === 'NEAR_EXPIRY')) {
-    return 'NEAR_EXPIRY';
-  }
-
-  return 'AVAILABLE';
-}
-
-function compareNullableDates(left: Date | null, right: Date | null): number {
-  if (!left && !right) {
-    return 0;
-  }
-
-  if (!left) {
-    return 1;
-  }
-
-  if (!right) {
-    return -1;
-  }
-
-  return left.getTime() - right.getTime();
-}
-
-function getStatusWhere(status: StockBalanceStatus | undefined): Prisma.StockBalanceWhereInput {
-  if (!status) {
-    return {};
-  }
-
-  const today = toDateOnly(new Date());
-  const nearExpiryCutoff = addDays(today, 30);
-
-  if (status === 'OUT_OF_STOCK') {
-    return {
-      availableQty: {
-        lte: 0,
-      },
-    };
-  }
-
-  if (status === 'EXPIRED') {
-    return {
-      availableQty: {
-        gt: 0,
-      },
-      expiryDate: {
-        lt: today,
-      },
-    };
-  }
-
-  if (status === 'NEAR_EXPIRY') {
-    return {
-      availableQty: {
-        gt: 0,
-      },
-      expiryDate: {
-        gte: today,
-        lte: nearExpiryCutoff,
-      },
-    };
-  }
-
-  if (status === 'LOW_STOCK') {
-    return {
-      availableQty: {
-        gt: 0,
-        lte: 10,
-      },
-      locationType: InventoryLocationType.KITCHEN,
-    };
-  }
-
-  return {
-    availableQty: {
-      gt: 0,
-    },
-    OR: [
-      {
-        expiryDate: null,
-      },
-      {
-        expiryDate: {
-          gt: nearExpiryCutoff,
-        },
-      },
-    ],
-  };
-}
-
-function getStoreLocationMap(stores: Awaited<ReturnType<StockRepository['findStoresByIds']>>) {
-  return new Map(
-    stores.map((store) => [
-      store.id,
-      {
-        code: store.storeCode,
-        id: store.id,
-        name: store.storeName,
-        type: InventoryLocationType.STORE,
-      },
-    ]),
-  );
-}
-
-function getRestaurantLocationMap(
-  restaurants: Awaited<ReturnType<StockRepository['findRestaurantsByIds']>>,
-) {
-  return new Map(
-    restaurants.map((restaurant) => [
-      restaurant.id,
-      {
-        code: restaurant.restaurantCode,
-        id: restaurant.id,
-        name: restaurant.restaurantName,
-        type: InventoryLocationType.RESTAURANT,
-      },
-    ]),
-  );
-}
-
-function getKitchenLocationMap(
-  kitchens: Awaited<ReturnType<StockRepository['findKitchensByIds']>>,
-) {
-  return new Map(
-    kitchens.map((kitchen) => [
-      kitchen.id,
-      {
-        code: kitchen.kitchenCode,
-        id: kitchen.id,
-        name: kitchen.kitchenName,
-        type: InventoryLocationType.KITCHEN,
-      },
-    ]),
-  );
-}
-
-function getStoreLocationIds<T extends { locationId: string; locationType: InventoryLocationType }>(
-  rows: T[],
-) {
-  return [
-    ...new Set(
-      rows
-        .filter((row) => row.locationType === InventoryLocationType.STORE)
-        .map((row) => row.locationId),
-    ),
-  ];
-}
-
-function getRestaurantLocationIds<
-  T extends { locationId: string; locationType: InventoryLocationType },
->(rows: T[]) {
-  return [
-    ...new Set(
-      rows
-        .filter((row) => row.locationType === InventoryLocationType.RESTAURANT)
-        .map((row) => row.locationId),
-    ),
-  ];
-}
-
-function getKitchenLocationIds<
-  T extends { locationId: string; locationType: InventoryLocationType },
->(rows: T[]) {
-  return [
-    ...new Set(
-      rows
-        .filter((row) => row.locationType === InventoryLocationType.KITCHEN)
-        .map((row) => row.locationId),
-    ),
-  ];
-}
+  compareNullableDates,
+  getBalanceStatus,
+  getKitchenLocationIds,
+  getKitchenLocationMap,
+  getRestaurantLocationIds,
+  getRestaurantLocationMap,
+  getStatusWhere,
+  getStoreLocationIds,
+  getStoreLocationMap,
+  getSummaryStatus,
+} from './stock.helpers';
 
 @Injectable()
 export class StockService {
@@ -321,7 +66,7 @@ export class StockService {
 
     const [items, total] = await Promise.all([
       this.stock.findBalances({
-        orderBy: getBalanceOrderBy(query),
+        orderBy: getOrderBy(query, 'lastUpdatedOn'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -588,7 +333,7 @@ export class StockService {
 
     const [items, total] = await Promise.all([
       this.stock.findLedgers({
-        orderBy: getLedgerOrderBy(query),
+        orderBy: getOrderBy(query, 'transactionDateTime'),
         skip: (page - 1) * limit,
         take: limit,
         where,

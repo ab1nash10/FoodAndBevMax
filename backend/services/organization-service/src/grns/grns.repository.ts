@@ -74,10 +74,15 @@ export class GrnsRepository {
     return this.prisma.grn.count(args);
   }
 
-  async create(data: Prisma.GrnUncheckedCreateInput, client: GrnClient): Promise<GrnWithRelations> {
+  async create(
+    data: Prisma.GrnUncheckedCreateInput,
+    client: GrnClient,
+  ): Promise<{ hospitalId: string; id: string }> {
+    // Callers only need the new row's keys and read the record back once its lines exist, so
+    // loading every relation here was wasted queries.
     return client.grn.create({
       data,
-      include: grnInclude,
+      select: { hospitalId: true, id: true },
     });
   }
 

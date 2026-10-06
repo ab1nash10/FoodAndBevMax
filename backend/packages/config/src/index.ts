@@ -34,10 +34,15 @@ const serviceEnvSchema = z.object({
     .enum(['true', 'false'])
     .transform((value) => value === 'true')
     .optional(),
-  // Redis is commented out for now - OTPs and the refresh-token denylist are held in
-  // process instead. Restore this line together with the code in
-  // auth-service/src/common/redis/redis.service.ts when Redis comes back.
-  // REDIS_URL: z.string().url(),
+  // Optional. Set, it holds OTPs, refresh tokens and rate limits for every instance: redis://
+  // or rediss:// (TLS, e.g. ElastiCache with in-transit encryption), credentials in the URL.
+  // Unset or empty, each process keeps them in memory, which needs a single replica.
+  REDIS_URL: z
+    .union([
+      z.literal(''),
+      z.string().regex(/^rediss?:\/\/\S+$/, 'REDIS_URL must start with redis:// or rediss://'),
+    ])
+    .optional(),
   THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
   THROTTLE_TTL: z.coerce.number().int().positive().default(60000),
 });

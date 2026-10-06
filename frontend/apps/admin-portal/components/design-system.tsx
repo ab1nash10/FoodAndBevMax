@@ -4,7 +4,7 @@ import { statusPresentation, type StatusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import type { FoodType, InventoryLocationType } from '@aahar/api-client';
 import type { LucideIcon } from 'lucide-react';
-import { Check, ChefHat, Inbox, X } from 'lucide-react';
+import { Check, Inbox, X } from 'lucide-react';
 import Image from 'next/image';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
@@ -121,7 +121,7 @@ export function ChartCard({
   );
 }
 
-export function PlaceholderChart() {
+function PlaceholderChart() {
   const bars = [44, 72, 58, 86, 64, 92, 76];
 
   return (
@@ -131,24 +131,6 @@ export function PlaceholderChart() {
           <div className="w-full rounded-t-md bg-ds-primary/80" style={{ height: `${height}%` }} />
         </div>
       ))}
-    </div>
-  );
-}
-
-interface MetricTileProps {
-  icon?: LucideIcon;
-  label: string;
-  value: ReactNode;
-}
-
-export function MetricTile({ icon: Icon = ChefHat, label, value }: MetricTileProps) {
-  return (
-    <div className="rounded-tile border border-ds-border bg-ds-subtle-2 p-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-ds-text-3">
-        <Icon className="h-4 w-4" strokeWidth={1.8} />
-        {label}
-      </div>
-      <div className="mt-3 text-xl font-extrabold text-ds-text">{value}</div>
     </div>
   );
 }
@@ -507,21 +489,5 @@ export function SummaryCard({
       ) : null}
       {children}
     </aside>
-  );
-}
-
-/** A titled block inside a DetailPanel. */
-export function DetailSection({
-  children,
-  className,
-  title,
-}: Readonly<{ children: ReactNode; className?: string; title?: ReactNode }>) {
-  return (
-    <section
-      className={cn('border-b border-ds-divider px-[18px] py-3.5 last:border-b-0', className)}
-    >
-      {title ? <h3 className="mb-2 text-[13px] font-extrabold text-ds-text">{title}</h3> : null}
-      {children}
-    </section>
   );
 }

@@ -30,7 +30,7 @@ function decodeBase64Url(value: string): string {
   return window.atob(paddedValue);
 }
 
-export function decodeJwtPayload(token: string): JwtSessionPayload | null {
+function decodeJwtPayload(token: string): JwtSessionPayload | null {
   if (typeof window === 'undefined') {
     return null;
   }
@@ -54,7 +54,7 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-export function getAccessTokenSecondsRemaining(token: string): number | null {
+function getAccessTokenSecondsRemaining(token: string): number | null {
   const payload = decodeJwtPayload(token);
 
   if (!payload?.exp) {

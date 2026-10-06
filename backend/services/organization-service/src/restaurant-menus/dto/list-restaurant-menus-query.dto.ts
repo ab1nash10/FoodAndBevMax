@@ -4,6 +4,7 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { ActivePaginationQueryDto } from '../../common/dto/active-pagination-query.dto';
 import { RestaurantMenuDayOfWeek } from './create-restaurant-menu.dto';
+import { toOptionalBoolean } from '../../common/values';
 
 export const restaurantMenuSortFields = [
   'createdAt',
@@ -14,22 +15,6 @@ export const restaurantMenuSortFields = [
 ] as const;
 
 export type RestaurantMenuSortField = (typeof restaurantMenuSortFields)[number];
-
-function toOptionalBoolean(value: unknown): unknown {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
-  if (value === true || value === 'true') {
-    return true;
-  }
-
-  if (value === false || value === 'false') {
-    return false;
-  }
-
-  return value;
-}
 
 export class ListRestaurantMenusQueryDto extends ActivePaginationQueryDto {
   @ApiPropertyOptional()

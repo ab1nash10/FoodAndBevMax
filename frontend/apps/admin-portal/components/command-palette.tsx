@@ -12,6 +12,7 @@ import { OPEN_COMMAND_PALETTE_EVENT } from '@/lib/command-palette-events';
 import { findSubRoute, getActiveNavHref } from '@/lib/navigation';
 import { statusPresentation } from '@/lib/status';
 import { cn } from '@/lib/utils';
+import { queryKeys } from '@/lib/query-keys';
 
 /** A sidebar page the user may open, passed in by the shell (already permission-filtered). */
 export interface PalettePage {
@@ -197,7 +198,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
         })),
       ];
     },
-    queryKey: ['command-palette', 'search', term, scopedHospitalId ?? 'all', canSee],
+    queryKey: queryKeys.commandPaletteSearch(term, scopedHospitalId ?? 'all', canSee),
     staleTime: 30_000,
   });
 

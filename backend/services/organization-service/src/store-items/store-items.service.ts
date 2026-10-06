@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateStoreItemDto } from './dto/create-store-item.dto';
-import { ListStoreItemsQueryDto, StoreItemSortField } from './dto/list-store-items-query.dto';
+import { ListStoreItemsQueryDto } from './dto/list-store-items-query.dto';
 import { UpdateStoreItemDto } from './dto/update-store-item.dto';
 import { StoreItemsRepository, StoreItemWithRelations } from './store-items.repository';
 
@@ -26,16 +27,6 @@ function toStoreItemResponse(mapping: StoreItemWithRelations) {
     store: mapping.store,
     storeId: mapping.storeId,
     updatedAt: mapping.updatedAt,
-  };
-}
-
-function getStoreItemOrderBy(
-  query: ListStoreItemsQueryDto,
-): Prisma.StoreItemOrderByWithRelationInput {
-  const sortBy: StoreItemSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -68,7 +59,7 @@ export class StoreItemsService {
 
     const [items, total] = await Promise.all([
       this.storeItems.findMany({
-        orderBy: getStoreItemOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -121,7 +112,7 @@ export class StoreItemsService {
 
       return toStoreItemResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Store item mapping');
+      handlePrismaError(error, 'Store item mapping');
     }
   }
 
@@ -180,7 +171,7 @@ export class StoreItemsService {
 
       return toStoreItemResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Store item mapping');
+      handlePrismaError(error, 'Store item mapping');
     }
   }
 
@@ -265,13 +256,5 @@ export class StoreItemsService {
     }
 
     return mapping;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

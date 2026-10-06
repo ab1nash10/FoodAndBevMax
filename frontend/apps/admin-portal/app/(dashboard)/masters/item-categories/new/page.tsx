@@ -1,4 +1,4 @@
-import { ItemCategoryCreatePageClient } from '@/components/master-data/master-data-pages';
+import { ItemCategoryCreatePageClient } from '@/components/master-data/item-categories/item-category-create-page';
 
 export default function CreateItemCategoryPage() {
   return <ItemCategoryCreatePageClient />;

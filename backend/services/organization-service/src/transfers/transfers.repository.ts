@@ -62,10 +62,12 @@ export class TransfersRepository {
   async create(
     data: Prisma.TransferUncheckedCreateInput,
     client: TransferClient,
-  ): Promise<TransferWithRelations> {
+  ): Promise<{ hospitalId: string; id: string }> {
+    // Callers only need the new row's keys and read the record back once its lines exist, so
+    // loading every relation here was wasted queries.
     return client.transfer.create({
       data,
-      include: transferInclude,
+      select: { hospitalId: true, id: true },
     });
   }
 

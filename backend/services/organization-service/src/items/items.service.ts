@@ -9,10 +9,10 @@ import { uniqueViolationTarget } from '@aahar/auth';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { normalizeMasterName } from '../common/normalize-master-name';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import { CreateItemDto } from './dto/create-item.dto';
-import { ItemSortField, ListItemsQueryDto } from './dto/list-items-query.dto';
+import { ListItemsQueryDto } from './dto/list-items-query.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { ItemsRepository, ItemWithCategory } from './items.repository';
 
@@ -37,14 +37,6 @@ function toItemResponse(item: ItemWithCategory) {
     preparationTimeMinutes: item.preparationTimeMinutes,
     type: item.type,
     updatedAt: item.updatedAt,
-  };
-}
-
-function getItemOrderBy(query: ListItemsQueryDto): Prisma.ItemOrderByWithRelationInput {
-  const sortBy: ItemSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -80,7 +72,7 @@ export class ItemsService {
 
     const [items, total] = await Promise.all([
       this.items.findMany({
-        orderBy: getItemOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,

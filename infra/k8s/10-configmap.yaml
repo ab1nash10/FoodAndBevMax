@@ -22,8 +22,8 @@ data:
 
   OTP_TTL_SECONDS: '300'
 
-  # Per-instance limits. With several replicas the effective limit is this value
-  # multiplied by the replica count until the throttler is moved to Redis storage.
+  # Shared limits when REDIS_URL is set; otherwise per instance, so with several replicas
+  # the effective limit is this value multiplied by the replica count.
   THROTTLE_TTL: '60000'
   THROTTLE_LIMIT: '100'
 

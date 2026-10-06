@@ -1,4 +1,4 @@
-import { DashboardOverview } from '@/components/organization/dashboard-overview';
+import { DashboardOverview } from '@/components/organization/dashboard/dashboard-overview';
 
 export default function DashboardPage() {
   return <DashboardOverview />;

@@ -63,14 +63,6 @@ export function saveStoredAuth(tokens: AuthTokens): StoredAuth {
   return storedAuth;
 }
 
-export function clearStoredAuth(): void {
-  if (canUseStorage()) {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-
-  dispatchAuthStorageEvent();
-}
-
 export function clearAaharClientStorage(): void {
   if (typeof window === 'undefined') {
     return;

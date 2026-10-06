@@ -1,8 +1,9 @@
 {{- if .Values.redis.enabled }}
 {{- /*
-Redis backs OTP storage and refresh-token revocation. The services validate REDIS_URL at
-startup and refuse to boot without it, so a namespace with no Redis cannot run the platform
-at all - this is here so a dev environment works without provisioning ElastiCache first.
+Redis holds OTPs, refresh tokens and rate limits for every backend pod once REDIS_URL is set;
+without it each pod keeps them in memory and the backends must stay at one replica. This
+deploys one inside the namespace, so an environment can have it without provisioning
+ElastiCache first.
 
 ponytail: one replica, memory only, no auth and no persistence. OTPs expire in minutes and
 refresh-token revocation is a denylist, so losing it on restart signs people out rather than

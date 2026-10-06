@@ -6,16 +6,14 @@ import {
 } from '@nestjs/common';
 import { Prisma, TimeSlot } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import {
   CreateRestaurantMenuDto,
   RestaurantMenuPositionType,
 } from './dto/create-restaurant-menu.dto';
-import {
-  ListRestaurantMenusQueryDto,
-  RestaurantMenuSortField,
-} from './dto/list-restaurant-menus-query.dto';
+import { ListRestaurantMenusQueryDto } from './dto/list-restaurant-menus-query.dto';
 import { UpdateRestaurantMenuDto } from './dto/update-restaurant-menu.dto';
 import {
   RestaurantMenusRepository,
@@ -27,16 +25,6 @@ type TimeSlotSummary = Pick<
   TimeSlot,
   'endTime' | 'id' | 'isActive' | 'isAlwaysAvailable' | 'slotName' | 'startTime'
 >;
-
-function getRestaurantMenuOrderBy(
-  query: ListRestaurantMenusQueryDto,
-): Prisma.RestaurantMenuOrderByWithRelationInput {
-  const sortBy: RestaurantMenuSortField = query.sortBy ?? 'displayOrder';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'asc',
-  };
-}
 
 function uniqueValues(values: string[] | undefined): string[] {
   return [...new Set(values ?? [])];
@@ -81,7 +69,7 @@ export class RestaurantMenusService {
 
     const [items, total] = await Promise.all([
       this.restaurantMenus.findMany({
-        orderBy: getRestaurantMenuOrderBy(query),
+        orderBy: getOrderBy(query, 'displayOrder', 'asc'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -152,7 +140,7 @@ export class RestaurantMenusService {
         return newValue;
       });
     } catch (error) {
-      this.handlePrismaError(error, 'Restaurant menu mapping');
+      handlePrismaError(error, 'Restaurant menu mapping');
     }
   }
 
@@ -249,7 +237,7 @@ export class RestaurantMenusService {
         return newValue;
       });
     } catch (error) {
-      this.handlePrismaError(error, 'Restaurant menu mapping');
+      handlePrismaError(error, 'Restaurant menu mapping');
     }
   }
 
@@ -444,13 +432,5 @@ export class RestaurantMenusService {
         .filter((timeSlot): timeSlot is TimeSlotSummary => Boolean(timeSlot)),
       updatedAt: mapping.updatedAt,
     }));
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

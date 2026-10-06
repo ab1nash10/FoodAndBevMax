@@ -1,18 +1,11 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreatePaymentMachineDto } from './dto/create-payment-machine.dto';
-import {
-  ListPaymentMachinesQueryDto,
-  PaymentMachineSortField,
-} from './dto/list-payment-machines-query.dto';
+import { ListPaymentMachinesQueryDto } from './dto/list-payment-machines-query.dto';
 import { UpdatePaymentMachineDto } from './dto/update-payment-machine.dto';
 import {
   PaymentMachinesRepository,
@@ -62,16 +55,6 @@ function toPaymentMachineResponse(paymentMachine: PaymentMachineWithRelations) {
   };
 }
 
-function getPaymentMachineOrderBy(
-  query: ListPaymentMachinesQueryDto,
-): Prisma.PaymentMachineOrderByWithRelationInput {
-  const sortBy: PaymentMachineSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
 @Injectable()
 export class PaymentMachinesService {
   constructor(
@@ -111,7 +94,7 @@ export class PaymentMachinesService {
 
     const [items, total] = await Promise.all([
       this.paymentMachines.findMany({
-        orderBy: getPaymentMachineOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -179,7 +162,7 @@ export class PaymentMachinesService {
 
       return toPaymentMachineResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Payment machine');
+      handlePrismaError(error, 'Payment machine');
     }
   }
 
@@ -285,7 +268,7 @@ export class PaymentMachinesService {
 
       return toPaymentMachineResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Payment machine');
+      handlePrismaError(error, 'Payment machine');
     }
   }
 
@@ -394,13 +377,5 @@ export class PaymentMachinesService {
     }
 
     return paymentMachine;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

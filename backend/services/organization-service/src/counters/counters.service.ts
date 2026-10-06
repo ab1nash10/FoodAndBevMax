@@ -6,11 +6,12 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CountersRepository, CounterWithRelations } from './counters.repository';
 import { CreateCounterDto } from './dto/create-counter.dto';
-import { CounterSortField, ListCountersQueryDto } from './dto/list-counters-query.dto';
+import { ListCountersQueryDto } from './dto/list-counters-query.dto';
 import { UpdateCounterDto } from './dto/update-counter.dto';
 
 type CounterClient = Prisma.TransactionClient;
@@ -41,14 +42,6 @@ function toCounterResponse(counter: CounterWithRelations) {
     },
     restaurantId: counter.restaurantId,
     updatedAt: counter.updatedAt,
-  };
-}
-
-function getCounterOrderBy(query: ListCountersQueryDto): Prisma.CounterOrderByWithRelationInput {
-  const sortBy: CounterSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -86,7 +79,7 @@ export class CountersService {
 
     const [items, total] = await Promise.all([
       this.counters.findMany({
-        orderBy: getCounterOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -147,7 +140,7 @@ export class CountersService {
 
       return toCounterResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Counter');
+      handlePrismaError(error, 'Counter');
     }
   }
 
@@ -239,7 +232,7 @@ export class CountersService {
 
       return toCounterResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Counter');
+      handlePrismaError(error, 'Counter');
     }
   }
 
@@ -324,13 +317,5 @@ export class CountersService {
     }
 
     return counter;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

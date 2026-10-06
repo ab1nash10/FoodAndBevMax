@@ -1,4 +1,4 @@
-import { AdminShell } from '@/components/admin-shell';
+import { AdminShell } from '@/components/admin-shell/admin-shell';
 import { Suspense, type ReactNode } from 'react';
 
 export default function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {

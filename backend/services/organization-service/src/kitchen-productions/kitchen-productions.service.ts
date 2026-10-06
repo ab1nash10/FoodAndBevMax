@@ -1,10 +1,5 @@
 import { NotificationPublisher } from '@aahar/auth';
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   InventoryLocationType,
   ItemType,
@@ -15,22 +10,21 @@ import {
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { NOTIFY_ROLES } from '../common/notification-roles';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
 import {
   CreateKitchenProductionDto,
   CreateKitchenProductionLineDto,
 } from './dto/create-kitchen-production.dto';
-import {
-  KitchenProductionSortField,
-  ListKitchenProductionsQueryDto,
-} from './dto/list-kitchen-productions-query.dto';
+import { ListKitchenProductionsQueryDto } from './dto/list-kitchen-productions-query.dto';
 import { UpdateKitchenProductionDto } from './dto/update-kitchen-production.dto';
 import {
   KitchenProductionsRepository,
   KitchenProductionWithRelations,
 } from './kitchen-productions.repository';
+import { optionalText, toDate, toDateOnly, toNumber } from '../common/values';
 
 type KitchenProductionClient = Prisma.TransactionClient;
 
@@ -40,44 +34,6 @@ interface PreparedProductionLine {
   producedQty: number;
   remarks?: string;
   wastageQty: number;
-}
-
-function optionalText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-
-  return trimmed ? trimmed : undefined;
-}
-
-function toDate(value: string): Date {
-  return new Date(value);
-}
-
-function toDateOnly(value: string | Date): Date {
-  if (typeof value === 'string') {
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-
-    if (match) {
-      return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-    }
-  }
-
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function toNumber(value: Prisma.Decimal | number): number {
-  return Number(value);
-}
-
-function getProductionOrderBy(
-  query: ListKitchenProductionsQueryDto,
-): Prisma.KitchenProductionOrderByWithRelationInput {
-  const sortBy: KitchenProductionSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
 }
 
 function toKitchenProductionResponse(production: KitchenProductionWithRelations) {
@@ -161,7 +117,7 @@ export class KitchenProductionsService {
 
     const [items, total] = await Promise.all([
       this.productions.findMany({
-        orderBy: getProductionOrderBy(query),
+        orderBy: getDocumentOrderBy(query, 'productionNumber', 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -222,7 +178,7 @@ export class KitchenProductionsService {
         return newValue;
       });
     } catch (error) {
-      this.handlePrismaError(error, 'Kitchen production');
+      handlePrismaError(error, 'Kitchen production');
     }
   }
 
@@ -304,7 +260,7 @@ export class KitchenProductionsService {
         return toKitchenProductionResponse(updated);
       });
     } catch (error) {
-      this.handlePrismaError(error, 'Kitchen production');
+      handlePrismaError(error, 'Kitchen production');
     }
   }
 
@@ -638,13 +594,5 @@ export class KitchenProductionsService {
         wastageQty,
       };
     });
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

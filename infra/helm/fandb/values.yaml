@@ -57,12 +57,15 @@ config:
     ADMIN_PASSWORD: ''
     SMS_USERNAME: ''
     SMS_PASSWORD: ''
-    # Redis is commented out in the services for now, so nothing reads this.
-    # REDIS_URL: ''
+    # Optional shared store for OTPs, refresh tokens and rate limits. Set it to run more than
+    # one replica of a backend, or to keep people signed in across deploys. For ElastiCache
+    # (cluster mode disabled, in-transit encryption on): rediss://<user>:<token>@<primary>:6379.
+    # Empty with redis.enabled=false: each pod keeps that state in memory (one replica only).
+    REDIS_URL: ''
 
-# Redis is commented out in the services for now, so the chart does not deploy it. Turning
-# this back on also means restoring REDIS_URL in backend/packages/config and the client in
-# auth-service/src/common/redis/redis.service.ts - the services do not read it until then.
+# An in-cluster Redis for environments without ElastiCache: enabled=true deploys it and points
+# REDIS_URL at it (an explicit config.secrets.REDIS_URL still wins). It pulls redis:7-alpine
+# from Docker Hub, so the cluster needs egress to it or the image mirrored into ECR.
 # ponytail: single replica, no persistence, no auth - fine for dev, use ElastiCache in
 # production and set enabled=false with config.secrets.REDIS_URL pointing at it.
 redis:

@@ -1,211 +1,31 @@
 import { NotificationPublisher } from '@aahar/auth';
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import {
-  InventoryLocationType,
-  ItemType,
-  Prisma,
-  StockReferenceType,
-  StockTransactionType,
-  TransferStatus,
-} from '@prisma/client';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InventoryLocationType, Prisma, StockReferenceType, TransferStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { NOTIFY_ROLES } from '../common/notification-roles';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
 import { CreateTransferDto, CreateTransferLineDto } from './dto/create-transfer.dto';
-import { ListTransfersQueryDto, TransferSortField } from './dto/list-transfers-query.dto';
+import { ListTransfersQueryDto } from './dto/list-transfers-query.dto';
 import { TransfersRepository, TransferWithRelations } from './transfers.repository';
+import { optionalText, toDate, toDateOnly, toNumber } from '../common/values';
+import {
+  assertCanMoveStockFrom,
+  assertSupportedSource,
+  dispatchTransactionType,
+  insufficientStockMessage,
+  sourceDisplayName,
+  sourceItemType,
+  stockBalanceKey,
+  stockKey,
+  toNullableDate,
+  toNullableText,
+  toTransferResponse,
+  type PreparedTransferLine,
+} from './transfers.helpers';
 
 type TransferClient = Prisma.TransactionClient;
-
-interface PreparedTransferLine {
-  batchNumber: string | null;
-  expiryDate: Date | null;
-  itemId: string;
-  itemName: string;
-  itemType: ItemType;
-  remarks?: string;
-  sentQty: number;
-}
-
-function optionalText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-
-  return trimmed ? trimmed : undefined;
-}
-
-function toDate(value: string): Date {
-  return new Date(value);
-}
-
-function toDateOnly(value: string | Date): Date {
-  if (typeof value === 'string') {
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-
-    if (match) {
-      return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-    }
-  }
-
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function toNumber(value: Prisma.Decimal | number): number {
-  return Number(value);
-}
-
-function formatQuantity(value: number): string {
-  return value.toFixed(3).replace(/\.?0+$/, '');
-}
-
-function formatDateOnly(value: Date): string {
-  return toDateOnly(value).toISOString().slice(0, 10);
-}
-
-function getTransferOrderBy(query: ListTransfersQueryDto): Prisma.TransferOrderByWithRelationInput {
-  const sortBy: TransferSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
-function stockKey(input: {
-  batchNumber: string | null;
-  businessDate?: Date | null;
-  expiryDate: Date | null;
-  itemId: string;
-}): string {
-  return `${input.itemId}|${input.batchNumber ?? ''}|${
-    input.expiryDate ? formatDateOnly(input.expiryDate) : ''
-  }|${input.businessDate ? formatDateOnly(input.businessDate) : ''}`;
-}
-
-function sourceItemType(sourceType: InventoryLocationType): ItemType {
-  return sourceType === InventoryLocationType.KITCHEN ? ItemType.READYMADE : ItemType.MRP;
-}
-
-function dispatchTransactionType(sourceType: InventoryLocationType): StockTransactionType {
-  return sourceType === InventoryLocationType.KITCHEN
-    ? StockTransactionType.KITCHEN_TRANSFER_OUT
-    : StockTransactionType.STORE_TO_RESTAURANT_OUT;
-}
-
-function sourceDisplayName(sourceType: InventoryLocationType): string {
-  return sourceType === InventoryLocationType.KITCHEN ? 'kitchen' : 'store';
-}
-
-function stockBalanceKey(
-  line: Pick<PreparedTransferLine, 'batchNumber' | 'expiryDate' | 'itemId'>,
-  businessDate: Date,
-) {
-  return {
-    batchNumber: line.batchNumber,
-    businessDate: line.expiryDate ? null : businessDate,
-    expiryDate: line.expiryDate,
-    itemId: line.itemId,
-  };
-}
-
-function lineLabelForStock(
-  line: Pick<PreparedTransferLine, 'batchNumber' | 'expiryDate' | 'itemName'>,
-  businessDate: Date,
-): string {
-  if (line.batchNumber) {
-    return `Selected batch ${line.batchNumber}`;
-  }
-
-  return `Selected item ${line.itemName} for business date ${formatDateOnly(businessDate)}`;
-}
-
-function insufficientStockMessage(
-  line: Pick<PreparedTransferLine, 'batchNumber' | 'expiryDate' | 'itemName'>,
-  businessDate: Date,
-  availableQty: number,
-  requestedQty: number,
-): string {
-  return `${lineLabelForStock(line, businessDate)} has available stock ${formatQuantity(
-    availableQty,
-  )}. Requested quantity ${formatQuantity(requestedQty)}.`;
-}
-
-function toNullableDate(value: string | undefined): Date | null {
-  return value ? toDateOnly(value) : null;
-}
-
-function toNullableText(value: string | undefined): string | null {
-  return optionalText(value) ?? null;
-}
-
-/**
- * The routes accept either the store or the kitchen transfer permission, so the check that the
- * permission matches the source has to happen here: a kitchen-only grant must not move store stock.
- */
-function assertCanMoveStockFrom(
-  sourceType: InventoryLocationType,
-  action: 'CREATE' | 'DISPATCH',
-  permissions: string[] | undefined,
-): void {
-  const accepted =
-    sourceType === InventoryLocationType.KITCHEN
-      ? [`TRANSFER_${action}`, `KITCHEN_TRANSFER_${action}`]
-      : [`TRANSFER_${action}`];
-
-  if (!accepted.some((code) => permissions?.includes(code))) {
-    throw new ForbiddenException(
-      `You do not have permission to transfer from a ${sourceDisplayName(sourceType)}`,
-    );
-  }
-}
-
-function assertSupportedSource(sourceType: InventoryLocationType): void {
-  if (sourceType !== InventoryLocationType.STORE && sourceType !== InventoryLocationType.KITCHEN) {
-    throw new BadRequestException('Source must be Store or Kitchen');
-  }
-}
-
-function toTransferResponse(transfer: TransferWithRelations) {
-  return {
-    businessDate: transfer.businessDate,
-    createdAt: transfer.createdAt,
-    deletedAt: transfer.deletedAt,
-    destinationId: transfer.destinationId,
-    destinationType: transfer.destinationType,
-    hospital: transfer.hospital,
-    hospitalId: transfer.hospitalId,
-    id: transfer.id,
-    lines: transfer.lines.map((line) => ({
-      acceptedQty: toNumber(line.acceptedQty),
-      batchNumber: line.batchNumber,
-      createdAt: line.createdAt,
-      expiryDate: line.expiryDate,
-      id: line.id,
-      item: line.item,
-      itemId: line.itemId,
-      rejectedQty: toNumber(line.rejectedQty),
-      rejectionReason: line.rejectionReason,
-      remarks: line.remarks,
-      sentQty: toNumber(line.sentQty),
-      transferId: line.transferId,
-      updatedAt: line.updatedAt,
-    })),
-    remarks: transfer.remarks,
-    sourceId: transfer.sourceId,
-    sourceType: transfer.sourceType,
-    status: transfer.status,
-    transferDate: transfer.transferDate,
-    transferNumber: transfer.transferNumber,
-    updatedAt: transfer.updatedAt,
-  };
-}
 
 @Injectable()
 export class TransfersService {
@@ -255,7 +75,7 @@ export class TransfersService {
 
     const [items, total] = await Promise.all([
       this.transfers.findMany({
-        orderBy: getTransferOrderBy(query),
+        orderBy: getDocumentOrderBy(query, 'transferNumber', 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,

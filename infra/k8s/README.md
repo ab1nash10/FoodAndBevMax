@@ -147,8 +147,8 @@ only so they are readable; the buildspecs override it via `kubectl set image`.
 Each service validates its environment at startup and refuses to boot if anything is
 missing, with a message naming the variables. Five values have no default:
 
-Redis is commented out for now, so `REDIS_URL` is not among them - OTPs and the
-refresh-token denylist are held in process instead. See the note under "Known blockers".
+`REDIS_URL` is optional and not among them. Without it OTPs, refresh tokens and rate limits
+are held in each process; see the note under "Known blockers".
 
 | Variable             | Source     | Notes                                                         |
 | -------------------- | ---------- | ------------------------------------------------------------- |
@@ -176,8 +176,9 @@ them fail. `auth-service` in particular is what serves sign-in.
 ## Probe design
 
 Liveness is a TCP check and readiness is the HTTP health endpoint, on purpose. The service
-health endpoint also probes Postgres and Redis, so using it for liveness would restart every
-pod during a brief database blip instead of just pulling them from the load balancer.
+health endpoint also probes Postgres (and reports Redis when it is configured), so using it for
+liveness would restart every pod during a brief database blip instead of just pulling them
+from the load balancer. Readiness follows the database only.
 
 ## Known blockers before production traffic
 
@@ -185,16 +186,16 @@ These are **not** solved by these files:
 
 1. **OTP is never delivered.** No SMS or email provider is wired, so mobile sign-in cannot
    work. Email plus password is the only usable path today.
-2. **Redis is commented out.** OTPs and the refresh-token denylist live in each pod's
+2. **Redis is optional.** Without `REDIS_URL`, OTPs and refresh tokens live in each pod's
    memory, so they are lost on restart - a deploy signs everyone out - and are not shared
-   between pods. Every backend must stay at one replica until Redis is restored.
+   between pods. Set `REDIS_URL` (ElastiCache) before running more than one replica.
 3. **Uploads are ephemeral.** Avatars and restaurant images are written to the pod
    filesystem. The `emptyDir` in `frontend/deployment.yml` makes that visible rather than
    hiding it in the image layer; they are still lost on restart and invisible to other
    replicas. Move to S3 and CloudFront.
-4. **Rate limiting is per-pod.** The throttler uses in-memory storage, so the effective
-   limit is the configured value multiplied by the replica count, and it resets on every
-   deploy. Move it to Redis storage.
+4. **Rate limiting is per-pod without Redis.** With `REDIS_URL` set the limits are shared
+   and survive deploys; without it the effective limit is the configured value multiplied
+   by the replica count, and it resets on every deploy.
 5. **Swagger is exposed unconditionally** at `/api/docs`, including in production.
 6. **No automated tests.** The buildspecs run `test`, but every package's test script is
    still a no-op, so that gate currently passes unconditionally.

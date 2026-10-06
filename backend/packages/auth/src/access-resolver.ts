@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { LocationScope, UserStatus, type PrismaClient } from '@prisma/client';
+import { LocationScope, type PrismaClient } from '@prisma/client';
 import type { LocationScopeName } from './types';
 
 /**
@@ -33,31 +33,17 @@ function widestScope(scopes: LocationScope[]): LocationScopeName {
   return 'SINGLE';
 }
 
-const accessInclude = {
-  assignedHospitals: {
-    select: { hospitalId: true },
-    where: { deletedAt: null },
-  },
-  permissionOverrides: {
-    include: { permission: true },
-    where: { deletedAt: null },
-  },
-  roles: {
-    include: {
-      role: {
-        include: {
-          permissions: {
-            include: { permission: true },
-            where: { deletedAt: null },
-          },
-        },
-      },
-    },
-    // A deleted role keeps its user_roles rows, so filter on the role too, or its holders kept
-    // its location scope and name after the delete.
-    where: { deletedAt: null, role: { deletedAt: null } },
-  },
-} as const;
+/** One row of the access query in AccessResolver.resolve. */
+interface AccessRow {
+  assignedHospitalIds: string[];
+  hospitalId: string | null;
+  inheritedCodes: string[];
+  overrides: { code: string; granted: boolean }[];
+  // A deleted role keeps its user_roles rows, so the query filters on the role too, or its
+  // holders kept its location scope and name after the delete.
+  roles: { locationScope: LocationScope; name: string }[];
+  sessionVersion: number;
+}
 
 /**
  * Applies per-user overrides on top of the permissions inherited from roles. A revoking override
@@ -91,38 +77,56 @@ export class AccessResolver {
   // ponytail: one query per authenticated request. Redis is already in the stack — cache per
   // user and drop the key on any role/permission write if request volume makes this show up.
   async resolve(userId: string): Promise<ResolvedAccess | null> {
-    const user = await this.prisma.user.findFirst({
-      include: accessInclude,
-      where: {
-        deletedAt: null,
-        id: userId,
-        status: UserStatus.ACTIVE,
-      },
-    });
+    // One round trip instead of one per relation (eight with Prisma's include). Only live rows
+    // count: the link, the role, the role's grant and the permission must all be undeleted.
+    const [user] = await this.prisma.$queryRaw<AccessRow[]>`
+      SELECT
+        u.session_version AS "sessionVersion",
+        u.hospital_id::text AS "hospitalId",
+        COALESCE((
+          SELECT json_agg(json_build_object('name', r.name, 'locationScope', r.location_scope::text))
+          FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = u.id AND ur.deleted_at IS NULL AND r.deleted_at IS NULL
+        ), '[]'::json) AS "roles",
+        COALESCE((
+          SELECT json_agg(p.code)
+          FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          JOIN role_permissions rp ON rp.role_id = r.id
+          JOIN permissions p ON p.id = rp.permission_id
+          WHERE ur.user_id = u.id AND ur.deleted_at IS NULL AND r.deleted_at IS NULL
+            AND rp.deleted_at IS NULL AND p.deleted_at IS NULL
+        ), '[]'::json) AS "inheritedCodes",
+        COALESCE((
+          SELECT json_agg(json_build_object('code', p.code, 'granted', up.granted))
+          FROM user_permissions up
+          JOIN permissions p ON p.id = up.permission_id
+          WHERE up.user_id = u.id AND up.deleted_at IS NULL AND p.deleted_at IS NULL
+        ), '[]'::json) AS "overrides",
+        COALESCE((
+          SELECT json_agg(uh.hospital_id::text)
+          FROM user_hospitals uh
+          WHERE uh.user_id = u.id AND uh.deleted_at IS NULL
+        ), '[]'::json) AS "assignedHospitalIds"
+      FROM users u
+      WHERE u.id = ${userId}::uuid AND u.deleted_at IS NULL AND u.status = 'ACTIVE'
+    `;
 
     if (!user) {
       return null;
     }
 
-    const inheritedCodes = user.roles.flatMap((userRole) =>
-      userRole.role.permissions
-        .filter((rolePermission) => rolePermission.permission.deletedAt === null)
-        .map((rolePermission) => rolePermission.permission.code),
-    );
-    const overrides = user.permissionOverrides
-      .filter(({ permission }) => permission.deletedAt === null)
-      .map(({ granted, permission }) => ({ code: permission.code, granted }));
-
-    const locationScope = widestScope(user.roles.map((userRole) => userRole.role.locationScope));
+    const locationScope = widestScope(user.roles.map((role) => role.locationScope));
     // A user's home hospital counts as an assignment so existing accounts keep working.
-    const assigned = new Set(user.assignedHospitals.map(({ hospitalId }) => hospitalId));
+    const assigned = new Set(user.assignedHospitalIds);
     if (user.hospitalId) assigned.add(user.hospitalId);
 
     return {
       allowedHospitalIds: locationScope === 'ALL' ? null : [...assigned],
       locationScope,
-      permissions: mergePermissionCodes(inheritedCodes, overrides),
-      roles: user.roles.map((userRole) => userRole.role.name),
+      permissions: mergePermissionCodes(user.inheritedCodes, user.overrides),
+      roles: user.roles.map((role) => role.name),
       sessionVersion: user.sessionVersion,
     };
   }

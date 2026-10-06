@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  AAHAR shared store for OTPs, refresh tokens and rate limits: an encrypted ElastiCache
+  (Valkey or Redis, cluster mode disabled) reachable only from the EKS cluster. Its endpoint
+  and generated password become REDIS_URL - see infra/aws/README.md.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The EKS cluster's VPC (aws eks describe-cluster ... resourcesVpcConfig.vpcId).
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets of that VPC, at least two availability zones (the cluster's own subnets work).
+  ClientSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: >-
+      Security group the backend pods' traffic comes from - the EKS cluster security group
+      (resourcesVpcConfig.clusterSecurityGroupId) for managed node groups.
+  Engine:
+    Type: String
+    Default: valkey
+    AllowedValues: [valkey, redis]
+    Description: Valkey is Redis-compatible and cheaper; the services work with either.
+  EngineVersion:
+    Type: String
+    Default: '8.0'
+    Description: 8.0 or 7.2 for valkey; 7.1 for redis.
+  NodeType:
+    Type: String
+    Default: cache.t4g.micro
+    Description: The data is small (sessions, codes, counters); the smallest node is enough to start.
+  NodeCount:
+    Type: Number
+    Default: 1
+    AllowedValues: [1, 2]
+    Description: 1 for a single node; 2 adds a replica in another zone with automatic failover.
+
+Conditions:
+  HasReplica: !Equals [!Ref NodeCount, 2]
+
+Resources:
+  # The AUTH token, generated and kept in Secrets Manager rather than in the template or a
+  # parameter. Letters and digits only, so it can sit in a URL unescaped.
+  AuthToken:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}-auth-token'
+      Description: AUTH token for the AAHAR ElastiCache (part of REDIS_URL)
+      GenerateSecretString:
+        ExcludePunctuation: true
+        PasswordLength: 64
+
+  SubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: AAHAR ElastiCache subnets
+      SubnetIds: !Ref SubnetIds
+
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: AAHAR ElastiCache - port 6379 from the EKS cluster only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: Backend pods
+          FromPort: 6379
+          IpProtocol: tcp
+          SourceSecurityGroupId: !Ref ClientSecurityGroupId
+          ToPort: 6379
+
+  ReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    # Sessions, codes and counters are short-lived; nothing is worth a final snapshot.
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ReplicationGroupDescription: AAHAR OTPs, refresh tokens and rate limits
+      Engine: !Ref Engine
+      EngineVersion: !Ref EngineVersion
+      CacheNodeType: !Ref NodeType
+      NumCacheClusters: !Ref NodeCount
+      AutomaticFailoverEnabled: !If [HasReplica, true, false]
+      MultiAZEnabled: !If [HasReplica, true, false]
+      CacheSubnetGroupName: !Ref SubnetGroup
+      SecurityGroupIds:
+        - !Ref CacheSecurityGroup
+      Port: 6379
+      # TLS in transit (the services connect with rediss://) and encryption at rest.
+      TransitEncryptionEnabled: true
+      AtRestEncryptionEnabled: true
+      AuthToken: !Sub '{{resolve:secretsmanager:${AuthToken}:SecretString}}'
+
+Outputs:
+  PrimaryEndpoint:
+    Description: Host for REDIS_URL
+    Value: !GetAtt ReplicationGroup.PrimaryEndPoint.Address
+  Port:
+    Value: !GetAtt ReplicationGroup.PrimaryEndPoint.Port
+  AuthTokenSecretArn:
+    Description: Secrets Manager secret holding the password for REDIS_URL
+    Value: !Ref AuthToken
+  RedisUrlFormat:
+    Description: Fill in the token from AuthTokenSecretArn (see infra/aws/README.md)
+    Value: !Sub 'rediss://:<token>@${ReplicationGroup.PrimaryEndPoint.Address}:6379'

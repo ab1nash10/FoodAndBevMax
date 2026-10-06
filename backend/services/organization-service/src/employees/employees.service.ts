@@ -1,10 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Employee, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
-import { EmployeeSortField, ListEmployeesQueryDto } from './dto/list-employees-query.dto';
+import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeesRepository } from './employees.repository';
 
@@ -39,14 +40,6 @@ function toEmployeeValidationResponse(employee: Employee) {
   };
 }
 
-function getEmployeeOrderBy(query: ListEmployeesQueryDto): Prisma.EmployeeOrderByWithRelationInput {
-  const sortBy: EmployeeSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
-
 @Injectable()
 export class EmployeesService {
   constructor(
@@ -77,7 +70,7 @@ export class EmployeesService {
 
     const [items, total] = await Promise.all([
       this.employees.findMany({
-        orderBy: getEmployeeOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -144,7 +137,7 @@ export class EmployeesService {
 
       return toEmployeeResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Employee');
+      handlePrismaError(error, 'Employee');
     }
   }
 
@@ -212,7 +205,7 @@ export class EmployeesService {
 
       return toEmployeeResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Employee');
+      handlePrismaError(error, 'Employee');
     }
   }
 
@@ -268,13 +261,5 @@ export class EmployeesService {
     }
 
     return employee;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

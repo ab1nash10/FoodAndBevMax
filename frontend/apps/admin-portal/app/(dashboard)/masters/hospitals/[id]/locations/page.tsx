@@ -1,4 +1,4 @@
-import { HospitalLocationsPageClient } from '@/components/organization/hospitals-pages';
+import { HospitalLocationsPageClient } from '@/components/organization/hospital-locations-page';
 
 interface HospitalLocationsPageProps {
   params: Promise<{

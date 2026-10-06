@@ -155,7 +155,7 @@ export function openRowLink(event: MouseEvent<HTMLTableRowElement>) {
 }
 
 /** `value`, once it has stopped changing for `delayMs` (for search boxes that query per key). */
-export function useDebouncedValue<T>(value: T, delayMs = 300): T {
+function useDebouncedValue<T>(value: T, delayMs = 300): T {
   const [debounced, setDebounced] = useState(value);
 
   useEffect(() => {
@@ -165,4 +165,34 @@ export function useDebouncedValue<T>(value: T, delayMs = 300): T {
   }, [delayMs, value]);
 
   return debounced;
+}
+
+/**
+ * A search box backed by `?name=`. The text is local state, so a keystroke re-renders only the
+ * component holding it, not everything that reads the URL; the URL and `debounced` (what the
+ * query uses) follow once typing pauses. Returns `[text, setText, debounced]`. The URL changing
+ * from elsewhere (back button, a link) replaces the text.
+ */
+export function useUrlSearchParam(
+  name: string,
+  delayMs = 250,
+): [string, (next: string) => void, string] {
+  const [urlValue, setUrlValue] = useUrlParam(name);
+  const [text, setText] = useState(urlValue);
+  const debounced = useDebouncedValue(text, delayMs);
+  const written = useRef(urlValue);
+
+  useEffect(() => {
+    written.current = debounced;
+    setUrlValue(debounced);
+  }, [debounced, setUrlValue]);
+
+  useEffect(() => {
+    if (urlValue !== written.current) {
+      written.current = urlValue;
+      setText(urlValue);
+    }
+  }, [urlValue]);
+
+  return [text, setText, debounced];
 }

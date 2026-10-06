@@ -3,7 +3,7 @@ export interface IndiaStateCities {
   state: string;
 }
 
-export const INDIA_STATE_CITIES: IndiaStateCities[] = [
+const INDIA_STATE_CITIES: IndiaStateCities[] = [
   {
     state: 'Andaman and Nicobar Islands',
     cities: ['Port Blair', 'Havelock Island', 'Neil Island', 'Diglipur'],

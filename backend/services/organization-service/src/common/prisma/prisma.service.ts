@@ -1,11 +1,17 @@
-import { createPrismaAdapter, hospitalScopeExtension } from '@aahar/auth';
+import {
+  countPrismaQueries,
+  createPrismaAdapter,
+  hospitalScopeExtension,
+  prismaQueryLogOptions,
+} from '@aahar/auth';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    super({ adapter: createPrismaAdapter() });
+    super({ adapter: createPrismaAdapter(), ...prismaQueryLogOptions() });
+    countPrismaQueries(this);
 
     // Reads on hospital-scoped models are narrowed to the requesting user's locations, so a
     // service cannot accidentally return another location's rows by omitting a filter.

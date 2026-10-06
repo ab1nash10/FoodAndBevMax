@@ -8,13 +8,10 @@ import { uniqueViolationTarget } from '@aahar/auth';
 import { ItemCategory, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { normalizeMasterName } from '../common/normalize-master-name';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import { CreateItemCategoryDto } from './dto/create-item-category.dto';
-import {
-  ItemCategorySortField,
-  ListItemCategoriesQueryDto,
-} from './dto/list-item-categories-query.dto';
+import { ListItemCategoriesQueryDto } from './dto/list-item-categories-query.dto';
 import { UpdateItemCategoryDto } from './dto/update-item-category.dto';
 import { ItemCategoriesRepository } from './item-categories.repository';
 
@@ -28,16 +25,6 @@ function toItemCategoryResponse(category: ItemCategory) {
     id: category.id,
     isActive: category.isActive,
     updatedAt: category.updatedAt,
-  };
-}
-
-function getItemCategoryOrderBy(
-  query: ListItemCategoriesQueryDto,
-): Prisma.ItemCategoryOrderByWithRelationInput {
-  const sortBy: ItemCategorySortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
   };
 }
 
@@ -65,7 +52,7 @@ export class ItemCategoriesService {
 
     const [items, total] = await Promise.all([
       this.itemCategories.findMany({
-        orderBy: getItemCategoryOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,

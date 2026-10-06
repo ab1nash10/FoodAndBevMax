@@ -1,4 +1,4 @@
-import { RestaurantEditPageClient } from '@/components/organization/restaurants-pages';
+import { RestaurantEditPageClient } from '@/components/organization/restaurant-form-pages';
 
 interface EditRestaurantPageProps {
   params: Promise<{

@@ -28,9 +28,17 @@ export { NotificationPublisher } from './notification-publisher';
 export type { NotificationAudience, PublishNotificationInput } from './notification-publisher';
 export { RbacGuard } from './rbac.guard';
 export { requestLoggingMiddleware } from './request-logging.middleware';
+export { countPrismaQueries, prismaQueryLogOptions } from './query-log';
 export { hashPassword, verifyPassword } from './passwords';
 export { createPrismaAdapter, prismaPgSettings, uniqueViolationTarget } from './prisma-adapter';
 export type { PrismaPgSettings } from './prisma-adapter';
+export {
+  closeSharedRedis,
+  createThrottlerStorage,
+  getSharedRedis,
+  RedisThrottlerStorage,
+  redisUrl,
+} from './redis';
 export { configureSecurityBaseline } from './service-bootstrap';
 export type { SecurityBaselineOptions } from './service-bootstrap';
 export type { JwtPayload, JwtRequestUser, LocationScopeName } from './types';

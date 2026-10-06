@@ -1,4 +1,4 @@
-import { EmployeesPageClient } from '@/components/master-data/master-data-pages';
+import { EmployeesPageClient } from '@/components/master-data/employees/employees-page';
 
 export default function EmployeesPage() {
   return <EmployeesPageClient />;

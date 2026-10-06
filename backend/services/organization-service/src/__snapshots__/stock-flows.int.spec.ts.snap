@@ -1,0 +1,537 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`stock and money paths (integration) > GRN: draft, post to stock per accepted batch, then refuses a second post > error body 1`] = `
+{
+  "errors": [],
+  "message": "string",
+  "requestId": "string",
+  "success": "boolean",
+  "timestamp": "string",
+}
+`;
+
+exports[`stock and money paths (integration) > GRN: draft, post to stock per accepted batch, then refuses a second post > grn created 1`] = `
+{
+  "data": {
+    "createdAt": "string",
+    "deletedAt": null,
+    "grnNumber": "string",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "invoiceNumber": null,
+    "lines": [
+      {
+        "acceptedQty": "number",
+        "batches": [
+          {
+            "acceptedQty": "number",
+            "batchNumber": "string",
+            "createdAt": "string",
+            "expiryDate": "string",
+            "grnLineId": "string",
+            "id": "string",
+            "itemId": "string",
+            "manufacturingDate": null,
+            "receivedQty": "number",
+            "rejectedQty": "number",
+            "rejectionReason": null,
+            "updatedAt": "string",
+          },
+        ],
+        "createdAt": "string",
+        "grnId": "string",
+        "id": "string",
+        "item": {
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "orderedQty": null,
+        "receivedQty": "number",
+        "rejectedQty": "number",
+        "rejectionReason": null,
+        "remarks": null,
+        "updatedAt": "string",
+      },
+    ],
+    "poNumber": null,
+    "receivedBy": "string",
+    "receivedDate": "string",
+    "remarks": null,
+    "status": "string",
+    "store": {
+      "hospitalId": "string",
+      "id": "string",
+      "isActive": "boolean",
+      "storeCode": "string",
+      "storeName": "string",
+    },
+    "storeId": "string",
+    "updatedAt": "string",
+    "vendorName": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > GRN: draft, post to stock per accepted batch, then refuses a second post > grn posted 1`] = `
+{
+  "data": {
+    "createdAt": "string",
+    "deletedAt": null,
+    "grnNumber": "string",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "invoiceNumber": null,
+    "lines": [
+      {
+        "acceptedQty": "number",
+        "batches": [
+          {
+            "acceptedQty": "number",
+            "batchNumber": "string",
+            "createdAt": "string",
+            "expiryDate": "string",
+            "grnLineId": "string",
+            "id": "string",
+            "itemId": "string",
+            "manufacturingDate": null,
+            "receivedQty": "number",
+            "rejectedQty": "number",
+            "rejectionReason": null,
+            "updatedAt": "string",
+          },
+        ],
+        "createdAt": "string",
+        "grnId": "string",
+        "id": "string",
+        "item": {
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "orderedQty": null,
+        "receivedQty": "number",
+        "rejectedQty": "number",
+        "rejectionReason": null,
+        "remarks": null,
+        "updatedAt": "string",
+      },
+    ],
+    "poNumber": null,
+    "receivedBy": "string",
+    "receivedDate": "string",
+    "remarks": null,
+    "status": "string",
+    "store": {
+      "hospitalId": "string",
+      "id": "string",
+      "isActive": "boolean",
+      "storeCode": "string",
+      "storeName": "string",
+    },
+    "storeId": "string",
+    "updatedAt": "string",
+    "vendorName": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > GRN: draft, post to stock per accepted batch, then refuses a second post > stock ledger entry 1`] = `
+{
+  "balanceAfter": "number",
+  "batchNumber": "string",
+  "businessDate": "string",
+  "createdAt": "string",
+  "deletedAt": null,
+  "expiryDate": "string",
+  "hospital": {
+    "hospitalCode": "string",
+    "hospitalName": "string",
+    "id": "string",
+    "isActive": "boolean",
+  },
+  "hospitalId": "string",
+  "id": "string",
+  "item": {
+    "category": {
+      "categoryName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "id": "string",
+    "isActive": "boolean",
+    "itemCode": "string",
+    "itemName": "string",
+    "itemType": "string",
+    "type": "string",
+  },
+  "itemId": "string",
+  "itemType": "string",
+  "location": {
+    "code": "string",
+    "id": "string",
+    "name": "string",
+    "type": "string",
+  },
+  "locationId": "string",
+  "locationType": "string",
+  "qtyIn": "number",
+  "qtyOut": "number",
+  "referenceId": "string",
+  "referenceType": "string",
+  "remarks": null,
+  "transactionDateTime": "string",
+  "transactionType": "string",
+  "updatedAt": "string",
+}
+`;
+
+exports[`stock and money paths (integration) > kitchen production: accepted = produced − wastage, posted to kitchen stock, then transferred > production created 1`] = `
+{
+  "data": {
+    "businessDate": "string",
+    "chef": null,
+    "chefUserId": null,
+    "createdAt": "string",
+    "deletedAt": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "kitchen": {
+      "hospitalId": "string",
+      "id": "string",
+      "isActive": "boolean",
+      "kitchenCode": "string",
+      "kitchenName": "string",
+    },
+    "kitchenId": "string",
+    "lines": [
+      {
+        "acceptedQty": "number",
+        "createdAt": "string",
+        "deletedAt": null,
+        "id": "string",
+        "item": {
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "producedQty": "number",
+        "productionId": "string",
+        "remarks": null,
+        "updatedAt": "string",
+        "wastageQty": "number",
+      },
+    ],
+    "productionDate": "string",
+    "productionNumber": "string",
+    "remarks": null,
+    "status": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > stock views: balances list and the grouped store summary agree > stock balances 1`] = `
+{
+  "data": {
+    "items": [
+      {
+        "availableQty": "number",
+        "batchNumber": "string",
+        "businessDate": null,
+        "createdAt": "string",
+        "deletedAt": null,
+        "expiryDate": "string",
+        "hospital": {
+          "hospitalCode": "string",
+          "hospitalName": "string",
+          "id": "string",
+          "isActive": "boolean",
+        },
+        "hospitalId": "string",
+        "id": "string",
+        "item": {
+          "category": {
+            "categoryName": "string",
+            "id": "string",
+            "isActive": "boolean",
+          },
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "itemType": "string",
+        "lastUpdatedOn": "string",
+        "location": {
+          "code": "string",
+          "id": "string",
+          "name": "string",
+          "type": "string",
+        },
+        "locationId": "string",
+        "locationType": "string",
+        "reservedQty": "number",
+        "status": "string",
+        "updatedAt": "string",
+      },
+    ],
+    "meta": {
+      "limit": "number",
+      "page": "number",
+      "total": "number",
+      "totalPages": "number",
+    },
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > stock views: balances list and the grouped store summary agree > store stock summary 1`] = `
+{
+  "data": {
+    "items": [
+      {
+        "batchCount": "number",
+        "batches": [
+          {
+            "availableQty": "number",
+            "batchNumber": "string",
+            "expiryDate": "string",
+            "reservedQty": "number",
+            "status": "string",
+            "stockBalanceId": "string",
+          },
+        ],
+        "categoryName": "string",
+        "hospitalId": "string",
+        "itemCode": "string",
+        "itemId": "string",
+        "itemName": "string",
+        "itemType": "string",
+        "lastUpdatedOn": "string",
+        "nearestExpiryDate": "string",
+        "status": "string",
+        "storeCode": "string",
+        "storeId": "string",
+        "storeName": "string",
+        "totalAvailableQty": "number",
+        "totalReservedQty": "number",
+      },
+    ],
+    "meta": {
+      "limit": "number",
+      "page": "number",
+      "total": "number",
+      "totalPages": "number",
+    },
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > store transfer: nothing moves on create, dispatch deducts, ACCEPTED_FULL credits the restaurant > acknowledgement created 1`] = `
+{
+  "data": {
+    "acknowledgementDate": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "lines": [
+      {
+        "acceptedQty": "number",
+        "batchNumber": "string",
+        "createdAt": "string",
+        "expiryDate": "string",
+        "id": "string",
+        "item": {
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "rejectedQty": "number",
+        "rejectionReason": null,
+        "remarks": null,
+        "sentQty": "number",
+        "transferLineId": "string",
+        "updatedAt": "string",
+      },
+    ],
+    "remarks": null,
+    "status": "string",
+    "transfer": {
+      "businessDate": "string",
+      "destinationId": "string",
+      "destinationType": "string",
+      "id": "string",
+      "sourceId": "string",
+      "sourceType": "string",
+      "status": "string",
+      "transferDate": "string",
+      "transferNumber": "string",
+    },
+    "transferId": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > store transfer: nothing moves on create, dispatch deducts, ACCEPTED_FULL credits the restaurant > transfer created 1`] = `
+{
+  "data": {
+    "businessDate": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "destinationId": "string",
+    "destinationType": "string",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "lines": [
+      {
+        "acceptedQty": "number",
+        "batchNumber": "string",
+        "createdAt": "string",
+        "expiryDate": "string",
+        "id": "string",
+        "item": {
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "rejectedQty": "number",
+        "rejectionReason": null,
+        "remarks": null,
+        "sentQty": "number",
+        "transferId": "string",
+        "updatedAt": "string",
+      },
+    ],
+    "remarks": null,
+    "sourceId": "string",
+    "sourceType": "string",
+    "status": "string",
+    "transferDate": "string",
+    "transferNumber": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`stock and money paths (integration) > store transfer: nothing moves on create, dispatch deducts, ACCEPTED_FULL credits the restaurant > transfer dispatched 1`] = `
+{
+  "data": {
+    "businessDate": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "destinationId": "string",
+    "destinationType": "string",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "lines": [
+      {
+        "acceptedQty": "number",
+        "batchNumber": "string",
+        "createdAt": "string",
+        "expiryDate": "string",
+        "id": "string",
+        "item": {
+          "id": "string",
+          "isActive": "boolean",
+          "itemCode": "string",
+          "itemName": "string",
+          "itemType": "string",
+          "type": "string",
+        },
+        "itemId": "string",
+        "rejectedQty": "number",
+        "rejectionReason": null,
+        "remarks": null,
+        "sentQty": "number",
+        "transferId": "string",
+        "updatedAt": "string",
+      },
+    ],
+    "remarks": null,
+    "sourceId": "string",
+    "sourceType": "string",
+    "status": "string",
+    "transferDate": "string",
+    "transferNumber": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;

@@ -7,138 +7,16 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
-import { ListRestaurantsQueryDto, RestaurantSortField } from './dto/list-restaurants-query.dto';
+import { ListRestaurantsQueryDto } from './dto/list-restaurants-query.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
 import { RestaurantsRepository, RestaurantWithRelations } from './restaurants.repository';
+import { toRestaurantResponse } from './restaurants.helpers';
 
 type RestaurantClient = Prisma.TransactionClient;
-
-function toRestaurantResponse(restaurant: RestaurantWithRelations) {
-  return {
-    address: restaurant.address,
-    b2cQrEnabled: restaurant.b2cQrEnabled,
-    accountNumber: restaurant.accountNumber,
-    atTableDining: restaurant.atTableDining,
-    bankBranch: restaurant.bankBranch,
-    bankName: restaurant.bankName,
-    closingTime: restaurant.closingTime,
-    coverImageUrl: restaurant.coverImageUrl,
-    createdAt: restaurant.createdAt,
-    deletedAt: restaurant.deletedAt,
-    delivery: restaurant.delivery,
-    email: restaurant.email,
-    fssaiNumber: restaurant.fssaiNumber,
-    fssaiNumbers: restaurant.fssaiNumber,
-    gstNumber: restaurant.gstNumber,
-    gstAddress: restaurant.gstAddress,
-    homeDelivery: restaurant.homeDelivery,
-    hospital: {
-      city: restaurant.hospital.city,
-      displayName: restaurant.hospital.displayName,
-      hospitalCode: restaurant.hospital.hospitalCode,
-      hospitalName: restaurant.hospital.hospitalName,
-      id: restaurant.hospital.id,
-      isActive: restaurant.hospital.isActive,
-      locationCode: restaurant.hospital.hospitalCode,
-      postalCode: restaurant.hospital.postalCode,
-      state: restaurant.hospital.state,
-      title: restaurant.hospital.hospitalName,
-    },
-    hospitalId: restaurant.hospitalId,
-    id: restaurant.id,
-    ifscCode: restaurant.ifscCode,
-    inCarDining: restaurant.inCarDining,
-    inRoomDining: restaurant.inRoomDiningEnabled,
-    inRoomDiningEnabled: restaurant.inRoomDiningEnabled,
-    inventory: restaurant.inventory,
-    isAtTableDiningEnabled: restaurant.atTableDining,
-    isDeliveryEnabled: restaurant.delivery,
-    isHomeDeliveryEnabled: restaurant.homeDelivery,
-    isInCarDiningEnabled: restaurant.inCarDining,
-    isInRoomDiningEnabled: restaurant.inRoomDiningEnabled,
-    isInventoryEnabled: restaurant.inventory,
-    isOffline: restaurant.offline,
-    isOnlineOrdersEnabled: restaurant.onlineOrderingEnabled,
-    isOpen24x7: restaurant.open24x7,
-    isPosOrdersEnabled: restaurant.posOrders,
-    isRegisteredInGst: restaurant.isRegisteredInGst,
-    isTakeawayEnabled: restaurant.takeaway,
-    isVegOnly: restaurant.vegOnly,
-    isActive: restaurant.isActive,
-    kitchen: restaurant.kitchen
-      ? {
-          id: restaurant.kitchen.id,
-          isActive: restaurant.kitchen.isActive,
-          kitchenCode: restaurant.kitchen.kitchenCode,
-          kitchenName: restaurant.kitchen.kitchenName,
-        }
-      : null,
-    kitchenId: restaurant.kitchenId,
-    kitchenIds: restaurant.restaurantKitchens.map((mapping) => mapping.kitchenId),
-    kitchens: restaurant.restaurantKitchens.map((mapping) => ({
-      id: mapping.kitchen.id,
-      isActive: mapping.kitchen.isActive,
-      kitchenCode: mapping.kitchen.kitchenCode,
-      kitchenName: mapping.kitchen.kitchenName,
-    })),
-    legalName: restaurant.legalName,
-    location: restaurant.location
-      ? {
-          id: restaurant.location.id,
-          isActive: restaurant.location.isActive,
-          locationName: restaurant.location.locationName,
-        }
-      : null,
-    locationId: restaurant.locationId,
-    mobile: restaurant.mobile,
-    normalDiscountApplicable: restaurant.normalDiscountApplicable,
-    offline: restaurant.offline,
-    onlineOrders: restaurant.onlineOrderingEnabled,
-    onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
-    openingTime: restaurant.openingTime,
-    open24x7: restaurant.open24x7,
-    panNumber: restaurant.panNumber,
-    posOrders: restaurant.posOrders,
-    qrUnitName: restaurant.qrUnitName,
-    unitNameForQr: restaurant.qrUnitName,
-    restaurantCode: restaurant.restaurantCode,
-    restaurantName: restaurant.restaurantName,
-    staffDiscountApplicable: restaurant.staffDiscountApplicable,
-    store: restaurant.store
-      ? {
-          id: restaurant.store.id,
-          isActive: restaurant.store.isActive,
-          storeCode: restaurant.store.storeCode,
-          storeName: restaurant.store.storeName,
-        }
-      : null,
-    storeId: restaurant.storeId,
-    bankNameBranch: restaurant.bankName,
-    sodexoMid: restaurant.sodexoMid,
-    sodexoTid: restaurant.sodexoTid,
-    sunBu: restaurant.sunBu,
-    sunT1: restaurant.sunT1,
-    sunT2: restaurant.sunT2,
-    takeaway: restaurant.takeaway,
-    thumbnailUrl: restaurant.thumbnailUrl,
-    updatedAt: restaurant.updatedAt,
-    upiId: restaurant.upiId,
-    vegOnly: restaurant.vegOnly,
-  };
-}
-
-function getRestaurantOrderBy(
-  query: ListRestaurantsQueryDto,
-): Prisma.RestaurantOrderByWithRelationInput {
-  const sortBy: RestaurantSortField = query.sortBy ?? 'createdAt';
-
-  return {
-    [sortBy]: query.sortOrder ?? 'desc',
-  };
-}
 
 @Injectable()
 export class RestaurantsService {
@@ -211,7 +89,7 @@ export class RestaurantsService {
 
     const [items, total] = await Promise.all([
       this.restaurants.findMany({
-        orderBy: getRestaurantOrderBy(query),
+        orderBy: getOrderBy(query, 'createdAt'),
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -329,7 +207,7 @@ export class RestaurantsService {
 
       return toRestaurantResponse(created);
     } catch (error) {
-      this.handlePrismaError(error, 'Restaurant');
+      handlePrismaError(error, 'Restaurant');
     }
   }
 
@@ -522,7 +400,7 @@ export class RestaurantsService {
 
       return toRestaurantResponse(updated);
     } catch (error) {
-      this.handlePrismaError(error, 'Restaurant');
+      handlePrismaError(error, 'Restaurant');
     }
   }
 
@@ -669,13 +547,5 @@ export class RestaurantsService {
     }
 
     return restaurant;
-  }
-
-  private handlePrismaError(error: unknown, entityName: string): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ConflictException(`${entityName} already exists`);
-    }
-
-    throw error;
   }
 }

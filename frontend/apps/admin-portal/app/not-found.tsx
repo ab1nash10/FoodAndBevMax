@@ -4,7 +4,7 @@ import { Button } from '@aahar/ui';
 import { LayoutDashboard, SearchX } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AdminShell } from '@/components/admin-shell';
+import { AdminShell } from '@/components/admin-shell/admin-shell';
 import { useAuth } from '@/components/auth-provider';
 import { EmptyState } from '@/components/design-system';
 import { getBreadcrumbTrail } from '@/lib/navigation';

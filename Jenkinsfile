@@ -132,7 +132,12 @@ pipeline {
           // over a CrashLoopBackOff.
           //
           // helm --set splits on commas, so a value containing one must escape it as `\,`.
-          // Base64 secrets and a standard Postgres URL contain none.
+          // Base64 secrets and a standard Postgres or Redis URL contain none.
+          //
+          // REDIS_URL is optional: set it on the job (an environment variable, or a credential
+          // bound under that name) to point the services at ElastiCache. Empty keeps each pod's
+          // in-memory store, which needs one replica per service. infra/aws/README.md creates the
+          // cache and the aahar-redis-url credential to bind above.
           sh '''
             aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
@@ -145,6 +150,7 @@ pipeline {
               --set-string config.secrets.ADMIN_PASSWORD="$ADMIN_PASSWORD" \
               --set-string config.secrets.SMS_USERNAME="$SMS_USERNAME" \
               --set-string config.secrets.SMS_PASSWORD="$SMS_PASSWORD" \
+              --set-string config.secrets.REDIS_URL="${REDIS_URL:-}" \
               --wait --timeout 10m
           '''
         }

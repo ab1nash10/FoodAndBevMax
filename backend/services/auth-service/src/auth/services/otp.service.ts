@@ -64,18 +64,19 @@ export class OtpService {
     }
   }
 
-  /** Refuses a new code while the previous one for this number is still fresh. */
+  /**
+   * Refuses a new code while the previous one for this number is still fresh. Claiming the slot
+   * is one atomic step, so two requests on different instances cannot both send.
+   */
   async claimSendSlot(target: OtpTarget): Promise<void> {
-    const key = this.getCooldownKey(target);
-
-    if (await this.redis.get(key)) {
+    if (
+      !(await this.redis.setIfAbsent(this.getCooldownKey(target), '1', RESEND_COOLDOWN_SECONDS))
+    ) {
       throw new HttpException(
         `Please wait ${RESEND_COOLDOWN_SECONDS} seconds before requesting another OTP`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-
-    await this.redis.setWithExpiry(key, '1', RESEND_COOLDOWN_SECONDS);
   }
 
   async send(target: OtpTarget): Promise<void> {
@@ -138,18 +139,16 @@ export class OtpService {
     return target;
   }
 
+  // Counted atomically: guesses spread across instances still burn the code after five misses.
   private async recordFailedAttempt(target: OtpTarget): Promise<void> {
     const attemptsKey = this.getAttemptsKey(target);
-    const attempts = Number((await this.redis.get(attemptsKey)) ?? 0) + 1;
+    const ttlSeconds = this.config.get<number>('OTP_TTL_SECONDS') ?? 300;
+    const attempts = await this.redis.increment(attemptsKey, ttlSeconds);
 
     if (attempts >= MAX_FAILED_ATTEMPTS) {
       await this.redis.delete(this.getOtpKey(target));
       await this.redis.delete(attemptsKey);
-      return;
     }
-
-    const ttlSeconds = this.config.get<number>('OTP_TTL_SECONDS') ?? 300;
-    await this.redis.setWithExpiry(attemptsKey, String(attempts), ttlSeconds);
   }
 
   private getCooldownKey(target: OtpTarget): string {
