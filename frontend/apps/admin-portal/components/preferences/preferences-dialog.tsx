@@ -12,8 +12,8 @@ import { FormSection, LoadingSkeleton } from '@/components/design-system';
 import { formatGlobalLocationLabel, useLocationContext } from '@/components/location-context';
 import { useTheme } from '@/components/theme-provider';
 import { useToast } from '@/components/toast-provider';
-import { Field, Input, Select } from '@/components/ui';
-import { Modal } from '@/components/ui-controls';
+import { Field, Select } from '@/components/ui';
+import { Modal, PasswordInput } from '@/components/ui-controls';
 import { getApiErrorMessage, userApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { preferencesQueryKey, usePreferences, useSavePreferences } from './use-preferences';
@@ -288,30 +288,27 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
         Signed in as <span className="font-medium text-ds-text-2">{email}</span>
       </p>
       <Field label="Current password" name="current-password">
-        <Input
+        <PasswordInput
           autoComplete="current-password"
           id="current-password"
           onChange={(event) => setCurrentPassword(event.target.value)}
-          type="password"
           value={currentPassword}
         />
       </Field>
       <Field label="New password" name="new-password">
-        <Input
+        <PasswordInput
           autoComplete="new-password"
           id="new-password"
           onChange={(event) => setNewPassword(event.target.value)}
           placeholder="Min 8 chars, 1 letter and 1 number"
-          type="password"
           value={newPassword}
         />
       </Field>
       <Field error={error ?? undefined} label="Confirm new password" name="confirm-password">
-        <Input
+        <PasswordInput
           autoComplete="new-password"
           id="confirm-password"
           onChange={(event) => setConfirmPassword(event.target.value)}
-          type="password"
           value={confirmPassword}
         />
       </Field>

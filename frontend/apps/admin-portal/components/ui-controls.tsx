@@ -2,9 +2,54 @@
 
 // Interactive primitives live apart from ui.tsx so server-rendered pages can keep importing the
 // static pieces (Panel, Field, Badge...) without being pulled into the client bundle.
+import { Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { Minus, Plus, Search, X } from 'lucide-react';
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { Eye, EyeOff, Minus, Plus, Search, X } from 'lucide-react';
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
+
+/** A password box with an eye button that shows or hides what has been typed. */
+export const PasswordInput = forwardRef<
+  HTMLInputElement,
+  Omit<ComponentPropsWithoutRef<'input'>, 'type'>
+>(({ className, disabled, ...props }, ref) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <span className="relative block w-full">
+      <Input
+        className={cn('pr-10', className)}
+        disabled={disabled}
+        ref={ref}
+        type={isVisible ? 'text' : 'password'}
+        {...props}
+      />
+      <button
+        aria-label={isVisible ? 'Hide password' : 'Show password'}
+        aria-pressed={isVisible}
+        className="absolute inset-y-0 right-0 grid w-10 place-items-center rounded-control text-ds-muted transition hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        onClick={() => setIsVisible((current) => !current)}
+        type="button"
+      >
+        {isVisible ? (
+          <EyeOff aria-hidden="true" className="h-4 w-4" />
+        ) : (
+          <Eye aria-hidden="true" className="h-4 w-4" />
+        )}
+      </button>
+    </span>
+  );
+});
+
+PasswordInput.displayName = 'PasswordInput';
 
 interface ToggleProps {
   /** Accessible name when there is no visible `label`. */

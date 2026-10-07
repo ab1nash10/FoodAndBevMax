@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { LocationPickerDialog } from '@/components/access/location-picker-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel, Select } from '@/components/ui';
+import { PasswordInput } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -285,7 +286,7 @@ export function UserDialog({
                 silently replace that user's password. They skip read-only fields, so the field
                 opens read-only and unlocks on focus.
               */}
-              <Input
+              <PasswordInput
                 autoComplete="new-password"
                 id="password"
                 onChange={(event) => update('password', event.target.value)}
@@ -294,7 +295,6 @@ export function UserDialog({
                 }}
                 placeholder="Min 8 chars, 1 letter and 1 number"
                 readOnly
-                type="password"
                 value={values.password}
               />
             </Field>

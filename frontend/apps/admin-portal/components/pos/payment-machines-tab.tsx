@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { PaymentMachine, PaymentMachineInput, PrimaryUpiProvider } from '@aahar/api-client';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Modal, Toggle } from '@/components/ui-controls';
+import { Modal, PasswordInput, Toggle } from '@/components/ui-controls';
 import { Field, Input, Panel, Select } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
@@ -322,10 +322,9 @@ function PaymentMachineForm({
           label="Pinelab Security Token"
           name="payment-token"
         >
-          <Input
+          <PasswordInput
             id="payment-token"
             placeholder={editingMachine ? 'Leave blank to keep existing token' : 'Optional'}
-            type="password"
             {...form.register('pinelabSecurityToken')}
           />
         </Field>
