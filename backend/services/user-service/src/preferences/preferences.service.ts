@@ -86,9 +86,12 @@ export class PreferencesService {
     // Hashed before the transaction, so the connection is not held through the scrypt work.
     const passwordHash = await hashPassword(dto.newPassword);
 
+    // A new password ends every session the user has open, this one included, as it does when
+    // an administrator sets it: their tokens carry the old session version, which the auth layer
+    // then refuses, so each device signs in again with the new password.
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
-        data: { passwordHash, updatedBy: actor.id },
+        data: { passwordHash, sessionVersion: { increment: 1 }, updatedBy: actor.id },
         where: { id: actor.id },
       });
       await this.auditLog.record(

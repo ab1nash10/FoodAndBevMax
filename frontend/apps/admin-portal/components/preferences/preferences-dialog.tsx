@@ -4,6 +4,7 @@ import type { ThemePreference, UserPreferences, UserPreferencesInput } from '@aa
 import { Button } from '@aahar/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Monitor, Moon, Sun } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { getStartPageOptions } from '@/lib/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -237,6 +238,8 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
 }
 
 function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
+  const { logout } = useAuth();
+  const router = useRouter();
   const { showToast } = useToast();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -248,12 +251,15 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
     onError(mutationError) {
       setError(getApiErrorMessage(mutationError));
     },
+    // The server has ended every session of this user, so sign out here too, as the profile
+    // menu's sign-out does, and let them sign in again with the new password.
     onSuccess() {
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setError(null);
-      showToast({ title: 'Password changed', variant: 'success' });
+      showToast({
+        description: 'Sign in again with your new password.',
+        title: 'Password changed',
+        variant: 'success',
+      });
+      void logout().then(() => router.replace('/auth/login'));
     },
   });
 
