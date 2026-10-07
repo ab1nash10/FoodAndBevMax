@@ -302,6 +302,11 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
     const allowedHrefs = new Set([...available.create, ...available.goTo].map((item) => item.href));
 
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      // Browser autofill (saved passwords, addresses) fires a plain keydown Event with no key.
+      if (!(event instanceof globalThis.KeyboardEvent)) {
+        return;
+      }
+
       const key = event.key.toLowerCase();
 
       if ((event.ctrlKey || event.metaKey) && key === 'k') {
