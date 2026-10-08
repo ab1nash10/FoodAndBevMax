@@ -41,6 +41,7 @@ function toRoleResponse(role: RoleWithPermissions) {
     deletedAt: role.deletedAt,
     description: role.description,
     id: role.id,
+    locationScope: role.locationScope,
     name: role.name,
     permissions: role.permissions.map((rolePermission) => ({
       action: rolePermission.permission.action,
