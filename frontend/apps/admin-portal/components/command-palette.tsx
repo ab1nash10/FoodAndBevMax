@@ -309,6 +309,14 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
 
       const key = event.key.toLowerCase();
 
+      // Listened for here, not on the search box, so Esc still closes after focus leaves it.
+      if (isOpen && key === 'escape') {
+        event.preventDefault();
+        close();
+
+        return;
+      }
+
       if ((event.ctrlKey || event.metaKey) && key === 'k') {
         event.preventDefault();
 
@@ -417,11 +425,8 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
       if (activeItem) {
         run(activeItem);
       }
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
     } else if (event.key === 'Tab') {
-      // The search box is the only stop in the dialog; keep focus inside it.
+      // Keep focus in the search box; the Close button is for the mouse, Esc does the same.
       event.preventDefault();
     }
   }
@@ -444,27 +449,38 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
         className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-2xl"
         role="dialog"
       >
-        <label className="flex h-14 shrink-0 items-center gap-3 border-b border-ds-border px-4 text-ds-muted">
-          <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
-          <input
-            aria-activedescendant={activeItem ? optionId(flatItems.indexOf(activeItem)) : undefined}
-            aria-autocomplete="list"
-            aria-controls={listId}
-            aria-expanded="true"
-            aria-label="Search or type a command"
-            autoComplete="off"
-            autoFocus
-            className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-ds-text outline-hidden placeholder:text-ds-muted focus-visible:outline-hidden"
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={onInputKeyDown}
-            placeholder="Search transfers, GRNs, items, or type a command…"
-            role="combobox"
-            spellCheck={false}
-            type="text"
-            value={query}
-          />
-          <KeyboardHint keys={['Esc']} />
-        </label>
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-ds-border px-4 text-ds-muted">
+          <label className="flex min-w-0 flex-1 items-center gap-3 self-stretch">
+            <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
+            <input
+              aria-activedescendant={
+                activeItem ? optionId(flatItems.indexOf(activeItem)) : undefined
+              }
+              aria-autocomplete="list"
+              aria-controls={listId}
+              aria-expanded="true"
+              aria-label="Search or type a command"
+              autoComplete="off"
+              autoFocus
+              className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-ds-text outline-hidden placeholder:text-ds-muted focus-visible:outline-hidden"
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={onInputKeyDown}
+              placeholder="Search transfers, GRNs, items, or type a command…"
+              role="combobox"
+              spellCheck={false}
+              type="text"
+              value={query}
+            />
+          </label>
+          <button
+            aria-label="Close"
+            className="rounded-md focus-visible:outline-2 focus-visible:outline-ds-primary"
+            onClick={close}
+            type="button"
+          >
+            <KeyboardHint keys={['Esc']} />
+          </button>
+        </div>
 
         <div
           aria-label="Results"

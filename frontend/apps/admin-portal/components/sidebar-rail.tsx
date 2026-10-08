@@ -285,7 +285,11 @@ export function SidebarRail({
                   className={tile}
                   onClick={() => show(group.label)}
                   onFocus={() => {
-                    if (!skipFocusOpen.current) show(group.label);
+                    // Nor may focus handed back by a closing dialog (the command palette): it is
+                    // still on screen as it returns focus, wherever focus was inside it.
+                    const fromDialog = document.querySelector('[aria-modal="true"]') !== null;
+
+                    if (!skipFocusOpen.current && !fromDialog) show(group.label);
                   }}
                   onKeyDown={(event) => onButtonKeyDown(event, group.label)}
                   onMouseEnter={() => show(group.label)}
