@@ -15,6 +15,8 @@ export const Input = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<'inpu
         className,
       )}
       ref={ref}
+      // Autofill/temp-mail extensions inject attributes before hydration.
+      suppressHydrationWarning
       type={type}
       {...props}
     />
