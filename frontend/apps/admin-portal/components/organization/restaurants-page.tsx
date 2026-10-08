@@ -14,7 +14,6 @@ import {
   useUrlParam,
   useUrlSearchParam,
 } from '@/lib/use-url-state';
-import { cn } from '@/lib/utils';
 import type { Restaurant, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -65,38 +64,6 @@ function RestaurantThumbnail({ restaurant }: Readonly<{ restaurant: Restaurant }
     <span className="grid h-14 w-14 shrink-0 place-items-center rounded-tile bg-ds-tile-locations-bg text-ds-tile-locations-fg">
       <Utensils className="h-6 w-6" />
     </span>
-  );
-}
-
-function RestaurantOnlineSwitch({
-  disabled,
-  isOnline,
-  onToggle,
-}: Readonly<{
-  disabled: boolean;
-  isOnline: boolean;
-  onToggle: () => void;
-}>) {
-  return (
-    <button
-      aria-checked={isOnline}
-      aria-label={isOnline ? 'Set restaurant offline' : 'Set restaurant online'}
-      className={cn(
-        'inline-flex h-7 w-12 items-center rounded-full border p-1 transition focus:outline-hidden focus:ring-2 focus:ring-ds-primary/20 disabled:cursor-not-allowed disabled:opacity-60',
-        isOnline ? 'border-ds-primary bg-ds-primary' : 'border-ds-input bg-ds-input',
-      )}
-      disabled={disabled}
-      onClick={onToggle}
-      role="switch"
-      type="button"
-    >
-      <span
-        className={cn(
-          'h-5 w-5 rounded-full bg-white shadow-xs transition',
-          isOnline ? 'translate-x-5' : 'translate-x-0',
-        )}
-      />
-    </button>
   );
 }
 
@@ -285,10 +252,10 @@ export function RestaurantsPageClient() {
           <table className="w-full min-w-[980px] border-separate border-spacing-y-3 text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[36%] px-4 py-2">Restaurant</th>
-                <th className="w-[14%] px-4 py-2">Online</th>
-                <th className="w-[30%] px-4 py-2">Status / Options</th>
-                <th className="w-[20%] px-4 py-2 text-right">Actions</th>
+                <th className="w-[33%] px-4 py-2">Restaurant</th>
+                <th className="w-[12%] px-4 py-2">Online</th>
+                <th className="w-[29%] px-4 py-2">Status / Options</th>
+                <th className="w-[26%] px-4 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -318,10 +285,11 @@ export function RestaurantsPageClient() {
                       </td>
                       <td className="border-y border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
                         <div className="flex flex-col gap-2">
-                          <RestaurantOnlineSwitch
+                          <Toggle
+                            ariaLabel={`${restaurant.restaurantName} online`}
+                            checked={isOnline}
                             disabled={isOnlineUpdating}
-                            isOnline={isOnline}
-                            onToggle={() => handleOnlineToggle(restaurant)}
+                            onChange={() => handleOnlineToggle(restaurant)}
                           />
                           <span className="text-xs font-medium text-ds-muted">
                             {isOnline ? 'Online' : 'Offline'}
@@ -347,7 +315,7 @@ export function RestaurantsPageClient() {
                         </p>
                       </td>
                       <td className="rounded-r-xl border-y border-r border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
-                        <div className="flex flex-wrap justify-end gap-2">
+                        <div className="grid grid-cols-2 gap-2 *:w-full">
                           <IfCanOpen href={`/masters/restaurants/${restaurant.id}/edit`}>
                             <Button asChild size="sm" variant="outline">
                               <Link
