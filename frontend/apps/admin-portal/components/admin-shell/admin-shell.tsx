@@ -52,7 +52,9 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     [hasPermission, navCounts],
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // null until the saved choice is read back, so the first render's default never overwrites it
+  // (React runs mount effects twice in development).
+  const [isCollapsed, setIsCollapsed] = useState<boolean | null>(null);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDetailsElement>(null);
 
@@ -79,7 +81,9 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem('aahar-sidebar-collapsed', String(isCollapsed));
+    if (isCollapsed !== null) {
+      window.localStorage.setItem('aahar-sidebar-collapsed', String(isCollapsed));
+    }
   }, [isCollapsed]);
 
   useEffect(() => {
@@ -91,9 +95,9 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
 
       if (
         event.key !== '[' ||
-        event.ctrlKey ||
+        // Keyboards that type "[" with AltGr report it as Ctrl+Alt.
+        ((event.ctrlKey || event.altKey) && !event.getModifierState('AltGraph')) ||
         event.metaKey ||
-        event.altKey ||
         event.defaultPrevented ||
         typing ||
         document.querySelector('[aria-modal="true"]')

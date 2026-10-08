@@ -385,10 +385,18 @@ export function SidebarRail({
               </Link>
             );
           })}
-          <p className="mt-1 border-t border-ds-divider px-2.5 pb-1 pt-2 text-[11.5px] text-ds-muted">
-            Press <kbd className="font-sans font-extrabold text-ds-text-3">[</kbd> to expand the
-            sidebar
-          </p>
+          <div className="mt-1 border-t border-ds-divider pt-1" role="none">
+            <button
+              className="flex min-h-8 w-full items-center justify-between gap-2 rounded-control px-2.5 text-[11.5px] font-medium text-ds-muted transition hover:bg-ds-subtle hover:text-ds-text focus-visible:bg-ds-subtle focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary"
+              onClick={onExpand}
+              role="menuitem"
+              tabIndex={-1}
+              type="button"
+            >
+              Expand sidebar
+              <kbd className="font-sans font-extrabold text-ds-text-3">[</kbd>
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
