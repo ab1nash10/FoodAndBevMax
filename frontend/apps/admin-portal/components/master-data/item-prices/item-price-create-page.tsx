@@ -29,7 +29,7 @@ import { FormShell, SubmitButton } from '@/components/master-data/shared/compone
 import { applyValidationErrors } from '@/components/master-data/shared/utils';
 
 export function ItemPriceCreatePageClient() {
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const form = useForm<ItemPriceFormValues>({
     defaultValues: emptyItemPriceFormValues(),
   });
@@ -112,7 +112,7 @@ export function ItemPriceCreatePageClient() {
         <ItemPriceFormFields
           form={form}
           hospitals={hospitalsQuery.data}
-          isLocationLocked={isLocationSelectorLocked}
+          isLocationLocked={!isAllLocations}
           isItemsLoading={itemOptionsQuery.isLoading}
           itemSearch={itemSearch}
           items={getItemPriceItemOptions(itemOptionsQuery.data)}

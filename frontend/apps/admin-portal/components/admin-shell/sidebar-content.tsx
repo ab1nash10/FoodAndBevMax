@@ -20,12 +20,13 @@ type NavCounts = Partial<Record<NavBadge, number>>;
  * query invalidation refreshes them after every GRN, transfer or production change.
  */
 export function useNavCounts(hasPermission: (permission: string | string[]) => boolean): NavCounts {
-  const { scopedHospitalId } = useLocationContext();
+  // Called by the shell before it waits for the location, so the counts wait for it here.
+  const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const scope = scopedHospitalId ?? 'all';
   const refresh = { refetchInterval: 60_000, staleTime: 30_000 };
   const transfers = useQuery({
     ...refresh,
-    enabled: hasPermission(['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW']),
+    enabled: !isLoadingLocations && hasPermission(['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW']),
     queryFn: async () =>
       (
         await organizationApi.listTransfers({
@@ -38,7 +39,7 @@ export function useNavCounts(hasPermission: (permission: string | string[]) => b
   });
   const grns = useQuery({
     ...refresh,
-    enabled: hasPermission('GRN_VIEW'),
+    enabled: !isLoadingLocations && hasPermission('GRN_VIEW'),
     queryFn: async () =>
       (
         await organizationApi.listGrns({
@@ -52,7 +53,7 @@ export function useNavCounts(hasPermission: (permission: string | string[]) => b
   });
   const productions = useQuery({
     ...refresh,
-    enabled: hasPermission('KITCHEN_PRODUCTION_VIEW'),
+    enabled: !isLoadingLocations && hasPermission('KITCHEN_PRODUCTION_VIEW'),
     queryFn: async () =>
       (
         await organizationApi.listKitchenProductions({

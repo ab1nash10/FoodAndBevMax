@@ -191,7 +191,7 @@ export function RestaurantMenusPageClient() {
   ]);
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('');
   const [dayFilter, setDayFilter] = useState<DayFilter>('');
-  const [hospitalFilter, setHospitalFilter] = useState('');
+  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('');
   const [restaurantFilter, setRestaurantFilter] = useState('');
   const [itemFilter, setItemFilter] = useState('');

@@ -179,7 +179,7 @@ const timeOnlyFormatter = new Intl.DateTimeFormat('en-IN', {
  * stock. Without an id it creates a production; with one it opens it (drafts stay editable).
  */
 export function ProductionEntryPageClient({ productionId }: Readonly<{ productionId?: string }>) {
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const { hasPermission } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -602,7 +602,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
             className="grid gap-3 px-[18px] py-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]"
             role="region"
           >
-            {!isLocationSelectorLocked && !isExisting ? (
+            {isAllLocations && !isExisting ? (
               <label className={fieldLabel}>
                 Location
                 <select

@@ -41,20 +41,21 @@ export function hospitalIdsOf(user: UserHospitals): string[] {
   return [...ids];
 }
 
+/** Users working at one of these hospitals: as their default location or an assigned one. */
+export function usersWorkingAt(hospitalIds: string[]): Prisma.UserWhereInput {
+  return {
+    OR: [
+      { hospitalId: { in: hospitalIds } },
+      { assignedHospitals: { some: { deletedAt: null, hospitalId: { in: hospitalIds } } } },
+    ],
+  };
+}
+
 /** Users the actor may see: anyone working at one of the actor's hospitals. */
 export function userReachWhere(actor: JwtRequestUser | undefined): Prisma.UserWhereInput {
   const allowed = requireActor(actor).allowedHospitalIds;
 
-  if (allowed === null) {
-    return {};
-  }
-
-  return {
-    OR: [
-      { hospitalId: { in: allowed } },
-      { assignedHospitals: { some: { deletedAt: null, hospitalId: { in: allowed } } } },
-    ],
-  };
+  return allowed === null ? {} : usersWorkingAt(allowed);
 }
 
 /**

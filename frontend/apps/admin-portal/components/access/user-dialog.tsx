@@ -67,7 +67,10 @@ export function UserDialog({
   user,
 }: Readonly<{ onClose: () => void; roles: AccessRole[]; user: AccessUser | null }>) {
   const [values, setValues] = useState<FormValues>(() => toFormValues(user));
-  const [homeId, setHomeId] = useState(() => user?.hospitals[0]?.id ?? '');
+  // The user's default location: where they start after sign-in (users.hospital_id).
+  const [homeId, setHomeId] = useState(
+    () => user?.defaultLocationId ?? user?.hospitals[0]?.id ?? '',
+  );
   const [accessIds, setAccessIds] = useState<string[]>(
     () => user?.hospitals.map((hospital) => hospital.id) ?? [],
   );
@@ -137,10 +140,20 @@ export function UserDialog({
       return;
     }
 
-    // Home first: the API treats the first location as the user's home posting.
+    // Default first: the API keeps the first location as the user's default location, so with
+    // none chosen the first added location becomes the default.
     const hospitalIds = homeId
       ? [homeId, ...accessIds.filter((id) => id !== homeId)]
       : [...accessIds];
+
+    if (scope === 'ALL' && !homeId) {
+      showToast({
+        description: `Choose where ${values.name.trim() || 'this user'} starts after signing in.`,
+        title: 'Select a default location',
+        variant: 'error',
+      });
+      return;
+    }
 
     if (isSingle && hospitalIds.length !== 1) {
       showToast({
@@ -299,16 +312,13 @@ export function UserDialog({
               />
             </Field>
 
-            <Field label="Location" name="location">
+            <Field label="Default location" name="location">
               <Select
-                disabled={!canPickLocations}
                 id="location"
                 onChange={(event) => chooseHome(event.target.value)}
                 value={homeId}
               >
-                <option value="">
-                  {canPickLocations ? 'No Location Selected' : 'All locations (by role)'}
-                </option>
+                <option value="">Select default location</option>
                 {hospitals.map((hospital) => (
                   <option key={hospital.id} value={hospital.id}>
                     {hospital.hospitalCode} - {hospital.hospitalName}
@@ -352,7 +362,8 @@ export function UserDialog({
 
               {scope === 'ALL' ? (
                 <p className="mt-2 text-xs text-ds-muted">
-                  {selectedRole?.name} reaches every location, so no assignment is needed.
+                  {selectedRole?.name} reaches every location, so only the default location is
+                  needed.
                 </p>
               ) : accessIds.length === 0 ? (
                 <p className="mt-2 text-xs text-ds-muted">No locations added yet.</p>
@@ -364,7 +375,7 @@ export function UserDialog({
                       key={id}
                     >
                       {nameOf(id)}
-                      {id === homeId ? <span className="opacity-70">(home)</span> : null}
+                      {id === homeId ? <span className="opacity-70">(default)</span> : null}
                       <button
                         aria-label={`Remove ${nameOf(id)}`}
                         onClick={() => {

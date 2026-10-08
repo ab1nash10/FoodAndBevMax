@@ -14,7 +14,7 @@ export type ThemePreference = (typeof THEMES)[number];
 export const MUTABLE_NOTIFICATION_CATEGORIES = ['GRN', 'KITCHEN', 'TRANSFER'] as const;
 
 export interface UserPreferences {
-  /** "all", a hospital id, or null for the portal's usual default. */
+  /** The user's default location: their home hospital (users.hospital_id), not part of the JSON. */
   defaultLocationId: string | null;
   mutedNotificationCategories: string[];
   /** A portal path such as /inventory/grns, or null for the dashboard. */

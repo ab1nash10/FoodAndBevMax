@@ -13,4 +13,9 @@ export class ListUsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   roleId?: string;
+
+  @ApiPropertyOptional({ description: 'Only users working at this location' })
+  @IsOptional()
+  @IsUUID()
+  hospitalId?: string;
 }

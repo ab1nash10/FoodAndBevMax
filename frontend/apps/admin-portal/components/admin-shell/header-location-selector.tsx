@@ -1,17 +1,17 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import type { Hospital } from '@aahar/api-client';
+import type { HospitalSummary } from '@aahar/api-client';
 import { Check, ChevronDown, MapPin } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { formatGlobalLocationLabel, useLocationContext } from '@/components/location-context';
 import { cn } from '@/lib/utils';
 
-function getLocationName(location: Hospital): string {
+function getLocationName(location: HospitalSummary): string {
   return location.displayName || location.title || location.hospitalName || 'Location';
 }
 
-function getLocationMeta(location: Hospital): string {
+function getLocationMeta(location: HospitalSummary): string {
   return [location.city, location.state].filter(Boolean).join(', ') || 'Location';
 }
 
@@ -20,6 +20,7 @@ export function HeaderLocationSelector() {
     availableLocations,
     canSelectAllLocations,
     isLoadingLocations,
+    isLocationSelectorLocked,
     locationLabel,
     selectedLocationValue,
     setSelectedLocation,
@@ -62,25 +63,35 @@ export function HeaderLocationSelector() {
 
   return (
     <div className="relative" ref={containerRef}>
+      {/* A user who works at one location stays there: it shows, with nothing to pick. */}
       <Button
-        aria-expanded={isOpen}
-        aria-label={`Select Location. Current selection: ${locationLabel}`}
+        aria-expanded={isLocationSelectorLocked ? undefined : isOpen}
+        aria-label={
+          isLocationSelectorLocked
+            ? `Your location: ${locationLabel}`
+            : `Select Location. Current selection: ${locationLabel}`
+        }
         className={cn(
           'w-10 px-0 text-ds-text-2 xl:w-auto xl:px-3.5',
           !allLocationsSelected && 'border-ds-teal-border bg-ds-teal-soft',
+          isLocationSelectorLocked && 'cursor-default',
         )}
         disabled={isLoadingLocations}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => {
+          if (!isLocationSelectorLocked) setIsOpen((current) => !current);
+        }}
         title={locationLabel}
         type="button"
         variant="outline"
       >
         <MapPin className="h-[18px] w-[18px] shrink-0 text-ds-teal-text" strokeWidth={1.8} />
         <span className="hidden max-w-40 truncate xl:inline">{locationLabel}</span>
-        <ChevronDown
-          aria-hidden="true"
-          className="hidden h-4 w-4 shrink-0 text-ds-muted xl:block"
-        />
+        {isLocationSelectorLocked ? null : (
+          <ChevronDown
+            aria-hidden="true"
+            className="hidden h-4 w-4 shrink-0 text-ds-muted xl:block"
+          />
+        )}
       </Button>
 
       {isOpen ? (

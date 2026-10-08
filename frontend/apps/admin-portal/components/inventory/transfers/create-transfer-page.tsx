@@ -68,7 +68,7 @@ function StepHeading({
 }
 
 export function CreateTransferPageClient() {
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -616,7 +616,7 @@ export function CreateTransferPageClient() {
             <StepHeading id="transfer-route" number={1}>
               Route
             </StepHeading>
-            {!isLocationSelectorLocked ? (
+            {isAllLocations ? (
               <label className={fieldLabel}>
                 Location
                 <select

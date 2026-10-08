@@ -25,7 +25,7 @@ import type { KitchenFormValues } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 
 export function KitchenCreatePageClient() {
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const form = useForm<KitchenFormValues>({
     defaultValues: {
       hospitalId: scopedHospitalId ?? '',
@@ -106,7 +106,7 @@ export function KitchenCreatePageClient() {
             name="kitchen-hospital"
           >
             <Select
-              disabled={hospitalOptionsQuery.isLoading || isLocationSelectorLocked}
+              disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
               id="kitchen-hospital"
               {...form.register('hospitalId')}
             >

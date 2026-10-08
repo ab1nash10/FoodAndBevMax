@@ -40,7 +40,7 @@ const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
 /** Personal settings, opened from the profile menu. Mounted only while open, so it starts fresh. */
 export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>) {
   const { currentUser, hasPermission } = useAuth();
-  const { availableLocations, canSelectAllLocations } = useLocationContext();
+  const { availableLocations } = useLocationContext();
   const { setTheme, theme } = useTheme();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -80,13 +80,11 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
     });
   };
 
-  const locationChoices = [
-    ...(canSelectAllLocations ? [{ label: 'All Locations', value: 'all' }] : []),
-    ...availableLocations.map((location) => ({
-      label: formatGlobalLocationLabel(location),
-      value: location.id,
-    })),
-  ];
+  // Every user starts at one of their own locations; "All Locations" stays a choice in the header.
+  const locationChoices = availableLocations.map((location) => ({
+    label: formatGlobalLocationLabel(location),
+    value: location.id,
+  }));
 
   return (
     <Modal onClose={onClose} open title="Preferences">
@@ -163,10 +161,16 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
                 <Field label="Default location" name="default-location">
                   <Select
                     id="default-location"
-                    onChange={(event) => save({ defaultLocationId: event.target.value || null })}
+                    onChange={(event) => {
+                      if (event.target.value) save({ defaultLocationId: event.target.value });
+                    }}
                     value={preferences.defaultLocationId ?? ''}
                   >
-                    <option value="">Usual default</option>
+                    {preferences.defaultLocationId ? null : (
+                      <option disabled value="">
+                        Choose a location
+                      </option>
+                    )}
                     {locationChoices.map((choice) => (
                       <option key={choice.value} value={choice.value}>
                         {choice.label}

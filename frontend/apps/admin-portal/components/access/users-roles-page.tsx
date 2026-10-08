@@ -9,6 +9,7 @@ import { useAuth } from '@/components/auth-provider';
 import { AppPageHeader } from '@/components/design-system';
 import { BulkLocationBar } from '@/components/access/bulk-location-bar';
 import { UserDialog } from '@/components/access/user-dialog';
+import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Input, Panel, Skeleton } from '@/components/ui';
 import { useUrlSearchParam } from '@/lib/use-url-state';
@@ -170,9 +171,12 @@ export function UsersRolesPageClient() {
   const [permissionUser, setPermissionUser] = useState<AccessUser | null>(null);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
+  // The users working at the location chosen in the header ("All Locations": everyone reachable).
+  const { scopedHospitalId } = useLocationContext();
   const usersQuery = useQuery({
-    queryKey: queryKeys.accessUsers(search),
-    queryFn: async () => (await userApi.listUsers({ limit: 50, page: 1, search })).data,
+    queryKey: queryKeys.accessUsers(search, scopedHospitalId ?? 'all'),
+    queryFn: async () =>
+      (await userApi.listUsers({ hospitalId: scopedHospitalId, limit: 50, page: 1, search })).data,
   });
   const rolesQuery = useQuery({
     queryKey: queryKeys.accessRoles(),

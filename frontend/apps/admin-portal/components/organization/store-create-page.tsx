@@ -25,7 +25,7 @@ import type { StoreFormValues } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 
 export function StoreCreatePageClient() {
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const form = useForm<StoreFormValues>({
     defaultValues: {
       hospitalId: scopedHospitalId ?? '',
@@ -106,7 +106,7 @@ export function StoreCreatePageClient() {
             name="store-hospital"
           >
             <Select
-              disabled={hospitalOptionsQuery.isLoading || isLocationSelectorLocked}
+              disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
               id="store-hospital"
               {...form.register('hospitalId')}
             >

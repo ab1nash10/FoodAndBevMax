@@ -38,7 +38,7 @@ import {
 } from '@/components/inventory/shared/utils';
 
 export function CreateGrnPageClient() {
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const { hasPermission } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -308,7 +308,7 @@ export function CreateGrnPageClient() {
               name="hospitalId"
             >
               <HospitalSelect
-                disabled={isLocationSelectorLocked || isReadOnly}
+                disabled={!isAllLocations || isReadOnly}
                 hospitals={hospitalsQuery.data ?? []}
                 onChange={(value) => {
                   form.setValue('hospitalId', value, { shouldValidate: true });

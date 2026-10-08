@@ -132,7 +132,7 @@ function PaymentMachineForm({
   const isDefault = form.watch('isDefault');
   const hospitalsQuery = useHospitalOptions();
   const posDevicesQuery = usePosDeviceOptions(selectedHospitalId);
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -255,7 +255,7 @@ function PaymentMachineForm({
           name="payment-location"
         >
           <Select
-            disabled={hospitalsQuery.isLoading || isLocationSelectorLocked}
+            disabled={hospitalsQuery.isLoading || !isAllLocations}
             id="payment-location"
             {...form.register('hospitalId')}
           >

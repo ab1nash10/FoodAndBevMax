@@ -86,7 +86,7 @@ function PosDeviceForm({
     },
   });
   const hospitalsQuery = useHospitalOptions();
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const isActive = form.watch('isActive');
@@ -241,7 +241,7 @@ function PosDeviceForm({
           name="pos-location"
         >
           <Select
-            disabled={hospitalsQuery.isLoading || isLocationSelectorLocked}
+            disabled={hospitalsQuery.isLoading || !isAllLocations}
             id="pos-location"
             {...form.register('hospitalId', {
               // Restaurants belong to one location, and the service rejects any that are not

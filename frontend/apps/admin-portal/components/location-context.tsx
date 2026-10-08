@@ -1,6 +1,6 @@
 'use client';
 
-import type { Hospital } from '@aahar/api-client';
+import type { HospitalSummary } from '@aahar/api-client';
 import { useQuery } from '@tanstack/react-query';
 import {
   createContext,
@@ -12,24 +12,23 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { usePreferences } from '@/components/preferences/use-preferences';
-import { organizationApi } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
+import { userApi } from '@/lib/api';
 
 const LOCATION_STORAGE_KEY = 'aahar.location-context';
 const allLocationsValue = 'all';
+const myAccessQueryKey = ['my-access'] as const;
 
 type LocationSelectionValue = string;
 
 interface LocationContextValue {
-  availableLocations: Hospital[];
+  availableLocations: HospitalSummary[];
   canSelectAllLocations: boolean;
   isAllLocations: boolean;
   isLocationSelectorLocked: boolean;
   isLoadingLocations: boolean;
   locationLabel: string;
   scopedHospitalId: string | undefined;
-  selectedLocation: Hospital | null;
+  selectedLocation: HospitalSummary | null;
   selectedLocationId: string | null;
   selectedLocationValue: LocationSelectionValue;
   setSelectedLocation: (locationId: string | null) => void;
@@ -61,19 +60,15 @@ function removeStoredLocationValue(): void {
   window.localStorage.removeItem(LOCATION_STORAGE_KEY);
 }
 
-function isSuperAdminRole(roles: string[]): boolean {
-  return roles.some((role) => role.trim().toLowerCase() === 'super admin');
-}
-
-function getLocationTitle(location: Hospital): string {
+function getLocationTitle(location: HospitalSummary): string {
   return location.displayName || location.title || location.hospitalName || 'Location';
 }
 
-function getLocationCode(location: Hospital): string {
+function getLocationCode(location: HospitalSummary): string {
   return location.locationCode || location.hospitalCode || '';
 }
 
-export function formatGlobalLocationLabel(location: Hospital): string {
+export function formatGlobalLocationLabel(location: HospitalSummary): string {
   const code = getLocationCode(location);
   const cityState = [location.city, location.state].filter(Boolean).join(', ');
   const postal = location.postalCode ? `-${location.postalCode}` : '';
@@ -85,91 +80,85 @@ export function formatGlobalLocationLabel(location: Hospital): string {
 }
 
 export function LocationProvider({ children }: Readonly<{ children: ReactNode }>) {
-  const { currentUser, isAuthenticated, roles } = useAuth();
+  const { isAuthenticated, isReady } = useAuth();
   const [selectedLocationValue, setSelectedLocationValue] =
     useState<LocationSelectionValue>(allLocationsValue);
-  const assignedLocationId = currentUser?.hospitalId ?? null;
-  const canSelectAllLocations = isSuperAdminRole(roles) || !assignedLocationId;
+  // Pages wait for this before treating the location as settled, so the switch from the
+  // initial value to the user's starting location does not count as a change.
+  const [isSelectionResolved, setIsSelectionResolved] = useState(false);
 
-  const locationsQuery = useQuery({
+  // The access token carries no locations, so the reach, the default location and the locations
+  // the user may pick come from the server. Only a user who reaches every location may look at
+  // all of them together.
+  const accessQuery = useQuery({
     enabled: isAuthenticated,
-    queryFn: async () => {
-      const response = await organizationApi.listHospitals({
-        isActive: true,
-        limit: 100,
-        sortBy: 'displayName',
-        sortOrder: 'asc',
-      });
-
-      return response.data.items;
-    },
-    queryKey: queryKeys.globalLocationContextActiveLocations(),
+    queryFn: async () => (await userApi.getMyAccess()).data,
+    queryKey: myAccessQueryKey,
     staleTime: 60_000,
   });
-  const preferencesQuery = usePreferences();
-  const preferredLocationId = preferencesQuery.data?.defaultLocationId ?? null;
+  const canSelectAllLocations = accessQuery.data?.locationScope === 'ALL';
+  const defaultLocationId = accessQuery.data?.defaultLocationId ?? null;
 
-  const availableLocations = useMemo(() => {
-    const locations = locationsQuery.data ?? [];
-
-    if (canSelectAllLocations || !assignedLocationId) {
-      return locations;
-    }
-
-    return locations.filter((location) => location.id === assignedLocationId);
-  }, [assignedLocationId, canSelectAllLocations, locationsQuery.data]);
+  const availableLocations = useMemo(
+    () => accessQuery.data?.locations ?? [],
+    [accessQuery.data?.locations],
+  );
 
   useEffect(() => {
+    // Until the stored session is read back, a signed-in user still looks signed out; clearing
+    // the pick then would lose the location chosen before a page reload.
+    if (!isReady) {
+      return;
+    }
+
     if (!isAuthenticated) {
       setSelectedLocationValue(allLocationsValue);
+      setIsSelectionResolved(false);
       removeStoredLocationValue();
       return;
     }
 
-    // Wait for the saved preferences too, so the first pick after sign-in can honour them; a
-    // failed preferences request just falls through to the usual default.
-    if (locationsQuery.isLoading || locationsQuery.isError || preferencesQuery.isLoading) {
+    if (accessQuery.isLoading) {
+      return;
+    }
+
+    // Without the location list there is nothing to choose from; the server still limits every
+    // request to the user's own locations.
+    if (accessQuery.isError) {
+      setIsSelectionResolved(true);
       return;
     }
 
     const locationIds = new Set(availableLocations.map((location) => location.id));
     const storedLocationValue = readStoredLocationValue();
-    // The Preferences default applies at sign-in (the stored pick is cleared on sign-out); a
-    // location chosen in the header during the session still wins over it. A saved location
-    // the user can no longer reach is ignored.
-    const preferredLocationValue =
-      preferredLocationId === allLocationsValue
+    // A location chosen in the header during the session wins; at sign-in (the pick is cleared
+    // on sign-out) the user starts at their default location. A location the user can no longer
+    // reach is ignored, and "All" is kept only for users who reach every location.
+    const sessionLocationValue =
+      storedLocationValue === allLocationsValue
         ? canSelectAllLocations
           ? allLocationsValue
           : null
-        : preferredLocationId && locationIds.has(preferredLocationId)
-          ? preferredLocationId
-          : null;
-    const defaultLocationValue =
-      preferredLocationValue ??
-      (canSelectAllLocations
-        ? allLocationsValue
-        : assignedLocationId && locationIds.has(assignedLocationId)
-          ? assignedLocationId
-          : (availableLocations[0]?.id ?? allLocationsValue));
-    const nextLocationValue =
-      storedLocationValue === allLocationsValue && canSelectAllLocations
-        ? allLocationsValue
         : storedLocationValue && locationIds.has(storedLocationValue)
           ? storedLocationValue
-          : defaultLocationValue;
+          : null;
+    const nextLocationValue =
+      sessionLocationValue ??
+      (defaultLocationId && locationIds.has(defaultLocationId)
+        ? defaultLocationId
+        : (availableLocations[0]?.id ?? allLocationsValue));
 
     setSelectedLocationValue(nextLocationValue);
     saveStoredLocationValue(nextLocationValue);
+    setIsSelectionResolved(true);
   }, [
-    assignedLocationId,
+    accessQuery.isError,
+    accessQuery.isLoading,
     availableLocations,
     canSelectAllLocations,
+    defaultLocationId,
     isAuthenticated,
-    locationsQuery.isError,
-    locationsQuery.isLoading,
-    preferencesQuery.isLoading,
-    preferredLocationId,
+    isReady,
   ]);
 
   const selectedLocation = useMemo(
@@ -210,10 +199,12 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
       canSelectAllLocations,
       isAllLocations,
       isLocationSelectorLocked,
-      isLoadingLocations: locationsQuery.isLoading,
+      isLoadingLocations: !isSelectionResolved,
       locationLabel: selectedLocation
         ? formatGlobalLocationLabel(selectedLocation)
-        : 'All Locations',
+        : !isSelectionResolved || canSelectAllLocations
+          ? 'All Locations'
+          : 'No location assigned',
       scopedHospitalId: selectedLocation?.id,
       selectedLocation,
       selectedLocationId: selectedLocation?.id ?? null,
@@ -225,7 +216,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
       canSelectAllLocations,
       isAllLocations,
       isLocationSelectorLocked,
-      locationsQuery.isLoading,
+      isSelectionResolved,
       selectedLocation,
       selectedLocationValue,
       setSelectedLocation,

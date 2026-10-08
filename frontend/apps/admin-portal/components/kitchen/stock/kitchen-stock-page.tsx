@@ -122,7 +122,7 @@ export function KitchenStockPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
-  const [hospitalFilter, setHospitalFilter] = useState('');
+  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [kitchenFilter, setKitchenFilter] = useState('');
   const [itemFilter, setItemFilter] = useState('');
   const [businessDateFilter, setBusinessDateFilter] = useState('');

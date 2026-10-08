@@ -38,7 +38,7 @@ import { restaurantDetailQuery } from '@/lib/detail-queries';
 
 function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: string }>) {
   const isEditMode = Boolean(restaurantId);
-  const { isLocationSelectorLocked, scopedHospitalId } = useLocationContext();
+  const { isAllLocations, scopedHospitalId } = useLocationContext();
   const form = useForm<RestaurantFormValues>({
     defaultValues: {
       ...restaurantFormDefaultValues,
@@ -258,7 +258,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               name="restaurant-location"
             >
               <Select
-                disabled={hospitalOptionsQuery.isLoading || isLocationSelectorLocked}
+                disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
                 id="restaurant-location"
                 {...form.register('hospitalId')}
               >

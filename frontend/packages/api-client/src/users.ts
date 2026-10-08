@@ -5,6 +5,7 @@ import {
   type ApiResponse,
   type ListQuery,
 } from './http';
+import type { HospitalSummary } from './organization';
 
 export type UserStatus = 'ACTIVE' | 'DISABLED';
 
@@ -22,6 +23,8 @@ export interface AccessRole {
 export interface AccessUser {
   avatarUrl: string | null;
   createdAt: string;
+  /** Where the user starts after sign-in: one of their locations (any location for ALL scope). */
+  defaultLocationId: string | null;
   designation: string | null;
   email: string | null;
   employeeCode: string;
@@ -84,7 +87,7 @@ export type ThemePreference = 'dark' | 'light' | 'system';
 
 /** Unset fields are null: the portal then keeps its usual behaviour. */
 export interface UserPreferences {
-  /** "all", a location id, or null. */
+  /** The user's default location (their home location); null only if none is set yet. */
   defaultLocationId: string | null;
   /** Categories hidden from the bell; ACCESS can never be muted. */
   mutedNotificationCategories: string[];
@@ -93,8 +96,20 @@ export interface UserPreferences {
   theme: ThemePreference | null;
 }
 
-/** Partial update: omitted fields are kept, null resets a field to its default. */
-export type UserPreferencesInput = Partial<UserPreferences>;
+/**
+ * Partial update: omitted fields are kept, null resets a field to its default. The default
+ * location can be changed to another of the user's locations but never cleared.
+ */
+export type UserPreferencesInput = Partial<Omit<UserPreferences, 'defaultLocationId'>> & {
+  defaultLocationId?: string;
+};
+
+/** The signed-in user's location reach, default location and the active locations they may pick. */
+export interface MyAccess {
+  defaultLocationId: string | null;
+  locationScope: LocationScope;
+  locations: HospitalSummary[];
+}
 
 export interface ChangePasswordInput {
   currentPassword: string;
@@ -106,6 +121,8 @@ export interface UnreadCount {
 }
 
 export interface AccessUserListQuery extends ListQuery {
+  /** Only users working at this location (default or assigned). */
+  hospitalId?: string;
   roleId?: string;
   status?: UserStatus;
 }
@@ -152,6 +169,9 @@ export function createUserApi(options: ApiClientOptions) {
       return client.request<ApiResponse<UnreadCount>>('/notifications/read-all', {
         method: 'POST',
       });
+    },
+    getMyAccess() {
+      return client.request<ApiResponse<MyAccess>>('/users/me/access');
     },
     getMyPreferences() {
       return client.request<ApiResponse<UserPreferences>>('/users/me/preferences');

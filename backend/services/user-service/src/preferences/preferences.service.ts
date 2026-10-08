@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { hashPassword, verifyPassword, type JwtRequestUser } from '@aahar/auth';
-import { Prisma, UserStatus } from '@prisma/client';
+import { UserStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { parsePreferences, type UserPreferences } from '../common/preferences';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -15,9 +15,11 @@ export class PreferencesService {
     private readonly prisma: PrismaService,
   ) {}
 
+  // The default location is the user's home location (users.hospital_id), the one place every
+  // user's starting location is kept; the rest of the preferences live in the JSON column.
   async get(userId: string): Promise<UserPreferences> {
     const user = await this.prisma.user.findFirst({
-      select: { preferences: true },
+      select: { hospitalId: true, preferences: true },
       where: { deletedAt: null, id: userId },
     });
 
@@ -25,19 +27,60 @@ export class PreferencesService {
       throw new NotFoundException('User not found');
     }
 
-    return parsePreferences(user.preferences);
+    return { ...parsePreferences(user.preferences), defaultLocationId: user.hospitalId };
+  }
+
+  /**
+   * What the portal needs to place the user: their reach, their default location and the active
+   * locations they may pick. Served here, not by GET /hospitals, so it needs no permission:
+   * operational roles without HOSPITAL_VIEW still see where they work.
+   */
+  async access(actor: JwtRequestUser) {
+    const [{ defaultLocationId }, locations] = await Promise.all([
+      this.get(actor.id),
+      this.prisma.hospital.findMany({
+        orderBy: [{ displayName: 'asc' }, { hospitalName: 'asc' }],
+        select: {
+          city: true,
+          displayName: true,
+          hospitalCode: true,
+          hospitalName: true,
+          id: true,
+          isActive: true,
+          postalCode: true,
+          state: true,
+        },
+        where: {
+          deletedAt: null,
+          isActive: true,
+          ...(actor.allowedHospitalIds === null ? {} : { id: { in: actor.allowedHospitalIds } }),
+        },
+      }),
+    ]);
+
+    return {
+      defaultLocationId,
+      locationScope: actor.locationScope,
+      locations: locations.map((location) => ({
+        ...location,
+        displayName: location.displayName ?? location.hospitalName,
+      })),
+    };
   }
 
   async update(actor: JwtRequestUser, dto: UpdatePreferencesDto): Promise<UserPreferences> {
     const current = await this.get(actor.id);
 
-    if (dto.defaultLocationId) {
+    if (dto.defaultLocationId !== undefined) {
+      if (!dto.defaultLocationId) {
+        throw new BadRequestException('Choose a location as your default');
+      }
+
       await this.assertLocationAllowed(dto.defaultLocationId, actor);
     }
 
     const next: UserPreferences = {
-      defaultLocationId:
-        dto.defaultLocationId === undefined ? current.defaultLocationId : dto.defaultLocationId,
+      defaultLocationId: dto.defaultLocationId ?? current.defaultLocationId,
       mutedNotificationCategories:
         dto.mutedNotificationCategories === undefined
           ? current.mutedNotificationCategories
@@ -45,9 +88,14 @@ export class PreferencesService {
       startPage: dto.startPage === undefined ? current.startPage : dto.startPage,
       theme: dto.theme === undefined ? current.theme : dto.theme,
     };
+    const { defaultLocationId, ...stored } = next;
 
     await this.prisma.user.update({
-      data: { preferences: next as unknown as Prisma.InputJsonValue, updatedBy: actor.id },
+      data: {
+        ...(dto.defaultLocationId ? { hospitalId: defaultLocationId } : {}),
+        preferences: stored,
+        updatedBy: actor.id,
+      },
       where: { id: actor.id },
     });
 
@@ -111,14 +159,6 @@ export class PreferencesService {
 
   /** The same reach as the header's location selector: only locations the user can work in. */
   private async assertLocationAllowed(locationId: string, actor: JwtRequestUser): Promise<void> {
-    if (locationId === 'all') {
-      if (actor.allowedHospitalIds !== null) {
-        throw new BadRequestException('Only users with access to every location can choose All');
-      }
-
-      return;
-    }
-
     if (actor.allowedHospitalIds !== null && !actor.allowedHospitalIds.includes(locationId)) {
       throw new BadRequestException('That location is outside your assigned access');
     }

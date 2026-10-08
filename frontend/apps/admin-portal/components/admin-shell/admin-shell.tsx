@@ -11,6 +11,7 @@ import { BrandMark, KeyboardHint } from '@/components/design-system';
 import { NotificationBell } from '@/components/notification-bell';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useAuth } from '@/components/auth-provider';
+import { useLocationContext } from '@/components/location-context';
 import { PreferencesDialog } from '@/components/preferences/preferences-dialog';
 import { SidebarRail } from '@/components/sidebar-rail';
 import { useApplyThemePreference } from '@/components/preferences/use-preferences';
@@ -35,6 +36,7 @@ function LoadingShell() {
 
 export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const { currentUser, hasPermission, isAuthenticated, isReady, logout, roles } = useAuth();
+  const { isLoadingLocations } = useLocationContext();
   useApplyThemePreference();
   const pathname = usePathname();
   const router = useRouter();
@@ -144,7 +146,9 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     return () => document.removeEventListener('keydown', closeOnEscape);
   }, [isMobileMenuOpen]);
 
-  if (!isReady || !isAuthenticated || !isPermitted) {
+  // Pages mount once the user's location has settled, so their first requests already ask
+  // for it rather than for every location.
+  if (!isReady || !isAuthenticated || !isPermitted || isLoadingLocations) {
     return <LoadingShell />;
   }
 

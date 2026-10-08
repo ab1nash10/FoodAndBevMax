@@ -29,6 +29,7 @@ import {
   hospitalIdsOf,
   sameIds,
   userReachWhere,
+  usersWorkingAt,
 } from '../common/actor-scope';
 import { diffPermissionOverrides } from '../common/permission-overrides';
 import { AssignRoleDto } from './dto/assign-role.dto';
@@ -70,6 +71,7 @@ function toUserResponse(user: UserWithRoles) {
   return {
     avatarUrl: user.avatarUrl,
     createdAt: user.createdAt,
+    defaultLocationId: user.hospitalId,
     deletedAt: user.deletedAt,
     designation: user.designation,
     email: user.email,
@@ -147,7 +149,10 @@ export class UsersService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where: Prisma.UserWhereInput = {
-      AND: [userReachWhere(context.actor)],
+      AND: [
+        userReachWhere(context.actor),
+        ...(query.hospitalId ? [usersWorkingAt([query.hospitalId])] : []),
+      ],
       deletedAt: null,
       ...(query.roleId
         ? {
@@ -872,6 +877,19 @@ export class UsersService {
       throw new BadRequestException(
         `The ${role.name} role requires at least one assigned location`,
       );
+    }
+
+    // Every user starts in a default location, so even a role that reaches every location keeps
+    // one: given here, or the one the user already has.
+    if (role.locationScope === LocationScope.ALL && requested.length === 0) {
+      const user = await tx.user.findUnique({
+        select: { hospitalId: true },
+        where: { id: userId },
+      });
+
+      if (!user?.hospitalId) {
+        throw new BadRequestException(`Choose a default location for the ${role.name} role`);
+      }
     }
 
     if (requested.length) {

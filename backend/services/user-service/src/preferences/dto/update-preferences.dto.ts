@@ -21,12 +21,13 @@ export class UpdatePreferencesDto {
   @IsIn([...THEMES])
   theme?: ThemePreference | null;
 
-  @ApiPropertyOptional({ description: '"all" or a location id', nullable: true })
+  // Saved as the user's home location; every user keeps one, so it can be changed but not cleared.
+  @ApiPropertyOptional({ description: 'A location id' })
   @IsOptional()
-  @Matches(/^(all|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, {
-    message: 'defaultLocationId must be "all" or a location id',
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
+    message: 'defaultLocationId must be a location id',
   })
-  defaultLocationId?: string | null;
+  defaultLocationId?: string;
 
   // A path inside the portal only: one leading slash, never "//", so it cannot redirect away.
   @ApiPropertyOptional({ example: '/inventory/grns', nullable: true })

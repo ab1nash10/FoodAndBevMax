@@ -73,7 +73,7 @@ export function StoreItemsPageClient() {
     'active',
     'inactive',
   ]);
-  const [hospitalFilter, setHospitalFilter] = useState('');
+  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [storeFilter, setStoreFilter] = useState('');
   const [itemFilter, setItemFilter] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');

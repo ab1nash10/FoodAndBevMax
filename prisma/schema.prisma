@@ -121,8 +121,8 @@ model User {
   passwordHash   String?    @map("password_hash")
   designation    String?
   avatarUrl      String?    @map("avatar_url")
-  /// Per-user portal preferences (theme, default location, start page, muted notification
-  /// categories). Null means every default; see user-service src/preferences.
+  /// Per-user portal preferences (theme, start page, muted notification categories). Null means
+  /// every default; see user-service src/preferences. The default location is hospitalId.
   preferences    Json?
   /// Bumped whenever an admin changes the user. Tokens carry the version they were issued at,
   /// so a bump ends every session the user has open and they must sign in again.

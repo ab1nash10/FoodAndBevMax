@@ -63,7 +63,7 @@ export function GrnsPageClient() {
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const hrefWith = useHrefWith();
-  const [hospitalFilter, setHospitalFilter] = useState('');
+  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [storeFilter, setStoreFilter] = useUrlParam('store');
   const [statusFilter, setStatusFilter] = useUrlParam<'' | GrnStatus>('view', '', grnStatuses);
   const [sortOrder, setSortOrder] = useUrlParam<SortOrder>('sort', 'desc', ['asc', 'desc']);

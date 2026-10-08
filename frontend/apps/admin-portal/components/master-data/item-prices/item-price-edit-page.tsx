@@ -48,7 +48,7 @@ function itemPriceToFormValues(itemPrice: ItemPrice): ItemPriceFormValues {
 }
 
 export function ItemPriceEditPageClient({ itemPriceId }: Readonly<{ itemPriceId: string }>) {
-  const { isLocationSelectorLocked } = useLocationContext();
+  const { isAllLocations } = useLocationContext();
   const form = useForm<ItemPriceFormValues>({
     defaultValues: emptyItemPriceFormValues(),
   });
@@ -160,7 +160,7 @@ export function ItemPriceEditPageClient({ itemPriceId }: Readonly<{ itemPriceId:
         <ItemPriceFormFields
           form={form}
           hospitals={hospitalsQuery.data}
-          isLocationLocked={isLocationSelectorLocked}
+          isLocationLocked={!isAllLocations}
           isItemsLoading={itemOptionsQuery.isLoading}
           itemSearch={itemSearch}
           items={getItemPriceItemOptions(itemOptionsQuery.data, itemPriceQuery.data?.item)}

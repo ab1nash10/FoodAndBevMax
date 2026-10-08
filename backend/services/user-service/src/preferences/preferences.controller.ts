@@ -26,6 +26,17 @@ function requireUser(user: JwtRequestUser | undefined): JwtRequestUser {
 export class PreferencesController {
   constructor(private readonly preferences: PreferencesService) {}
 
+  @Get('access')
+  @ApiOperation({ summary: 'Get my location reach and default location' })
+  @ApiOkResponse({ description: 'locationScope (ALL, MULTI or SINGLE) and defaultLocationId.' })
+  async access(@CurrentUser() user: JwtRequestUser | undefined) {
+    return {
+      data: await this.preferences.access(requireUser(user)),
+      message: 'Success',
+      success: true,
+    };
+  }
+
   @Get('preferences')
   @ApiOperation({ summary: 'Get my preferences' })
   @ApiOkResponse({ description: 'Preferences returned; unset fields are null.' })

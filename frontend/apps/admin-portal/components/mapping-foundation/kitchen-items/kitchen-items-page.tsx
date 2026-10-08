@@ -73,7 +73,7 @@ export function KitchenItemsPageClient() {
     'active',
     'inactive',
   ]);
-  const [hospitalFilter, setHospitalFilter] = useState('');
+  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [kitchenFilter, setKitchenFilter] = useState('');
   const [itemFilter, setItemFilter] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
