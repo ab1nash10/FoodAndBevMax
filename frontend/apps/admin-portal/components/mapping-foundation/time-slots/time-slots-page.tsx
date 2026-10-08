@@ -483,6 +483,7 @@ export function TimeSlotsPageClient() {
                   error={slotsQuery.error}
                   isError={slotsQuery.isError}
                   isLoading={slotsQuery.isLoading}
+                  atLocation={false}
                   label="time slots"
                 />
               )}

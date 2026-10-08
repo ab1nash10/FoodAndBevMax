@@ -345,6 +345,7 @@ export function ItemCategoriesPageClient() {
                   error={categoriesQuery.error}
                   isError={categoriesQuery.isError}
                   isLoading={categoriesQuery.isLoading}
+                  atLocation={false}
                   label="item categories"
                 />
               )}

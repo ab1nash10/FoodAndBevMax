@@ -1,14 +1,16 @@
 // Usage: <SetupChecklist steps={setupSteps(counts, firsts, canOpen)} />
-// "Finish setting up AAHAR": a progress bar and one row per step. Done steps are ticked and
-// quiet, the next step is highlighted, and every unfinished step the user may act on links to
-// its create page.
+// "Finish setting up <location>" (AAHAR for All Locations): a progress bar and one row per step.
+// Done steps are ticked and quiet, the next step is highlighted, and every unfinished step the
+// user may act on links to its create page.
 
 import { Check } from 'lucide-react';
 import Link from 'next/link';
+import { useLocationName } from '@/components/location-empty-states';
 import type { SetupStep } from '@/lib/dashboard-stats';
 import { cn } from '@/lib/utils';
 
 export function SetupChecklist({ steps }: Readonly<{ steps: SetupStep[] }>) {
+  const locationName = useLocationName();
   const done = steps.filter((step) => step.done).length;
   const percent = steps.length ? Math.round((done / steps.length) * 100) : 0;
 
@@ -20,7 +22,7 @@ export function SetupChecklist({ steps }: Readonly<{ steps: SetupStep[] }>) {
       <div className="flex flex-wrap items-center justify-between gap-4 px-5 pb-3.5 pt-[18px]">
         <div className="flex flex-col gap-1">
           <h2 className="text-[17px] font-extrabold text-ds-text" id="setup-heading">
-            Finish setting up AAHAR
+            Finish setting up {locationName ?? 'AAHAR'}
           </h2>
           <p className="text-[13px] text-ds-muted">
             {done} of {steps.length} done · menus and prices unlock restaurant ordering and stock

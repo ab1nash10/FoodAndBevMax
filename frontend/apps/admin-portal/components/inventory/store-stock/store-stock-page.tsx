@@ -374,6 +374,7 @@ export function StoreStockPageClient() {
                   error={stockQuery.error}
                   isError={stockQuery.isError}
                   isLoading={stockQuery.isLoading}
+                  hint="Stock arrives when a GRN is posted to a store, or nothing matches the filters."
                   label="store stock"
                 />
               )}

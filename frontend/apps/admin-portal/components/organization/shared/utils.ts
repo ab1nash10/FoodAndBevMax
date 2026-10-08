@@ -7,8 +7,6 @@ import { lazyValue } from '@/lib/lazy-value';
 
 export const listLimit = 10;
 
-export const skeletonRows = ['row-1', 'row-2', 'row-3', 'row-4', 'row-5'];
-
 const dateFormatter = new Intl.DateTimeFormat('en-IN', {
   dateStyle: 'medium',
   timeStyle: 'short',

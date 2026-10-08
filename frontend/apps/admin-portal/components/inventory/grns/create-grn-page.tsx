@@ -36,6 +36,7 @@ import {
   useHospitals,
   useStores,
 } from '@/components/inventory/shared/utils';
+import { SetupNotice } from '@/components/location-empty-states';
 
 export function CreateGrnPageClient() {
   const { isAllLocations, scopedHospitalId } = useLocationContext();
@@ -328,6 +329,11 @@ export function CreateGrnPageClient() {
                 stores={storesQuery.data ?? []}
                 value={selectedStoreId}
               />
+              {selectedHospitalId && storesQuery.data?.length === 0 ? (
+                <SetupNotice href="/masters/stores/new" linkLabel="Create a store">
+                  This location has no store yet, so goods cannot be received here.
+                </SetupNotice>
+              ) : null}
             </Field>
             <Field
               error={form.formState.errors.receivedDate?.message}
@@ -395,8 +401,10 @@ export function CreateGrnPageClient() {
             ) : null}
 
             {selectedStoreId && itemOptions.length === 0 && !mappedItemsQuery.isLoading ? (
-              <div className="mt-4 rounded-md border border-ds-status-pending-fg/25 bg-ds-status-pending-bg p-3 text-sm font-medium text-ds-status-pending-fg">
-                Map MRP items to this store before creating a GRN.
+              <div className="mt-4">
+                <SetupNotice href="/masters/store-items" linkLabel="Map items to this store">
+                  No MRP items are mapped to this store yet, so there is nothing to receive.
+                </SetupNotice>
               </div>
             ) : null}
 

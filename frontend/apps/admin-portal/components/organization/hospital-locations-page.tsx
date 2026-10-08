@@ -527,6 +527,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
                   error={locationsQuery.error}
                   isError={locationsQuery.isError}
                   isLoading={locationsQuery.isLoading}
+                  atLocation={false}
                   label="locations"
                 />
               )}

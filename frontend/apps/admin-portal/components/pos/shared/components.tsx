@@ -3,61 +3,11 @@
 import { Button } from '@aahar/ui';
 import { RefreshCw, Search } from 'lucide-react';
 import { Toggle } from '@/components/ui-controls';
-import { Input, Select, Skeleton } from '@/components/ui';
-import { getApiErrorMessage } from '@/lib/api';
+import { Input, Select } from '@/components/ui';
 import type { ActiveFilter } from '@/components/pos/shared/types';
 import { pageLimitOptions } from '@/components/pos/shared/utils';
 
-export function TableState({
-  colSpan,
-  error,
-  isError,
-  isLoading,
-  label,
-}: Readonly<{
-  colSpan: number;
-  error: unknown;
-  isError: boolean;
-  isLoading: boolean;
-  label: string;
-}>) {
-  if (isLoading) {
-    return (
-      <>
-        {['one', 'two', 'three', 'four'].map((row) => (
-          <tr key={row}>
-            <td className="px-4 py-3" colSpan={colSpan}>
-              <Skeleton className="h-9 w-full" />
-            </td>
-          </tr>
-        ))}
-      </>
-    );
-  }
-
-  if (isError) {
-    return (
-      <tr>
-        <td
-          className="px-4 py-12 text-center text-sm font-medium text-ds-status-bad-fg"
-          colSpan={colSpan}
-        >
-          {getApiErrorMessage(error)}
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <tr>
-      <td className="px-4 py-12 text-center" colSpan={colSpan}>
-        <p className="text-sm font-semibold text-ds-text dark:text-white">No {label} found</p>
-        <p className="mt-1 text-sm text-ds-muted">Add a record or adjust the filters.</p>
-      </td>
-    </tr>
-  );
-}
-
+export { QueryState as TableState } from '@/components/location-empty-states';
 export function PaginationControls({
   limit,
   onLimitChange,

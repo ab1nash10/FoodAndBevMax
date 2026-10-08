@@ -7,8 +7,8 @@ import { useEffect, useState } from 'react';
 import type { Item, ItemType, SortOrder, StockBalanceStatus } from '@aahar/api-client';
 import { StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
-import { Input, Panel, Select, Skeleton } from '@/components/ui';
-import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { Input, Panel, Select } from '@/components/ui';
+import { organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
 import {
   useOnScopeChange,
@@ -31,8 +31,7 @@ import {
   useKitchens,
 } from '@/components/kitchen/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
-
-const skeletonRows = ['row-1', 'row-2', 'row-3', 'row-4', 'row-5'];
+import { QueryState } from '@/components/location-empty-states';
 
 const kitchenStockStatuses: StockBalanceStatus[] = ['AVAILABLE', 'LOW_STOCK', 'OUT_OF_STOCK'];
 
@@ -52,53 +51,6 @@ function formatEnum(value: string): string {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
-}
-
-function QueryState({
-  colSpan,
-  error,
-  isError,
-  isLoading,
-  label,
-}: Readonly<{
-  colSpan: number;
-  error: unknown;
-  isError: boolean;
-  isLoading: boolean;
-  label: string;
-}>) {
-  if (isLoading) {
-    return (
-      <>
-        {skeletonRows.map((row) => (
-          <tr key={row}>
-            <td className="px-4 py-3" colSpan={colSpan}>
-              <Skeleton className="h-10 w-full" />
-            </td>
-          </tr>
-        ))}
-      </>
-    );
-  }
-
-  if (isError) {
-    return (
-      <tr>
-        <td className="px-4 py-8 text-center text-sm text-ds-status-bad-fg" colSpan={colSpan}>
-          {getApiErrorMessage(error)}
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <tr>
-      <td className="px-4 py-10 text-center" colSpan={colSpan}>
-        <p className="font-medium text-ds-text-2">No {label} found</p>
-        <p className="text-sm text-ds-muted">Adjust filters or create a new record.</p>
-      </td>
-    </tr>
-  );
 }
 
 function useItems(itemType?: ItemType) {
@@ -336,6 +288,7 @@ export function KitchenStockPageClient() {
                   error={stockQuery.error}
                   isError={stockQuery.isError}
                   isLoading={stockQuery.isLoading}
+                  hint="Stock arrives when a production is posted, or nothing matches the filters."
                   label="kitchen stock"
                 />
               )}

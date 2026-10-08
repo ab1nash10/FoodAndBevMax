@@ -46,6 +46,7 @@ import {
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { SetupNotice, useLocationName } from '@/components/location-empty-states';
 
 function useStoreOptions(hospitalId?: string) {
   return useQuery<Store[]>({
@@ -66,6 +67,7 @@ function useStoreOptions(hospitalId?: string) {
 
 export function StoreItemsPageClient() {
   const { scopedHospitalId } = useLocationContext();
+  const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -233,6 +235,17 @@ export function StoreItemsPageClient() {
             void handleSubmit(event);
           }}
         >
+          {storesQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/stores/new" linkLabel="Create a store">
+              {locationName ? `${locationName} has no store yet` : 'There is no store yet'}, so
+              there is nothing to map items to.
+            </SetupNotice>
+          ) : null}
+          {itemsQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/items/new" linkLabel="Create an item">
+              There are no active MRP items to map yet.
+            </SetupNotice>
+          ) : null}
           <MappingFormFields
             form={form}
             itemLabel="MRP Item"

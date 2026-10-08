@@ -296,6 +296,7 @@ export function HospitalsPageClient() {
                   error={locationsQuery.error}
                   isError={locationsQuery.isError}
                   isLoading={locationsQuery.isLoading}
+                  atLocation={false}
                   label="locations"
                 />
               )}

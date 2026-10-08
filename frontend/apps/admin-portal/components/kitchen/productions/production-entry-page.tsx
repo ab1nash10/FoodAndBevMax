@@ -22,6 +22,7 @@ import { invalidateKitchenProductionQueries } from '@/lib/query-invalidation';
 import { formatProductionQuantity } from '@/components/kitchen/productions/shared';
 import { useHospitals, useKitchens } from '@/components/kitchen/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { SetupNotice } from '@/components/location-empty-states';
 
 const headerSchema = z.object({
   businessDate: z.string().trim().min(1, 'Business date is required.'),
@@ -649,6 +650,13 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
               </select>
               {errors.kitchenId ? <FieldError>{errors.kitchenId.message}</FieldError> : null}
             </label>
+            {selectedHospitalId && isEditable && kitchensQuery.data?.length === 0 ? (
+              <div className="col-span-full">
+                <SetupNotice href="/masters/kitchens/new" linkLabel="Create a kitchen">
+                  This location has no kitchen yet, so there is nothing to record production for.
+                </SetupNotice>
+              </div>
+            ) : null}
             <label className={fieldLabel}>
               Produced at
               <Input
@@ -818,15 +826,20 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
                 </table>
               </div>
             ) : (
-              <p className="border-t border-ds-divider px-[18px] py-6 text-center text-[13px] text-ds-muted">
-                {!selectedKitchenId
-                  ? 'Choose a kitchen to see the items mapped to it.'
-                  : itemsQuery.isLoading
-                    ? 'Loading kitchen items…'
-                    : mappedItems.length === 0
-                      ? 'Map a READYMADE item to this kitchen before recording production.'
-                      : 'Add what the kitchen produced from the items below.'}
-              </p>
+              <div className="border-t border-ds-divider px-[18px] py-6 text-center text-[13px] text-ds-muted">
+                {!selectedKitchenId ? (
+                  'Choose a kitchen to see the items mapped to it.'
+                ) : itemsQuery.isLoading ? (
+                  'Loading kitchen items…'
+                ) : mappedItems.length === 0 ? (
+                  <SetupNotice href="/masters/kitchen-items" linkLabel="Map items to this kitchen">
+                    No READYMADE items are mapped to this kitchen yet, so there is nothing to
+                    record.
+                  </SetupNotice>
+                ) : (
+                  'Add what the kitchen produced from the items below.'
+                )}
+              </div>
             )}
             {isEditable && available.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-ds-divider px-[18px] py-3">

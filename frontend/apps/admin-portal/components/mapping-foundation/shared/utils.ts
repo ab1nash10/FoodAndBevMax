@@ -10,8 +10,6 @@ import { queryKeys } from '@/lib/query-keys';
 
 export const listLimit = 10;
 
-export const skeletonRows = ['row-1', 'row-2', 'row-3', 'row-4', 'row-5'];
-
 export const mappingSchema = z.object({
   isActive: z.boolean(),
   itemId: z.string().uuid('Select an item.'),

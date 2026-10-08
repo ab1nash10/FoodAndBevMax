@@ -6,14 +6,12 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { SortOrder } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
-import { Badge, Input, Panel, Select, Skeleton } from '@/components/ui';
-import { getApiErrorMessage } from '@/lib/api';
+import { Badge, Input, Panel, Select } from '@/components/ui';
 import type {
   ActiveFilter,
   PageHeaderProps,
   PaginationControlsProps,
 } from '@/components/master-data/shared/types';
-import { skeletonRows } from '@/components/master-data/shared/utils';
 
 export function StatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
   return (
@@ -77,55 +75,7 @@ export function SortOrderSelect({
   );
 }
 
-export function QueryState({
-  colSpan,
-  error,
-  isError,
-  isLoading,
-  label,
-}: Readonly<{
-  colSpan: number;
-  error: unknown;
-  isError: boolean;
-  isLoading: boolean;
-  label: string;
-}>) {
-  if (isLoading) {
-    return (
-      <>
-        {skeletonRows.map((row) => (
-          <tr key={row}>
-            <td className="px-4 py-3" colSpan={colSpan}>
-              <Skeleton className="h-8 w-full" />
-            </td>
-          </tr>
-        ))}
-      </>
-    );
-  }
-
-  if (isError) {
-    return (
-      <tr>
-        <td className="px-4 py-12 text-center text-sm text-ds-status-bad-fg" colSpan={colSpan}>
-          {getApiErrorMessage(error)}
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <tr>
-      <td className="px-4 py-12 text-center" colSpan={colSpan}>
-        <div className="mx-auto max-w-sm">
-          <p className="text-sm font-semibold text-ds-text">No {label} found</p>
-          <p className="mt-1 text-sm text-ds-muted">Create a record or adjust the filters.</p>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
+export { QueryState } from '@/components/location-empty-states';
 export function PaginationControls({
   limit,
   onPageChange,

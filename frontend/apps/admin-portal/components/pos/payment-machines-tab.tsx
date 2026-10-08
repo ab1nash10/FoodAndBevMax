@@ -30,6 +30,7 @@ import {
   useHospitalOptions,
 } from '@/components/pos/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { SetupNotice } from '@/components/location-empty-states';
 
 const primaryUpiValues: PrimaryUpiProvider[] = [
   'PHONEPE',
@@ -284,6 +285,11 @@ function PaymentMachineForm({
               </option>
             ))}
           </Select>
+          {selectedHospitalId && posDevicesQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/pos?tab=devices" linkLabel="Add a POS device">
+              This location has no POS device yet to attach the machine to.
+            </SetupNotice>
+          ) : null}
         </Field>
         <ToggleField
           label="Status"

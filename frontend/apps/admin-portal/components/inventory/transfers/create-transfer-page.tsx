@@ -49,6 +49,7 @@ import {
 } from '@/components/inventory/transfers/transfer-form';
 import { useSourceStock } from '@/components/inventory/transfers/use-source-stock';
 import { queryKeys } from '@/lib/query-keys';
+import { SetupNotice } from '@/components/location-empty-states';
 
 function StepHeading({
   id,
@@ -693,6 +694,19 @@ export function CreateTransferPageClient() {
                   </select>
                   {errors.sourceId ? <FieldError>{errors.sourceId.message}</FieldError> : null}
                 </label>
+                {selectedHospitalId &&
+                (selectedSourceType === 'KITCHEN' ? kitchensQuery.data : storesQuery.data)
+                  ?.length === 0 ? (
+                  selectedSourceType === 'KITCHEN' ? (
+                    <SetupNotice href="/masters/kitchens/new" linkLabel="Create a kitchen">
+                      This location has no kitchen yet.
+                    </SetupNotice>
+                  ) : (
+                    <SetupNotice href="/masters/stores/new" linkLabel="Create a store">
+                      This location has no store yet.
+                    </SetupNotice>
+                  )
+                ) : null}
               </fieldset>
               <fieldset className="flex min-w-0 flex-col gap-2.5 rounded-xl border border-ds-border p-3.5">
                 <legend className="px-1.5 text-xs font-bold uppercase tracking-[0.06em] text-ds-muted">
@@ -739,6 +753,11 @@ export function CreateTransferPageClient() {
                     <FieldError>{errors.restaurantId.message}</FieldError>
                   ) : null}
                 </label>
+                {selectedHospitalId && restaurantsQuery.data?.length === 0 ? (
+                  <SetupNotice href="/masters/restaurants/new" linkLabel="Create a restaurant">
+                    This location has no restaurant to send stock to yet.
+                  </SetupNotice>
+                ) : null}
               </fieldset>
             </div>
             <div className="grid gap-3.5 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
@@ -854,8 +873,8 @@ export function CreateTransferPageClient() {
                       <li className="px-3 py-2 text-[13px] text-ds-muted">
                         {stockGroups.length === 0
                           ? selectedSourceType === 'KITCHEN'
-                            ? 'No ready-made stock at this kitchen for the chosen date.'
-                            : 'No MRP stock at this store.'
+                            ? 'No ready-made stock at this kitchen for the chosen date. It arrives when a production is posted.'
+                            : 'No MRP stock at this store. It arrives when a GRN is posted.'
                           : `No item matches “${itemQuery.trim()}”.`}
                       </li>
                     ) : (

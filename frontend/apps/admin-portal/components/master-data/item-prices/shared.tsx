@@ -16,6 +16,7 @@ import {
   formatLocationOption,
   type RateTypeFilter,
 } from '@/components/master-data/item-prices/options';
+import { SetupNotice } from '@/components/location-empty-states';
 
 const gstPercentValues = ['0', '5', '12', '18'] as const;
 
@@ -241,7 +242,13 @@ function ItemPriceItemCombobox({
               ))
             ) : (
               <div className="px-3 py-2 text-ds-muted">
-                {search ? 'No active items match your search.' : 'No active items found.'}
+                {search ? (
+                  'No active items match your search.'
+                ) : (
+                  <SetupNotice href="/masters/items/new" linkLabel="Create an item">
+                    There are no active items to price yet.
+                  </SetupNotice>
+                )}
               </div>
             )}
           </div>

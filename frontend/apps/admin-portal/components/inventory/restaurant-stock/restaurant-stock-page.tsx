@@ -313,6 +313,7 @@ export function RestaurantStockPageClient() {
                   error={stockQuery.error}
                   isError={stockQuery.isError}
                   isLoading={stockQuery.isLoading}
+                  hint="Stock arrives when a restaurant acknowledges a transfer, or nothing matches the filters."
                   label="restaurant stock"
                 />
               )}

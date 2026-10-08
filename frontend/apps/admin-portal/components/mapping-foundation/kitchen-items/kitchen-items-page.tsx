@@ -46,6 +46,7 @@ import {
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { SetupNotice, useLocationName } from '@/components/location-empty-states';
 
 function useKitchenOptions(hospitalId?: string) {
   return useQuery<Kitchen[]>({
@@ -66,6 +67,7 @@ function useKitchenOptions(hospitalId?: string) {
 
 export function KitchenItemsPageClient() {
   const { scopedHospitalId } = useLocationContext();
+  const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -237,6 +239,17 @@ export function KitchenItemsPageClient() {
             void handleSubmit(event);
           }}
         >
+          {kitchensQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/kitchens/new" linkLabel="Create a kitchen">
+              {locationName ? `${locationName} has no kitchen yet` : 'There is no kitchen yet'}, so
+              there is nothing to map items to.
+            </SetupNotice>
+          ) : null}
+          {itemsQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/items/new" linkLabel="Create an item">
+              There are no active READYMADE items to map yet.
+            </SetupNotice>
+          ) : null}
           <MappingFormFields
             form={form}
             itemLabel="Readymade Item"

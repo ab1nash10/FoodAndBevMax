@@ -393,6 +393,7 @@ export function EmployeesPageClient() {
                   error={employeesQuery.error}
                   isError={employeesQuery.isError}
                   isLoading={employeesQuery.isLoading}
+                  atLocation={false}
                   label="employees"
                 />
               )}

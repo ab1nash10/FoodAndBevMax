@@ -5,9 +5,7 @@ import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Hospital, Store } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
-import { Input, Select, Skeleton } from '@/components/ui';
-import { getApiErrorMessage } from '@/lib/api';
-import { skeletonRows } from '@/components/inventory/shared/utils';
+import { Input, Select } from '@/components/ui';
 
 export function PageHeader({
   action,
@@ -76,53 +74,7 @@ export function PaginationControls({
   );
 }
 
-export function QueryState({
-  colSpan,
-  error,
-  isError,
-  isLoading,
-  label,
-}: Readonly<{
-  colSpan: number;
-  error: unknown;
-  isError: boolean;
-  isLoading: boolean;
-  label: string;
-}>) {
-  if (isLoading) {
-    return (
-      <>
-        {skeletonRows.map((row) => (
-          <tr key={row}>
-            <td className="px-4 py-3" colSpan={colSpan}>
-              <Skeleton className="h-10 w-full" />
-            </td>
-          </tr>
-        ))}
-      </>
-    );
-  }
-
-  if (isError) {
-    return (
-      <tr>
-        <td className="px-4 py-8 text-center text-sm text-ds-status-bad-fg" colSpan={colSpan}>
-          {getApiErrorMessage(error)}
-        </td>
-      </tr>
-    );
-  }
-
-  return (
-    <tr>
-      <td className="px-4 py-10 text-center" colSpan={colSpan}>
-        <p className="font-medium text-ds-text-2">No {label} found</p>
-        <p className="text-sm text-ds-muted">Adjust filters or create a new record.</p>
-      </td>
-    </tr>
-  );
-}
-
+export { QueryState } from '@/components/location-empty-states';
 export function HospitalSelect({
   disabled = false,
   hospitals,

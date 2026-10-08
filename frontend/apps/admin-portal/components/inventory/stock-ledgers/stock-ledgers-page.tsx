@@ -373,6 +373,7 @@ export function StockLedgersPageClient() {
                   error={ledgersQuery.error}
                   isError={ledgersQuery.isError}
                   isLoading={ledgersQuery.isLoading}
+                  hint="Every GRN, transfer and production posted here is recorded, or nothing matches the filters."
                   label="stock ledgers"
                 />
               )}

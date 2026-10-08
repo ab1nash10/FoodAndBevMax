@@ -53,6 +53,7 @@ import {
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { SetupNotice, useLocationName } from '@/components/location-empty-states';
 
 const restaurantMenuSchema = z
   .object({
@@ -182,6 +183,7 @@ function restaurantMenuToFormValues(menu: RestaurantMenu): RestaurantMenuFormVal
 
 export function RestaurantMenusPageClient() {
   const { scopedHospitalId } = useLocationContext();
+  const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -401,6 +403,19 @@ export function RestaurantMenusPageClient() {
             void handleSubmit(event);
           }}
         >
+          {restaurantsQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/restaurants/new" linkLabel="Create a restaurant">
+              {locationName
+                ? `${locationName} has no restaurant yet`
+                : 'There is no restaurant yet'}
+              , so there is no menu to add items to.
+            </SetupNotice>
+          ) : null}
+          {itemsQuery.data?.length === 0 ? (
+            <SetupNotice href="/masters/items/new" linkLabel="Create an item">
+              There are no active items to put on a menu yet.
+            </SetupNotice>
+          ) : null}
           <RestaurantMenuFormFields
             form={form}
             isEditing={Boolean(editingMenu)}
