@@ -26,3 +26,22 @@ test('retries once, never on 401, 403 or 404, and never refetches on focus', () 
     expect(retry(0, new ApiClientError(status, 'x'))).toBe(false);
   }
 });
+
+test('keeps trying for about a minute while a service is starting, not after a timeout', () => {
+  const options = createQueryClient().defaultQueryOptions({ queryKey: ['x'] });
+  const retry = options.retry as (count: number, error: unknown) => boolean;
+  const retryDelay = options.retryDelay as (attempt: number) => number;
+  const refused = new ApiClientError(0, 'x', new TypeError('Failed to fetch'));
+
+  for (const error of [refused, new ApiClientError(502, 'x'), new ApiClientError(503, 'x')]) {
+    expect(retry(11, error)).toBe(true);
+    expect(retry(12, error)).toBe(false);
+  }
+  expect(retry(1, new ApiClientError(0, 'timed out'))).toBe(false);
+  expect(retry(1, new ApiClientError(500, 'x'))).toBe(false);
+  const totalWait = Array.from({ length: 12 }, (_, attempt) => retryDelay(attempt)).reduce(
+    (sum, delay) => sum + delay,
+  );
+  expect(totalWait).toBeGreaterThan(45_000);
+  expect(totalWait).toBeLessThan(75_000);
+});

@@ -27,6 +27,9 @@ interface LocationContextValue {
   isLocationSelectorLocked: boolean;
   isLoadingLocations: boolean;
   locationLabel: string;
+  /** The user's locations could not be loaded (the service is unreachable): offer a retry. */
+  locationsFailed: boolean;
+  retryLocations: () => void;
   scopedHospitalId: string | undefined;
   selectedLocation: HospitalSummary | null;
   selectedLocationId: string | null;
@@ -122,10 +125,8 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
       return;
     }
 
-    // Without the location list there is nothing to choose from; the server still limits every
-    // request to the user's own locations.
+    // Without the location list the shell keeps waiting (with a retry) rather than guess one.
     if (accessQuery.isError) {
-      setIsSelectionResolved(true);
       return;
     }
 
@@ -170,6 +171,9 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
   );
   const isAllLocations = selectedLocationValue === allLocationsValue;
   const isLocationSelectorLocked = !canSelectAllLocations && availableLocations.length <= 1;
+  const locationsFailed = accessQuery.isError && !accessQuery.isFetching && !isSelectionResolved;
+  const { refetch } = accessQuery;
+  const retryLocations = useCallback(() => void refetch(), [refetch]);
 
   const setSelectedLocation = useCallback(
     (locationId: string | null) => {
@@ -205,6 +209,8 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
         : !isSelectionResolved || canSelectAllLocations
           ? 'All Locations'
           : 'No location assigned',
+      locationsFailed,
+      retryLocations,
       scopedHospitalId: selectedLocation?.id,
       selectedLocation,
       selectedLocationId: selectedLocation?.id ?? null,
@@ -217,6 +223,8 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
       isAllLocations,
       isLocationSelectorLocked,
       isSelectionResolved,
+      locationsFailed,
+      retryLocations,
       selectedLocation,
       selectedLocationValue,
       setSelectedLocation,

@@ -314,9 +314,14 @@ export function KitchenProductionsPageClient() {
             </span>
           </span>
           <span aria-live="polite">
-            {productionsQuery.isLoading
-              ? 'Loading productions…'
-              : `${meta.total} production${meta.total === 1 ? '' : 's'} on the board`}
+            {productionsQuery.isLoading ? (
+              <Skeleton
+                aria-label="Loading productions"
+                className="inline-block h-4 w-36 align-middle"
+              />
+            ) : (
+              `${meta.total} production${meta.total === 1 ? '' : 's'} on the board`
+            )}
           </span>
           {notPostedCount > 0 ? (
             <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ds-status-bad-bg px-3 py-1 text-xs font-semibold text-ds-status-bad-fg">

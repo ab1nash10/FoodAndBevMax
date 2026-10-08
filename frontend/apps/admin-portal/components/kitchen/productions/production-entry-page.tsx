@@ -9,7 +9,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { KitchenProductionInput } from '@aahar/api-client';
-import { StatusChip } from '@/components/design-system';
+import { LoadingSkeleton, StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { FieldError, Input, Panel, Skeleton } from '@/components/ui';
@@ -212,7 +212,6 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
     enabled: Boolean(productionId),
     queryFn: async () => (await organizationApi.getKitchenProduction(productionId ?? '')).data,
     queryKey: queryKeys.kitchenProductions('detail', productionId),
-    retry: false,
   });
   const production = productionQuery.data;
   useBreadcrumbLabel(
@@ -830,7 +829,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
                 {!selectedKitchenId ? (
                   'Choose a kitchen to see the items mapped to it.'
                 ) : itemsQuery.isLoading ? (
-                  'Loading kitchen items…'
+                  <LoadingSkeleton rows={3} />
                 ) : mappedItems.length === 0 ? (
                   <SetupNotice href="/masters/kitchen-items" linkLabel="Map items to this kitchen">
                     No READYMADE items are mapped to this kitchen yet, so there is nothing to

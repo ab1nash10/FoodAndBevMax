@@ -6,6 +6,7 @@ import type { AccessUser } from '@aahar/api-client';
 import { Loader2, MapPin, X } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/components/toast-provider';
+import { Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -105,7 +106,9 @@ export function BulkLocationBar({
         className="flex max-h-28 flex-wrap gap-x-4 gap-y-1 overflow-y-auto rounded-md border border-ds-border bg-white p-2"
         role="group"
       >
-        {hospitals.length === 0 ? (
+        {hospitalsQuery.isLoading ? (
+          <Skeleton className="h-6 w-full" />
+        ) : hospitals.length === 0 ? (
           <p className="px-1 py-1 text-sm text-ds-muted">No locations available.</p>
         ) : (
           hospitals.map((hospital) => (

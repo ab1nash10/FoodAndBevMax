@@ -71,7 +71,6 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
   const grnQuery = useQuery({
     queryFn: async () => (await organizationApi.getGrn(grnId)).data,
     queryKey: queryKeys.grns('detail', grnId),
-    retry: false,
   });
   const grn = grnQuery.data;
   useBreadcrumbLabel(grnId, grn?.grnNumber ?? (grnQuery.isError ? 'Not found' : undefined));

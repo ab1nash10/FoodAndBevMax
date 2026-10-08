@@ -2,9 +2,10 @@
 
 import { Button } from '@aahar/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { useState } from 'react';
-import { Input, Panel } from '@/components/ui';
+import { LoadingSkeleton } from '@/components/design-system';
+import { Input, Panel, Skeleton } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -96,8 +97,8 @@ export function LocationPickerDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {query.isLoading ? (
-            <div className="grid place-items-center py-12 text-ds-muted">
-              <Loader2 className="h-5 w-5 animate-spin" />
+            <div className="p-5">
+              <LoadingSkeleton />
             </div>
           ) : items.length === 0 ? (
             <p className="px-5 py-12 text-center text-sm text-ds-muted">No locations found.</p>
@@ -129,10 +130,14 @@ export function LocationPickerDialog({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ds-border px-5 py-3">
-          <p className="text-xs text-ds-muted">
-            Showing {firstRow} to {lastRow} of {total} results
-            {draft.length > 0 ? ` · ${draft.length} selected` : ''}
-          </p>
+          {query.isLoading ? (
+            <Skeleton className="h-4 w-48" />
+          ) : (
+            <p className="text-xs text-ds-muted">
+              Showing {firstRow} to {lastRow} of {total} results
+              {draft.length > 0 ? ` · ${draft.length} selected` : ''}
+            </p>
+          )}
           <div className="flex items-center gap-1">
             <Button
               aria-label="Previous page"

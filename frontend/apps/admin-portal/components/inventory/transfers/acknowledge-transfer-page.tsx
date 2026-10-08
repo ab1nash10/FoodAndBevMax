@@ -99,7 +99,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
   const [remarks, setRemarks] = useState('');
   const [hasTriedConfirm, setHasTriedConfirm] = useState(false);
   const initializedFor = useRef<string | null>(null);
-  const transferQuery = useQuery({ ...transferDetailQuery(transferId), retry: false });
+  const transferQuery = useQuery(transferDetailQuery(transferId));
   const transfer = transferQuery.data;
   useBreadcrumbLabel(
     transferId,

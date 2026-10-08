@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import type { Hospital, Item, ItemPriceInput, RateType, Restaurant } from '@aahar/api-client';
-import { Field, Input, Select } from '@/components/ui';
+import { Field, Input, Select, Skeleton } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
 import { CheckboxLine } from '@/components/master-data/shared/components';
 import type { ItemTypeFilter } from '@/components/master-data/shared/types';
@@ -223,7 +223,10 @@ function ItemPriceItemCombobox({
             role="listbox"
           >
             {isLoading ? (
-              <div className="px-3 py-2 text-ds-muted">Loading active items...</div>
+              <div aria-label="Loading active items" className="space-y-1 p-1">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
             ) : hasItems ? (
               items?.map((item) => (
                 <button

@@ -8,10 +8,16 @@ import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import type { TransferInput } from '@aahar/api-client';
-import { StatusChip, FoodTypeMarker, KeyboardHint, SummaryCard } from '@/components/design-system';
+import {
+  StatusChip,
+  FoodTypeMarker,
+  KeyboardHint,
+  LoadingSkeleton,
+  SummaryCard,
+} from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { FieldError, Input, Panel } from '@/components/ui';
+import { FieldError, Input, Panel, Skeleton } from '@/components/ui';
 import { SegmentedControl } from '@/components/ui-controls';
 import { Textarea } from '@/components/organization/shared/form-controls';
 import { recordHref } from '@/lib/navigation';
@@ -336,6 +342,8 @@ export function CreateTransferPageClient() {
       }),
   );
   const invalidLineCount = lines.filter((line) => !lineChecks.get(line.clientId)?.isValid).length;
+  // A restored draft's lines are only checked once the source's stock has loaded.
+  const isCheckingStock = stockQuery.isLoading && lines.length > 0;
   const batchCount = [...lineChecks.values()].reduce(
     (total, check) => total + check.allocations.length,
     0,
@@ -868,7 +876,10 @@ export function CreateTransferPageClient() {
                     role="listbox"
                   >
                     {stockQuery.isLoading ? (
-                      <li className="px-3 py-2 text-[13px] text-ds-muted">Loading stock…</li>
+                      <li aria-label="Loading stock" className="space-y-1 p-1">
+                        <Skeleton className="h-9 w-full" />
+                        <Skeleton className="h-9 w-full" />
+                      </li>
                     ) : itemMatches.length === 0 ? (
                       <li className="px-3 py-2 text-[13px] text-ds-muted">
                         {stockGroups.length === 0
@@ -941,7 +952,11 @@ export function CreateTransferPageClient() {
               ) : null}
             </div>
 
-            {lines.length > 0 ? (
+            {isCheckingStock ? (
+              <div className="border-t border-ds-divider px-[18px] py-3">
+                <LoadingSkeleton rows={Math.min(lines.length, 5)} />
+              </div>
+            ) : lines.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[700px] table-fixed text-[13px]">
                   <thead className="border-y border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
@@ -1188,7 +1203,9 @@ export function CreateTransferPageClient() {
           sticky
           title="Summary"
         >
-          {lines.length === 0 || invalidLineCount > 0 ? (
+          {isCheckingStock ? (
+            <Skeleton className="h-11 w-full rounded-xl" />
+          ) : lines.length === 0 || invalidLineCount > 0 ? (
             <div
               className="flex gap-2.5 rounded-xl bg-ds-status-bad-bg p-3 text-[12.5px] font-semibold text-ds-status-bad-fg"
               role="status"

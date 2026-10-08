@@ -8,7 +8,7 @@ import type {
   RestaurantMenuPositionType,
   TimeSlot,
 } from '@aahar/api-client';
-import { Field, Select } from '@/components/ui';
+import { Field, Select, Skeleton } from '@/components/ui';
 import {
   dayOfWeekValues,
   formatEnum,
@@ -85,16 +85,23 @@ export function RestaurantMenuFormFields({
           label="Time Slots"
           name="time-slot-ids"
         >
-          <MultiSelectDropdown
-            emptyText="No active time slots found."
-            id="time-slot-ids"
-            onChange={(timeSlotIds) =>
-              form.setValue('timeSlotIds', timeSlotIds, { shouldDirty: true, shouldValidate: true })
-            }
-            options={(timeSlots ?? []).map((slot) => ({ label: slot.slotName, value: slot.id }))}
-            placeholder="All day"
-            value={selectedTimeSlotIds}
-          />
+          {timeSlots ? (
+            <MultiSelectDropdown
+              emptyText="No active time slots found."
+              id="time-slot-ids"
+              onChange={(timeSlotIds) =>
+                form.setValue('timeSlotIds', timeSlotIds, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              options={(timeSlots ?? []).map((slot) => ({ label: slot.slotName, value: slot.id }))}
+              placeholder="All day"
+              value={selectedTimeSlotIds}
+            />
+          ) : (
+            <Skeleton aria-label="Loading time slots" className="h-10 w-full" />
+          )}
         </Field>
         <Field
           error={form.formState.errors.daysOfWeek?.message}

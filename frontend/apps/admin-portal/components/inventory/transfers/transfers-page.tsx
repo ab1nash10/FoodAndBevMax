@@ -254,7 +254,6 @@ export function TransfersPageClient() {
     enabled: Boolean(selectedTransferId) && !listedTransfer && !transfersQuery.isLoading,
     queryFn: async () => (await organizationApi.getTransfer(selectedTransferId ?? '')).data,
     queryKey: queryKeys.transfers('detail', selectedTransferId),
-    retry: false,
   });
   const selectedTransfer = listedTransfer ?? linkedTransferQuery.data;
   useBreadcrumbLabel(

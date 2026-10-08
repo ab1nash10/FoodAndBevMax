@@ -221,7 +221,6 @@ export function ItemsPageClient() {
     enabled: Boolean(selectedItemId) && !listedItem && !itemsQuery.isLoading,
     queryFn: async () => (await organizationApi.getItem(selectedItemId ?? '')).data,
     queryKey: queryKeys.items('detail', selectedItemId),
-    retry: false,
   });
   const selectedItem = listedItem ?? linkedItemQuery.data;
   useBreadcrumbLabel(

@@ -423,7 +423,7 @@ export function RestaurantMenusPageClient() {
             items={itemsQuery.data}
             referenceMenus={referenceMenus}
             restaurants={restaurantsQuery.data}
-            timeSlots={timeSlotsQuery.data}
+            timeSlots={timeSlotsQuery.isError ? [] : timeSlotsQuery.data}
           />
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             {editingMenu ? (

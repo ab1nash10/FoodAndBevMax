@@ -1,13 +1,23 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import { ChevronDown, LogOut, Menu, PanelLeftClose, Plus, Search, Settings, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  Plus,
+  Search,
+  Settings,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BreadcrumbLabelsProvider, Breadcrumbs } from '@/components/breadcrumbs';
 import { CommandPalette, type PalettePage } from '@/components/command-palette';
-import { BrandMark, KeyboardHint } from '@/components/design-system';
+import { BrandMark, EmptyState, KeyboardHint } from '@/components/design-system';
 import { NotificationBell } from '@/components/notification-bell';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useAuth } from '@/components/auth-provider';
@@ -22,13 +32,28 @@ import { cn } from '@/lib/utils';
 import { HeaderLocationSelector } from '@/components/admin-shell/header-location-selector';
 import { SidebarContent, useNavCounts } from '@/components/admin-shell/sidebar-content';
 
-function LoadingShell() {
+function LoadingShell({ onRetry }: Readonly<{ onRetry?: () => void }>) {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-5xl space-y-4">
-        <Skeleton className="h-12 w-48" />
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-72 w-full" />
+        {onRetry ? (
+          <EmptyState
+            action={
+              <Button onClick={onRetry} size="sm" type="button" variant="outline">
+                Try again
+              </Button>
+            }
+            description="AAHAR services are not answering yet. They may be starting; try again in a moment."
+            icon={AlertTriangle}
+            title="Could not load your locations"
+          />
+        ) : (
+          <>
+            <Skeleton className="h-12 w-48" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-72 w-full" />
+          </>
+        )}
       </div>
     </div>
   );
@@ -36,7 +61,7 @@ function LoadingShell() {
 
 export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const { currentUser, hasPermission, isAuthenticated, isReady, logout, roles } = useAuth();
-  const { isLoadingLocations } = useLocationContext();
+  const { isLoadingLocations, locationsFailed, retryLocations } = useLocationContext();
   useApplyThemePreference();
   const pathname = usePathname();
   const router = useRouter();
@@ -153,7 +178,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   // Pages mount once the user's location has settled, so their first requests already ask
   // for it rather than for every location.
   if (!isReady || !isAuthenticated || !isPermitted || isLoadingLocations) {
-    return <LoadingShell />;
+    return <LoadingShell onRetry={locationsFailed ? retryLocations : undefined} />;
   }
 
   const displayName =

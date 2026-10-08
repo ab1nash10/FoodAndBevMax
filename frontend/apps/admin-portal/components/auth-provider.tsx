@@ -11,6 +11,7 @@ import {
   type StoredAuth,
 } from '@/lib/auth-storage';
 import { authApi, refreshStoredSession, setApiSessionExpiredHandler } from '@/lib/api';
+import { isServiceUnavailable, serviceRetries, serviceRetryDelay } from '@/lib/query-client';
 import { isAccessTokenExpired, sessionUserFromAccessToken, type SessionUser } from '@/lib/session';
 import { useQueryClient } from '@tanstack/react-query';
 import { LogIn } from 'lucide-react';
@@ -105,8 +106,28 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         return;
       }
 
+      // While the auth service is starting, keep trying (the shell shows its loading state)
+      // rather than end a session that is still good.
+      async function refreshWhileStarting(): Promise<string | null> {
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            return await refreshStoredSession();
+          } catch (error) {
+            if (!isServiceUnavailable(error) || attempt + 1 >= serviceRetries) {
+              throw error;
+            }
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, serviceRetryDelay(attempt)));
+
+          if (!isMounted) {
+            return null;
+          }
+        }
+      }
+
       try {
-        const refreshedAccessToken = await refreshStoredSession();
+        const refreshedAccessToken = await refreshWhileStarting();
 
         if (isMounted) {
           if (refreshedAccessToken) {

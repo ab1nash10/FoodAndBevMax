@@ -3,10 +3,11 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AppNotification } from '@aahar/api-client';
-import { Bell, CheckCheck, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { LoadingSkeleton } from '@/components/design-system';
 import { userApi } from '@/lib/api';
 import { canOpenPath, notificationHref } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';
@@ -218,8 +219,8 @@ export function NotificationBell() {
 
           <div className="max-h-96 overflow-y-auto">
             {listQuery.isLoading ? (
-              <div className="grid place-items-center py-10 text-ds-muted">
-                <Loader2 className="h-5 w-5 animate-spin" />
+              <div className="p-4">
+                <LoadingSkeleton rows={3} />
               </div>
             ) : items.length === 0 ? (
               <div className="px-4 py-10 text-center">
