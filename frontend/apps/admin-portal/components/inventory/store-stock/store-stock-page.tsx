@@ -68,7 +68,7 @@ export function StoreStockPageClient() {
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
   const hospitalsQuery = useHospitals();
   const storesQuery = useStores(hospitalFilter);
-  const itemOptionsQuery = useItems(itemTypeFilter || undefined);
+  const itemOptionsQuery = useItems(itemTypeFilter || undefined, hospitalFilter);
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');

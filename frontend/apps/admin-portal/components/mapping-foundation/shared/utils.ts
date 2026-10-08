@@ -85,10 +85,12 @@ export function useHospitalOptions() {
   });
 }
 
-export function useItemOptions(itemType?: ItemType) {
+/** Active items to pick: the shared ones plus `hospitalId`'s (all visible ones without it). */
+export function useItemOptions(itemType?: ItemType, hospitalId?: string) {
   return useQuery<Item[]>({
     queryFn: async () => {
       const response = await organizationApi.listItems({
+        hospitalId: hospitalId || undefined,
         isActive: true,
         itemType,
         limit: 100,
@@ -98,7 +100,7 @@ export function useItemOptions(itemType?: ItemType) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.itemOptions(itemType ?? 'all'),
+    queryKey: queryKeys.itemOptions(itemType ?? 'all', hospitalId || 'all'),
   });
 }
 

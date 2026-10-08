@@ -11,7 +11,7 @@ import type {
   ApiResponse,
   ItemCategory,
   ItemCategoryInput,
-  ListQuery,
+  ItemCategoryListQuery,
   SortOrder,
 } from '@aahar/api-client';
 import { useToast } from '@/components/toast-provider';
@@ -44,11 +44,13 @@ import {
   formatDate,
   listLimit,
 } from '@/components/master-data/shared/utils';
+import { useLocationContext } from '@/components/location-context';
+import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
 
 function useEntityList<TItem>(
   entityKey: string,
-  query: ListQuery,
-  list: (query: ListQuery) => Promise<ApiResponse<ApiList<TItem>>>,
+  query: ItemCategoryListQuery,
+  list: (query: ItemCategoryListQuery) => Promise<ApiResponse<ApiList<TItem>>>,
 ) {
   return useQuery({
     queryFn: async () => {
@@ -75,9 +77,12 @@ export function ItemCategoriesPageClient() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
+  const { scopedHospitalId } = useLocationContext();
+  const { canEdit } = useMasterEditing();
   const form = useForm<ItemCategoryFormValues>({
     defaultValues: {
       categoryName: '',
+      hospitalId: '',
       isActive: true,
     },
   });
@@ -85,6 +90,7 @@ export function ItemCategoriesPageClient() {
   const categoriesQuery = useEntityList<ItemCategory>(
     'item-categories',
     {
+      hospitalId: scopedHospitalId,
       isActive: activeFilterToBoolean(activeFilter),
       limit: listLimit,
       page,
@@ -164,6 +170,7 @@ export function ItemCategoriesPageClient() {
 
     saveCategoryMutation.mutate({
       categoryName: parsed.data.categoryName,
+      hospitalId: parsed.data.hospitalId || null,
       isActive: parsed.data.isActive,
     });
   });
@@ -172,6 +179,7 @@ export function ItemCategoriesPageClient() {
     setEditingCategory(category);
     form.reset({
       categoryName: category.categoryName,
+      hospitalId: category.hospitalId ?? '',
       isActive: category.isActive,
     });
   }
@@ -180,6 +188,7 @@ export function ItemCategoriesPageClient() {
     setEditingCategory(null);
     form.reset({
       categoryName: '',
+      hospitalId: '',
       isActive: true,
     });
   }
@@ -286,6 +295,7 @@ export function ItemCategoriesPageClient() {
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
                 <th className="w-[24%] px-4 py-2.5">Category Name</th>
+                <th className="w-[14%] px-4 py-2.5">Location</th>
                 <th className="w-[11%] px-4 py-2.5">Status</th>
                 <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
                 <th className="w-[18%] px-4 py-2.5">Created Date Time</th>
@@ -299,13 +309,16 @@ export function ItemCategoriesPageClient() {
                   <tr className="hover:bg-ds-subtle" key={category.id}>
                     <td className="px-4 py-3 font-medium text-ds-text">{category.categoryName}</td>
                     <td className="px-4 py-3">
+                      <MasterLocationCell hospital={category.hospital} />
+                    </td>
+                    <td className="px-4 py-3">
                       <StatusBadge isActive={category.isActive} />
                     </td>
                     <td className="px-4 py-3">
                       <Toggle
                         ariaLabel={`${category.categoryName} active`}
                         checked={category.isActive}
-                        disabled={toggleCategoryStatusMutation.isPending}
+                        disabled={toggleCategoryStatusMutation.isPending || !canEdit(category)}
                         onChange={() => toggleCategoryStatus(category)}
                       />
                     </td>
@@ -317,15 +330,17 @@ export function ItemCategoriesPageClient() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          onClick={() => startEditingCategory(category)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Edit
-                        </Button>
+                        {canEdit(category) ? (
+                          <Button
+                            onClick={() => startEditingCategory(category)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </Button>
+                        ) : null}
                         <Button
                           onClick={() => setViewingCategory(category)}
                           size="sm"
@@ -341,11 +356,10 @@ export function ItemCategoriesPageClient() {
                 ))
               ) : (
                 <QueryState
-                  colSpan={6}
+                  colSpan={7}
                   error={categoriesQuery.error}
                   isError={categoriesQuery.isError}
                   isLoading={categoriesQuery.isLoading}
-                  atLocation={false}
                   label="item categories"
                 />
               )}
@@ -365,6 +379,7 @@ export function ItemCategoriesPageClient() {
         rows={
           viewingCategory && [
             ['Category Name', viewingCategory.categoryName],
+            ['Location', <MasterLocationCell hospital={viewingCategory.hospital} key="location" />],
             ['Status', <StatusBadge isActive={viewingCategory.isActive} key="status" />],
             ['Created', formatDate(viewingCategory.createdAt)],
             ['Updated', formatDate(viewingCategory.updatedAt)],

@@ -1,17 +1,22 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Employee, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import {
+  assertActiveHospital,
+  assertMayChangeShared,
+  sharedOrAt,
+} from '../common/location-masters';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { EmployeesRepository } from './employees.repository';
+import { EmployeesRepository, type EmployeeWithHospital } from './employees.repository';
 
 type EmployeeClient = Prisma.TransactionClient;
 
-function toEmployeeResponse(employee: Employee) {
+function toEmployeeResponse(employee: EmployeeWithHospital) {
   return {
     createdAt: employee.createdAt,
     deletedAt: employee.deletedAt,
@@ -20,6 +25,8 @@ function toEmployeeResponse(employee: Employee) {
     eligibleForDiscount: employee.eligibleForDiscount,
     employeeCode: employee.employeeCode,
     employeeName: employee.employeeName,
+    hospital: employee.hospital,
+    hospitalId: employee.hospitalId,
     id: employee.id,
     isActive: employee.isActive,
     mobile: employee.mobile,
@@ -50,6 +57,7 @@ export class EmployeesService {
   async list(query: ListEmployeesQueryDto) {
     const { limit, page } = getPagination(query);
     const where: Prisma.EmployeeWhereInput = {
+      ...(query.hospitalId ? { AND: [sharedOrAt(query.hospitalId)] } : {}),
       deletedAt: null,
       ...(query.eligibleForDiscount !== undefined
         ? { eligibleForDiscount: query.eligibleForDiscount }
@@ -103,6 +111,14 @@ export class EmployeesService {
   async create(dto: CreateEmployeeDto, context: ActorContext) {
     try {
       const created = await this.employees.transaction(async (tx) => {
+        const hospitalId = dto.hospitalId ?? null;
+
+        assertMayChangeShared(hospitalId, 'employees');
+
+        if (hospitalId) {
+          await assertActiveHospital(tx, hospitalId);
+        }
+
         await this.assertUniqueEmployeeCode(dto.employeeCode, undefined, tx);
 
         const employee = await this.employees.create(
@@ -112,6 +128,7 @@ export class EmployeesService {
             designation: dto.designation,
             eligibleForDiscount: dto.eligibleForDiscount ?? true,
             employeeCode: dto.employeeCode,
+            hospitalId,
             employeeName: dto.employeeName,
             isActive: dto.isActive ?? true,
             mobile: dto.mobile,
@@ -146,6 +163,20 @@ export class EmployeesService {
       const updated = await this.employees.transaction(async (tx) => {
         const existing = await this.findActiveEmployee(id, tx);
         const data: Prisma.EmployeeUpdateInput = {};
+        const hospitalId = dto.hospitalId === undefined ? existing.hospitalId : dto.hospitalId;
+
+        assertMayChangeShared(existing.hospitalId, 'employees');
+
+        // Nothing else refers to an employee, so one can move between locations freely.
+        if (hospitalId !== existing.hospitalId) {
+          assertMayChangeShared(hospitalId, 'employees');
+
+          if (hospitalId) {
+            await assertActiveHospital(tx, hospitalId);
+          }
+
+          data.hospital = hospitalId ? { connect: { id: hospitalId } } : { disconnect: true };
+        }
 
         if (dto.department !== undefined) {
           data.department = dto.department;
@@ -212,6 +243,8 @@ export class EmployeesService {
   async remove(id: string, context: ActorContext) {
     const existing = await this.findActiveEmployee(id);
 
+    assertMayChangeShared(existing.hospitalId, 'employees');
+
     await this.employees.transaction(async (tx) => {
       await this.employees.update(
         id,
@@ -253,7 +286,10 @@ export class EmployeesService {
     }
   }
 
-  private async findActiveEmployee(id: string, client?: EmployeeClient): Promise<Employee> {
+  private async findActiveEmployee(
+    id: string,
+    client?: EmployeeClient,
+  ): Promise<EmployeeWithHospital> {
     const employee = await this.employees.findActiveById(id, client);
 
     if (!employee) {

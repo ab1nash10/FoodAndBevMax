@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ItemType, Prisma } from '@prisma/client';
+import { ItemType, Prisma, type Store } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
@@ -13,6 +13,7 @@ import { CreateStoreItemDto } from './dto/create-store-item.dto';
 import { ListStoreItemsQueryDto } from './dto/list-store-items-query.dto';
 import { UpdateStoreItemDto } from './dto/update-store-item.dto';
 import { StoreItemsRepository, StoreItemWithRelations } from './store-items.repository';
+import { assertUsableAt } from '../common/location-masters';
 
 type StoreItemClient = Prisma.TransactionClient;
 
@@ -80,8 +81,9 @@ export class StoreItemsService {
   async create(dto: CreateStoreItemDto, context: ActorContext) {
     try {
       const created = await this.storeItems.transaction(async (tx) => {
-        await this.assertValidStore(dto.storeId, tx);
-        await this.assertValidMrpItem(dto.itemId, tx);
+        const store = await this.assertValidStore(dto.storeId, tx);
+
+        await this.assertValidMrpItem(dto.itemId, store.hospitalId, tx);
         await this.assertUniqueMapping(dto.storeId, dto.itemId, undefined, tx);
 
         const mapping = await this.storeItems.create(
@@ -124,14 +126,23 @@ export class StoreItemsService {
         const nextItemId = dto.itemId ?? existing.itemId;
         const data: Prisma.StoreItemUpdateInput = {};
 
+        let nextHospitalId = existing.store.hospital.id;
+
         if (dto.storeId !== undefined) {
-          await this.assertValidStore(dto.storeId, tx);
+          nextHospitalId = (await this.assertValidStore(dto.storeId, tx)).hospitalId;
           data.store = { connect: { id: dto.storeId } };
         }
 
         if (dto.itemId !== undefined) {
-          await this.assertValidMrpItem(dto.itemId, tx);
+          await this.assertValidMrpItem(dto.itemId, nextHospitalId, tx);
           data.item = { connect: { id: dto.itemId } };
+        } else if (nextHospitalId !== existing.store.hospital.id) {
+          // Moving to another location's store: the item it keeps must be usable there.
+          const item = await this.storeItems.findActiveItem(existing.itemId, tx);
+
+          if (item) {
+            assertUsableAt(item, nextHospitalId, 'item');
+          }
         }
 
         if (dto.storeId !== undefined || dto.itemId !== undefined) {
@@ -217,7 +228,11 @@ export class StoreItemsService {
     }
   }
 
-  private async assertValidMrpItem(itemId: string, client: StoreItemClient): Promise<void> {
+  private async assertValidMrpItem(
+    itemId: string,
+    hospitalId: string,
+    client: StoreItemClient,
+  ): Promise<void> {
     const item = await this.storeItems.findActiveItem(itemId, client);
 
     if (!item) {
@@ -231,9 +246,11 @@ export class StoreItemsService {
     if (item.itemType !== ItemType.MRP) {
       throw new BadRequestException('Only MRP items can be mapped to stores');
     }
+
+    assertUsableAt(item, hospitalId, 'item');
   }
 
-  private async assertValidStore(storeId: string, client: StoreItemClient): Promise<void> {
+  private async assertValidStore(storeId: string, client: StoreItemClient): Promise<Store> {
     const store = await this.storeItems.findActiveStore(storeId, client);
 
     if (!store) {
@@ -243,6 +260,8 @@ export class StoreItemsService {
     if (!store.isActive) {
       throw new BadRequestException('Store not found or inactive');
     }
+
+    return store;
   }
 
   private async findActiveStoreItem(

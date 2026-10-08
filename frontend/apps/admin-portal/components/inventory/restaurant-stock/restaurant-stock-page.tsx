@@ -84,7 +84,7 @@ export function RestaurantStockPageClient() {
   const effectiveItemType =
     itemTypeFilter ||
     (sourceFilter === 'STORE' ? 'MRP' : sourceFilter === 'KITCHEN' ? 'READYMADE' : '');
-  const itemOptionsQuery = useItems(effectiveItemType || undefined);
+  const itemOptionsQuery = useItems(effectiveItemType || undefined, hospitalFilter);
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');

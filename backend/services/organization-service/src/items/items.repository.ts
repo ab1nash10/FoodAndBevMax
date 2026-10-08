@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ItemCategory, Prisma } from '@prisma/client';
+import { masterHospitalSelect } from '../common/location-masters';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 export const itemInclude = {
   category: true,
+  hospital: masterHospitalSelect,
 } satisfies Prisma.ItemInclude;
 
 export type ItemWithCategory = Prisma.ItemGetPayload<{ include: typeof itemInclude }>;
@@ -96,6 +98,31 @@ export class ItemsRepository {
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
     });
+  }
+
+  /** Prices, menus, mappings, stock and documents that use the item outside `hospitalId`. */
+  async countUsesOutside(itemId: string, hospitalId: string, client: ItemClient): Promise<number> {
+    const elsewhere = { not: hospitalId };
+    const counts = await Promise.all([
+      client.itemPrice.count({ where: { deletedAt: null, hospitalId: elsewhere, itemId } }),
+      client.restaurantMenu.count({ where: { deletedAt: null, hospitalId: elsewhere, itemId } }),
+      client.storeItem.count({
+        where: { deletedAt: null, itemId, store: { hospitalId: elsewhere } },
+      }),
+      client.kitchenItem.count({
+        where: { deletedAt: null, itemId, kitchen: { hospitalId: elsewhere } },
+      }),
+      client.stockLedger.count({ where: { hospitalId: elsewhere, itemId } }),
+      client.grnLine.count({ where: { deletedAt: null, grn: { hospitalId: elsewhere }, itemId } }),
+      client.transferLine.count({
+        where: { deletedAt: null, itemId, transfer: { hospitalId: elsewhere } },
+      }),
+      client.kitchenProductionLine.count({
+        where: { deletedAt: null, itemId, production: { hospitalId: elsewhere } },
+      }),
+    ]);
+
+    return counts.reduce((total, count) => total + count, 0);
   }
 
   async findMany(args: Prisma.ItemFindManyArgs): Promise<ItemWithCategory[]> {

@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, TimeSlot } from '@prisma/client';
+import { masterHospitalSelect } from '../common/location-masters';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 type TimeSlotClient = Prisma.TransactionClient | PrismaService;
+
+const timeSlotInclude = { hospital: masterHospitalSelect } satisfies Prisma.TimeSlotInclude;
+
+export type TimeSlotWithHospital = Prisma.TimeSlotGetPayload<{ include: typeof timeSlotInclude }>;
 
 @Injectable()
 export class TimeSlotsRepository {
@@ -19,12 +24,16 @@ export class TimeSlotsRepository {
   async create(
     data: Prisma.TimeSlotUncheckedCreateInput,
     client: TimeSlotClient,
-  ): Promise<TimeSlot> {
-    return client.timeSlot.create({ data });
+  ): Promise<TimeSlotWithHospital> {
+    return client.timeSlot.create({ data, include: timeSlotInclude });
   }
 
-  async findActiveById(id: string, client: TimeSlotClient = this.prisma): Promise<TimeSlot | null> {
+  async findActiveById(
+    id: string,
+    client: TimeSlotClient = this.prisma,
+  ): Promise<TimeSlotWithHospital | null> {
     return client.timeSlot.findFirst({
+      include: timeSlotInclude,
       where: {
         deletedAt: null,
         id,
@@ -48,8 +57,15 @@ export class TimeSlotsRepository {
     });
   }
 
-  async findMany(args: Prisma.TimeSlotFindManyArgs): Promise<TimeSlot[]> {
-    return this.prisma.timeSlot.findMany(args);
+  async findMany(args: Prisma.TimeSlotFindManyArgs): Promise<TimeSlotWithHospital[]> {
+    return this.prisma.timeSlot.findMany({ ...args, include: timeSlotInclude });
+  }
+
+  /** Restaurant menus outside `hospitalId` that offer the slot. */
+  async countMenusOutside(id: string, hospitalId: string, client: TimeSlotClient): Promise<number> {
+    return client.restaurantMenu.count({
+      where: { deletedAt: null, hospitalId: { not: hospitalId }, timeSlotIds: { has: id } },
+    });
   }
 
   async hasActiveRestaurantMenus(id: string, client: TimeSlotClient): Promise<boolean> {
@@ -69,9 +85,10 @@ export class TimeSlotsRepository {
     id: string,
     data: Prisma.TimeSlotUpdateInput,
     client: TimeSlotClient,
-  ): Promise<TimeSlot> {
+  ): Promise<TimeSlotWithHospital> {
     return client.timeSlot.update({
       data,
+      include: timeSlotInclude,
       where: {
         id,
       },

@@ -141,10 +141,11 @@ function useRestaurantOptions(hospitalId?: string) {
   });
 }
 
-function useTimeSlotOptions() {
+function useTimeSlotOptions(hospitalId?: string) {
   return useQuery<TimeSlot[]>({
     queryFn: async () => {
       const response = await organizationApi.listTimeSlots({
+        hospitalId: hospitalId || undefined,
         isActive: true,
         limit: 100,
         sortBy: 'slotName',
@@ -153,7 +154,7 @@ function useTimeSlotOptions() {
 
       return response.data.items;
     },
-    queryKey: queryKeys.timeSlotOptions(),
+    queryKey: queryKeys.timeSlotOptions(hospitalId || 'all'),
   });
 }
 
@@ -207,9 +208,9 @@ export function RestaurantMenusPageClient() {
   });
   const hospitalsQuery = useHospitalOptions();
   const restaurantsQuery = useRestaurantOptions(hospitalFilter);
-  const itemsQuery = useItemOptions();
-  const filterItemsQuery = useItemOptions(itemTypeFilter || undefined);
-  const timeSlotsQuery = useTimeSlotOptions();
+  const itemsQuery = useItemOptions(undefined, hospitalFilter);
+  const filterItemsQuery = useItemOptions(itemTypeFilter || undefined, hospitalFilter);
+  const timeSlotsQuery = useTimeSlotOptions(hospitalFilter);
   const selectedRestaurantId = form.watch('restaurantId');
   const queryClient = useQueryClient();
   const { showToast } = useToast();

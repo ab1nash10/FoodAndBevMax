@@ -17,10 +17,12 @@ import {
 } from '@/components/master-data/employees/shared';
 import { FormShell, SubmitButton } from '@/components/master-data/shared/components';
 import { applyValidationErrors, optionalValue } from '@/components/master-data/shared/utils';
+import { useMasterEditing } from '@/components/master-location';
 
 export function EmployeeCreatePageClient() {
+  const { defaultHospitalId } = useMasterEditing();
   const form = useForm<EmployeeFormValues>({
-    defaultValues: emptyEmployeeFormValues(),
+    defaultValues: emptyEmployeeFormValues(defaultHospitalId),
   });
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -67,6 +69,7 @@ export function EmployeeCreatePageClient() {
       eligibleForDiscount: parsed.data.eligibleForDiscount,
       employeeCode: parsed.data.employeeCode,
       employeeName: parsed.data.employeeName,
+      hospitalId: parsed.data.hospitalId || null,
       isActive: parsed.data.isActive,
       mobile: optionalValue(parsed.data.mobile),
     });

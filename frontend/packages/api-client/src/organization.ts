@@ -55,6 +55,12 @@ export type HospitalSummary = Pick<Hospital, 'hospitalCode' | 'hospitalName' | '
     Pick<Hospital, 'city' | 'displayName' | 'locationCode' | 'postalCode' | 'state' | 'title'>
   >;
 
+/** A master kept by one location, or shared by every location when hospitalId is null. */
+export interface LocationOwned {
+  hospital: HospitalSummary | null;
+  hospitalId: string | null;
+}
+
 export interface HospitalListQuery extends ListQuery {
   city?: string;
   onlinePaymentOption?: OnlinePaymentOption;
@@ -339,7 +345,7 @@ export interface CounterListQuery extends ListQuery {
   restaurantId?: string;
 }
 
-export interface Employee {
+export interface Employee extends LocationOwned {
   createdAt: string;
   deletedAt: string | null;
   department: string | null;
@@ -359,12 +365,16 @@ export interface EmployeeInput {
   eligibleForDiscount?: boolean;
   employeeCode: string;
   employeeName: string;
+  /** The location it belongs to; null shares it with every location. */
+  hospitalId?: string | null;
   isActive?: boolean;
   mobile?: string;
 }
 
 export interface EmployeeListQuery extends ListQuery {
   eligibleForDiscount?: boolean;
+  /** Shared records plus this location's. */
+  hospitalId?: string;
 }
 
 export interface EmployeeValidation {

@@ -37,6 +37,8 @@ import {
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { useLocationContext } from '@/components/location-context';
+import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
 
 type DiscountFilter = '' | 'eligible' | 'notEligible';
 
@@ -67,6 +69,7 @@ function employeeToFormValues(employee: Employee): EmployeeFormValues {
     eligibleForDiscount: employee.eligibleForDiscount,
     employeeCode: employee.employeeCode,
     employeeName: employee.employeeName,
+    hospitalId: employee.hospitalId ?? '',
     isActive: employee.isActive,
     mobile: employee.mobile ?? '',
   };
@@ -92,14 +95,17 @@ export function EmployeesPageClient() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
+  const { scopedHospitalId } = useLocationContext();
+  const { canEdit, defaultHospitalId } = useMasterEditing();
   const form = useForm<EmployeeFormValues>({
-    defaultValues: emptyEmployeeFormValues(),
+    defaultValues: emptyEmployeeFormValues(defaultHospitalId),
   });
 
   const employeesQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listEmployees({
         eligibleForDiscount: discountFilterToBoolean(discountFilter),
+        hospitalId: scopedHospitalId,
         isActive: activeFilterToBoolean(activeFilter),
         limit: listLimit,
         page,
@@ -114,6 +120,7 @@ export function EmployeesPageClient() {
       activeFilter,
       discountFilter,
       page,
+      scope: scopedHospitalId ?? 'all',
       search,
       sortBy,
       sortOrder,
@@ -203,13 +210,14 @@ export function EmployeesPageClient() {
       eligibleForDiscount: parsed.data.eligibleForDiscount,
       employeeCode: parsed.data.employeeCode,
       employeeName: parsed.data.employeeName,
+      hospitalId: parsed.data.hospitalId || null,
       isActive: parsed.data.isActive,
       mobile: optionalValue(parsed.data.mobile),
     });
   });
 
   function openCreate() {
-    form.reset(emptyEmployeeFormValues());
+    form.reset(emptyEmployeeFormValues(defaultHospitalId));
     setDialog({ mode: 'create' });
   }
 
@@ -313,6 +321,7 @@ export function EmployeesPageClient() {
             <thead className="bg-ds-subtle text-left">
               <tr>
                 <th className="px-3 py-2.5">Employee</th>
+                <th className="px-2.5 py-2.5">Location</th>
                 <th className="px-2.5 py-2.5">Department</th>
                 <th className="px-2.5 py-2.5">Designation</th>
                 <th className="px-2.5 py-2.5">Mobile</th>
@@ -329,6 +338,9 @@ export function EmployeesPageClient() {
                     <td className="px-3 py-3">
                       <p className="font-semibold text-ds-text">{employee.employeeName}</p>
                       <p className="text-xs text-ds-muted">{employee.employeeCode}</p>
+                    </td>
+                    <td className="px-2.5 py-3">
+                      <MasterLocationCell hospital={employee.hospital} />
                     </td>
                     <td className="px-2.5 py-3 text-ds-text-3">
                       {employee.department || 'Not set'}
@@ -350,7 +362,7 @@ export function EmployeesPageClient() {
                         <Toggle
                           ariaLabel={`${employee.employeeName} active`}
                           checked={employee.isActive}
-                          disabled={toggleEmployeeStatusMutation.isPending}
+                          disabled={toggleEmployeeStatusMutation.isPending || !canEdit(employee)}
                           onChange={() => toggleEmployeeStatus(employee)}
                         />
                       </span>
@@ -372,28 +384,29 @@ export function EmployeesPageClient() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          aria-label={`Edit ${employee.employeeName}`}
-                          className="h-9 w-9"
-                          onClick={() => openEdit(employee)}
-                          size="icon"
-                          title="Edit"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        {canEdit(employee) ? (
+                          <Button
+                            aria-label={`Edit ${employee.employeeName}`}
+                            className="h-9 w-9"
+                            onClick={() => openEdit(employee)}
+                            size="icon"
+                            title="Edit"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <QueryState
-                  colSpan={8}
+                  colSpan={9}
                   error={employeesQuery.error}
                   isError={employeesQuery.isError}
                   isLoading={employeesQuery.isLoading}
-                  atLocation={false}
                   label="employees"
                 />
               )}
@@ -474,6 +487,12 @@ export function EmployeesPageClient() {
                   </dd>
                 </div>
               ))}
+              <div>
+                <dt className="text-xs font-semibold text-ds-muted">Location</dt>
+                <dd className="mt-1">
+                  <MasterLocationCell hospital={dialog.employee.hospital} />
+                </dd>
+              </div>
               <div>
                 <dt className="text-xs font-semibold text-ds-muted">Discount</dt>
                 <dd className="mt-1">

@@ -19,6 +19,7 @@ import {
   RestaurantMenusRepository,
   RestaurantMenuWithRelations,
 } from './restaurant-menus.repository';
+import { assertUsableAt } from '../common/location-masters';
 
 type RestaurantMenuClient = Prisma.TransactionClient;
 type TimeSlotSummary = Pick<
@@ -94,8 +95,8 @@ export class RestaurantMenusService {
         const timeSlotIds = uniqueValues(dto.timeSlotIds);
         const daysOfWeek = uniqueValues(dto.daysOfWeek);
 
-        await this.assertValidItem(dto.itemId, tx);
-        await this.assertValidTimeSlots(timeSlotIds, tx);
+        await this.assertValidItem(dto.itemId, restaurant.hospitalId, tx);
+        await this.assertValidTimeSlots(timeSlotIds, restaurant.hospitalId, tx);
         await this.assertUniqueMapping(dto.restaurantId, dto.itemId, undefined, tx);
 
         const displayOrder = await this.resolveDisplayOrder(
@@ -152,6 +153,7 @@ export class RestaurantMenusService {
         const nextItemId = dto.itemId ?? existing.itemId;
         const data: Prisma.RestaurantMenuUpdateInput = {};
         const oldValue = await this.toRestaurantMenuResponse(existing, tx);
+        let nextHospitalId = existing.hospitalId;
 
         if (dto.referenceMenuId && dto.positionType === undefined) {
           throw new BadRequestException(
@@ -162,13 +164,21 @@ export class RestaurantMenusService {
         if (dto.restaurantId !== undefined) {
           const restaurant = await this.assertValidRestaurant(dto.restaurantId, tx);
 
+          nextHospitalId = restaurant.hospitalId;
           data.hospital = { connect: { id: restaurant.hospitalId } };
           data.restaurant = { connect: { id: dto.restaurantId } };
         }
 
         if (dto.itemId !== undefined) {
-          await this.assertValidItem(dto.itemId, tx);
+          await this.assertValidItem(dto.itemId, nextHospitalId, tx);
           data.item = { connect: { id: dto.itemId } };
+        } else if (nextHospitalId !== existing.hospitalId) {
+          // Moving to another location's restaurant: the item it keeps must be usable there.
+          const item = await this.restaurantMenus.findActiveItem(existing.itemId, tx);
+
+          if (item) {
+            assertUsableAt(item, nextHospitalId, 'item');
+          }
         }
 
         if (dto.restaurantId !== undefined || dto.itemId !== undefined) {
@@ -178,8 +188,15 @@ export class RestaurantMenusService {
         if (dto.timeSlotIds !== undefined) {
           const timeSlotIds = uniqueValues(dto.timeSlotIds);
 
-          await this.assertValidTimeSlots(timeSlotIds, tx);
+          await this.assertValidTimeSlots(timeSlotIds, nextHospitalId, tx);
           data.timeSlotIds = { set: timeSlotIds };
+        } else if (nextHospitalId !== existing.hospitalId) {
+          for (const timeSlot of await this.restaurantMenus.findActiveTimeSlotsByIds(
+            existing.timeSlotIds,
+            tx,
+          )) {
+            assertUsableAt(timeSlot, nextHospitalId, 'time slot');
+          }
         }
 
         if (dto.daysOfWeek !== undefined) {
@@ -291,7 +308,11 @@ export class RestaurantMenusService {
     }
   }
 
-  private async assertValidItem(itemId: string, client: RestaurantMenuClient): Promise<void> {
+  private async assertValidItem(
+    itemId: string,
+    hospitalId: string,
+    client: RestaurantMenuClient,
+  ): Promise<void> {
     const item = await this.restaurantMenus.findActiveItem(itemId, client);
 
     if (!item) {
@@ -301,6 +322,8 @@ export class RestaurantMenusService {
     if (!item.isActive) {
       throw new BadRequestException('This item is inactive and cannot be used.');
     }
+
+    assertUsableAt(item, hospitalId, 'item');
   }
 
   private async assertValidRestaurant(restaurantId: string, client: RestaurantMenuClient) {
@@ -315,6 +338,7 @@ export class RestaurantMenusService {
 
   private async assertValidTimeSlots(
     timeSlotIds: string[],
+    hospitalId: string,
     client: RestaurantMenuClient,
   ): Promise<void> {
     if (timeSlotIds.length === 0) {
@@ -325,6 +349,10 @@ export class RestaurantMenusService {
 
     if (timeSlots.length !== timeSlotIds.length) {
       throw new BadRequestException('One or more time slots were not found or inactive');
+    }
+
+    for (const timeSlot of timeSlots) {
+      assertUsableAt(timeSlot, hospitalId, 'time slot');
     }
   }
 

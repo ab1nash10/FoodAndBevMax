@@ -17,11 +17,14 @@ import {
 } from '@/components/master-data/item-categories/shared';
 import { FormShell, SubmitButton } from '@/components/master-data/shared/components';
 import { applyValidationErrors } from '@/components/master-data/shared/utils';
+import { useMasterEditing } from '@/components/master-location';
 
 export function ItemCategoryCreatePageClient() {
+  const { defaultHospitalId } = useMasterEditing();
   const form = useForm<ItemCategoryFormValues>({
     defaultValues: {
       categoryName: '',
+      hospitalId: defaultHospitalId,
       isActive: true,
     },
   });
@@ -66,6 +69,7 @@ export function ItemCategoryCreatePageClient() {
 
     createCategoryMutation.mutate({
       categoryName: parsed.data.categoryName,
+      hospitalId: parsed.data.hospitalId || null,
       isActive: parsed.data.isActive,
     });
   });

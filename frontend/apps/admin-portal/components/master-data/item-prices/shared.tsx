@@ -109,10 +109,12 @@ export function toItemPricePayload(values: ItemPriceParsedValues): ItemPriceInpu
 export const overlappingItemPriceError =
   'An active price already exists for this item, rate type, and date range.';
 
-export function useItemOptions(itemType?: ItemTypeFilter, search = '') {
+/** Items a price can be set for: the shared ones plus the price's location's. */
+export function useItemOptions(itemType?: ItemTypeFilter, search = '', hospitalId = '') {
   return useQuery<Item[]>({
     queryFn: async () => {
       const response = await organizationApi.listItems({
+        hospitalId: hospitalId || undefined,
         isActive: true,
         itemType: itemType || undefined,
         limit: 100,
@@ -123,7 +125,7 @@ export function useItemOptions(itemType?: ItemTypeFilter, search = '') {
 
       return response.data.items;
     },
-    queryKey: queryKeys.itemOptions(itemType ?? 'all', search),
+    queryKey: queryKeys.itemOptions(itemType ?? 'all', search, hospitalId || 'all'),
   });
 }
 

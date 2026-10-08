@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   ValidateIf,
@@ -41,4 +42,12 @@ export class CreateTimeSlotDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'The location the slot belongs to; null or omitted shares it with every location',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  hospitalId?: string | null;
 }

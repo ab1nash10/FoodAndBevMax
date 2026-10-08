@@ -159,7 +159,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
             )
           : [],
         canSee.items
-          ? organizationApi.listItems({ limit: 3, search: term }).then(
+          ? organizationApi.listItems(base).then(
               (response) => response.data.items,
               () => [],
             )

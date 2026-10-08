@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ItemCategory, Prisma } from '@prisma/client';
+import { masterHospitalSelect } from '../common/location-masters';
 import { PrismaService } from '../common/prisma/prisma.service';
+
+const categoryInclude = { hospital: masterHospitalSelect } satisfies Prisma.ItemCategoryInclude;
+
+export type ItemCategoryWithHospital = Prisma.ItemCategoryGetPayload<{
+  include: typeof categoryInclude;
+}>;
 
 type ItemCategoryClient = Prisma.TransactionClient | PrismaService;
 
@@ -19,15 +26,16 @@ export class ItemCategoriesRepository {
   async create(
     data: Prisma.ItemCategoryUncheckedCreateInput,
     client: ItemCategoryClient,
-  ): Promise<ItemCategory> {
-    return client.itemCategory.create({ data });
+  ): Promise<ItemCategoryWithHospital> {
+    return client.itemCategory.create({ data, include: categoryInclude });
   }
 
   async findActiveById(
     id: string,
     client: ItemCategoryClient = this.prisma,
-  ): Promise<ItemCategory | null> {
+  ): Promise<ItemCategoryWithHospital | null> {
     return client.itemCategory.findFirst({
+      include: categoryInclude,
       where: {
         deletedAt: null,
         id,
@@ -61,8 +69,23 @@ export class ItemCategoriesRepository {
     });
   }
 
-  async findMany(args: Prisma.ItemCategoryFindManyArgs): Promise<ItemCategory[]> {
-    return this.prisma.itemCategory.findMany(args);
+  async findMany(args: Prisma.ItemCategoryFindManyArgs): Promise<ItemCategoryWithHospital[]> {
+    return this.prisma.itemCategory.findMany({ ...args, include: categoryInclude });
+  }
+
+  /** Items the category could no longer serve if it belonged to `hospitalId` only. */
+  async countItemsOutside(
+    categoryId: string,
+    hospitalId: string,
+    client: ItemCategoryClient,
+  ): Promise<number> {
+    return client.item.count({
+      where: {
+        categoryId,
+        deletedAt: null,
+        OR: [{ hospitalId: null }, { hospitalId: { not: hospitalId } }],
+      },
+    });
   }
 
   async hasActiveItems(categoryId: string, client: ItemCategoryClient): Promise<boolean> {
@@ -80,9 +103,10 @@ export class ItemCategoriesRepository {
     id: string,
     data: Prisma.ItemCategoryUpdateInput,
     client: ItemCategoryClient,
-  ): Promise<ItemCategory> {
+  ): Promise<ItemCategoryWithHospital> {
     return client.itemCategory.update({
       data,
+      include: categoryInclude,
       where: {
         id,
       },

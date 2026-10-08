@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsOptional } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { ActivePaginationQueryDto } from '../../common/dto/active-pagination-query.dto';
 import { toOptionalBoolean } from '../../common/values';
 
@@ -27,4 +27,9 @@ export class ListTimeSlotsQueryDto extends ActivePaginationQueryDto {
   @IsIn(timeSlotSortFields)
   @IsOptional()
   sortBy?: TimeSlotSortField;
+
+  @ApiPropertyOptional({ description: 'Slots shared by every location plus this location' })
+  @IsOptional()
+  @IsUUID()
+  hospitalId?: string;
 }

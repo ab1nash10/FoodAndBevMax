@@ -53,6 +53,27 @@ const RELATION_SCOPED_MODELS: Record<string, string> = {
   StoreItem: 'store',
 };
 
+/**
+ * Masters that are either shared by every location (no hospital) or kept by one. A user sees
+ * the shared ones and those of their own locations.
+ */
+const SHARED_OR_SCOPED_MODELS = new Set(['Employee', 'Item', 'ItemCategory', 'TimeSlot']);
+
+/** The filter a read on `model` gets for a user limited to `allowed`; null leaves it alone. */
+export function readScope(model: string, allowed: string[]): Record<string, unknown> | null {
+  if (HOSPITAL_SCOPED_MODELS.has(model)) {
+    return { hospitalId: { in: allowed } };
+  }
+
+  if (SHARED_OR_SCOPED_MODELS.has(model)) {
+    return { OR: [{ hospitalId: null }, { hospitalId: { in: allowed } }] };
+  }
+
+  const relation = RELATION_SCOPED_MODELS[model];
+
+  return relation ? { [relation]: { hospitalId: { in: allowed } } } : null;
+}
+
 const READ_OPERATIONS = new Set([
   'aggregate',
   'count',
@@ -78,12 +99,7 @@ export const hospitalScopeExtension = Prisma.defineExtension({
           return query(args);
         }
 
-        const relation = RELATION_SCOPED_MODELS[model];
-        const scope = HOSPITAL_SCOPED_MODELS.has(model)
-          ? { hospitalId: { in: allowed } }
-          : relation
-            ? { [relation]: { hospitalId: { in: allowed } } }
-            : null;
+        const scope = readScope(model, allowed);
 
         if (!scope) {
           return query(args);

@@ -14,6 +14,7 @@ import { ResolveItemPriceQueryDto } from './dto/resolve-item-price-query.dto';
 import { UpdateItemPriceDto } from './dto/update-item-price.dto';
 import { ItemPricesRepository, ItemPriceWithRelations } from './item-prices.repository';
 import { toDateOnly, toNumber } from '../common/values';
+import { assertUsableAt } from '../common/location-masters';
 
 type ItemPriceClient = Prisma.TransactionClient;
 type PriceSource = 'LOCATION' | 'MISSING' | 'RESTAURANT';
@@ -143,7 +144,7 @@ export class ItemPricesService {
         validateDateRange(effectiveFrom, effectiveTo);
         validateGstPercent(dto.gstPercent, isTaxInclusive);
         await this.assertValidHospital(dto.hospitalId, tx);
-        await this.assertValidItem(dto.itemId, tx);
+        await this.assertValidItem(dto.itemId, dto.hospitalId, tx);
 
         if (restaurantId) {
           await this.assertValidRestaurant(restaurantId, dto.hospitalId, tx);
@@ -248,7 +249,7 @@ export class ItemPricesService {
           validateGstPercent(nextGstPercent, nextIsTaxInclusive);
         }
         await this.assertValidHospital(nextHospitalId, tx);
-        await this.assertValidItem(nextItemId, tx);
+        await this.assertValidItem(nextItemId, nextHospitalId, tx);
 
         if (nextRestaurantId) {
           await this.assertValidRestaurant(nextRestaurantId, nextHospitalId, tx);
@@ -377,7 +378,7 @@ export class ItemPricesService {
     const date = query.date ? toDateOnly(query.date) : toDateOnly(new Date());
 
     await this.assertValidHospital(query.hospitalId);
-    await this.assertValidItem(query.itemId);
+    await this.assertValidItem(query.itemId, query.hospitalId);
 
     if (query.restaurantId) {
       await this.assertValidRestaurant(query.restaurantId, query.hospitalId);
@@ -448,7 +449,11 @@ export class ItemPricesService {
     }
   }
 
-  private async assertValidItem(id: string, client?: ItemPriceClient): Promise<void> {
+  private async assertValidItem(
+    id: string,
+    hospitalId: string,
+    client?: ItemPriceClient,
+  ): Promise<void> {
     const item = await this.itemPrices.findActiveItem(id, client);
 
     if (!item) {
@@ -458,6 +463,8 @@ export class ItemPricesService {
     if (!item.isActive) {
       throw new BadRequestException('This item is inactive and cannot be priced.');
     }
+
+    assertUsableAt(item, hospitalId, 'item');
   }
 
   private async assertValidRestaurant(

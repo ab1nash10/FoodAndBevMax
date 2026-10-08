@@ -57,4 +57,12 @@ export class CreateItemDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'The location the item belongs to; null or omitted shares it with every location',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  hospitalId?: string | null;
 }

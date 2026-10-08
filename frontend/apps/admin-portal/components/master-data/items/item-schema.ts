@@ -16,6 +16,7 @@ const itemTypeSchema = z.custom<ItemType>((value) => itemTypeValues.includes(val
 
 export const itemSchema = z.object({
   categoryId: z.string().uuid('Select a category.'),
+  hospitalId: z.string(),
   hsnCode: optionalText(50),
   isActive: z.boolean(),
   itemName: z.string().trim().min(1, 'Item name is required.').max(255),

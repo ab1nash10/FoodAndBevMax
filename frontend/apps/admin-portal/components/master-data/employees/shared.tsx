@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Field, Input } from '@/components/ui';
 import { CheckboxLine } from '@/components/master-data/shared/components';
 import { optionalText } from '@/components/master-data/shared/schemas';
+import { MasterLocationSelect } from '@/components/master-location';
 
 export const employeeSchema = z.object({
   department: optionalText(255),
@@ -12,19 +13,22 @@ export const employeeSchema = z.object({
   eligibleForDiscount: z.boolean(),
   employeeCode: z.string().trim().min(1, 'Employee code is required.').max(100),
   employeeName: z.string().trim().min(1, 'Employee name is required.').max(255),
+  /** Empty shares the employee with every location. */
+  hospitalId: z.string(),
   isActive: z.boolean(),
   mobile: optionalText(20),
 });
 
 export type EmployeeFormValues = z.infer<typeof employeeSchema>;
 
-export function emptyEmployeeFormValues(): EmployeeFormValues {
+export function emptyEmployeeFormValues(hospitalId = ''): EmployeeFormValues {
   return {
     department: '',
     designation: '',
     eligibleForDiscount: true,
     employeeCode: '',
     employeeName: '',
+    hospitalId,
     isActive: true,
     mobile: '',
   };
@@ -67,9 +71,14 @@ export function EmployeeFormFields({
           <Input id="employee-designation" {...form.register('designation')} />
         </Field>
       </div>
-      <Field error={form.formState.errors.mobile?.message} label="Mobile" name="employee-mobile">
-        <Input id="employee-mobile" inputMode="numeric" {...form.register('mobile')} />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field error={form.formState.errors.mobile?.message} label="Mobile" name="employee-mobile">
+          <Input id="employee-mobile" inputMode="numeric" {...form.register('mobile')} />
+        </Field>
+        <Field label="Location" name="employee-location">
+          <MasterLocationSelect id="employee-location" {...form.register('hospitalId')} />
+        </Field>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <CheckboxLine
           input={

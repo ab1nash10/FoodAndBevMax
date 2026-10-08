@@ -56,7 +56,7 @@ export function ItemPriceEditPageClient({ itemPriceId }: Readonly<{ itemPriceId:
   const selectedHospitalId = form.watch('hospitalId');
   const hospitalsQuery = useHospitalOptions();
   const restaurantsQuery = useRestaurantOptions(selectedHospitalId);
-  const itemOptionsQuery = useItemOptions(undefined, itemSearch);
+  const itemOptionsQuery = useItemOptions(undefined, itemSearch, selectedHospitalId);
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();

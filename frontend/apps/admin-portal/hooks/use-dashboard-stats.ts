@@ -242,8 +242,8 @@ export function useDashboardStats(period: Period) {
   // ---- Master data totals (the existing keys) and the setup checklist's counts.
   const masters = {
     employees: useEntityTotal(
-      'employees',
-      () => organizationApi.listEmployees({ limit: 1 }),
+      ['employees', scope],
+      () => organizationApi.listEmployees({ hospitalId, limit: 1 }),
       can.employees,
     ),
     hospitals: useEntityTotal(
@@ -251,7 +251,11 @@ export function useDashboardStats(period: Period) {
       () => organizationApi.listHospitals({ limit: 1 }),
       can.hospitals,
     ),
-    items: useEntityTotal('items', () => organizationApi.listItems({ limit: 1 }), can.items),
+    items: useEntityTotal(
+      ['items', scope],
+      () => organizationApi.listItems({ hospitalId, limit: 1 }),
+      can.items,
+    ),
     kitchens: useEntityTotal(
       ['kitchens', scope],
       () => organizationApi.listKitchens({ hospitalId, limit: 1 }),
@@ -290,8 +294,8 @@ export function useDashboardStats(period: Period) {
       can.storeItems,
     ),
     timeSlots: useEntityTotal(
-      ['setup', 'time-slots'],
-      () => organizationApi.listTimeSlots({ limit: 1 }),
+      ['setup', 'time-slots', scope],
+      () => organizationApi.listTimeSlots({ hospitalId, limit: 1 }),
       can.timeSlots,
     ),
   };

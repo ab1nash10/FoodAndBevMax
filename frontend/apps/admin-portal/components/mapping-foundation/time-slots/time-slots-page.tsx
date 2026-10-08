@@ -32,6 +32,12 @@ import {
   listLimit,
 } from '@/components/mapping-foundation/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { useLocationContext } from '@/components/location-context';
+import {
+  MasterLocationCell,
+  MasterLocationSelect,
+  useMasterEditing,
+} from '@/components/master-location';
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -43,6 +49,8 @@ const timeInputSchema = z
 const timeSlotSchema = z
   .object({
     endTime: timeInputSchema,
+    /** Empty shares the slot with every location. */
+    hospitalId: z.string(),
     isActive: z.boolean(),
     isAlwaysAvailable: z.boolean(),
     slotName: z.string().trim().min(1, 'Slot name is required.').max(100),
@@ -105,6 +113,7 @@ function timeRange(slot: TimeSlot): string {
 function timeSlotToFormValues(slot: TimeSlot): TimeSlotFormValues {
   return {
     endTime: slot.endTime ?? '',
+    hospitalId: slot.hospitalId ?? '',
     isActive: slot.isActive,
     isAlwaysAvailable: slot.isAlwaysAvailable,
     slotName: slot.slotName,
@@ -112,9 +121,10 @@ function timeSlotToFormValues(slot: TimeSlot): TimeSlotFormValues {
   };
 }
 
-function emptyTimeSlotFormValues(): TimeSlotFormValues {
+function emptyTimeSlotFormValues(hospitalId = ''): TimeSlotFormValues {
   return {
     endTime: '',
+    hospitalId,
     isActive: true,
     isAlwaysAvailable: false,
     slotName: '',
@@ -125,6 +135,7 @@ function emptyTimeSlotFormValues(): TimeSlotFormValues {
 function toTimeSlotPayload(values: TimeSlotFormValues): TimeSlotInput {
   if (values.isAlwaysAvailable) {
     return {
+      hospitalId: values.hospitalId || null,
       isActive: values.isActive,
       isAlwaysAvailable: true,
       slotName: values.slotName,
@@ -133,6 +144,7 @@ function toTimeSlotPayload(values: TimeSlotFormValues): TimeSlotInput {
 
   return {
     endTime: values.endTime,
+    hospitalId: values.hospitalId || null,
     isActive: values.isActive,
     isAlwaysAvailable: false,
     slotName: values.slotName,
@@ -170,6 +182,9 @@ function TimeSlotFormFields({ form }: Readonly<{ form: UseFormReturn<TimeSlotFor
           />
         </Field>
       </div>
+      <Field label="Location" name="slot-location">
+        <MasterLocationSelect id="slot-location" {...form.register('hospitalId')} />
+      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <CheckboxLine
           input={
@@ -204,13 +219,16 @@ export function TimeSlotsPageClient() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
+  const { scopedHospitalId } = useLocationContext();
+  const { canEdit, defaultHospitalId } = useMasterEditing();
   const form = useForm<TimeSlotFormValues>({
-    defaultValues: emptyTimeSlotFormValues(),
+    defaultValues: emptyTimeSlotFormValues(defaultHospitalId),
   });
 
   const slotsQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listTimeSlots({
+        hospitalId: scopedHospitalId,
         isActive: activeFilterToBoolean(activeFilter),
         isAlwaysAvailable: alwaysAvailableFilterToBoolean(alwaysFilter),
         limit: listLimit,
@@ -226,6 +244,7 @@ export function TimeSlotsPageClient() {
       activeFilter,
       alwaysFilter,
       page,
+      scope: scopedHospitalId ?? 'all',
       search,
       sortBy,
       sortOrder,
@@ -252,7 +271,7 @@ export function TimeSlotsPageClient() {
         variant: 'success',
       });
       setEditingSlot(null);
-      form.reset(emptyTimeSlotFormValues());
+      form.reset(emptyTimeSlotFormValues(defaultHospitalId));
     },
   });
 
@@ -317,7 +336,7 @@ export function TimeSlotsPageClient() {
 
   function cancelEditingSlot() {
     setEditingSlot(null);
-    form.reset(emptyTimeSlotFormValues());
+    form.reset(emptyTimeSlotFormValues(defaultHospitalId));
   }
 
   return (
@@ -415,6 +434,7 @@ export function TimeSlotsPageClient() {
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
                 <th className="w-[17%] px-4 py-2.5">Slot Name</th>
+                <th className="w-[14%] px-4 py-2.5">Location</th>
                 <th className="w-[18%] px-4 py-2.5">Time Range</th>
                 <th className="w-[14%] px-4 py-2.5">Availability</th>
                 <th className="w-[10%] px-4 py-2.5">Status</th>
@@ -428,6 +448,9 @@ export function TimeSlotsPageClient() {
                 slots.map((slot) => (
                   <tr className="hover:bg-ds-subtle" key={slot.id}>
                     <td className="px-4 py-3 font-medium text-ds-text">{slot.slotName}</td>
+                    <td className="px-4 py-3">
+                      <MasterLocationCell hospital={slot.hospital} />
+                    </td>
                     <td className="px-4 py-3 text-ds-text-3">{timeRange(slot)}</td>
                     <td className="px-4 py-3">
                       <BooleanBadge
@@ -442,7 +465,7 @@ export function TimeSlotsPageClient() {
                         <Toggle
                           ariaLabel={`${slot.slotName} active`}
                           checked={slot.isActive}
-                          disabled={toggleSlotStatusMutation.isPending}
+                          disabled={toggleSlotStatusMutation.isPending || !canEdit(slot)}
                           onChange={() => toggleSlotStatus(slot)}
                         />
                       </span>
@@ -455,15 +478,17 @@ export function TimeSlotsPageClient() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          onClick={() => startEditingSlot(slot)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Edit
-                        </Button>
+                        {canEdit(slot) ? (
+                          <Button
+                            onClick={() => startEditingSlot(slot)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </Button>
+                        ) : null}
                         <Button
                           onClick={() => setViewingSlot(slot)}
                           size="sm"
@@ -479,11 +504,10 @@ export function TimeSlotsPageClient() {
                 ))
               ) : (
                 <QueryState
-                  colSpan={7}
+                  colSpan={8}
                   error={slotsQuery.error}
                   isError={slotsQuery.isError}
                   isLoading={slotsQuery.isLoading}
-                  atLocation={false}
                   label="time slots"
                 />
               )}
@@ -503,6 +527,7 @@ export function TimeSlotsPageClient() {
         rows={
           viewingSlot && [
             ['Slot Name', viewingSlot.slotName],
+            ['Location', <MasterLocationCell hospital={viewingSlot.hospital} key="location" />],
             ['Time Range', timeRange(viewingSlot)],
             [
               'Availability',

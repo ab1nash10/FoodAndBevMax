@@ -53,10 +53,11 @@ function formatEnum(value: string): string {
     .join(' ');
 }
 
-function useItems(itemType?: ItemType) {
+function useItems(itemType?: ItemType, hospitalId?: string) {
   return useQuery<Item[]>({
     queryFn: async () => {
       const response = await organizationApi.listItems({
+        hospitalId: hospitalId || undefined,
         itemType,
         limit: 100,
         sortBy: 'itemName',
@@ -65,7 +66,7 @@ function useItems(itemType?: ItemType) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.kitchenStockItems(itemType ?? 'all'),
+    queryKey: queryKeys.kitchenStockItems(itemType ?? 'all', hospitalId || 'all'),
   });
 }
 
@@ -89,7 +90,7 @@ export function KitchenStockPageClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const hospitalsQuery = useHospitals();
   const kitchensQuery = useKitchens(hospitalFilter);
-  const itemOptionsQuery = useItems('READYMADE');
+  const itemOptionsQuery = useItems('READYMADE', hospitalFilter);
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');

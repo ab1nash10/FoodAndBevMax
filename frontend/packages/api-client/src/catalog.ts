@@ -1,5 +1,5 @@
 import type { ListQuery } from './http';
-import type { HospitalSummary, Kitchen, Restaurant, Store } from './organization';
+import type { HospitalSummary, Kitchen, LocationOwned, Restaurant, Store } from './organization';
 
 export type FoodType = 'VEG' | 'NON_VEG' | 'EGGETARIAN';
 
@@ -7,7 +7,7 @@ export type ItemType = 'MRP' | 'READYMADE' | 'LIVE';
 
 export type RateType = 'COUNTER' | 'NORMAL' | 'ROOM' | 'STAFF';
 
-export interface ItemCategory {
+export interface ItemCategory extends LocationOwned {
   categoryName: string;
   createdAt: string;
   deletedAt: string | null;
@@ -18,12 +18,17 @@ export interface ItemCategory {
 
 export interface ItemCategoryInput {
   categoryName: string;
+  /** The location it belongs to; null shares it with every location. */
+  hospitalId?: string | null;
   isActive?: boolean;
 }
 
-export type ItemCategoryListQuery = ListQuery;
+export interface ItemCategoryListQuery extends ListQuery {
+  /** Shared records plus this location's. */
+  hospitalId?: string;
+}
 
-export interface Item {
+export interface Item extends LocationOwned {
   category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'>;
   categoryId: string;
   createdAt: string;
@@ -41,6 +46,8 @@ export interface Item {
 
 export interface ItemInput {
   categoryId: string;
+  /** The location it belongs to; null shares it with every location. */
+  hospitalId?: string | null;
   hsnCode?: string;
   isActive?: boolean;
   itemName: string;
@@ -51,6 +58,8 @@ export interface ItemInput {
 
 export interface ItemListQuery extends ListQuery {
   categoryId?: string;
+  /** Shared records plus this location's. */
+  hospitalId?: string;
   itemType?: ItemType;
   type?: FoodType;
 }
@@ -114,7 +123,7 @@ export interface ResolvedItemPrice {
   status: 'FOUND' | 'PRICE_MISSING';
 }
 
-export interface TimeSlot {
+export interface TimeSlot extends LocationOwned {
   createdAt: string;
   deletedAt: string | null;
   endTime: string | null;
@@ -128,6 +137,8 @@ export interface TimeSlot {
 
 export interface TimeSlotInput {
   endTime?: string;
+  /** The location it belongs to; null shares it with every location. */
+  hospitalId?: string | null;
   isActive?: boolean;
   isAlwaysAvailable?: boolean;
   slotName: string;
@@ -135,6 +146,8 @@ export interface TimeSlotInput {
 }
 
 export interface TimeSlotListQuery extends ListQuery {
+  /** Shared records plus this location's. */
+  hospitalId?: string;
   isAlwaysAvailable?: boolean;
 }
 

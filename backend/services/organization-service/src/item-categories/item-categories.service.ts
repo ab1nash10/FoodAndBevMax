@@ -5,23 +5,34 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { uniqueViolationTarget } from '@aahar/auth';
-import { ItemCategory, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import {
+  assertActiveHospital,
+  assertMayChangeShared,
+  assertNotUsedElsewhere,
+  sharedOrAt,
+} from '../common/location-masters';
 import { normalizeMasterName } from '../common/normalize-master-name';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import { CreateItemCategoryDto } from './dto/create-item-category.dto';
 import { ListItemCategoriesQueryDto } from './dto/list-item-categories-query.dto';
 import { UpdateItemCategoryDto } from './dto/update-item-category.dto';
-import { ItemCategoriesRepository } from './item-categories.repository';
+import {
+  ItemCategoriesRepository,
+  type ItemCategoryWithHospital,
+} from './item-categories.repository';
 
 type ItemCategoryClient = Prisma.TransactionClient;
 
-function toItemCategoryResponse(category: ItemCategory) {
+function toItemCategoryResponse(category: ItemCategoryWithHospital) {
   return {
     categoryName: category.categoryName,
     createdAt: category.createdAt,
     deletedAt: category.deletedAt,
+    hospital: category.hospital,
+    hospitalId: category.hospitalId,
     id: category.id,
     isActive: category.isActive,
     updatedAt: category.updatedAt,
@@ -38,6 +49,7 @@ export class ItemCategoriesService {
   async list(query: ListItemCategoriesQueryDto) {
     const { limit, page } = getPagination(query);
     const where: Prisma.ItemCategoryWhereInput = {
+      ...(query.hospitalId ? sharedOrAt(query.hospitalId) : {}),
       deletedAt: null,
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.search
@@ -75,6 +87,14 @@ export class ItemCategoriesService {
   async create(dto: CreateItemCategoryDto, context: ActorContext) {
     try {
       const created = await this.itemCategories.transaction(async (tx) => {
+        const hospitalId = dto.hospitalId ?? null;
+
+        assertMayChangeShared(hospitalId, 'item categories');
+
+        if (hospitalId) {
+          await assertActiveHospital(tx, hospitalId);
+        }
+
         const normalizedName = normalizeMasterName(dto.categoryName);
 
         await this.assertUniqueNormalizedCategoryName(normalizedName, undefined, tx);
@@ -83,6 +103,7 @@ export class ItemCategoriesService {
           {
             categoryName: dto.categoryName,
             createdBy: context.actorId,
+            hospitalId,
             isActive: dto.isActive ?? true,
             normalizedName,
             updatedBy: context.actorId,
@@ -116,6 +137,23 @@ export class ItemCategoriesService {
       const updated = await this.itemCategories.transaction(async (tx) => {
         const existing = await this.findActiveItemCategory(id, tx);
         const data: Prisma.ItemCategoryUpdateInput = {};
+        const hospitalId = dto.hospitalId === undefined ? existing.hospitalId : dto.hospitalId;
+
+        assertMayChangeShared(existing.hospitalId, 'item categories');
+
+        if (hospitalId !== existing.hospitalId) {
+          assertMayChangeShared(hospitalId, 'item categories');
+
+          if (hospitalId) {
+            await assertActiveHospital(tx, hospitalId);
+            assertNotUsedElsewhere(
+              await this.itemCategories.countItemsOutside(id, hospitalId, tx),
+              'category',
+            );
+          }
+
+          data.hospital = hospitalId ? { connect: { id: hospitalId } } : { disconnect: true };
+        }
 
         if (dto.categoryName !== undefined) {
           const normalizedName = normalizeMasterName(dto.categoryName);
@@ -164,6 +202,8 @@ export class ItemCategoriesService {
 
   async remove(id: string, context: ActorContext) {
     const existing = await this.findActiveItemCategory(id);
+
+    assertMayChangeShared(existing.hospitalId, 'item categories');
 
     await this.itemCategories.transaction(async (tx) => {
       const hasActiveItems = await this.itemCategories.hasActiveItems(id, tx);
@@ -218,7 +258,7 @@ export class ItemCategoriesService {
   private async findActiveItemCategory(
     id: string,
     client?: ItemCategoryClient,
-  ): Promise<ItemCategory> {
+  ): Promise<ItemCategoryWithHospital> {
     const category = await this.itemCategories.findActiveById(id, client);
 
     if (!category) {

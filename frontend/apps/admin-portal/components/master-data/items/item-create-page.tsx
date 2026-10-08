@@ -18,13 +18,15 @@ import {
 } from '@/components/master-data/items/shared';
 import { itemSchema } from '@/components/master-data/items/item-schema';
 import { FormShell, SubmitButton } from '@/components/master-data/shared/components';
+import { useMasterEditing } from '@/components/master-location';
 import { applyValidationErrors, optionalValue } from '@/components/master-data/shared/utils';
 
 export function ItemCreatePageClient() {
+  const { defaultHospitalId } = useMasterEditing();
   const form = useForm<ItemFormValues>({
-    defaultValues: emptyItemFormValues(),
+    defaultValues: emptyItemFormValues(defaultHospitalId),
   });
-  const categoryOptionsQuery = useItemCategoryOptions();
+  const categoryOptionsQuery = useItemCategoryOptions(form.watch('hospitalId'));
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();
@@ -83,6 +85,7 @@ export function ItemCreatePageClient() {
 
     createItemMutation.mutate({
       categoryId: parsed.data.categoryId,
+      hospitalId: parsed.data.hospitalId || null,
       hsnCode: optionalValue(parsed.data.hsnCode),
       isActive: parsed.data.isActive,
       itemName: parsed.data.itemName,
@@ -96,7 +99,7 @@ export function ItemCreatePageClient() {
     <FormShell
       backHref="/masters/items"
       icon={PackageOpen}
-      subtitle="Create a global item for future menu, inventory, and billing workflows."
+      subtitle="Create an item for one location, or shared by every location."
       title="Create Item"
     >
       <form

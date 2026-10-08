@@ -57,6 +57,7 @@ import {
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
 
 function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -65,6 +66,7 @@ function plural(count: number, word: string): string {
 function itemToFormValues(item: Item): ItemFormValues {
   return {
     categoryId: item.categoryId,
+    hospitalId: item.hospitalId ?? '',
     hsnCode: item.hsnCode ?? '',
     isActive: item.isActive,
     itemCode: item.itemCode,
@@ -147,18 +149,21 @@ export function ItemsPageClient() {
   const [isEditing, setIsEditing] = useState(false);
   // The open item lives in the URL (?id=), so links from the palette land on it.
   const selectedItemId = searchParams.get('id');
-  const categoryOptionsQuery = useItemCategoryOptions();
+  const categoryOptionsQuery = useItemCategoryOptions(scopedHospitalId);
+  const { canEdit } = useMasterEditing();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
   const form = useForm<ItemFormValues>({
     defaultValues: emptyItemFormValues(),
   });
+  const formCategoriesQuery = useItemCategoryOptions(form.watch('hospitalId'));
 
   const itemsQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listItems({
         categoryId: categoryFilter || undefined,
+        hospitalId: scopedHospitalId,
         isActive: activeFilterToBoolean(activeFilter),
         itemType: itemTypeFilter || undefined,
         limit: pageSize,
@@ -178,6 +183,7 @@ export function ItemsPageClient() {
       itemTypeFilter,
       page,
       pageSize,
+      scope: scopedHospitalId ?? 'all',
       search,
       sortBy,
       sortOrder,
@@ -296,6 +302,7 @@ export function ItemsPageClient() {
 
     saveItemMutation.mutate({
       categoryId: parsed.data.categoryId,
+      hospitalId: parsed.data.hospitalId || null,
       hsnCode: optionalValue(parsed.data.hsnCode),
       isActive: parsed.data.isActive,
       itemName: parsed.data.itemName,
@@ -454,11 +461,12 @@ export function ItemsPageClient() {
           </FilterBar>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] table-fixed text-[13px]">
+            <table className="w-full min-w-[740px] table-fixed text-[13px]">
               <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
                 <tr>
                   <th className="px-4 py-2.5 font-semibold">Item</th>
                   <th className="w-[130px] px-3 py-2.5 font-semibold">Category</th>
+                  <th className="w-[120px] px-3 py-2.5 font-semibold">Location</th>
                   <th className="w-[108px] px-3 py-2.5 font-semibold">Type</th>
                   <th className="w-[84px] px-3 py-2.5 text-right font-semibold">Normal</th>
                   <th className="w-[118px] px-3 py-2.5 pr-4 font-semibold">Status</th>
@@ -468,7 +476,7 @@ export function ItemsPageClient() {
                 {itemsQuery.isLoading ? (
                   Array.from({ length: 6 }, (_, index) => (
                     <tr className="border-b border-ds-divider" key={`item-skeleton-${index}`}>
-                      <td className="px-4 py-3" colSpan={5}>
+                      <td className="px-4 py-3" colSpan={6}>
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
@@ -477,14 +485,14 @@ export function ItemsPageClient() {
                   <tr>
                     <td
                       className="px-4 py-8 text-center text-sm font-medium text-ds-status-bad-fg"
-                      colSpan={5}
+                      colSpan={6}
                     >
                       {getApiErrorMessage(itemsQuery.error)}
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td className="p-4" colSpan={5}>
+                    <td className="p-4" colSpan={6}>
                       <EmptyState
                         action={
                           hasFilters ? (
@@ -544,6 +552,9 @@ export function ItemsPageClient() {
                         <td className="truncate px-3 py-1.5 text-[12.5px] text-ds-text-2">
                           {item.category.categoryName}
                         </td>
+                        <td className="truncate px-3 py-1.5 text-[12.5px]">
+                          <MasterLocationCell hospital={item.hospital} />
+                        </td>
                         <td className="px-3 py-1.5">
                           <ItemTypeTag type={item.itemType} />
                         </td>
@@ -561,7 +572,7 @@ export function ItemsPageClient() {
                             <Toggle
                               ariaLabel={`${item.itemName} active`}
                               checked={item.isActive}
-                              disabled={toggleItemStatusMutation.isPending}
+                              disabled={toggleItemStatusMutation.isPending || !canEdit(item)}
                               onChange={() => toggleItemStatus(item)}
                             />
                             <span
@@ -635,7 +646,7 @@ export function ItemsPageClient() {
             <DetailPanel
               className="min-w-[300px] flex-[0_1_400px]"
               footer={
-                isEditing ? undefined : (
+                isEditing || !canEdit(selectedItem) ? undefined : (
                   <Button
                     className="flex-1"
                     onClick={() => startEditing(selectedItem)}
@@ -666,10 +677,10 @@ export function ItemsPageClient() {
                     void handleSubmit(event);
                   }}
                 >
-                  <ItemFormFields categories={categoryOptionsQuery.data} form={form} />
-                  {categoryOptionsQuery.isError ? (
+                  <ItemFormFields categories={formCategoriesQuery.data} form={form} />
+                  {formCategoriesQuery.isError ? (
                     <p className="text-sm font-medium text-ds-status-bad-fg">
-                      {getApiErrorMessage(categoryOptionsQuery.error)}
+                      {getApiErrorMessage(formCategoriesQuery.error)}
                     </p>
                   ) : null}
                   <div className="grid grid-cols-2 gap-3 border-t border-ds-divider pt-4">

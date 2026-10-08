@@ -6,6 +6,7 @@ import type { FoodType, ItemCategory } from '@aahar/api-client';
 import { Field, FieldError, Input, Select, Skeleton } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
 import { CheckboxLine } from '@/components/master-data/shared/components';
+import { MasterLocationSelect, SHARED_LOCATION } from '@/components/master-location';
 import type { ItemTypeFilter } from '@/components/master-data/shared/types';
 import { formatEnum, itemTypeValues } from '@/components/master-data/shared/utils';
 import { lazyValue } from '@/lib/lazy-value';
@@ -17,6 +18,8 @@ export type FoodTypeFilter = '' | FoodType;
 
 export interface ItemFormValues {
   categoryId: string;
+  /** The location the item belongs to; empty shares it with every location. */
+  hospitalId: string;
   hsnCode: string;
   isActive: boolean;
   itemCode: string;
@@ -28,10 +31,15 @@ export interface ItemFormValues {
 
 export const similarItemError = 'Similar item already exists';
 
-export function useItemCategoryOptions() {
+/**
+ * Categories to pick from: for a location, the shared ones plus its own; for a shared item, only
+ * shared ones (it cannot use one location's category); with no location given, all visible.
+ */
+export function useItemCategoryOptions(hospitalId?: string) {
   return useQuery<ItemCategory[]>({
     queryFn: async () => {
       const response = await organizationApi.listItemCategories({
+        hospitalId: hospitalId || undefined,
         isActive: true,
         limit: 100,
         sortBy: 'categoryName',
@@ -40,13 +48,18 @@ export function useItemCategoryOptions() {
 
       return response.data.items;
     },
-    queryKey: queryKeys.itemCategoryOptions(),
+    queryKey: queryKeys.itemCategoryOptions(hospitalId ?? 'all'),
+    select:
+      hospitalId === SHARED_LOCATION
+        ? (categories) => categories.filter((category) => category.hospitalId === null)
+        : undefined,
   });
 }
 
-export function emptyItemFormValues(): ItemFormValues {
+export function emptyItemFormValues(hospitalId = SHARED_LOCATION): ItemFormValues {
   return {
     categoryId: '',
+    hospitalId,
     hsnCode: '',
     isActive: true,
     itemCode: '',
@@ -86,6 +99,9 @@ export function ItemFormFields({
           />
         </Field>
       </div>
+      <Field label="Location" name="item-location">
+        <MasterLocationSelect id="item-location" {...form.register('hospitalId')} />
+      </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.categoryId?.message}

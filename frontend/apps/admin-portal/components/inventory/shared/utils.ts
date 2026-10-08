@@ -111,10 +111,12 @@ export function useStores(hospitalId?: string) {
   });
 }
 
-export function useItems(itemType?: ItemType) {
+/** Items for filters: the shared ones plus `hospitalId`'s (all visible ones without it). */
+export function useItems(itemType?: ItemType, hospitalId?: string) {
   return useQuery<Item[]>({
     queryFn: async () => {
       const response = await organizationApi.listItems({
+        hospitalId: hospitalId || undefined,
         itemType,
         limit: 100,
         sortBy: 'itemName',
@@ -123,7 +125,7 @@ export function useItems(itemType?: ItemType) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.inventoryItems(itemType ?? 'all'),
+    queryKey: queryKeys.inventoryItems(itemType ?? 'all', hospitalId || 'all'),
   });
 }
 

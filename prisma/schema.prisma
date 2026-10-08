@@ -271,13 +271,16 @@ model Hospital {
 
   auditLogs                AuditLog[]
   counters                 Counter[]
+  employees                Employee[]
   grns                     Grn[]
   kitchenProductions       KitchenProduction[]
   kitchens                 Kitchen[]
   locations                Location[]
   assignedUsers            UserHospital[]
   notifications            Notification[]
+  itemCategories           ItemCategory[]
   itemPrices               ItemPrice[]
+  items                    Item[]
   paymentMachines          PaymentMachine[]
   posDevices               PosDevice[]
   restaurants              Restaurant[]
@@ -285,6 +288,7 @@ model Hospital {
   stockBalances            StockBalance[]
   stockLedgers             StockLedger[]
   stores                   Store[]
+  timeSlots                TimeSlot[]
   transferAcknowledgements TransferAcknowledgement[]
   transfers                Transfer[]
   users                    User[]
@@ -586,6 +590,8 @@ model ItemCategory {
   id             String    @id @default(uuid()) @db.Uuid
   categoryName   String    @unique @map("category_name")
   normalizedName String    @map("normalized_name")
+  /// The location this record belongs to; null means shared by every location.
+  hospitalId     String?   @map("hospital_id") @db.Uuid
   isActive       Boolean   @default(true) @map("is_active")
   createdAt      DateTime  @default(now()) @map("created_at")
   createdBy      String?   @map("created_by") @db.Uuid
@@ -593,9 +599,11 @@ model ItemCategory {
   updatedBy      String?   @map("updated_by") @db.Uuid
   deletedAt      DateTime? @map("deleted_at")
 
-  items Item[]
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+  items    Item[]
 
   @@index([deletedAt])
+  @@index([hospitalId])
   @@index([isActive])
   @@index([normalizedName])
   @@map("item_categories")
@@ -611,6 +619,8 @@ model Item {
   itemType               ItemType  @map("item_type")
   preparationTimeMinutes Int?      @map("preparation_time_minutes")
   hsnCode                String?   @map("hsn_code")
+  /// The location this record belongs to; null means shared by every location.
+  hospitalId             String?   @map("hospital_id") @db.Uuid
   isActive               Boolean   @default(true) @map("is_active")
   createdAt              DateTime  @default(now()) @map("created_at")
   createdBy              String?   @map("created_by") @db.Uuid
@@ -619,6 +629,7 @@ model Item {
   deletedAt              DateTime? @map("deleted_at")
 
   category                     ItemCategory                  @relation(fields: [categoryId], references: [id])
+  hospital                     Hospital?                     @relation(fields: [hospitalId], references: [id])
   grnBatches                   GrnBatch[]
   grnLines                     GrnLine[]
   kitchenItems                 KitchenItem[]
@@ -633,6 +644,7 @@ model Item {
 
   @@index([categoryId])
   @@index([deletedAt])
+  @@index([hospitalId])
   @@index([isActive])
   @@index([itemType])
   @@index([normalizedName])
@@ -680,6 +692,8 @@ model TimeSlot {
   startTime         String?   @map("start_time") @db.VarChar(5)
   endTime           String?   @map("end_time") @db.VarChar(5)
   isAlwaysAvailable Boolean   @default(false) @map("is_always_available")
+  /// The location this record belongs to; null means shared by every location.
+  hospitalId        String?   @map("hospital_id") @db.Uuid
   isActive          Boolean   @default(true) @map("is_active")
   createdAt         DateTime  @default(now()) @map("created_at")
   createdBy         String?   @map("created_by") @db.Uuid
@@ -687,7 +701,10 @@ model TimeSlot {
   updatedBy         String?   @map("updated_by") @db.Uuid
   deletedAt         DateTime? @map("deleted_at")
 
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+
   @@index([deletedAt])
+  @@index([hospitalId])
   @@index([isActive])
   @@index([isAlwaysAvailable])
   @@map("time_slots")
@@ -774,6 +791,8 @@ model Employee {
   designation         String?
   mobile              String?
   eligibleForDiscount Boolean   @default(true) @map("eligible_for_discount")
+  /// The location this record belongs to; null means shared by every location.
+  hospitalId          String?   @map("hospital_id") @db.Uuid
   isActive            Boolean   @default(true) @map("is_active")
   createdAt           DateTime  @default(now()) @map("created_at")
   createdBy           String?   @map("created_by") @db.Uuid
@@ -781,8 +800,11 @@ model Employee {
   updatedBy           String?   @map("updated_by") @db.Uuid
   deletedAt           DateTime? @map("deleted_at")
 
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+
   @@index([deletedAt])
   @@index([eligibleForDiscount])
+  @@index([hospitalId])
   @@index([isActive])
   @@map("employees")
 }

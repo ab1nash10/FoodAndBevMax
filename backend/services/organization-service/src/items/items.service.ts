@@ -6,8 +6,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { uniqueViolationTarget } from '@aahar/auth';
-import { Prisma } from '@prisma/client';
+import { Prisma, type ItemCategory } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import {
+  assertActiveHospital,
+  assertMayChangeShared,
+  assertNotUsedElsewhere,
+  assertUsableAt,
+  sharedOrAt,
+} from '../common/location-masters';
 import { normalizeMasterName } from '../common/normalize-master-name';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
@@ -28,6 +35,8 @@ function toItemResponse(item: ItemWithCategory) {
     categoryId: item.categoryId,
     createdAt: item.createdAt,
     deletedAt: item.deletedAt,
+    hospital: item.hospital,
+    hospitalId: item.hospitalId,
     hsnCode: item.hsnCode,
     id: item.id,
     isActive: item.isActive,
@@ -50,6 +59,7 @@ export class ItemsService {
   async list(query: ListItemsQueryDto) {
     const { limit, page } = getPagination(query);
     const where: Prisma.ItemWhereInput = {
+      ...(query.hospitalId ? { AND: [sharedOrAt(query.hospitalId)] } : {}),
       category: {
         deletedAt: null,
       },
@@ -95,16 +105,26 @@ export class ItemsService {
   async create(dto: CreateItemDto, context: ActorContext) {
     try {
       const created = await this.items.transaction(async (tx) => {
+        const hospitalId = dto.hospitalId ?? null;
+
+        assertMayChangeShared(hospitalId, 'items');
+
+        if (hospitalId) {
+          await assertActiveHospital(tx, hospitalId);
+        }
+
         const normalizedName = normalizeMasterName(dto.itemName);
         const itemCode = await this.generateUniqueItemCode(tx);
+        const category = await this.assertActiveCategory(dto.categoryId, tx);
 
-        await this.assertActiveCategory(dto.categoryId, tx);
+        assertUsableAt(category, hospitalId, 'category');
         await this.assertUniqueNormalizedItemName(normalizedName, undefined, tx);
 
         const item = await this.items.create(
           {
             categoryId: dto.categoryId,
             createdBy: context.actorId,
+            hospitalId,
             hsnCode: dto.hsnCode,
             isActive: dto.isActive ?? true,
             itemCode,
@@ -144,14 +164,34 @@ export class ItemsService {
       const updated = await this.items.transaction(async (tx) => {
         const existing = await this.findActiveItem(id, tx);
         const data: Prisma.ItemUpdateInput = {};
+        const hospitalId = dto.hospitalId === undefined ? existing.hospitalId : dto.hospitalId;
+
+        assertMayChangeShared(existing.hospitalId, 'items');
+
+        if (hospitalId !== existing.hospitalId) {
+          assertMayChangeShared(hospitalId, 'items');
+
+          if (hospitalId) {
+            await assertActiveHospital(tx, hospitalId);
+            assertNotUsedElsewhere(await this.items.countUsesOutside(id, hospitalId, tx), 'item');
+          }
+
+          data.hospital = hospitalId ? { connect: { id: hospitalId } } : { disconnect: true };
+        }
 
         if (dto.categoryId !== undefined) {
-          await this.assertActiveCategory(dto.categoryId, tx);
+          assertUsableAt(
+            await this.assertActiveCategory(dto.categoryId, tx),
+            hospitalId,
+            'category',
+          );
           data.category = {
             connect: {
               id: dto.categoryId,
             },
           };
+        } else if (hospitalId !== existing.hospitalId) {
+          assertUsableAt(existing.category, hospitalId, 'category');
         }
 
         if (dto.hsnCode !== undefined) {
@@ -216,6 +256,8 @@ export class ItemsService {
   async remove(id: string, context: ActorContext) {
     const existing = await this.findActiveItem(id);
 
+    assertMayChangeShared(existing.hospitalId, 'items');
+
     await this.items.transaction(async (tx) => {
       await this.items.update(
         id,
@@ -244,7 +286,7 @@ export class ItemsService {
     };
   }
 
-  private async assertActiveCategory(id: string, client: ItemClient): Promise<void> {
+  private async assertActiveCategory(id: string, client: ItemClient): Promise<ItemCategory> {
     const category = await this.items.findActiveCategory(id, client);
 
     if (!category) {
@@ -254,6 +296,8 @@ export class ItemsService {
     if (!category.isActive) {
       throw new BadRequestException('This category is inactive and cannot be used for new items.');
     }
+
+    return category;
   }
 
   private async assertUniqueNormalizedItemName(

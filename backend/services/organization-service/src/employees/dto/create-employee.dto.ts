@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateEmployeeDto {
   @ApiProperty({ example: 'EMP001' })
@@ -41,4 +41,13 @@ export class CreateEmployeeDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'The location the employee works at; null or omitted shares them with every location',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  hospitalId?: string | null;
 }

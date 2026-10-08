@@ -4,23 +4,31 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, TimeSlot } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import {
+  assertActiveHospital,
+  assertMayChangeShared,
+  assertNotUsedElsewhere,
+  sharedOrAt,
+} from '../common/location-masters';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
 import { CreateTimeSlotDto } from './dto/create-time-slot.dto';
 import { ListTimeSlotsQueryDto } from './dto/list-time-slots-query.dto';
 import { UpdateTimeSlotDto } from './dto/update-time-slot.dto';
-import { TimeSlotsRepository } from './time-slots.repository';
+import { TimeSlotsRepository, type TimeSlotWithHospital } from './time-slots.repository';
 
 type TimeSlotClient = Prisma.TransactionClient;
 
-function toTimeSlotResponse(timeSlot: TimeSlot) {
+function toTimeSlotResponse(timeSlot: TimeSlotWithHospital) {
   return {
     createdAt: timeSlot.createdAt,
     deletedAt: timeSlot.deletedAt,
     endTime: timeSlot.endTime,
+    hospital: timeSlot.hospital,
+    hospitalId: timeSlot.hospitalId,
     id: timeSlot.id,
     isActive: timeSlot.isActive,
     isAlwaysAvailable: timeSlot.isAlwaysAvailable,
@@ -49,6 +57,7 @@ export class TimeSlotsService {
   async list(query: ListTimeSlotsQueryDto) {
     const { limit, page } = getPagination(query);
     const where: Prisma.TimeSlotWhereInput = {
+      ...(query.hospitalId ? sharedOrAt(query.hospitalId) : {}),
       deletedAt: null,
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.isAlwaysAvailable !== undefined
@@ -87,6 +96,14 @@ export class TimeSlotsService {
   async create(dto: CreateTimeSlotDto, context: ActorContext) {
     try {
       const created = await this.timeSlots.transaction(async (tx) => {
+        const hospitalId = dto.hospitalId ?? null;
+
+        assertMayChangeShared(hospitalId, 'time slots');
+
+        if (hospitalId) {
+          await assertActiveHospital(tx, hospitalId);
+        }
+
         await this.assertUniqueSlotName(dto.slotName, undefined, tx);
 
         if (!dto.isAlwaysAvailable) {
@@ -97,6 +114,7 @@ export class TimeSlotsService {
           {
             createdBy: context.actorId,
             endTime: dto.isAlwaysAvailable ? null : dto.endTime,
+            hospitalId,
             isActive: dto.isActive ?? true,
             isAlwaysAvailable: dto.isAlwaysAvailable ?? false,
             slotName: dto.slotName,
@@ -143,6 +161,23 @@ export class TimeSlotsService {
             ? dto.endTime
             : existing.endTime;
         const data: Prisma.TimeSlotUpdateInput = {};
+        const hospitalId = dto.hospitalId === undefined ? existing.hospitalId : dto.hospitalId;
+
+        assertMayChangeShared(existing.hospitalId, 'time slots');
+
+        if (hospitalId !== existing.hospitalId) {
+          assertMayChangeShared(hospitalId, 'time slots');
+
+          if (hospitalId) {
+            await assertActiveHospital(tx, hospitalId);
+            assertNotUsedElsewhere(
+              await this.timeSlots.countMenusOutside(id, hospitalId, tx),
+              'time slot',
+            );
+          }
+
+          data.hospital = hospitalId ? { connect: { id: hospitalId } } : { disconnect: true };
+        }
 
         if (dto.slotName !== undefined) {
           await this.assertUniqueSlotName(dto.slotName, id, tx);
@@ -207,6 +242,8 @@ export class TimeSlotsService {
   async remove(id: string, context: ActorContext) {
     const existing = await this.findActiveTimeSlot(id);
 
+    assertMayChangeShared(existing.hospitalId, 'time slots');
+
     await this.timeSlots.transaction(async (tx) => {
       const hasMenus = await this.timeSlots.hasActiveRestaurantMenus(id, tx);
 
@@ -252,7 +289,10 @@ export class TimeSlotsService {
     }
   }
 
-  private async findActiveTimeSlot(id: string, client?: TimeSlotClient): Promise<TimeSlot> {
+  private async findActiveTimeSlot(
+    id: string,
+    client?: TimeSlotClient,
+  ): Promise<TimeSlotWithHospital> {
     const timeSlot = await this.timeSlots.findActiveById(id, client);
 
     if (!timeSlot) {
