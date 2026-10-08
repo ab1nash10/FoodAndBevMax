@@ -5,7 +5,6 @@ import type {
   Item,
   Restaurant,
   RestaurantMenu,
-  RestaurantMenuDayOfWeek,
   RestaurantMenuPositionType,
   TimeSlot,
 } from '@aahar/api-client';
@@ -17,6 +16,7 @@ import {
   type RestaurantMenuFormValues,
 } from '@/components/mapping-foundation/restaurant-menus/shared';
 import { CheckboxLine } from '@/components/mapping-foundation/shared/components';
+import { MultiSelectDropdown } from '@/components/ui-controls';
 
 function formatPositionType(value: RestaurantMenuPositionType): string {
   if (value === 'BEFORE_ITEM') {
@@ -50,30 +50,6 @@ export function RestaurantMenuFormFields({
   const selectedTimeSlotIds = form.watch('timeSlotIds');
   const shouldShowReferenceMenu =
     selectedPositionType === 'BEFORE_ITEM' || selectedPositionType === 'AFTER_ITEM';
-
-  function toggleDay(day: RestaurantMenuDayOfWeek, checked: boolean) {
-    form.setValue(
-      'daysOfWeek',
-      checked ? [...selectedDays, day] : selectedDays.filter((selectedDay) => selectedDay !== day),
-      {
-        shouldDirty: true,
-        shouldValidate: true,
-      },
-    );
-  }
-
-  function toggleTimeSlot(timeSlotId: string, checked: boolean) {
-    form.setValue(
-      'timeSlotIds',
-      checked
-        ? [...selectedTimeSlotIds, timeSlotId]
-        : selectedTimeSlotIds.filter((selectedTimeSlotId) => selectedTimeSlotId !== timeSlotId),
-      {
-        shouldDirty: true,
-        shouldValidate: true,
-      },
-    );
-  }
 
   return (
     <>
@@ -109,50 +85,31 @@ export function RestaurantMenuFormFields({
           label="Time Slots"
           name="time-slot-ids"
         >
-          <div className="grid gap-2 rounded-md border bg-white p-3 shadow-xs sm:grid-cols-2">
-            {timeSlots?.length ? (
-              timeSlots.map((slot) => (
-                <CheckboxLine
-                  input={
-                    <input
-                      checked={selectedTimeSlotIds.includes(slot.id)}
-                      className="h-4 w-4"
-                      onChange={(event) => toggleTimeSlot(slot.id, event.target.checked)}
-                      type="checkbox"
-                    />
-                  }
-                  key={slot.id}
-                >
-                  {slot.slotName}
-                </CheckboxLine>
-              ))
-            ) : (
-              <p className="text-sm text-ds-muted">No active time slots found.</p>
-            )}
-          </div>
+          <MultiSelectDropdown
+            emptyText="No active time slots found."
+            id="time-slot-ids"
+            onChange={(timeSlotIds) =>
+              form.setValue('timeSlotIds', timeSlotIds, { shouldDirty: true, shouldValidate: true })
+            }
+            options={(timeSlots ?? []).map((slot) => ({ label: slot.slotName, value: slot.id }))}
+            placeholder="All day"
+            value={selectedTimeSlotIds}
+          />
         </Field>
         <Field
           error={form.formState.errors.daysOfWeek?.message}
           label="Days Of Week"
           name="days-of-week"
         >
-          <div className="grid gap-2 rounded-md border bg-white p-3 shadow-xs sm:grid-cols-2">
-            {dayOfWeekValues.map((day) => (
-              <CheckboxLine
-                input={
-                  <input
-                    checked={selectedDays.includes(day)}
-                    className="h-4 w-4"
-                    onChange={(event) => toggleDay(day, event.target.checked)}
-                    type="checkbox"
-                  />
-                }
-                key={day}
-              >
-                {formatEnum(day)}
-              </CheckboxLine>
-            ))}
-          </div>
+          <MultiSelectDropdown
+            id="days-of-week"
+            onChange={(daysOfWeek) =>
+              form.setValue('daysOfWeek', daysOfWeek, { shouldDirty: true, shouldValidate: true })
+            }
+            options={dayOfWeekValues.map((day) => ({ label: formatEnum(day), value: day }))}
+            placeholder="Every day"
+            value={selectedDays}
+          />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

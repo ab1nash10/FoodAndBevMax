@@ -4,7 +4,7 @@
 // static pieces (Panel, Field, Badge...) without being pulled into the client bundle.
 import { Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { Eye, EyeOff, Minus, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Minus, Plus, Search, X } from 'lucide-react';
 import {
   forwardRef,
   useEffect,
@@ -248,6 +248,105 @@ interface ModalProps {
  * Centred pop-up used by the POS masters. The spec asks for create/edit to open as a pop-up over
  * the grid instead of pushing the table down the page.
  */
+/**
+ * A dropdown of checkable options, styled like Select, for picking several values. The closed
+ * box lists what is picked, or the placeholder when nothing is.
+ */
+export function MultiSelectDropdown<TValue extends string>({
+  emptyText = 'No options',
+  id,
+  onChange,
+  options,
+  placeholder,
+  value,
+}: Readonly<{
+  emptyText?: string;
+  id: string;
+  onChange: (value: TValue[]) => void;
+  options: Array<{ label: string; value: TValue }>;
+  placeholder: string;
+  value: TValue[];
+}>) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const picked = options.filter((option) => value.includes(option.value));
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [isOpen]);
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && isOpen) {
+          event.stopPropagation();
+          setIsOpen(false);
+        }
+      }}
+      ref={rootRef}
+    >
+      <button
+        aria-controls={`${id}-options`}
+        aria-expanded={isOpen}
+        className="flex h-control w-full items-center gap-2 rounded-control border border-ds-input bg-ds-surface px-3 text-left text-sm text-ds-text outline-hidden transition focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/15 dark:focus:border-ds-link dark:focus:ring-ds-link/20"
+        id={id}
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        <span className={cn('min-w-0 flex-1 truncate', picked.length === 0 && 'text-ds-muted')}>
+          {picked.length ? picked.map((option) => option.label).join(', ') : placeholder}
+        </span>
+        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-ds-muted" />
+      </button>
+      {isOpen ? (
+        <div
+          className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-control border border-ds-border bg-ds-surface p-1 shadow-card"
+          id={`${id}-options`}
+          role="group"
+        >
+          {options.length ? (
+            options.map((option) => (
+              <label
+                className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-control px-2.5 text-sm text-ds-text hover:bg-ds-subtle"
+                key={option.value}
+              >
+                <input
+                  checked={value.includes(option.value)}
+                  className="h-4 w-4"
+                  onChange={(event) =>
+                    onChange(
+                      event.target.checked
+                        ? [...value, option.value]
+                        : value.filter((selected) => selected !== option.value),
+                    )
+                  }
+                  type="checkbox"
+                />
+                {option.label}
+              </label>
+            ))
+          ) : (
+            <p className="px-2.5 py-2 text-sm text-ds-muted">{emptyText}</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** A record's read-only details, opened from a list's View action; `rows` null keeps it closed. */
 export function DetailsModal({
   onClose,
