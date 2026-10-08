@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -265,25 +265,6 @@ export function ItemsPageClient() {
     },
   });
 
-  const deleteItemMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteItem(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Item was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      invalidateItemQueries(queryClient);
-      setUrlParams({ id: null });
-      showToast({
-        title: 'Item deleted',
-        variant: 'success',
-      });
-    },
-  });
-
   const toggleItemStatusMutation = useMutation({
     mutationFn: ({ isActive, item }: { isActive: boolean; item: Item }) =>
       organizationApi.updateItem(item.id, { isActive }),
@@ -333,12 +314,6 @@ export function ItemsPageClient() {
   function startEditing(item: Item) {
     form.reset(itemToFormValues(item));
     setIsEditing(true);
-  }
-
-  function deleteItem(item: Item) {
-    if (window.confirm(`Delete ${item.itemName}?`)) {
-      deleteItemMutation.mutate(item.id);
-    }
   }
 
   function toggleItemStatus(item: Item) {
@@ -661,28 +636,15 @@ export function ItemsPageClient() {
               className="min-w-[300px] flex-[0_1_400px]"
               footer={
                 isEditing ? undefined : (
-                  <>
-                    <Button
-                      className="flex-1"
-                      onClick={() => startEditing(selectedItem)}
-                      type="button"
-                      variant="outline"
-                    >
-                      <Pencil aria-hidden="true" className="h-4 w-4" />
-                      Edit details
-                    </Button>
-                    <Button
-                      aria-label={`Delete ${selectedItem.itemName}`}
-                      className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
-                      disabled={deleteItemMutation.isPending}
-                      onClick={() => deleteItem(selectedItem)}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      Delete
-                    </Button>
-                  </>
+                  <Button
+                    className="flex-1"
+                    onClick={() => startEditing(selectedItem)}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Pencil aria-hidden="true" className="h-4 w-4" />
+                    Edit details
+                  </Button>
                 )
               }
               id="item-detail-panel"

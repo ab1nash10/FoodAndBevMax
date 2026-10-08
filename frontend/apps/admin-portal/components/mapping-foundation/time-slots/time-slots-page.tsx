@@ -2,13 +2,14 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { CalendarClock, Eye, Pencil, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import type { SortOrder, TimeSlot, TimeSlotInput } from '@aahar/api-client';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel, Select } from '@/components/ui';
+import { DetailsModal, Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import {
@@ -199,6 +200,7 @@ export function TimeSlotsPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
+  const [viewingSlot, setViewingSlot] = useState<TimeSlot | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -254,21 +256,40 @@ export function TimeSlotsPageClient() {
     },
   });
 
-  const deleteSlotMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteTimeSlot(id),
+  const toggleSlotStatusMutation = useMutation({
+    mutationFn: ({ isActive, slot }: { isActive: boolean; slot: TimeSlot }) =>
+      organizationApi.updateTimeSlot(slot.id, { isActive }),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
-        title: 'Time slot was not deleted',
+        title: 'Time slot status was not updated',
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, variables) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.timeSlots() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.timeSlotOptions() });
-      showToast({ title: 'Time slot deleted', variant: 'success' });
+      showToast({
+        title: variables.isActive ? 'Time slot activated' : 'Time slot marked inactive',
+        variant: 'success',
+      });
     },
   });
+
+  function toggleSlotStatus(slot: TimeSlot) {
+    const nextIsActive = !slot.isActive;
+
+    if (
+      !nextIsActive &&
+      !window.confirm(
+        'Turning this time slot inactive will stop it from being used for new restaurant menus. Existing records will remain visible. Continue?',
+      )
+    ) {
+      return;
+    }
+
+    toggleSlotStatusMutation.mutate({ isActive: nextIsActive, slot });
+  }
 
   const slots = slotsQuery.data?.items ?? [];
   const meta = slotsQuery.data?.meta ?? {
@@ -297,14 +318,6 @@ export function TimeSlotsPageClient() {
   function cancelEditingSlot() {
     setEditingSlot(null);
     form.reset(emptyTimeSlotFormValues());
-  }
-
-  function deleteSlot(slot: TimeSlot) {
-    const shouldDelete = window.confirm(`Delete ${slot.slotName}?`);
-
-    if (shouldDelete) {
-      deleteSlotMutation.mutate(slot.id);
-    }
   }
 
   return (
@@ -424,7 +437,15 @@ export function TimeSlotsPageClient() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge isActive={slot.isActive} />
+                      <span className="flex items-center gap-2">
+                        <StatusBadge isActive={slot.isActive} />
+                        <Toggle
+                          ariaLabel={`${slot.slotName} active`}
+                          checked={slot.isActive}
+                          disabled={toggleSlotStatusMutation.isPending}
+                          onChange={() => toggleSlotStatus(slot)}
+                        />
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
                       {formatDate(slot.createdAt)}
@@ -444,15 +465,13 @@ export function TimeSlotsPageClient() {
                           Edit
                         </Button>
                         <Button
-                          className="border-ds-status-bad-fg/25 text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                          disabled={deleteSlotMutation.isPending}
-                          onClick={() => deleteSlot(slot)}
+                          onClick={() => setViewingSlot(slot)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Eye className="h-4 w-4" />
+                          View
                         </Button>
                       </div>
                     </td>
@@ -478,6 +497,28 @@ export function TimeSlotsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingSlot(null)}
+        rows={
+          viewingSlot && [
+            ['Slot Name', viewingSlot.slotName],
+            ['Time Range', timeRange(viewingSlot)],
+            [
+              'Availability',
+              <BooleanBadge
+                falseLabel="Scheduled"
+                key="availability"
+                trueLabel="Always"
+                value={viewingSlot.isAlwaysAvailable}
+              />,
+            ],
+            ['Status', <StatusBadge isActive={viewingSlot.isActive} key="status" />],
+            ['Created', formatDate(viewingSlot.createdAt)],
+            ['Updated', formatDate(viewingSlot.updatedAt)],
+          ]
+        }
+        title="Time Slot"
+      />
     </section>
   );
 }

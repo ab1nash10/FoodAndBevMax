@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChefHat, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { ChefHat, Eye, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type {
@@ -15,6 +15,7 @@ import type {
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
+import { DetailsModal, Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
@@ -29,7 +30,6 @@ import {
   SearchInput,
   SortOrderSelect,
   StatusBadge,
-  StatusToggleButton,
   SubmitButton,
 } from '@/components/mapping-foundation/shared/components';
 import type { ActiveFilter, MappingFormValues } from '@/components/mapping-foundation/shared/types';
@@ -79,6 +79,7 @@ export function KitchenItemsPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<KitchenItem | null>(null);
+  const [viewingMapping, setViewingMapping] = useState<KitchenItem | null>(null);
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const kitchensQuery = useKitchenOptions(hospitalFilter);
@@ -132,21 +133,6 @@ export function KitchenItemsPageClient() {
       });
       setEditingMapping(null);
       form.reset(emptyMappingFormValues());
-    },
-  });
-
-  const deleteMappingMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteKitchenItem(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Kitchen item was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      invalidateKitchenItems();
-      showToast({ title: 'Kitchen item deleted', variant: 'success' });
     },
   });
 
@@ -212,16 +198,6 @@ export function KitchenItemsPageClient() {
   function cancelEditingMapping() {
     setEditingMapping(null);
     form.reset(emptyMappingFormValues());
-  }
-
-  function deleteMapping(mapping: KitchenItem) {
-    const shouldDelete = window.confirm(
-      `Delete ${mapping.kitchen.kitchenName} - ${mapping.item.itemName}?`,
-    );
-
-    if (shouldDelete) {
-      deleteMappingMutation.mutate(mapping.id);
-    }
   }
 
   function toggleMappingStatus(mapping: KitchenItem) {
@@ -412,10 +388,11 @@ export function KitchenItemsPageClient() {
                       <StatusBadge isActive={mapping.isActive} />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusToggleButton
-                        isActive={mapping.isActive}
-                        isPending={toggleMappingStatusMutation.isPending}
-                        onToggle={() => toggleMappingStatus(mapping)}
+                      <Toggle
+                        ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
+                        checked={mapping.isActive}
+                        disabled={toggleMappingStatusMutation.isPending}
+                        onChange={() => toggleMappingStatus(mapping)}
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
@@ -436,15 +413,13 @@ export function KitchenItemsPageClient() {
                           Edit
                         </Button>
                         <Button
-                          className="border-ds-status-bad-fg/25 text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                          disabled={deleteMappingMutation.isPending}
-                          onClick={() => deleteMapping(mapping)}
+                          onClick={() => setViewingMapping(mapping)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Eye className="h-4 w-4" />
+                          View
                         </Button>
                       </div>
                     </td>
@@ -470,6 +445,27 @@ export function KitchenItemsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingMapping(null)}
+        rows={
+          viewingMapping && [
+            [
+              'Location',
+              `${viewingMapping.kitchen.hospital.hospitalName} (${viewingMapping.kitchen.hospital.hospitalCode})`,
+            ],
+            [
+              'Kitchen',
+              `${viewingMapping.kitchen.kitchenName} (${viewingMapping.kitchen.kitchenCode})`,
+            ],
+            ['Item', `${viewingMapping.item.itemName} (${viewingMapping.item.itemCode})`],
+            ['Category', viewingMapping.item.category?.categoryName ?? '-'],
+            ['Status', <StatusBadge isActive={viewingMapping.isActive} key="status" />],
+            ['Created', formatDate(viewingMapping.createdAt)],
+            ['Updated', formatDate(viewingMapping.updatedAt)],
+          ]
+        }
+        title="Kitchen Item"
+      />
     </section>
   );
 }

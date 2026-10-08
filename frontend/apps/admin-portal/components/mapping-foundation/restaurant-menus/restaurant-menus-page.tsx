@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, RefreshCw, Trash2, Utensils } from 'lucide-react';
+import { Eye, Pencil, RefreshCw, Utensils } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -19,6 +19,7 @@ import type {
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
+import { DetailsModal, Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
@@ -40,7 +41,6 @@ import {
   SearchInput,
   SortOrderSelect,
   StatusBadge,
-  StatusToggleButton,
   SubmitButton,
 } from '@/components/mapping-foundation/shared/components';
 import type { ActiveFilter } from '@/components/mapping-foundation/shared/types';
@@ -199,6 +199,7 @@ export function RestaurantMenusPageClient() {
   const [sortBy, setSortBy] = useState('displayOrder');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [editingMenu, setEditingMenu] = useState<RestaurantMenu | null>(null);
+  const [viewingMenu, setViewingMenu] = useState<RestaurantMenu | null>(null);
   const form = useForm<RestaurantMenuFormValues>({
     defaultValues: emptyRestaurantMenuFormValues(),
   });
@@ -296,21 +297,6 @@ export function RestaurantMenusPageClient() {
     },
   });
 
-  const deleteMenuMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteRestaurantMenu(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Restaurant menu was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantMenus() });
-      showToast({ title: 'Restaurant menu deleted', variant: 'success' });
-    },
-  });
-
   const toggleMenuStatusMutation = useMutation({
     mutationFn: ({ isActive, menu }: { isActive: boolean; menu: RestaurantMenu }) =>
       organizationApi.updateRestaurantMenu(menu.id, { isActive }),
@@ -378,16 +364,6 @@ export function RestaurantMenusPageClient() {
   function cancelEditingMenu() {
     setEditingMenu(null);
     form.reset(emptyRestaurantMenuFormValues());
-  }
-
-  function deleteMenu(menu: RestaurantMenu) {
-    const shouldDelete = window.confirm(
-      `Delete ${menu.restaurant.restaurantName} - ${menu.item.itemName}?`,
-    );
-
-    if (shouldDelete) {
-      deleteMenuMutation.mutate(menu.id);
-    }
   }
 
   function toggleMenuStatus(menu: RestaurantMenu) {
@@ -651,10 +627,11 @@ export function RestaurantMenusPageClient() {
                       <StatusBadge isActive={menu.isActive} />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusToggleButton
-                        isActive={menu.isActive}
-                        isPending={toggleMenuStatusMutation.isPending}
-                        onToggle={() => toggleMenuStatus(menu)}
+                      <Toggle
+                        ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
+                        checked={menu.isActive}
+                        disabled={toggleMenuStatusMutation.isPending}
+                        onChange={() => toggleMenuStatus(menu)}
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
@@ -675,15 +652,13 @@ export function RestaurantMenusPageClient() {
                           Edit
                         </Button>
                         <Button
-                          className="border-ds-status-bad-fg/25 text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                          disabled={deleteMenuMutation.isPending}
-                          onClick={() => deleteMenu(menu)}
+                          onClick={() => setViewingMenu(menu)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Eye className="h-4 w-4" />
+                          View
                         </Button>
                       </div>
                     </td>
@@ -709,6 +684,49 @@ export function RestaurantMenusPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingMenu(null)}
+        rows={
+          viewingMenu && [
+            [
+              'Location',
+              `${viewingMenu.restaurant.hospital.hospitalName} (${viewingMenu.restaurant.hospital.hospitalCode})`,
+            ],
+            [
+              'Restaurant',
+              `${viewingMenu.restaurant.restaurantName} (${viewingMenu.restaurant.restaurantCode})`,
+            ],
+            ['Item', `${viewingMenu.item.itemName} (${viewingMenu.item.itemCode})`],
+            ['Item Type', formatEnum(viewingMenu.item.itemType)],
+            [
+              'Time Slots',
+              viewingMenu.timeSlots.length
+                ? viewingMenu.timeSlots.map((timeSlot) => timeSlot.slotName).join(', ')
+                : 'All day',
+            ],
+            [
+              'Days',
+              viewingMenu.daysOfWeek.length
+                ? viewingMenu.daysOfWeek.map((day) => formatEnum(day)).join(', ')
+                : 'Every day',
+            ],
+            ['Display Order', viewingMenu.displayOrder],
+            [
+              'Available',
+              <BooleanBadge
+                falseLabel="Unavailable"
+                key="available"
+                trueLabel="Available"
+                value={viewingMenu.isAvailable}
+              />,
+            ],
+            ['Status', <StatusBadge isActive={viewingMenu.isActive} key="status" />],
+            ['Created', formatDate(viewingMenu.createdAt)],
+            ['Updated', formatDate(viewingMenu.updatedAt)],
+          ]
+        }
+        title="Restaurant Menu"
+      />
     </section>
   );
 }

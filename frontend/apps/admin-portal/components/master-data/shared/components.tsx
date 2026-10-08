@@ -21,33 +21,6 @@ export function StatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
   );
 }
 
-export function StatusToggleButton({
-  isActive,
-  isPending,
-  onToggle,
-}: Readonly<{
-  isActive: boolean;
-  isPending: boolean;
-  onToggle: () => void;
-}>) {
-  return (
-    <Button
-      className={
-        isActive
-          ? 'border-ds-status-pending-fg/25 text-ds-status-pending-fg hover:bg-ds-status-pending-bg'
-          : 'border-ds-teal-border text-ds-teal-text hover:bg-ds-teal-soft'
-      }
-      disabled={isPending}
-      onClick={onToggle}
-      size="sm"
-      type="button"
-      variant="outline"
-    >
-      {isActive ? 'Turn inactive' : 'Turn active'}
-    </Button>
-  );
-}
-
 export function PageHeader({ action, eyebrow, subtitle, title }: PageHeaderProps) {
   return <AppPageHeader action={action} description={subtitle} eyebrow={eyebrow} title={title} />;
 }

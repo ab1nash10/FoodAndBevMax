@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Panel, Select } from '@/components/ui';
+import { DetailsModal, Toggle } from '@/components/ui-controls';
 import { IfCanOpen } from '@/components/record-link';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
@@ -17,7 +18,7 @@ import { cn } from '@/lib/utils';
 import type { Restaurant, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Loader2, Pencil, Plus, QrCode, RefreshCw, Trash2, Utensils } from 'lucide-react';
+import { Activity, Eye, Pencil, Plus, QrCode, RefreshCw, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import {
   ActiveFilterSelect,
@@ -32,8 +33,12 @@ import {
   activeFilterToBoolean,
   formatDate,
   listLimit,
+  nullableText,
 } from '@/components/organization/shared/utils';
-import { formatRestaurantLocationDisplay } from '@/components/organization/shared/locations';
+import {
+  formatRestaurantLocationDisplay,
+  freezeServicesMessage,
+} from '@/components/organization/shared/locations';
 import {
   getRestaurantOptionBadges,
   isRestaurantOnline,
@@ -108,7 +113,7 @@ export function RestaurantsPageClient() {
   ]);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewingRestaurant, setViewingRestaurant] = useState<Restaurant | null>(null);
   const [onlineUpdatingId, setOnlineUpdatingId] = useState<string | null>(null);
 
   const restaurantsQuery = useQuery({
@@ -139,28 +144,6 @@ export function RestaurantsPageClient() {
     setPage(1);
   });
 
-  const deleteRestaurantMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteRestaurant(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Restaurant was not deleted',
-        variant: 'error',
-      });
-    },
-    onSettled() {
-      setDeletingId(null);
-    },
-    onSuccess() {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantOptions() });
-      showToast({
-        title: 'Restaurant deleted',
-        variant: 'success',
-      });
-    },
-  });
-
   const onlineToggleMutation = useMutation({
     mutationFn: ({ id, nextIsOnline }: { id: string; nextIsOnline: boolean }) =>
       organizationApi.updateRestaurant(id, {
@@ -187,6 +170,36 @@ export function RestaurantsPageClient() {
     },
   });
 
+  const statusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      organizationApi.updateRestaurant(id, { isActive }),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Restaurant status was not updated',
+        variant: 'error',
+      });
+    },
+    onSuccess(_, variables) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantOptions() });
+      showToast({
+        title: variables.isActive ? 'Restaurant activated' : 'Restaurant deactivated',
+        variant: 'success',
+      });
+    },
+  });
+
+  function toggleRestaurantStatus(restaurant: Restaurant) {
+    const nextIsActive = !restaurant.isActive;
+
+    if (!nextIsActive && !window.confirm(freezeServicesMessage)) {
+      return;
+    }
+
+    statusMutation.mutate({ id: restaurant.id, isActive: nextIsActive });
+  }
+
   const items = restaurantsQuery.data?.items ?? [];
   const meta = restaurantsQuery.data?.meta ?? {
     limit: listLimit,
@@ -200,17 +213,6 @@ export function RestaurantsPageClient() {
     { label: 'Restaurant code', value: 'restaurantCode' },
     { label: 'Status', value: 'isActive' },
   ];
-
-  const handleDelete = (restaurant: Restaurant) => {
-    const shouldDelete = window.confirm(`Delete ${restaurant.restaurantName}?`);
-
-    if (!shouldDelete) {
-      return;
-    }
-
-    setDeletingId(restaurant.id);
-    deleteRestaurantMutation.mutate(restaurant.id);
-  };
 
   const handleOnlineToggle = (restaurant: Restaurant) => {
     setOnlineUpdatingId(restaurant.id);
@@ -294,7 +296,6 @@ export function RestaurantsPageClient() {
                 items.map((restaurant) => {
                   const isOnline = isRestaurantOnline(restaurant);
                   const optionBadges = getRestaurantOptionBadges(restaurant);
-                  const isDeleting = deletingId === restaurant.id;
                   const isOnlineUpdating = onlineUpdatingId === restaurant.id;
 
                   return (
@@ -328,7 +329,13 @@ export function RestaurantsPageClient() {
                         </div>
                       </td>
                       <td className="border-y border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Toggle
+                            ariaLabel={`${restaurant.restaurantName} active`}
+                            checked={restaurant.isActive}
+                            disabled={statusMutation.isPending}
+                            onChange={() => toggleRestaurantStatus(restaurant)}
+                          />
                           {optionBadges.map((badge) => (
                             <Badge key={badge.label} variant={badge.variant}>
                               {badge.label}
@@ -355,18 +362,13 @@ export function RestaurantsPageClient() {
                             </Button>
                           </IfCanOpen>
                           <Button
-                            disabled={isDeleting}
-                            onClick={() => handleDelete(restaurant)}
+                            onClick={() => setViewingRestaurant(restaurant)}
                             size="sm"
                             type="button"
                             variant="outline"
                           >
-                            {isDeleting ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                            Delete
+                            <Eye className="h-4 w-4" />
+                            View
                           </Button>
                           <Button
                             onClick={() =>
@@ -422,6 +424,40 @@ export function RestaurantsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingRestaurant(null)}
+        rows={
+          viewingRestaurant && [
+            [
+              'Restaurant',
+              `${viewingRestaurant.restaurantName} (${viewingRestaurant.restaurantCode})`,
+            ],
+            ['Location', formatRestaurantLocationDisplay(viewingRestaurant.hospital)],
+            ['Legal Name', nullableText(viewingRestaurant.legalName)],
+            ['Address', nullableText(viewingRestaurant.address)],
+            ['Mobile', nullableText(viewingRestaurant.mobile)],
+            ['Email', nullableText(viewingRestaurant.email)],
+            ['GST Number', nullableText(viewingRestaurant.gstNumber)],
+            ['FSSAI Number', nullableText(viewingRestaurant.fssaiNumber)],
+            ['Kitchen', nullableText(viewingRestaurant.kitchen?.kitchenName)],
+            ['Store', nullableText(viewingRestaurant.store?.storeName)],
+            ['Online', isRestaurantOnline(viewingRestaurant) ? 'Online' : 'Offline'],
+            [
+              'Status / Options',
+              <span className="flex flex-wrap gap-2" key="options">
+                {getRestaurantOptionBadges(viewingRestaurant).map((badge) => (
+                  <Badge key={badge.label} variant={badge.variant}>
+                    {badge.label}
+                  </Badge>
+                ))}
+              </span>,
+            ],
+            ['Created', formatDate(viewingRestaurant.createdAt)],
+            ['Updated', formatDate(viewingRestaurant.updatedAt)],
+          ]
+        }
+        title="Restaurant"
+      />
     </section>
   );
 }

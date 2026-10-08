@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, RefreshCw, Tags, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Plus, RefreshCw, Tags } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -16,6 +16,7 @@ import type {
 } from '@aahar/api-client';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
+import { DetailsModal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { IfCanOpen } from '@/components/record-link';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
@@ -34,7 +35,6 @@ import {
   SearchInput,
   SortOrderSelect,
   StatusBadge,
-  StatusToggleButton,
   SubmitButton,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
@@ -71,6 +71,7 @@ export function ItemCategoriesPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
+  const [viewingCategory, setViewingCategory] = useState<ItemCategory | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -122,24 +123,6 @@ export function ItemCategoriesPageClient() {
       form.reset({
         categoryName: '',
         isActive: true,
-      });
-    },
-  });
-
-  const deleteCategoryMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteItemCategory(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Category was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      invalidateItemCategoryQueries(queryClient);
-      showToast({
-        title: 'Category deleted',
-        variant: 'success',
       });
     },
   });
@@ -199,14 +182,6 @@ export function ItemCategoriesPageClient() {
       categoryName: '',
       isActive: true,
     });
-  }
-
-  function deleteCategory(category: ItemCategory) {
-    const shouldDelete = window.confirm(`Delete ${category.categoryName}?`);
-
-    if (shouldDelete) {
-      deleteCategoryMutation.mutate(category.id);
-    }
   }
 
   function toggleCategoryStatus(category: ItemCategory) {
@@ -327,10 +302,11 @@ export function ItemCategoriesPageClient() {
                       <StatusBadge isActive={category.isActive} />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusToggleButton
-                        isActive={category.isActive}
-                        isPending={toggleCategoryStatusMutation.isPending}
-                        onToggle={() => toggleCategoryStatus(category)}
+                      <Toggle
+                        ariaLabel={`${category.categoryName} active`}
+                        checked={category.isActive}
+                        disabled={toggleCategoryStatusMutation.isPending}
+                        onChange={() => toggleCategoryStatus(category)}
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
@@ -351,15 +327,13 @@ export function ItemCategoriesPageClient() {
                           Edit
                         </Button>
                         <Button
-                          className="border-ds-status-bad-fg/25 text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                          disabled={deleteCategoryMutation.isPending}
-                          onClick={() => deleteCategory(category)}
+                          onClick={() => setViewingCategory(category)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Eye className="h-4 w-4" />
+                          View
                         </Button>
                       </div>
                     </td>
@@ -385,6 +359,18 @@ export function ItemCategoriesPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingCategory(null)}
+        rows={
+          viewingCategory && [
+            ['Category Name', viewingCategory.categoryName],
+            ['Status', <StatusBadge isActive={viewingCategory.isActive} key="status" />],
+            ['Created', formatDate(viewingCategory.createdAt)],
+            ['Updated', formatDate(viewingCategory.updatedAt)],
+          ]
+        }
+        title="Item Category"
+      />
     </section>
   );
 }

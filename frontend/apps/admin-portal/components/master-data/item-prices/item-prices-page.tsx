@@ -2,13 +2,14 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IndianRupee, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Eye, IndianRupee, Pencil, Plus, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { ItemPrice, SortOrder } from '@aahar/api-client';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Input, Panel, Select } from '@/components/ui';
+import { DetailsModal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { IfCanOpen, RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
@@ -33,7 +34,6 @@ import {
   SearchInput,
   SortOrderSelect,
   StatusBadge,
-  StatusToggleButton,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter, ItemTypeFilter } from '@/components/master-data/shared/types';
 import {
@@ -74,6 +74,7 @@ export function ItemPricesPageClient() {
   const [effectiveDate, setEffectiveDate] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [viewingPrice, setViewingPrice] = useState<ItemPrice | null>(null);
   const hospitalsQuery = useHospitalOptions();
   const restaurantsQuery = useRestaurantOptions(hospitalFilter);
   const queryClient = useQueryClient();
@@ -120,24 +121,6 @@ export function ItemPricesPageClient() {
     }),
   });
 
-  const deleteItemPriceMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteItemPrice(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Item price was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      invalidateItemPriceQueries(queryClient);
-      showToast({
-        title: 'Item price deleted',
-        variant: 'success',
-      });
-    },
-  });
-
   const toggleItemPriceStatusMutation = useMutation({
     mutationFn: ({ isActive, price }: { isActive: boolean; price: ItemPrice }) =>
       organizationApi.updateItemPrice(price.id, { isActive }),
@@ -164,16 +147,6 @@ export function ItemPricesPageClient() {
     total: 0,
     totalPages: 1,
   };
-
-  function deleteItemPrice(price: ItemPrice) {
-    const shouldDelete = window.confirm(
-      `Delete ${price.item.itemName} ${formatEnum(price.rateType)} price?`,
-    );
-
-    if (shouldDelete) {
-      deleteItemPriceMutation.mutate(price.id);
-    }
-  }
 
   function toggleItemPriceStatus(price: ItemPrice) {
     const nextIsActive = !price.isActive;
@@ -401,10 +374,11 @@ export function ItemPricesPageClient() {
                       <StatusBadge isActive={price.isActive} />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusToggleButton
-                        isActive={price.isActive}
-                        isPending={toggleItemPriceStatusMutation.isPending}
-                        onToggle={() => toggleItemPriceStatus(price)}
+                      <Toggle
+                        ariaLabel={`${price.item.itemName} ${formatEnum(price.rateType)} price active`}
+                        checked={price.isActive}
+                        disabled={toggleItemPriceStatusMutation.isPending}
+                        onChange={() => toggleItemPriceStatus(price)}
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
@@ -429,15 +403,13 @@ export function ItemPricesPageClient() {
                           </Button>
                         </IfCanOpen>
                         <Button
-                          className="border-ds-status-bad-fg/25 text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                          disabled={deleteItemPriceMutation.isPending}
-                          onClick={() => deleteItemPrice(price)}
+                          onClick={() => setViewingPrice(price)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Eye className="h-4 w-4" />
+                          View
                         </Button>
                       </div>
                     </td>
@@ -463,6 +435,30 @@ export function ItemPricesPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingPrice(null)}
+        rows={
+          viewingPrice && [
+            [
+              'Location',
+              `${viewingPrice.hospital.displayName ?? viewingPrice.hospital.hospitalName} (${viewingPrice.hospital.hospitalCode})`,
+            ],
+            ['Restaurant', viewingPrice.restaurant?.restaurantName ?? 'All restaurants'],
+            ['Item', `${viewingPrice.item.itemName} (${viewingPrice.item.itemCode})`],
+            ['Item Type', formatEnum(viewingPrice.item.itemType)],
+            ['Rate Type', formatEnum(viewingPrice.rateType)],
+            ['Price', formatCurrency(viewingPrice.price)],
+            ['Tax Inclusive', viewingPrice.isTaxInclusive ? 'Yes' : 'No'],
+            ['GST %', viewingPrice.gstPercent === null ? '-' : `${viewingPrice.gstPercent}%`],
+            ['Effective From', formatDateOnly(viewingPrice.effectiveFrom)],
+            ['Effective To', formatDateOnly(viewingPrice.effectiveTo)],
+            ['Status', <StatusBadge isActive={viewingPrice.isActive} key="status" />],
+            ['Created', formatDate(viewingPrice.createdAt)],
+            ['Updated', formatDate(viewingPrice.updatedAt)],
+          ]
+        }
+        title="Item Price"
+      />
     </section>
   );
 }

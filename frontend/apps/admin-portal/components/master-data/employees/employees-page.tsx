@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 import type { Employee, EmployeeInput, SortOrder } from '@aahar/api-client';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Panel, Select } from '@/components/ui';
-import { Modal } from '@/components/ui-controls';
+import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { invalidateEmployeeQueries } from '@/lib/query-invalidation';
@@ -141,6 +141,40 @@ export function EmployeesPageClient() {
       closeDialog();
     },
   });
+
+  const toggleEmployeeStatusMutation = useMutation({
+    mutationFn: ({ employee, isActive }: { employee: Employee; isActive: boolean }) =>
+      organizationApi.updateEmployee(employee.id, { isActive }),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Employee status was not updated',
+        variant: 'error',
+      });
+    },
+    onSuccess(_response, variables) {
+      invalidateEmployeeQueries(queryClient);
+      showToast({
+        title: variables.isActive ? 'Employee activated' : 'Employee marked inactive',
+        variant: 'success',
+      });
+    },
+  });
+
+  function toggleEmployeeStatus(employee: Employee) {
+    const nextIsActive = !employee.isActive;
+
+    if (
+      !nextIsActive &&
+      !window.confirm(
+        'Turning this employee inactive will stop them from being used in new operations. Existing records will remain visible. Continue?',
+      )
+    ) {
+      return;
+    }
+
+    toggleEmployeeStatusMutation.mutate({ employee, isActive: nextIsActive });
+  }
 
   const employees = employeesQuery.data?.items ?? [];
   const meta = employeesQuery.data?.meta ?? {
@@ -311,7 +345,15 @@ export function EmployeesPageClient() {
                       </Badge>
                     </td>
                     <td className="px-2.5 py-3">
-                      <StatusBadge isActive={employee.isActive} />
+                      <span className="flex items-center gap-2">
+                        <StatusBadge isActive={employee.isActive} />
+                        <Toggle
+                          ariaLabel={`${employee.employeeName} active`}
+                          checked={employee.isActive}
+                          disabled={toggleEmployeeStatusMutation.isPending}
+                          onChange={() => toggleEmployeeStatus(employee)}
+                        />
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-2.5 py-3">
                       <p className="text-ds-text-3">{formatDateOnly(employee.createdAt)}</p>

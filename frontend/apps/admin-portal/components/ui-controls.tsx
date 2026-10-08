@@ -248,6 +248,26 @@ interface ModalProps {
  * Centred pop-up used by the POS masters. The spec asks for create/edit to open as a pop-up over
  * the grid instead of pushing the table down the page.
  */
+/** A record's read-only details, opened from a list's View action; `rows` null keeps it closed. */
+export function DetailsModal({
+  onClose,
+  rows,
+  title,
+}: Readonly<{ onClose: () => void; rows: Array<[string, ReactNode]> | null; title: string }>) {
+  return (
+    <Modal onClose={onClose} open={rows !== null} title={title}>
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        {rows?.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-xs font-semibold text-ds-muted">{label}</dt>
+            <dd className="mt-0.5 wrap-break-word text-sm font-medium text-ds-text">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Modal>
+  );
+}
+
 export function Modal({ children, footer, onClose, open, title }: ModalProps) {
   useEffect(() => {
     if (!open) {

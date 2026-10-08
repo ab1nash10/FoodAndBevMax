@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel, Select, Skeleton } from '@/components/ui';
+import { DetailsModal } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import type { HospitalInput, Location, LocationInput, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Eye, MapPin, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, MapPin, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -20,6 +21,7 @@ import {
   SearchInput,
   SortOrderSelect,
   StatusBadge,
+  StatusToggleCell,
   ToolbarGrid,
 } from '@/components/organization/shared/list-controls';
 import { CheckboxLine, SubmitButton } from '@/components/organization/shared/form-controls';
@@ -34,6 +36,7 @@ import {
   organizationSchemas,
 } from '@/components/organization/shared/utils';
 import {
+  freezeServicesMessage,
   getLocationTitle,
   toHospitalFormDefaults,
   toHospitalInput,
@@ -56,6 +59,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
   const [sortBy, setSortBy] = useState('locationName');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [viewingLocation, setViewingLocation] = useState<Location | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -149,6 +153,37 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
     },
   });
 
+  const statusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      organizationApi.updateLocation(id, { isActive }),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Location status was not updated',
+        variant: 'error',
+      });
+    },
+    onSuccess(_, variables) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalLocations(hospitalId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.locationOptions(hospitalId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.locations() });
+      showToast({
+        title: variables.isActive ? 'Location activated' : 'Location deactivated',
+        variant: 'success',
+      });
+    },
+  });
+
+  function toggleLocationStatus(location: Location) {
+    const nextIsActive = !location.isActive;
+
+    if (!nextIsActive && !window.confirm(freezeServicesMessage)) {
+      return;
+    }
+
+    statusMutation.mutate({ id: location.id, isActive: nextIsActive });
+  }
+
   const updateLocationMasterMutation = useMutation({
     mutationFn: (body: HospitalInput) => organizationApi.updateHospital(hospitalId, body),
     onError(error) {
@@ -165,26 +200,6 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
       locationMasterForm.reset(toHospitalFormDefaults(response.data));
       showToast({
         title: 'Location updated',
-        variant: 'success',
-      });
-    },
-  });
-
-  const deleteLocationMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteLocation(id),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Location was not deleted',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalLocations(hospitalId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.locationOptions(hospitalId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.locations() });
-      showToast({
-        title: 'Location deleted',
         variant: 'success',
       });
     },
@@ -260,14 +275,6 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
       isActive: true,
       locationName: '',
     });
-  }
-
-  function deleteLocation(location: Location) {
-    const shouldDelete = window.confirm(`Delete ${location.locationName}?`);
-
-    if (shouldDelete) {
-      deleteLocationMutation.mutate(location.id);
-    }
   }
 
   return (
@@ -484,7 +491,11 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
                     <td className="px-4 py-3 text-ds-text-3">{nullableText(location.floor)}</td>
                     <td className="px-4 py-3 text-ds-text-3">{nullableText(location.area)}</td>
                     <td className="px-4 py-3">
-                      <StatusBadge isActive={location.isActive} />
+                      <StatusToggleCell
+                        disabled={statusMutation.isPending}
+                        isActive={location.isActive}
+                        onToggle={() => toggleLocationStatus(location)}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
@@ -498,15 +509,13 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
                           Edit
                         </Button>
                         <Button
-                          className="border-ds-status-bad-fg/25 text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                          disabled={deleteLocationMutation.isPending}
-                          onClick={() => deleteLocation(location)}
+                          onClick={() => setViewingLocation(location)}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Eye className="h-4 w-4" />
+                          View
                         </Button>
                       </div>
                     </td>
@@ -532,6 +541,22 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
           totalPages={meta.totalPages}
         />
       </Panel>
+      <DetailsModal
+        onClose={() => setViewingLocation(null)}
+        rows={
+          viewingLocation && [
+            ['Location', viewingLocation.locationName],
+            ['Building', nullableText(viewingLocation.building)],
+            ['Floor', nullableText(viewingLocation.floor)],
+            ['Area', nullableText(viewingLocation.area)],
+            ['Address', nullableText(viewingLocation.address)],
+            ['Status', <StatusBadge isActive={viewingLocation.isActive} key="status" />],
+            ['Created', formatDate(viewingLocation.createdAt)],
+            ['Updated', formatDate(viewingLocation.updatedAt)],
+          ]
+        }
+        title="Location"
+      />
     </section>
   );
 }
