@@ -15,16 +15,6 @@ export const restaurantDetailQuery = (restaurantId: string | undefined) =>
     queryKey: queryKeys.restaurant(restaurantId),
   });
 
-export const itemPriceDetailQuery = (itemPriceId: string) =>
-  queryOptions({
-    queryFn: async () => {
-      const response = await organizationApi.getItemPrice(itemPriceId);
-
-      return response.data;
-    },
-    queryKey: queryKeys.itemPrices(itemPriceId),
-  });
-
 export const transferDetailQuery = (transferId: string) =>
   queryOptions({
     queryFn: async () => (await organizationApi.getTransfer(transferId)).data,

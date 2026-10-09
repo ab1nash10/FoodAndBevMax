@@ -1,6 +1,7 @@
 'use client';
 
 import { useLocationContext } from '@/components/location-context';
+import { invalidateKitchenQueries } from '@/lib/query-invalidation';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Select } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
@@ -22,7 +23,6 @@ import { formatLocationOption } from '@/components/organization/shared/locations
 import { kitchenSchema, isUuid } from '@/components/organization/shared/schemas';
 import { useHospitalOptions } from '@/components/organization/shared/hooks';
 import type { KitchenFormValues } from '@/components/organization/shared/types';
-import { queryKeys } from '@/lib/query-keys';
 
 export function KitchenCreatePageClient() {
   const { isAllLocations, scopedHospitalId } = useLocationContext();
@@ -60,8 +60,7 @@ export function KitchenCreatePageClient() {
       const href = recordHref('/masters/kitchens', {
         name: response.data.kitchenCode || response.data.kitchenName,
       });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.kitchens() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.kitchenOptions() });
+      invalidateKitchenQueries(queryClient);
       showToast({
         action: { href, label: `View ${response.data.kitchenName}` },
         title: 'Kitchen created',

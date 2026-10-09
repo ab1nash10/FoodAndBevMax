@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ItemType, Prisma, type Kitchen } from '@prisma/client';
+import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
@@ -13,7 +13,6 @@ import { CreateKitchenItemDto } from './dto/create-kitchen-item.dto';
 import { ListKitchenItemsQueryDto } from './dto/list-kitchen-items-query.dto';
 import { UpdateKitchenItemDto } from './dto/update-kitchen-item.dto';
 import { KitchenItemsRepository, KitchenItemWithRelations } from './kitchen-items.repository';
-import { assertUsableAt } from '../common/location-masters';
 
 type KitchenItemClient = Prisma.TransactionClient;
 
@@ -81,9 +80,8 @@ export class KitchenItemsService {
   async create(dto: CreateKitchenItemDto, context: ActorContext) {
     try {
       const created = await this.kitchenItems.transaction(async (tx) => {
-        const kitchen = await this.assertValidKitchen(dto.kitchenId, tx);
-
-        await this.assertValidReadymadeItem(dto.itemId, kitchen.hospitalId, tx);
+        await this.assertValidKitchen(dto.kitchenId, tx);
+        await this.assertValidReadymadeItem(dto.itemId, tx);
         await this.assertUniqueMapping(dto.kitchenId, dto.itemId, undefined, tx);
 
         const mapping = await this.kitchenItems.create(
@@ -126,23 +124,14 @@ export class KitchenItemsService {
         const nextItemId = dto.itemId ?? existing.itemId;
         const data: Prisma.KitchenItemUpdateInput = {};
 
-        let nextHospitalId = existing.kitchen.hospital.id;
-
         if (dto.kitchenId !== undefined) {
-          nextHospitalId = (await this.assertValidKitchen(dto.kitchenId, tx)).hospitalId;
+          await this.assertValidKitchen(dto.kitchenId, tx);
           data.kitchen = { connect: { id: dto.kitchenId } };
         }
 
         if (dto.itemId !== undefined) {
-          await this.assertValidReadymadeItem(dto.itemId, nextHospitalId, tx);
+          await this.assertValidReadymadeItem(dto.itemId, tx);
           data.item = { connect: { id: dto.itemId } };
-        } else if (nextHospitalId !== existing.kitchen.hospital.id) {
-          // Moving to another location's kitchen: the item it keeps must be usable there.
-          const item = await this.kitchenItems.findActiveItem(existing.itemId, tx);
-
-          if (item) {
-            assertUsableAt(item, nextHospitalId, 'item');
-          }
         }
 
         if (dto.kitchenId !== undefined || dto.itemId !== undefined) {
@@ -228,21 +217,15 @@ export class KitchenItemsService {
     }
   }
 
-  private async assertValidKitchen(kitchenId: string, client: KitchenItemClient): Promise<Kitchen> {
+  private async assertValidKitchen(kitchenId: string, client: KitchenItemClient): Promise<void> {
     const kitchen = await this.kitchenItems.findActiveKitchen(kitchenId, client);
 
     if (!kitchen || !kitchen.isActive) {
       throw new BadRequestException('Kitchen not found or inactive');
     }
-
-    return kitchen;
   }
 
-  private async assertValidReadymadeItem(
-    itemId: string,
-    hospitalId: string,
-    client: KitchenItemClient,
-  ): Promise<void> {
+  private async assertValidReadymadeItem(itemId: string, client: KitchenItemClient): Promise<void> {
     const item = await this.kitchenItems.findActiveItem(itemId, client);
 
     if (!item) {
@@ -256,8 +239,6 @@ export class KitchenItemsService {
     if (item.itemType !== ItemType.READYMADE) {
       throw new BadRequestException('Only READYMADE items can be mapped to kitchens');
     }
-
-    assertUsableAt(item, hospitalId, 'item');
   }
 
   private async findActiveKitchenItem(

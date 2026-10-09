@@ -6,15 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { uniqueViolationTarget } from '@aahar/auth';
-import { Prisma, type ItemCategory } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import {
-  assertActiveHospital,
-  assertMayChangeShared,
-  assertNotUsedElsewhere,
-  assertUsableAt,
-  sharedOrAt,
-} from '../common/location-masters';
 import { normalizeMasterName } from '../common/normalize-master-name';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
@@ -35,8 +28,6 @@ function toItemResponse(item: ItemWithCategory) {
     categoryId: item.categoryId,
     createdAt: item.createdAt,
     deletedAt: item.deletedAt,
-    hospital: item.hospital,
-    hospitalId: item.hospitalId,
     hsnCode: item.hsnCode,
     id: item.id,
     isActive: item.isActive,
@@ -59,7 +50,6 @@ export class ItemsService {
   async list(query: ListItemsQueryDto) {
     const { limit, page } = getPagination(query);
     const where: Prisma.ItemWhereInput = {
-      ...(query.hospitalId ? { AND: [sharedOrAt(query.hospitalId)] } : {}),
       category: {
         deletedAt: null,
       },
@@ -105,26 +95,19 @@ export class ItemsService {
   async create(dto: CreateItemDto, context: ActorContext) {
     try {
       const created = await this.items.transaction(async (tx) => {
-        const hospitalId = dto.hospitalId ?? null;
-
-        assertMayChangeShared(hospitalId, 'items');
-
-        if (hospitalId) {
-          await assertActiveHospital(tx, hospitalId);
-        }
-
         const normalizedName = normalizeMasterName(dto.itemName);
-        const itemCode = await this.generateUniqueItemCode(tx);
-        const category = await this.assertActiveCategory(dto.categoryId, tx);
 
-        assertUsableAt(category, hospitalId, 'category');
-        await this.assertUniqueNormalizedItemName(normalizedName, undefined, tx);
+        await this.assertActiveCategory(dto.categoryId, tx);
+        await this.assertUniqueNormalizedItemName(normalizedName, dto.categoryId, undefined, tx);
+
+        // Only after every check: a code taken from the sequence is never given back, so a
+        // refused item would otherwise leave a gap in the numbering.
+        const itemCode = await this.generateUniqueItemCode(tx);
 
         const item = await this.items.create(
           {
             categoryId: dto.categoryId,
             createdBy: context.actorId,
-            hospitalId,
             hsnCode: dto.hsnCode,
             isActive: dto.isActive ?? true,
             itemCode,
@@ -164,34 +147,14 @@ export class ItemsService {
       const updated = await this.items.transaction(async (tx) => {
         const existing = await this.findActiveItem(id, tx);
         const data: Prisma.ItemUpdateInput = {};
-        const hospitalId = dto.hospitalId === undefined ? existing.hospitalId : dto.hospitalId;
-
-        assertMayChangeShared(existing.hospitalId, 'items');
-
-        if (hospitalId !== existing.hospitalId) {
-          assertMayChangeShared(hospitalId, 'items');
-
-          if (hospitalId) {
-            await assertActiveHospital(tx, hospitalId);
-            assertNotUsedElsewhere(await this.items.countUsesOutside(id, hospitalId, tx), 'item');
-          }
-
-          data.hospital = hospitalId ? { connect: { id: hospitalId } } : { disconnect: true };
-        }
 
         if (dto.categoryId !== undefined) {
-          assertUsableAt(
-            await this.assertActiveCategory(dto.categoryId, tx),
-            hospitalId,
-            'category',
-          );
+          await this.assertActiveCategory(dto.categoryId, tx);
           data.category = {
             connect: {
               id: dto.categoryId,
             },
           };
-        } else if (hospitalId !== existing.hospitalId) {
-          assertUsableAt(existing.category, hospitalId, 'category');
         }
 
         if (dto.hsnCode !== undefined) {
@@ -203,11 +166,20 @@ export class ItemsService {
         }
 
         if (dto.itemName !== undefined) {
-          const normalizedName = normalizeMasterName(dto.itemName);
-
-          await this.assertUniqueNormalizedItemName(normalizedName, id, tx);
           data.itemName = dto.itemName;
-          data.normalizedName = normalizedName;
+          data.normalizedName = normalizeMasterName(dto.itemName);
+        }
+
+        // The same name may be used once per category, so a new name or a new category is checked.
+        if (dto.itemName !== undefined || dto.categoryId !== undefined) {
+          await this.assertUniqueNormalizedItemName(
+            dto.itemName === undefined
+              ? existing.normalizedName
+              : normalizeMasterName(dto.itemName),
+            dto.categoryId ?? existing.categoryId,
+            id,
+            tx,
+          );
         }
 
         if (dto.itemType !== undefined) {
@@ -256,8 +228,6 @@ export class ItemsService {
   async remove(id: string, context: ActorContext) {
     const existing = await this.findActiveItem(id);
 
-    assertMayChangeShared(existing.hospitalId, 'items');
-
     await this.items.transaction(async (tx) => {
       await this.items.update(
         id,
@@ -286,7 +256,7 @@ export class ItemsService {
     };
   }
 
-  private async assertActiveCategory(id: string, client: ItemClient): Promise<ItemCategory> {
+  private async assertActiveCategory(id: string, client: ItemClient): Promise<void> {
     const category = await this.items.findActiveCategory(id, client);
 
     if (!category) {
@@ -296,19 +266,23 @@ export class ItemsService {
     if (!category.isActive) {
       throw new BadRequestException('This category is inactive and cannot be used for new items.');
     }
-
-    return category;
   }
 
   private async assertUniqueNormalizedItemName(
     normalizedName: string,
+    categoryId: string,
     excludeId: string | undefined,
     client: ItemClient,
   ): Promise<void> {
-    const item = await this.items.findByNormalizedName(normalizedName, excludeId, client);
+    const item = await this.items.findByNormalizedName(
+      normalizedName,
+      categoryId,
+      excludeId,
+      client,
+    );
 
     if (item) {
-      throw new ConflictException('Similar item already exists');
+      throw new ConflictException('Similar item already exists in this category');
     }
   }
 
@@ -346,7 +320,7 @@ export class ItemsService {
       const target = uniqueViolationTarget(error.meta);
 
       if (/normalized_name/.test(target)) {
-        throw new ConflictException('Similar item already exists');
+        throw new ConflictException('Similar item already exists in this category');
       }
 
       if (/item_?code/i.test(target)) {

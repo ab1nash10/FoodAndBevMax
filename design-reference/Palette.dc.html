@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Command palette</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 760px; height: 620px; box-sizing: border-box; padding: 48px 40px; background: {{c.overlay}}; display: flex; justify-content: center; align-items: flex-start; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: {{c.text}}">
+<div role="dialog" aria-modal="true" aria-label="Search and commands" style="width: 100%; max-width: 640px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.dialogShadow}}; overflow: hidden; display: flex; flex-direction: column">
+<label style="display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-bottom: 1px solid {{c.border}}; color: {{c.muted}}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+<input type="search" aria-label="Search or type a command" placeholder="Search transfers, GRNs, items, or type a command…" value="{{q}}" onChange="{{onQ}}" style="flex-grow: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 15px; color: {{c.text}}">
+<kbd style="font-family: inherit; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid {{c.border}}; background: {{c.subtle}}; color: {{c.text3}}">Esc</kbd>
+</label>
+<div style="max-height: 420px; overflow-y: auto; padding: 8px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px">
+<span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: {{g.c.muted}}; padding: 8px 10px 4px">{{g.label}}</span>
+<sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+<a href="{{it.href}}" onMouseEnter="{{it.hover}}" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 10px; border-radius: 10px; text-decoration: none; background: {{it.bg}}; color: {{it.c.text}}">
+<span style="width: 28px; height: 28px; border-radius: 8px; background: {{it.tBg}}; color: {{it.tFg}}; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 800; flex-shrink: 0">{{it.abbr}}</span>
+<span style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0"><span style="font-size: 13.5px; font-weight: 700">{{it.label}}</span><span style="font-size: 12px; color: {{it.c.muted}}">{{it.hint}}</span></span>
+<sc-if value="{{it.hasKey}}" hint-placeholder-val="{{ false }}"><kbd style="font-family: inherit; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid {{it.c.border}}; background: {{it.c.subtle}}; color: {{it.c.text3}}">{{it.key}}</kbd></sc-if>
+<sc-if value="{{it.on}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{it.c.link}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 10 4 15l5 5"></path><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg></sc-if>
+</a>
+</sc-for>
+</div>
+</sc-for>
+<sc-if value="{{empty}}" hint-placeholder-val="{{ false }}"><div style="padding: 32px 12px; text-align: center; font-size: 13px; color: {{c.muted}}">No matches for “{{q}}”. Try a transfer number like TRF0042.</div></sc-if>
+</div>
+<div style="display: flex; gap: 16px; padding: 10px 16px; border-top: 1px solid {{c.border}}; background: {{c.subtle}}; font-size: 12px; color: {{c.muted}}">
+<span><kbd style="font-family: inherit; font-weight: 700; color: {{c.text3}}">↑ ↓</kbd> move</span>
+<span><kbd style="font-family: inherit; font-weight: 700; color: {{c.text3}}">Enter</kbd> open</span>
+<span><kbd style="font-family: inherit; font-weight: 700; color: {{c.text3}}">N</kbd> then a letter to create</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":760,"height":620}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { q: '', hot: 'Acknowledge TRF0042' };
+  }
+  renderVals() {
+    const dark = this.props.theme === 'dark';
+    const c = dark
+      ? { surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', text: '#F8FAFC', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', selected: '#0C2238', overlay: 'rgba(2, 6, 23, 0.72)', dialogShadow: '0 24px 64px rgba(0, 0, 0, 0.6)', pendBg: '#422006', pendFg: '#FCD34D', infoBg: '#082F49', infoFg: '#7DD3FC', storeBg: '#052E16', storeFg: '#86EFAC', kitBg: '#431407', kitFg: '#FDBA74', itemBg: '#172554', itemFg: '#93C5FD', neuBg: '#1E293B', neuFg: '#CBD5E1' }
+      : { surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', text: '#0F172A', text3: '#475569', muted: '#5B6577', link: '#0B57A4', selected: '#F1F6FD', overlay: 'rgba(15, 23, 42, 0.42)', dialogShadow: '0 24px 64px rgba(15, 23, 42, 0.24)', pendBg: '#FEF3C7', pendFg: '#92400E', infoBg: '#E8F0FA', infoFg: '#0B57A4', storeBg: '#E3F5EE', storeFg: '#15803D', kitBg: '#FFF4E6', kitFg: '#C2570C', itemBg: '#EAF1FD', itemFg: '#1D5FC9', neuBg: '#EEF2F6', neuFg: '#475569' };
+    const sfx = dark ? '-dark' : '';
+    const L = (f) => f + sfx + '.dc.html';
+    const G = [
+      ['RECENT', [
+        ['TR', 'Acknowledge TRF0042', 'Pending · Main F&B Store → Main Cafeteria', L('Acknowledge'), 'pend'],
+        ['GR', 'GRN000128', 'Under verification · Fresh Farms Pvt Ltd', L('Grn'), 'info'],
+        ['IT', 'Veg Thali', 'Item · ITM-0201 · Main Course', L('Items'), 'item']
+      ]],
+      ['CREATE', [
+        ['+T', 'New transfer', 'Store or kitchen to a restaurant', L('NewTransfer'), 'info', 'N T'],
+        ['+G', 'New GRN', 'Receive goods into a store', L('Grn'), 'store', 'N G'],
+        ['+P', 'New kitchen production', 'Record produced and wasted quantity', L('Production'), 'kit', 'N P']
+      ]],
+      ['GO TO', [
+        ['DB', 'Dashboard', 'Overview', L('Dashboard'), 'neu', 'G D'],
+        ['TF', 'Transfers', 'Inventory · 8 pending', L('Transfers'), 'neu', 'G T'],
+        ['IT', 'Items', 'Item & Menu Setup', L('Items'), 'neu', 'G I'],
+        ['KP', 'Kitchen Production', 'Kitchen Operations', L('Production'), 'neu', 'G P']
+      ]]
+    ];
+    const q = this.state.q.trim().toLowerCase();
+    let count = 0;
+    const groups = G.map(([label, items]) => ({
+      c, label,
+      items: items.filter((i) => !q || (i[1] + ' ' + i[2]).toLowerCase().indexOf(q) >= 0).map(([abbr, lab, hint, href, k, key]) => {
+        count++;
+        const on = lab === this.state.hot;
+        return { c, abbr, label: lab, hint, href, key: key || '', hasKey: !!key, on, bg: on ? c.selected : 'transparent', tBg: c[k + 'Bg'], tFg: c[k + 'Fg'], hover: () => this.setState({ hot: lab }) };
+      })
+    })).filter((g) => g.items.length > 0);
+    return { c, groups, q: this.state.q, empty: count === 0, onQ: (e) => this.setState({ q: e.target.value }) };
+  }
+}
+</script>
+</body>
+</html>

@@ -61,15 +61,10 @@ export const queryKeys = {
   itemCategoryOptions: key('item-category-options'),
   itemMappings: key('item-mappings'),
   itemOptions: key('item-options'),
-  itemPrices: key('item-prices'),
-  itemPricesItem: key('item-prices', 'item'),
-  itemPricesNormal: key('item-prices', 'normal'),
   items: key('items'),
   mappingHospitalOptions: key('mapping-hospital-options'),
   restaurantMenuReferenceOptions: key('restaurant-menu-reference-options'),
   restaurantMenus: key('restaurant-menus'),
-  timeSlotOptions: key('time-slot-options'),
-  timeSlots: key('time-slots'),
 
   // POS
   paymentMachinePosDeviceOptions: key('payment-machine-pos-device-options'),
@@ -113,7 +108,6 @@ export const masterDataKeys = [
   queryKeys.restaurantMenuReferenceOptions(),
   queryKeys.restaurantOptions(),
   queryKeys.storeOptions(),
-  queryKeys.timeSlotOptions(),
 ];
 
 // Stale after 15 seconds: queues of work waiting on someone.

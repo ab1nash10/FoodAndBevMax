@@ -37,11 +37,6 @@ export class ListRestaurantMenusQueryDto extends ActivePaginationQueryDto {
   @IsOptional()
   itemType?: ItemType;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  timeSlotId?: string;
-
   @ApiPropertyOptional({ enum: RestaurantMenuDayOfWeek })
   @IsEnum(RestaurantMenuDayOfWeek)
   @IsOptional()

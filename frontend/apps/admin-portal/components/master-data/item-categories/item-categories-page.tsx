@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Pencil, Plus, RefreshCw, Tags } from 'lucide-react';
+import { Eye, Loader2, Pencil, Plus, RefreshCw, Tags } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -11,12 +11,12 @@ import type {
   ApiResponse,
   ItemCategory,
   ItemCategoryInput,
-  ItemCategoryListQuery,
+  ListQuery,
   SortOrder,
 } from '@aahar/api-client';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { DetailsModal, Toggle } from '@/components/ui-controls';
+import { DetailsModal, Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { IfCanOpen } from '@/components/record-link';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
@@ -35,7 +35,6 @@ import {
   SearchInput,
   SortOrderSelect,
   StatusBadge,
-  SubmitButton,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
@@ -44,13 +43,11 @@ import {
   formatDate,
   listLimit,
 } from '@/components/master-data/shared/utils';
-import { useLocationContext } from '@/components/location-context';
-import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
 
 function useEntityList<TItem>(
   entityKey: string,
-  query: ItemCategoryListQuery,
-  list: (query: ItemCategoryListQuery) => Promise<ApiResponse<ApiList<TItem>>>,
+  query: ListQuery,
+  list: (query: ListQuery) => Promise<ApiResponse<ApiList<TItem>>>,
 ) {
   return useQuery({
     queryFn: async () => {
@@ -77,12 +74,9 @@ export function ItemCategoriesPageClient() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
-  const { scopedHospitalId } = useLocationContext();
-  const { canEdit } = useMasterEditing();
   const form = useForm<ItemCategoryFormValues>({
     defaultValues: {
       categoryName: '',
-      hospitalId: '',
       isActive: true,
     },
   });
@@ -90,7 +84,6 @@ export function ItemCategoriesPageClient() {
   const categoriesQuery = useEntityList<ItemCategory>(
     'item-categories',
     {
-      hospitalId: scopedHospitalId,
       isActive: activeFilterToBoolean(activeFilter),
       limit: listLimit,
       page,
@@ -170,7 +163,6 @@ export function ItemCategoriesPageClient() {
 
     saveCategoryMutation.mutate({
       categoryName: parsed.data.categoryName,
-      hospitalId: parsed.data.hospitalId || null,
       isActive: parsed.data.isActive,
     });
   });
@@ -179,7 +171,6 @@ export function ItemCategoriesPageClient() {
     setEditingCategory(category);
     form.reset({
       categoryName: category.categoryName,
-      hospitalId: category.hospitalId ?? '',
       isActive: category.isActive,
     });
   }
@@ -188,7 +179,6 @@ export function ItemCategoriesPageClient() {
     setEditingCategory(null);
     form.reset({
       categoryName: '',
-      hospitalId: '',
       isActive: true,
     });
   }
@@ -227,28 +217,32 @@ export function ItemCategoriesPageClient() {
         title="Item Categories"
       />
 
-      {editingCategory ? (
-        <Panel className="p-4">
-          <div className="mb-5">
-            <h2 className="text-lg font-semibold tracking-normal text-ds-text">Edit Category</h2>
-            <p className="text-sm text-ds-muted">Update category details and status.</p>
+      <Modal
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button onClick={cancelEditingCategory} type="button" variant="outline">
+              Cancel
+            </Button>
+            <Button disabled={saveCategoryMutation.isPending} form="category-form" type="submit">
+              {saveCategoryMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save changes
+            </Button>
           </div>
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              void handleSubmit(event);
-            }}
-          >
-            <CategoryFormFields form={form} />
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button onClick={cancelEditingCategory} type="button" variant="outline">
-                Cancel
-              </Button>
-              <SubmitButton isPending={saveCategoryMutation.isPending} label="Update Category" />
-            </div>
-          </form>
-        </Panel>
-      ) : null}
+        }
+        onClose={cancelEditingCategory}
+        open={editingCategory !== null}
+        title="Edit category"
+      >
+        <form
+          className="grid gap-4"
+          id="category-form"
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+        >
+          <CategoryFormFields form={form} />
+        </form>
+      </Modal>
 
       <Panel>
         <div className="grid gap-3 border-b p-4 md:grid-cols-[minmax(0,1fr)_160px_180px_130px_auto]">
@@ -295,7 +289,6 @@ export function ItemCategoriesPageClient() {
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
                 <th className="w-[24%] px-4 py-2.5">Category Name</th>
-                <th className="w-[14%] px-4 py-2.5">Location</th>
                 <th className="w-[11%] px-4 py-2.5">Status</th>
                 <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
                 <th className="w-[18%] px-4 py-2.5">Created Date Time</th>
@@ -309,16 +302,13 @@ export function ItemCategoriesPageClient() {
                   <tr className="hover:bg-ds-subtle" key={category.id}>
                     <td className="px-4 py-3 font-medium text-ds-text">{category.categoryName}</td>
                     <td className="px-4 py-3">
-                      <MasterLocationCell hospital={category.hospital} />
-                    </td>
-                    <td className="px-4 py-3">
                       <StatusBadge isActive={category.isActive} />
                     </td>
                     <td className="px-4 py-3">
                       <Toggle
                         ariaLabel={`${category.categoryName} active`}
                         checked={category.isActive}
-                        disabled={toggleCategoryStatusMutation.isPending || !canEdit(category)}
+                        disabled={toggleCategoryStatusMutation.isPending}
                         onChange={() => toggleCategoryStatus(category)}
                       />
                     </td>
@@ -330,17 +320,15 @@ export function ItemCategoriesPageClient() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        {canEdit(category) ? (
-                          <Button
-                            onClick={() => startEditingCategory(category)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Edit
-                          </Button>
-                        ) : null}
+                        <Button
+                          onClick={() => startEditingCategory(category)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </Button>
                         <Button
                           onClick={() => setViewingCategory(category)}
                           size="sm"
@@ -356,10 +344,11 @@ export function ItemCategoriesPageClient() {
                 ))
               ) : (
                 <QueryState
-                  colSpan={7}
+                  colSpan={6}
                   error={categoriesQuery.error}
                   isError={categoriesQuery.isError}
                   isLoading={categoriesQuery.isLoading}
+                  atLocation={false}
                   label="item categories"
                 />
               )}
@@ -379,7 +368,6 @@ export function ItemCategoriesPageClient() {
         rows={
           viewingCategory && [
             ['Category Name', viewingCategory.categoryName],
-            ['Location', <MasterLocationCell hospital={viewingCategory.hospital} key="location" />],
             ['Status', <StatusBadge isActive={viewingCategory.isActive} key="status" />],
             ['Created', formatDate(viewingCategory.createdAt)],
             ['Updated', formatDate(viewingCategory.updatedAt)],

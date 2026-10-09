@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – New transfer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<div style="flex: 1 1 248px; max-width: 100%; position: sticky; top: 0; align-self: flex-start">
+<dc-import name="Sidebar" theme="{{theme}}" active="transfers" hint-size="248px,100vh"></dc-import>
+</div>
+<div style="flex: 999 1 0; min-width: 62%; display: flex; flex-direction: column">
+<dc-import name="Topbar" theme="{{theme}}" section="Transfers" page="New transfer" file="NewTransfer" hint-size="100%,64px"></dc-import>
+<main style="width: 100%; max-width: 1240px; box-sizing: border-box; padding: 20px 32px 0; display: flex; flex-direction: column; gap: 16px; flex-grow: 1">
+
+<section style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<a href="{{links.transfers}}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; text-decoration: none; color: {{c.link}}; min-height: 24px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>Transfers</a>
+<div style="display: flex; align-items: center; gap: 10px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em">New transfer</h1>
+<span style="font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: {{c.neuBg}}; color: {{c.neuFg}}">Draft · TRF0043</span>
+</div>
+</div>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: {{c.muted}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{c.tealText}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>Draft saved automatically · 12:41</span>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+<section aria-labelledby="route-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; height: 24px; border-radius: 50%; background: {{c.primarySoft}}; color: {{c.link}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800">1</span><h2 id="route-h" style="margin: 0; font-size: 15px; font-weight: 800">Route</h2></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px">
+<fieldset style="margin: 0; padding: 14px; border: 1px solid {{c.border}}; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<legend style="padding: 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">FROM</legend>
+<div role="group" aria-label="Source type" style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: {{c.subtle}}; border: 1px solid {{c.border}}">
+<sc-for list="{{srcTypes}}" as="o" hint-placeholder-count="2"><button onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="flex: 1 1 0; height: 32px; border: 0; border-radius: 7px; background: {{o.bg}}; color: {{o.fg}}; box-shadow: {{o.sh}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">{{o.label}}</button></sc-for>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: {{c.text2}}">{{srcLabel}}
+<sc-if value="{{isStore}}" hint-placeholder-val="{{ true }}"><select style="height: 40px; border: 1px solid {{c.input}}; border-radius: 10px; padding: 0 10px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: {{c.text}}; background: {{c.surface}}"><option>Main F&amp;B Store · Max Saket</option><option>Dry Store · Max Saket</option></select></sc-if><sc-if value="{{isKitchen}}" hint-placeholder-val="{{ false }}"><select style="height: 40px; border: 1px solid {{c.input}}; border-radius: 10px; padding: 0 10px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: {{c.text}}; background: {{c.surface}}"><option>Main Kitchen · Max Saket</option><option>Patient Diet Kitchen · Max Saket</option></select></sc-if></label>
+</fieldset>
+<fieldset style="margin: 0; padding: 14px; border: 1px solid {{c.border}}; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<legend style="padding: 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">TO</legend>
+<div role="group" aria-label="Destination type" style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: {{c.subtle}}; border: 1px solid {{c.border}}">
+<sc-for list="{{dstTypes}}" as="o" hint-placeholder-count="2"><button onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="flex: 1 1 0; height: 32px; border: 0; border-radius: 7px; background: {{o.bg}}; color: {{o.fg}}; box-shadow: {{o.sh}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">{{o.label}}</button></sc-for>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: {{c.text2}}">{{dstLabel}}
+<sc-if value="{{isRest}}" hint-placeholder-val="{{ true }}"><select style="height: 40px; border: 1px solid {{c.input}}; border-radius: 10px; padding: 0 10px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: {{c.text}}; background: {{c.surface}}"><option>Main Cafeteria · Max Saket</option><option>Staff Canteen · Max Saket</option><option>Coffee Lounge · Max Saket</option></select></sc-if><sc-if value="{{isCounter}}" hint-placeholder-val="{{ false }}"><select style="height: 40px; border: 1px solid {{c.input}}; border-radius: 10px; padding: 0 10px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: {{c.text}}; background: {{c.surface}}"><option>OPD Counter · Max Saket</option><option>Emergency Counter · Max Saket</option></select></sc-if></label>
+</fieldset>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: {{c.text2}}">Transfer date &amp; time
+<input type="datetime-local" value="{{tDate}}" onChange="{{setTDate}}" style="height: 40px; box-sizing: border-box; border: 1px solid {{c.input}}; border-radius: 10px; padding: 0 10px; font-family: inherit; font-size: 13.5px; color: {{c.text}}; background: {{c.surface}}"></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: {{c.text2}}">Business date
+<input type="date" value="{{bDate}}" onChange="{{setBDate}}" style="height: 40px; box-sizing: border-box; border: 1px solid {{c.input}}; border-radius: 10px; padding: 0 10px; font-family: inherit; font-size: 13.5px; color: {{c.text}}; background: {{c.surface}}"></label>
+</div>
+</section>
+
+<section aria-labelledby="items-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div style="padding: 18px 18px 12px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; height: 24px; border-radius: 50%; background: {{c.primarySoft}}; color: {{c.link}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800">2</span><h2 id="items-h" style="margin: 0; font-size: 15px; font-weight: 800">Items</h2><span style="font-size: 12.5px; color: {{c.muted}}">Batches are picked first-expiry-first-out (FEFO)</span></div>
+<label style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border: 1.5px solid {{c.link}}; border-radius: 10px; background: {{c.surface}}; color: {{c.muted}}; box-sizing: border-box">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+<input type="search" aria-label="Add an item" placeholder="Add an item by name or code — only items mapped to this store are shown" style="border: 0; outline: 0; background: transparent; flex-grow: 1; min-width: 0; font-family: inherit; font-size: 13.5px; color: {{c.text}}">
+<kbd style="font-family: inherit; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid {{c.border}}; background: {{c.subtle}}; color: {{c.text3}}">Enter to add</kbd>
+</label>
+<sc-if value="{{hasSuggest}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+<span style="font-size: 12px; font-weight: 600; color: {{c.muted}}">Often sent to this restaurant:</span>
+<sc-for list="{{suggest}}" as="sg" hint-placeholder-count="4"><button onClick="{{sg.add}}" style="height: 30px; padding: 0 10px; border-radius: 999px; border: 1px dashed {{sg.c.input}}; background: transparent; color: {{sg.c.text2}}; font-family: inherit; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 4px; cursor: pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>{{sg.label}}</button></sc-for>
+</div>
+</sc-if>
+</div>
+<div style="overflow-x: auto">
+<div style="min-width: 700px">
+<div style="display: grid; grid-template-columns: 28px minmax(190px, 1.5fr) minmax(190px, 1.2fr) 88px 130px 36px; gap: 12px; align-items: center; padding: 0 18px; height: 36px; background: {{c.subtle}}; border-top: 1px solid {{c.divider}}; border-bottom: 1px solid {{c.divider}}; font-size: 12px; font-weight: 600; color: {{c.muted}}">
+<span>#</span><span>Item</span><span>Batch</span><span style="text-align: right">Available</span><span>Send qty</span><span></span>
+</div>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; padding: 10px 18px; border-bottom: 1px solid {{l.c.divider}}; background: {{l.rowBg}}">
+<div style="display: grid; grid-template-columns: 28px minmax(190px, 1.5fr) minmax(190px, 1.2fr) 88px 130px 36px; gap: 12px; align-items: center">
+<span style="font-size: 12.5px; color: {{l.c.muted}}; font-variant-numeric: tabular-nums">{{l.n}}</span>
+<span style="display: flex; align-items: center; gap: 8px; min-width: 0">
+<sc-if value="{{l.veg}}" hint-placeholder-val="{{ true }}"><span aria-label="Veg" style="width: 13px; height: 13px; border: 1.5px solid {{l.c.veg}}; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><span style="width: 5px; height: 5px; border-radius: 50%; background: {{l.c.veg}}"></span></span></sc-if>
+<sc-if value="{{l.nonveg}}" hint-placeholder-val="{{ false }}"><span aria-label="Non-veg" style="width: 13px; height: 13px; border: 1.5px solid {{l.c.nonveg}}; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1 9 9H1z" fill="{{l.c.nonveg}}"></path></svg></span></sc-if>
+<sc-if value="{{l.egg}}" hint-placeholder-val="{{ false }}"><span aria-label="Eggetarian" style="width: 13px; height: 13px; border: 1.5px solid {{l.c.egg}}; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><span style="width: 5px; height: 6px; border-radius: 50%; background: {{l.c.eggDot}}"></span></span></sc-if>
+<span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 13.5px; font-weight: 700">{{l.name}}</span><span style="font-size: 11.5px; color: {{l.c.muted}}">{{l.code}}</span></span>
+</span>
+<span style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: {{l.expFg}}"><span style="font-weight: 600">{{l.batch}}</span><span style="font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; background: {{l.c.tealSoft}}; color: {{l.c.tealText}}">FEFO</span><button style="padding: 0; border: 0; background: transparent; color: {{l.c.link}}; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer">Change</button></span>
+<span style="text-align: right; font-size: 13px; font-weight: 600; color: {{l.c.text2}}; font-variant-numeric: tabular-nums">{{l.avail}}</span>
+<label style="display: flex; align-items: center; height: 38px; border: 1.5px solid {{l.qtyBd}}; border-radius: 10px; background: {{l.c.surface}}; overflow: hidden; box-sizing: border-box"><input type="number" min="0" aria-label="Send quantity for {{l.name}}" value="{{l.qty}}" onChange="{{l.onQty}}" style="width: 100%; min-width: 0; border: 0; outline: 0; padding: 0 10px; background: transparent; font-family: inherit; font-size: 13.5px; font-weight: 700; color: {{l.c.text}}; font-variant-numeric: tabular-nums"><span style="padding: 0 10px; font-size: 12px; font-weight: 600; color: {{l.c.muted}}">{{l.unit}}</span></label>
+<button onClick="{{l.remove}}" aria-label="Remove {{l.name}}" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: {{l.c.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+</div>
+<sc-if value="{{l.hasErr}}" hint-placeholder-val="{{ false }}"><span role="alert" style="margin: 6px 0 0 40px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: {{l.c.badFg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"></path><path d="M12 10v4M12 17h.01"></path></svg>{{l.err}}</span></sc-if>
+<sc-if value="{{l.hasWarn}}" hint-placeholder-val="{{ false }}"><span style="margin: 6px 0 0 40px; font-size: 12px; font-weight: 600; color: {{l.c.pendFg}}">{{l.warn}}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="rem-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; height: 24px; border-radius: 50%; background: {{c.primarySoft}}; color: {{c.link}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800">3</span><h2 id="rem-h" style="margin: 0; font-size: 15px; font-weight: 800">Remarks <span style="font-weight: 500; color: {{c.muted}}; font-size: 13px">(optional)</span></h2></div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: {{c.text2}}">Note for the receiving restaurant
+<textarea rows="2" placeholder="e.g. Lunch top-up, deliver before 12:30" style="border: 1px solid {{c.input}}; border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13.5px; color: {{c.text}}; background: {{c.surface}}; resize: vertical"></textarea></label>
+</section>
+</div>
+
+<aside aria-label="Transfer summary" style="flex: 1 1 300px; min-width: 0; position: sticky; top: 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 800">Summary</h2>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: {{c.subtle}}; font-size: 13px">
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="color: {{c.muted}}">From</span><span style="font-weight: 700; text-align: right">{{srcName}}</span></span>
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="color: {{c.muted}}">To</span><span style="font-weight: 700; text-align: right">{{dstName}}</span></span>
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="color: {{c.muted}}">Lines</span><span style="font-weight: 700; font-variant-numeric: tabular-nums">{{lineCount}}</span></span>
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="color: {{c.muted}}">Quantity</span><span style="font-weight: 700; text-align: right; font-variant-numeric: tabular-nums">{{qtySummary}}</span></span>
+</div>
+<sc-if value="{{hasErrors}}" hint-placeholder-val="{{ true }}">
+<div role="status" style="display: flex; gap: 10px; padding: 12px; border-radius: 12px; background: {{c.badBg}}; color: {{c.badFg}}; font-size: 12.5px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><path d="M12 3 2 20h20z"></path><path d="M12 10v4M12 17h.01"></path></svg><span>{{errorText}}</span></div>
+</sc-if>
+<sc-if value="{{noErrors}}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display: flex; gap: 10px; padding: 12px; border-radius: 12px; background: {{c.okBg}}; color: {{c.okFg}}; font-size: 12.5px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><path d="m5 12 5 5 9-10"></path></svg><span>All lines are within available stock.</span></div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: {{c.text3}}">
+<span style="font-weight: 800; color: {{c.text}}">When you submit</span>
+<span>Stock is reserved at {{srcName}}, and {{dstName}} is asked to acknowledge each line.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 1px solid {{c.divider}}; font-size: 12px; color: {{c.muted}}">
+<span style="display: flex; justify-content: space-between"><span>Save draft</span><kbd style="font-family: inherit; font-weight: 700; color: {{c.text3}}">Ctrl S</kbd></span>
+<span style="display: flex; justify-content: space-between"><span>Submit</span><kbd style="font-family: inherit; font-weight: 700; color: {{c.text3}}">Ctrl Enter</kbd></span>
+</div>
+</aside>
+</div>
+
+<div style="position: sticky; bottom: 0; margin: 4px -32px 0; padding: 12px 32px; background: {{c.surface}}; border-top: 1px solid {{c.border}}; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<span style="font-size: 12.5px; color: {{c.muted}}; flex-grow: 1">{{footerNote}}</span>
+<a href="{{links.transfers}}" style="height: 40px; padding: 0 14px; border-radius: 10px; color: {{c.text2}}; display: flex; align-items: center; text-decoration: none; font-size: 13px; font-weight: 700">Discard</a>
+<button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Save draft</button>
+<button aria-disabled="{{hasErrors}}" style="height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: {{submitBg}}; color: {{submitFg}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Submit for acknowledgement</button>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      src: 'STORE', dst: 'RESTAURANT',
+      tDate: '2026-10-01T12:40', bDate: '2026-10-01',
+      lines: ['rice', 'dal', 'paneer', 'milk'],
+      qty: { rice: '25', dal: '10', paneer: '8', milk: '40' }
+    };
+  }
+  pal(t) {
+    const L = { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', input: '#D5DCE5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', primarySoft: '#E8F0FA', tealText: '#0F6B55', tealSoft: '#E7F6F1', pendBg: '#FEF3C7', pendFg: '#92400E', okBg: '#E3F5EE', okFg: '#0F6B55', badBg: '#FDECEF', badFg: '#B4233F', badRow: '#FFF8F9', neuBg: '#EEF2F6', neuFg: '#475569', veg: '#15803D', nonveg: '#9A3412', egg: '#B45309', eggDot: '#F59E0B', disBg: '#CBD5E1', disFg: '#475569', shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)', segSh: '0 1px 2px rgba(15, 23, 42, 0.12)' };
+    const D = { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', input: '#334155', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', primarySoft: '#082F49', tealText: '#5EEAD4', tealSoft: '#042F2E', pendBg: '#422006', pendFg: '#FCD34D', okBg: '#042F2E', okFg: '#5EEAD4', badBg: '#4C0519', badFg: '#FDA4AF', badRow: '#1A0F1A', neuBg: '#1E293B', neuFg: '#CBD5E1', veg: '#4ADE80', nonveg: '#FB923C', egg: '#FBBF24', eggDot: '#FBBF24', disBg: '#334155', disFg: '#CBD5E1', shadow: 'none', segSh: 'none' };
+    return t === 'dark' ? D : L;
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const c = this.pal(theme);
+    const sfx = theme === 'dark' ? '-dark' : '';
+    const links = { transfers: 'Transfers' + sfx + '.dc.html' };
+    const I = {
+      rice: ['Basmati rice', 'ITM-0041', 'veg', 'kg', 120, 'B-2409-03 · exp 12 Mar 2027'],
+      dal: ['Toor dal', 'ITM-0057', 'veg', 'kg', 46, 'B-2409-11 · exp 20 Jan 2027'],
+      paneer: ['Paneer', 'ITM-0102', 'veg', 'kg', 6, 'B-2409-17 · exp 3 Oct 2026', 'Expires in 2 days'],
+      milk: ['Toned milk', 'ITM-0110', 'veg', 'L', 64, 'B-2410-01 · exp 4 Oct 2026', 'Expires in 3 days'],
+      atta: ['Atta', 'ITM-0033', 'veg', 'kg', 210, 'B-2409-08 · exp 8 Jan 2027'],
+      oil: ['Refined oil', 'ITM-0061', 'veg', 'L', 90, 'B-2408-14 · exp 14 Feb 2027'],
+      eggs: ['Eggs', 'ITM-0150', 'egg', 'pcs', 360, 'B-2409-29 · exp 9 Oct 2026'],
+      chicken: ['Chicken curry cut', 'ITM-0171', 'nonveg', 'kg', 24, 'B-2409-30 · exp 3 Oct 2026', 'Expires in 2 days']
+    };
+    const st = this.state;
+    const seg = (cur, val, key) => ({ on: cur === val, bg: cur === val ? c.surface : 'transparent', fg: cur === val ? c.text : c.muted, sh: cur === val ? c.segSh : 'none', pick: () => this.setState({ [key]: val }) });
+    const srcTypes = [Object.assign({ label: 'Store' }, seg(st.src, 'STORE', 'src')), Object.assign({ label: 'Kitchen' }, seg(st.src, 'KITCHEN', 'src'))];
+    const dstTypes = [Object.assign({ label: 'Restaurant' }, seg(st.dst, 'RESTAURANT', 'dst')), Object.assign({ label: 'Counter' }, seg(st.dst, 'COUNTER', 'dst'))];
+    const srcOpts = st.src === 'STORE' ? ['Main F&B Store · Max Saket', 'Dry Store · Max Saket'] : ['Main Kitchen · Max Saket', 'Patient Diet Kitchen · Max Saket'];
+    const dstOpts = st.dst === 'RESTAURANT' ? ['Main Cafeteria · Max Saket', 'Staff Canteen · Max Saket', 'Coffee Lounge · Max Saket'] : ['OPD Counter · Max Saket', 'Emergency Counter · Max Saket'];
+    let errors = 0;
+    const units = {};
+    const lines = st.lines.map((k, i) => {
+      const [name, code, food, unit, avail, batch, warn] = I[k];
+      const raw = st.qty[k] || '';
+      const q = parseFloat(raw);
+      const over = q > avail;
+      const empty = !(q > 0);
+      if (over || empty) errors++;
+      if (q > 0) units[unit] = (units[unit] || 0) + q;
+      return {
+        c, n: i + 1, name, code, unit, batch, qty: raw,
+        veg: food === 'veg', nonveg: food === 'nonveg', egg: food === 'egg',
+        avail: avail + ' ' + unit,
+        expFg: warn ? c.pendFg : c.text3,
+        hasErr: over || empty,
+        err: over ? 'Only ' + avail + ' ' + unit + ' available in this batch. Reduce the quantity or add another batch.' : 'Enter a quantity greater than 0.',
+        hasWarn: !!warn && !over && !empty,
+        warn: warn ? warn + ' — will be sent first.' : '',
+        qtyBd: over || empty ? c.badFg : c.input,
+        rowBg: over || empty ? c.badRow : c.surface,
+        onQty: (e) => this.setState({ qty: Object.assign({}, st.qty, { [k]: e.target.value }) }),
+        remove: () => this.setState({ lines: st.lines.filter((x) => x !== k) })
+      };
+    });
+    const pool = ['atta', 'oil', 'eggs', 'chicken'].filter((k) => st.lines.indexOf(k) < 0);
+    const suggest = pool.map((k) => ({ c, label: I[k][0], add: () => this.setState({ lines: st.lines.concat([k]), qty: Object.assign({}, st.qty, { [k]: '' }) }) }));
+    const qtySummary = Object.keys(units).map((u) => units[u] + ' ' + u).join(' · ') || '—';
+    const hasErrors = errors > 0 || lines.length === 0;
+    return {
+      c, theme, links, srcTypes, dstTypes,
+      srcLabel: st.src === 'STORE' ? 'Store' : 'Kitchen',
+      dstLabel: st.dst === 'RESTAURANT' ? 'Restaurant' : 'Counter',
+      isStore: st.src === 'STORE', isKitchen: st.src === 'KITCHEN', isRest: st.dst === 'RESTAURANT', isCounter: st.dst === 'COUNTER',
+      srcName: srcOpts[0].split(' · ')[0],
+      dstName: dstOpts[0].split(' · ')[0],
+      tDate: st.tDate, bDate: st.bDate,
+      setTDate: (e) => this.setState({ tDate: e.target.value }),
+      setBDate: (e) => this.setState({ bDate: e.target.value }),
+      lines, suggest, hasSuggest: suggest.length > 0,
+      lineCount: lines.length, qtySummary,
+      hasErrors, noErrors: !hasErrors,
+      errorText: lines.length === 0 ? 'Add at least one item to submit.' : errors + (errors === 1 ? ' line needs' : ' lines need') + ' attention before you can submit.',
+      footerNote: hasErrors ? 'Fix the highlighted lines to submit.' : lines.length + ' lines ready · the restaurant will be notified on submit.',
+      submitBg: hasErrors ? c.disBg : '#0B57A4',
+      submitFg: hasErrors ? c.disFg : '#FFFFFF'
+    };
+  }
+}
+</script>
+</body>
+</html>

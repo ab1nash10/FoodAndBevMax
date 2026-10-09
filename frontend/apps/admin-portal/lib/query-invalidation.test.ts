@@ -27,8 +27,12 @@ test('each write invalidates the same query keys', () => {
       ['transfer-store-stock'],
       ['dashboard'],
     ],
-    invalidateItemCategoryQueries: [['item-categories'], ['item-category-options']],
-    invalidateItemPriceQueries: [['item-prices']],
+    invalidateItemCategoryQueries: [
+      ['item-categories'],
+      ['item-category-options'],
+      ['items'],
+      ['item-options'],
+    ],
     invalidateItemQueries: [['items'], ['item-options'], ['dashboard', 'items']],
     invalidateKitchenProductionQueries: [
       ['kitchen-productions'],
@@ -36,6 +40,13 @@ test('each write invalidates the same query keys', () => {
       ['kitchen-stock-ledgers'],
       ['transfer-kitchen-stock'],
       ['dashboard'],
+    ],
+    invalidateKitchenQueries: [
+      ['kitchens'],
+      ['kitchen-options'],
+      ['inventory-kitchens'],
+      ['inventory-all-kitchens'],
+      ['kitchen-kitchens'],
     ],
     invalidateTransferQueries: [
       ['transfers'],

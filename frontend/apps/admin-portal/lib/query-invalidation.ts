@@ -8,7 +8,24 @@ function invalidate(queryClient: QueryClient, keys: QueryKey[]): void {
 }
 
 export function invalidateItemCategoryQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [queryKeys.itemCategories(), queryKeys.itemCategoryOptions()]);
+  // Items carry their category's name and status, so their lists and pickers refresh too.
+  invalidate(queryClient, [
+    queryKeys.itemCategories(),
+    queryKeys.itemCategoryOptions(),
+    queryKeys.items(),
+    queryKeys.itemOptions(),
+  ]);
+}
+
+/** Every kitchen list: the Kitchens page, the pickers, and the inventory, kitchen and menu forms. */
+export function invalidateKitchenQueries(queryClient: QueryClient): void {
+  invalidate(queryClient, [
+    queryKeys.kitchens(),
+    queryKeys.kitchenOptions(),
+    queryKeys.inventoryKitchens(),
+    queryKeys.inventoryAllKitchens(),
+    queryKeys.kitchenKitchens(),
+  ]);
 }
 
 export function invalidateItemQueries(queryClient: QueryClient): void {
@@ -17,10 +34,6 @@ export function invalidateItemQueries(queryClient: QueryClient): void {
     queryKeys.itemOptions(),
     queryKeys.dashboard('items'),
   ]);
-}
-
-export function invalidateItemPriceQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [queryKeys.itemPrices()]);
 }
 
 export function invalidateEmployeeQueries(queryClient: QueryClient): void {

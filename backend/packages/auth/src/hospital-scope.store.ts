@@ -57,7 +57,7 @@ const RELATION_SCOPED_MODELS: Record<string, string> = {
  * Masters that are either shared by every location (no hospital) or kept by one. A user sees
  * the shared ones and those of their own locations.
  */
-const SHARED_OR_SCOPED_MODELS = new Set(['Employee', 'Item', 'ItemCategory', 'TimeSlot']);
+const SHARED_OR_SCOPED_MODELS = new Set(['Employee', 'TimeSlot']);
 
 /** The filter a read on `model` gets for a user limited to `allowed`; null leaves it alone. */
 export function readScope(model: string, allowed: string[]): Record<string, unknown> | null {

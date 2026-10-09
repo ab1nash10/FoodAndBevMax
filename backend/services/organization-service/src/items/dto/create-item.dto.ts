@@ -17,7 +17,7 @@ import {
 export class CreateItemDto {
   @ApiProperty({
     description:
-      'Duplicate checks ignore spaces, punctuation, symbols, underscores, hyphens, and case.',
+      'Unique within its category. Duplicate checks ignore spaces, punctuation, symbols, underscores, hyphens, and case.',
     example: 'Coke 500ml',
   })
   @IsNotEmpty()
@@ -57,12 +57,4 @@ export class CreateItemDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
-
-  @ApiPropertyOptional({
-    description: 'The location the item belongs to; null or omitted shares it with every location',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsUUID()
-  hospitalId?: string | null;
 }

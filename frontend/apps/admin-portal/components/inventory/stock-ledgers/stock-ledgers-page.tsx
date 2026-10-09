@@ -76,7 +76,7 @@ export function StockLedgersPageClient() {
   const storesQuery = useStores(hospitalFilter);
   const kitchensQuery = useKitchens(hospitalFilter);
   const restaurantsQuery = useRestaurants(hospitalFilter);
-  const itemOptionsQuery = useItems(undefined, hospitalFilter);
+  const itemOptionsQuery = useItems();
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');

@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { Item, Prisma, Restaurant, TimeSlot } from '@prisma/client';
+import { Item, Prisma, Restaurant } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 export const restaurantMenuInclude = {
+  kitchen: {
+    select: {
+      id: true,
+      isActive: true,
+      kitchenCode: true,
+      kitchenName: true,
+    },
+  },
   item: {
     select: {
       id: true,
@@ -120,6 +128,19 @@ export class RestaurantMenusRepository {
     });
   }
 
+  /** Whether an active kitchen sits at the restaurant's location. */
+  async isRestaurantKitchen(
+    restaurant: Restaurant,
+    kitchenId: string,
+    client: RestaurantMenuClient,
+  ): Promise<boolean> {
+    const kitchen = await client.kitchen.findFirst({
+      where: { deletedAt: null, hospitalId: restaurant.hospitalId, id: kitchenId, isActive: true },
+    });
+
+    return Boolean(kitchen);
+  }
+
   async findActiveRestaurant(id: string, client: RestaurantMenuClient): Promise<Restaurant | null> {
     return client.restaurant.findFirst({
       where: {
@@ -131,45 +152,6 @@ export class RestaurantMenusRepository {
         id,
       },
     });
-  }
-
-  async findActiveTimeSlotsByIds(
-    ids: string[],
-    client: RestaurantMenuClient = this.prisma,
-  ): Promise<TimeSlot[]> {
-    if (ids.length === 0) {
-      return [];
-    }
-
-    return client.timeSlot.findMany({
-      orderBy: {
-        slotName: 'asc',
-      },
-      where: {
-        deletedAt: null,
-        id: {
-          in: ids,
-        },
-        isActive: true,
-      },
-    });
-  }
-
-  async findActiveTimeSlotIdsBySearch(search: string): Promise<string[]> {
-    const timeSlots = await this.prisma.timeSlot.findMany({
-      select: {
-        id: true,
-      },
-      where: {
-        deletedAt: null,
-        slotName: {
-          contains: search,
-          mode: 'insensitive',
-        },
-      },
-    });
-
-    return timeSlots.map((timeSlot) => timeSlot.id);
   }
 
   async getMaxDisplayOrder(restaurantId: string, client: RestaurantMenuClient): Promise<number> {

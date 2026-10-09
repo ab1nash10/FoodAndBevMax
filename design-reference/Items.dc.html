@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Items</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<div style="flex: 1 1 248px; max-width: 100%; position: sticky; top: 0; align-self: flex-start">
+<dc-import name="Sidebar" theme="{{theme}}" active="items" hint-size="248px,100vh"></dc-import>
+</div>
+<div style="flex: 999 1 0; min-width: 62%; display: flex; flex-direction: column">
+<dc-import name="Topbar" theme="{{theme}}" section="Item &amp; Menu Setup" page="Items" file="Items" hint-size="100%,64px"></dc-import>
+<main style="width: 100%; box-sizing: border-box; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em">Items</h1>
+<p style="margin: 0; font-size: 13.5px; color: {{c.muted}}">One catalogue for every store, kitchen and restaurant. Prices are set per rate type.</p>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9m-5 5 5-5 5 5M4 4h16"></path></svg>Import</button>
+<button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 0; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New item</button>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-label="Item list" style="flex: 1 1 560px; min-width: 0; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div style="display: flex; gap: 8px; padding: 12px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid {{c.divider}}">
+<label style="flex: 1 1 200px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" aria-label="Search items" placeholder="Search name or code" value="{{q}}" onChange="{{onQ}}" style="border: 0; outline: 0; background: transparent; flex-grow: 1; min-width: 0; font-family: inherit; font-size: 13px; color: {{c.text}}"></label>
+<div role="group" aria-label="Food type" style="display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: {{c.subtle}}; border: 1px solid {{c.border}}">
+<sc-for list="{{foods}}" as="f" hint-placeholder-count="4"><button onClick="{{f.pick}}" aria-pressed="{{f.on}}" style="height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: {{f.bg}}; color: {{f.fg}}; box-shadow: {{f.sh}}; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer">{{f.label}}</button></sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; font-size: 12.5px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}">Type<select style="border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 700; color: {{c.text}}"><option>All</option><option>Live</option><option>Readymade</option><option>MRP</option></select></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; font-size: 12.5px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}">Category<select style="border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 700; color: {{c.text}}"><option>All</option><option>Main Course</option><option>Breakfast</option><option>Beverages</option><option>Snacks</option><option>Patient Diet</option></select></label>
+</div>
+<div style="overflow-x: auto">
+<div style="min-width: 620px">
+<div style="display: grid; grid-template-columns: minmax(200px, 1.6fr) 118px 96px 76px 96px; gap: 12px; align-items: center; padding: 0 16px; height: 38px; background: {{c.subtle}}; border-bottom: 1px solid {{c.divider}}; font-size: 12px; font-weight: 600; color: {{c.muted}}">
+<span>Item</span><span>Category</span><span>Type</span><span style="text-align: right">Normal</span><span>Status</span>
+</div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="12">
+<div style="display: grid; grid-template-columns: minmax(200px, 1.6fr) 118px 96px 76px 96px; gap: 12px; align-items: center; padding: 6px 16px; min-height: 52px; box-sizing: border-box; border-bottom: 1px solid {{r.c.divider}}; background: {{r.bg}}">
+<span style="display: flex; align-items: center; gap: 10px; min-width: 0">
+<sc-if value="{{r.veg}}" hint-placeholder-val="{{ true }}"><span aria-label="Veg" style="width: 13px; height: 13px; border: 1.5px solid {{r.c.veg}}; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><span style="width: 5px; height: 5px; border-radius: 50%; background: {{r.c.veg}}"></span></span></sc-if>
+<sc-if value="{{r.nonveg}}" hint-placeholder-val="{{ false }}"><span aria-label="Non-veg" style="width: 13px; height: 13px; border: 1.5px solid {{r.c.nonveg}}; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><svg width="7" height="7" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1 9 9H1z" fill="{{r.c.nonveg}}"></path></svg></span></sc-if>
+<sc-if value="{{r.egg}}" hint-placeholder-val="{{ false }}"><span aria-label="Eggetarian" style="width: 13px; height: 13px; border: 1.5px solid {{r.c.egg}}; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><span style="width: 5px; height: 6px; border-radius: 50%; background: {{r.c.eggDot}}"></span></span></sc-if>
+<span style="display: flex; flex-direction: column; min-width: 0"><button onClick="{{r.open}}" style="padding: 0; border: 0; background: transparent; font-family: inherit; font-size: 13.5px; font-weight: 700; color: {{r.nameFg}}; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.name}}</button><span style="font-size: 11.5px; color: {{r.c.muted}}; font-variant-numeric: tabular-nums">{{r.code}} · HSN {{r.hsn}}</span></span>
+</span>
+<span style="font-size: 12.5px; color: {{r.c.text2}}">{{r.cat}}</span>
+<span><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 5px; background: {{r.tBg}}; color: {{r.tFg}}">{{r.type}}</span></span>
+<span style="text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums">{{r.price}}</span>
+<button onClick="{{r.toggle}}" aria-pressed="{{r.active}}" aria-label="{{r.toggleLabel}}" style="display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; font-family: inherit; font-size: 12px; font-weight: 700; color: {{r.stFg}}; cursor: pointer"><span style="width: 32px; height: 18px; border-radius: 999px; background: {{r.track}}; position: relative; display: block; flex-shrink: 0"><span style="position: absolute; top: 2px; left: {{r.knob}}; width: 14px; height: 14px; border-radius: 50%; background: #FFFFFF"></span></span>{{r.stLabel}}</button>
+</div>
+</sc-for>
+<sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 40px 16px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center"><span style="font-size: 14px; font-weight: 800">No items match</span><span style="font-size: 12.5px; color: {{c.muted}}">Try another name or clear the food-type filter.</span></div>
+</sc-if>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; font-size: 12.5px; color: {{c.muted}}; flex-wrap: wrap">
+<span>Showing <strong style="color: {{c.text}}">{{shown}}</strong> of 128 items</span>
+<span style="display: flex; align-items: center; gap: 6px">Rows<select aria-label="Rows per page" style="height: 30px; border: 1px solid {{c.border}}; border-radius: 7px; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 12.5px; font-weight: 700"><option>25</option><option>50</option><option>100</option></select></span>
+</div>
+</section>
+
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+<aside aria-label="{{d.name}} details" style="flex: 0 1 400px; min-width: 300px; position: sticky; top: 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 16px 18px 0; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: flex-start; gap: 12px">
+<span style="width: 44px; height: 44px; border-radius: 12px; background: {{c.itemBg}}; color: {{c.itemFg}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8M7 7h4"></path><path d="M17 21V3c-2 1-3 3-3 6v5h3"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0"><h2 style="margin: 0; font-size: 17px; font-weight: 800">{{d.name}}</h2><span style="font-size: 12.5px; color: {{c.muted}}">{{d.code}} · {{d.cat}} · {{d.type}}</span></div>
+<button onClick="{{closeSel}}" aria-label="Close details" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text3}}; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+</div>
+<div role="tablist" aria-label="Item sections" style="display: flex; gap: 4px; border-bottom: 1px solid {{c.border}}">
+<sc-for list="{{ptabs}}" as="t" hint-placeholder-count="3"><button role="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}" style="height: 40px; padding: 0 10px; border: 0; border-bottom: 2px solid {{t.line}}; background: transparent; color: {{t.fg}}; font-family: inherit; font-size: 13px; font-weight: {{t.w}}; cursor: pointer">{{t.label}}</button></sc-for>
+</div>
+</div>
+
+<sc-if value="{{tabPrices}}" hint-placeholder-val="{{ true }}">
+<div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 70px 54px 92px; gap: 8px; font-size: 11.5px; font-weight: 600; color: {{c.muted}}; padding-bottom: 6px; border-bottom: 1px solid {{c.divider}}"><span>Rate type</span><span style="text-align: right">Price</span><span style="text-align: right">GST</span><span style="text-align: right">From</span></div>
+<sc-for list="{{prices}}" as="p" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 70px 54px 92px; gap: 8px; align-items: center; font-size: 13px; font-variant-numeric: tabular-nums">
+<span style="display: flex; flex-direction: column"><span style="font-weight: 700">{{p.rate}}</span><span style="font-size: 11.5px; color: {{p.c.muted}}">{{p.hint}}</span></span>
+<span style="text-align: right; font-weight: 800; color: {{p.priceFg}}">{{p.price}}</span>
+<span style="text-align: right; color: {{p.c.text3}}">{{p.gst}}</span>
+<span style="text-align: right; font-size: 12px; color: {{p.c.text3}}">{{p.from}}</span>
+</div>
+</sc-for>
+<div style="padding: 10px 12px; border-radius: 10px; background: {{c.subtle}}; font-size: 12.5px; color: {{c.text2}}"><strong style="color: {{c.text}}">Restaurant override</strong> · Coffee Lounge charges ₹130 (Normal), tax inclusive</div>
+<button style="height: 38px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.link}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Edit prices</button>
+</div>
+</sc-if>
+<sc-if value="{{tabDetails}}" hint-placeholder-val="{{ false }}">
+<dl style="margin: 0; padding: 14px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 14px; font-size: 13px">
+<dt style="color: {{c.muted}}">Item code</dt><dd style="margin: 0; font-weight: 700">{{d.code}}</dd>
+<dt style="color: {{c.muted}}">Category</dt><dd style="margin: 0; font-weight: 700">{{d.cat}}</dd>
+<dt style="color: {{c.muted}}">Food type</dt><dd style="margin: 0; font-weight: 700">{{d.food}}</dd>
+<dt style="color: {{c.muted}}">Item type</dt><dd style="margin: 0; font-weight: 700">{{d.typeLong}}</dd>
+<dt style="color: {{c.muted}}">Preparation</dt><dd style="margin: 0; font-weight: 700">{{d.prep}}</dd>
+<dt style="color: {{c.muted}}">HSN code</dt><dd style="margin: 0; font-weight: 700">{{d.hsn}}</dd>
+</dl>
+</sc-if>
+<sc-if value="{{tabMap}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{maps}}" as="m" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid {{m.c.border}}">
+<span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; background: {{m.bg}}; color: {{m.fg}}">{{m.kind}}</span>
+<span style="flex-grow: 1; font-size: 13px; font-weight: 700">{{m.name}}</span>
+<span style="font-size: 12px; font-weight: 600; color: {{m.stFg}}">{{m.st}}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</aside>
+</sc-if>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { q: '', food: 'all', sel: 'ITM-0201', tab: 'prices', off: { 'ITM-0211': true } };
+  }
+  pal(t) {
+    const L = { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', input: '#D5DCE5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', primarySoft: '#E8F0FA', selected: '#F1F6FD', okFg: '#0F6B55', badFg: '#B4233F', neuBg: '#EEF2F6', neuFg: '#475569', storeBg: '#E3F5EE', storeFg: '#15803D', kitBg: '#FFF4E6', kitFg: '#C2570C', restBg: '#F3EEFF', restFg: '#6D3FD1', itemBg: '#EAF1FD', itemFg: '#1D5FC9', locBg: '#E7F6F1', locFg: '#0F7B63', veg: '#15803D', nonveg: '#9A3412', egg: '#B45309', eggDot: '#F59E0B', teal: '#0F7B63', off: '#CBD5E1', shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)', segSh: '0 1px 2px rgba(15, 23, 42, 0.12)' };
+    const D = { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', input: '#334155', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', primarySoft: '#082F49', selected: '#0C2238', okFg: '#5EEAD4', badFg: '#FDA4AF', neuBg: '#1E293B', neuFg: '#CBD5E1', storeBg: '#052E16', storeFg: '#86EFAC', kitBg: '#431407', kitFg: '#FDBA74', restBg: '#2E1065', restFg: '#C4B5FD', itemBg: '#172554', itemFg: '#93C5FD', locBg: '#042F2E', locFg: '#5EEAD4', veg: '#4ADE80', nonveg: '#FB923C', egg: '#FBBF24', eggDot: '#FBBF24', teal: '#0F7B63', off: '#334155', shadow: 'none', segSh: 'none' };
+    return t === 'dark' ? D : L;
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const c = this.pal(theme);
+    const st = this.state;
+    const all = [
+      ['ITM-0201', 'Veg Thali', 'Main Course', 'veg', 'LIVE', '15 min', '996331', '₹120'],
+      ['ITM-0202', 'Masala Dosa', 'Breakfast', 'veg', 'LIVE', '10 min', '996331', '₹80'],
+      ['ITM-0203', 'Chicken Biryani', 'Main Course', 'nonveg', 'LIVE', '25 min', '996331', '₹180'],
+      ['ITM-0204', 'Filter Coffee', 'Beverages', 'veg', 'LIVE', '3 min', '996331', '₹40'],
+      ['ITM-0205', 'Egg Sandwich', 'Snacks', 'egg', 'READYMADE', '5 min', '996331', '₹70'],
+      ['ITM-0206', 'Soft Diet Khichdi', 'Patient Diet', 'veg', 'LIVE', '20 min', '996331', '—'],
+      ['ITM-0207', 'Packaged Water 1 L', 'Beverages', 'veg', 'MRP', '—', '22011010', '₹20'],
+      ['ITM-0208', 'Samosa', 'Snacks', 'veg', 'READYMADE', '5 min', '996331', '₹25'],
+      ['ITM-0209', 'Fresh Lime Soda', 'Beverages', 'veg', 'LIVE', '4 min', '996331', '₹45'],
+      ['ITM-0210', 'Glucose Biscuits', 'Snacks', 'veg', 'MRP', '—', '19053100', '₹10'],
+      ['ITM-0211', 'Fish Curry Meal', 'Main Course', 'nonveg', 'LIVE', '20 min', '996331', '₹160'],
+      ['ITM-0212', 'Fruit Bowl', 'Patient Diet', 'veg', 'READYMADE', '8 min', '996331', '₹60']
+    ];
+    const TY = { LIVE: ['LIVE', c.kitBg, c.kitFg, 'Live (cooked to order)'], READYMADE: ['READYMADE', c.restBg, c.restFg, 'Readymade'], MRP: ['MRP', c.itemBg, c.itemFg, 'MRP (packaged)'] };
+    const FOOD = { veg: 'Veg', nonveg: 'Non-veg', egg: 'Eggetarian' };
+    const foods = [['all', 'All'], ['veg', 'Veg'], ['nonveg', 'Non-veg'], ['egg', 'Egg']].map(([id, label]) => {
+      const on = st.food === id;
+      return { label, on, bg: on ? c.surface : 'transparent', fg: on ? c.text : c.muted, sh: on ? c.segSh : 'none', pick: () => this.setState({ food: id }) };
+    });
+    const q = st.q.trim().toLowerCase();
+    const rows = all.filter((a) => (st.food === 'all' || a[3] === st.food) && (!q || a[1].toLowerCase().indexOf(q) >= 0 || a[0].toLowerCase().indexOf(q) >= 0)).map(([code, name, cat, food, type, prep, hsn, price]) => {
+      const active = !st.off[code];
+      const isSel = code === st.sel;
+      return {
+        c, code, name, cat, hsn, price,
+        veg: food === 'veg', nonveg: food === 'nonveg', egg: food === 'egg',
+        type: TY[type][0], tBg: TY[type][1], tFg: TY[type][2],
+        active, stLabel: active ? 'Active' : 'Inactive', stFg: active ? c.okFg : c.muted,
+        toggleLabel: (active ? 'Deactivate ' : 'Activate ') + name,
+        track: active ? c.teal : c.off, knob: active ? '16px' : '2px',
+        bg: isSel ? c.selected : c.surface,
+        nameFg: isSel ? c.link : c.text,
+        toggle: () => this.setState({ off: Object.assign({}, st.off, { [code]: active }) }),
+        open: () => this.setState({ sel: code })
+      };
+    });
+    const s = all.find((a) => a[0] === st.sel);
+    let d = {}, prices = [], maps = [];
+    if (s) {
+      d = { code: s[0], name: s[1], cat: s[2], food: FOOD[s[3]], type: TY[s[4]][0].charAt(0) + TY[s[4]][0].slice(1).toLowerCase(), typeLong: TY[s[4]][3], prep: s[5], hsn: s[6] };
+      const base = parseInt(s[7].replace(/[^0-9]/g, ''), 10) || 90;
+      prices = [
+        ['Normal', 'Walk-in guests', '₹' + base],
+        ['Staff', 'Employees, with ID', '₹' + Math.round(base * 0.75)],
+        ['Room', 'In-room dining for patients', '₹' + Math.round(base * 1.15)],
+        ['Counter', 'OPD & emergency counters', '₹' + Math.round(base * 0.92)]
+      ].map(([rate, hint, price]) => ({ c, rate, hint, price, priceFg: c.text, gst: '5%', from: '1 Apr 2026' }));
+      maps = [
+        ['STORE', 'Main F&B Store', 'Mapped', c.storeBg, c.storeFg, c.okFg],
+        ['KITCHEN', 'Main Kitchen', 'Mapped', c.kitBg, c.kitFg, c.okFg],
+        ['KITCHEN', 'Patient Diet Kitchen', 'Not mapped', c.kitBg, c.kitFg, c.muted],
+        ['MENU', 'Main Cafeteria · Lunch, Dinner', 'On menu', c.restBg, c.restFg, c.okFg],
+        ['MENU', 'Staff Canteen · Lunch', 'On menu', c.restBg, c.restFg, c.okFg]
+      ].map(([kind, name, stt, bg, fg, stFg]) => ({ c, kind, name, st: stt, bg, fg, stFg }));
+    }
+    const ptabs = [['prices', 'Prices'], ['details', 'Details'], ['map', 'Mapping']].map(([id, label]) => {
+      const on = st.tab === id;
+      return { label, on, line: on ? '#0B57A4' : 'transparent', fg: on ? c.text : c.text3, w: on ? '800' : '600', pick: () => this.setState({ tab: id }) };
+    });
+    return {
+      c, theme, foods, rows, q: st.q,
+      onQ: (e) => this.setState({ q: e.target.value }),
+      shown: rows.length, empty: rows.length === 0,
+      hasSel: !!s, d, prices, maps, ptabs,
+      tabPrices: st.tab === 'prices', tabDetails: st.tab === 'details', tabMap: st.tab === 'map',
+      closeSel: () => this.setState({ sel: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Transfers</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<div style="flex: 1 1 248px; max-width: 100%; position: sticky; top: 0; align-self: flex-start">
+<dc-import name="Sidebar" theme="{{theme}}" active="transfers" hint-size="248px,100vh"></dc-import>
+</div>
+<div style="flex: 999 1 0; min-width: 62%; display: flex; flex-direction: column">
+<dc-import name="Topbar" theme="{{theme}}" section="Inventory" page="Transfers" file="Transfers" hint-size="100%,64px"></dc-import>
+<main style="width: 100%; box-sizing: border-box; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em">Transfers</h1>
+<p style="margin: 0; font-size: 13.5px; color: {{c.muted}}">Stock sent from stores and kitchens to restaurants and counters.</p>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M4 20h16"></path></svg>Export</button>
+<a href="{{links.newTransfer}}" style="height: 40px; padding: 0 14px; border-radius: 10px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; gap: 8px; text-decoration: none; font-size: 13px; font-weight: 700"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New transfer</a>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-label="Transfer list" style="flex: 1 1 560px; min-width: 0; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div role="tablist" aria-label="Saved views" style="display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid {{c.border}}; overflow-x: auto">
+<sc-for list="{{views}}" as="v" hint-placeholder-count="5">
+<button role="tab" aria-selected="{{v.on}}" onClick="{{v.pick}}" style="height: 46px; padding: 0 10px; border: 0; border-bottom: 2px solid {{v.line}}; background: transparent; color: {{v.fg}}; font-family: inherit; font-size: 13px; font-weight: {{v.w}}; display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer">{{v.label}}<span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: {{v.cbg}}; color: {{v.cfg}}">{{v.count}}</span></button>
+</sc-for>
+</div>
+
+<sc-if value="{{noneSelected}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; gap: 8px; padding: 12px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid {{c.divider}}">
+<label style="flex: 1 1 200px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" aria-label="Search transfers" placeholder="Transfer no., item, store…" style="border: 0; outline: 0; background: transparent; flex-grow: 1; min-width: 0; font-family: inherit; font-size: 13px; color: {{c.text}}"></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; font-size: 12.5px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}">From<select style="border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 700; color: {{c.text}}"><option>Any source</option><option>Stores</option><option>Kitchens</option></select></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; font-size: 12.5px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}">To<select style="border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 700; color: {{c.text}}"><option>Any destination</option><option>Restaurants</option><option>Counters</option></select></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid {{c.input}}; border-radius: 8px; font-size: 12.5px; color: {{c.muted}}; box-sizing: border-box; background: {{c.surface}}">Date<select style="border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 700; color: {{c.text}}"><option>Last 2 days</option><option>Today</option><option>Last 7 days</option><option>Custom…</option></select></label>
+</div>
+</sc-if>
+<sc-if value="{{someSelected}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 8px; padding: 10px 12px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid {{c.divider}}; background: {{c.primarySoft}}">
+<span style="font-size: 13px; font-weight: 800; color: {{c.link}}; padding: 0 6px">{{selCount}} selected</span>
+<button style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">Send reminder</button>
+<button style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">Print challans</button>
+<button style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">Export CSV</button>
+<button onClick="{{clearSel}}" style="margin-left: auto; height: 34px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; color: {{c.link}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">Clear selection</button>
+</div>
+</sc-if>
+
+<div style="overflow-x: auto">
+<div style="min-width: 620px">
+<div style="display: grid; grid-template-columns: 36px 130px minmax(220px, 1fr) 56px 176px; gap: 12px; align-items: center; padding: 0 16px; height: 38px; background: {{c.subtle}}; border-bottom: 1px solid {{c.divider}}; font-size: 12px; font-weight: 600; color: {{c.muted}}">
+<input type="checkbox" aria-label="Select all visible transfers" checked="{{allChecked}}" onChange="{{toggleAll}}" style="width: 16px; height: 16px; margin: 0; accent-color: #0B57A4">
+<span>Transfer</span><span>Route</span><span style="text-align: right">Lines</span><span>Status</span>
+</div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="10">
+<div style="display: grid; grid-template-columns: 36px 130px minmax(220px, 1fr) 56px 176px; gap: 12px; align-items: center; padding: 8px 16px; min-height: 56px; box-sizing: border-box; border-bottom: 1px solid {{r.c.divider}}; background: {{r.bg}}">
+<input type="checkbox" aria-label="Select {{r.no}}" checked="{{r.checked}}" onChange="{{r.toggle}}" style="width: 16px; height: 16px; margin: 0; accent-color: #0B57A4">
+<span style="display: flex; flex-direction: column; gap: 2px"><button onClick="{{r.open}}" style="padding: 0; border: 0; background: transparent; font-family: inherit; font-size: 13px; font-weight: 800; color: {{r.c.link}}; text-align: left; cursor: pointer; font-variant-numeric: tabular-nums">{{r.no}}</button><span style="font-size: 11.5px; color: {{r.c.muted}}">{{r.when}}</span></span>
+<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px">
+<span style="display: flex; align-items: center; gap: 6px; min-width: 0"><span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; background: {{r.sBg}}; color: {{r.sFg}}; flex-shrink: 0">{{r.sType}}</span><span style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.src}}</span></span>
+<span style="display: flex; align-items: center; gap: 6px; min-width: 0"><span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; background: {{r.dBg}}; color: {{r.dFg}}; flex-shrink: 0">{{r.dType}}</span><span style="color: {{r.c.text2}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.dst}}</span></span>
+</span>
+<span style="text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums">{{r.lineCount}}</span>
+<span style="display: flex; flex-direction: column; align-items: flex-start; gap: 3px"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: {{r.stBg}}; color: {{r.stFg}}"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{r.stFg}}"></span>{{r.stLabel}}</span><span style="font-size: 11.5px; font-weight: 600; color: {{r.subFg}}">{{r.sub}}</span></span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; font-size: 12.5px; color: {{c.muted}}; flex-wrap: wrap">
+<span>Showing <strong style="color: {{c.text}}">1–{{rowCount}}</strong> of {{viewTotal}}</span>
+<span style="display: flex; gap: 6px"><button aria-label="Previous page" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button><button aria-label="Next page" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button></span>
+</div>
+</section>
+
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+<aside aria-label="Transfer {{d.no}}" style="flex: 0 1 420px; min-width: 300px; position: sticky; top: 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid {{c.divider}}">
+<div style="display: flex; align-items: center; gap: 10px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums">{{d.no}}</h2>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: {{d.stBg}}; color: {{d.stFg}}"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{d.stFg}}"></span>{{d.stLong}}</span>
+<button onClick="{{closeSel}}" aria-label="Close details" style="margin-left: auto; width: 32px; height: 32px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text3}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+</div>
+<span style="font-size: 12.5px; color: {{c.muted}}">Created {{d.when}} by {{d.by}} · {{d.loc}}</span>
+</div>
+
+<div style="padding: 14px 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border-bottom: 1px solid {{c.divider}}">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: {{c.subtle}}"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">FROM · {{d.sType}}</span><span style="font-size: 13px; font-weight: 700">{{d.src}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: {{c.subtle}}"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">TO · {{d.dType}}</span><span style="font-size: 13px; font-weight: 700">{{d.dst}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11.5px; color: {{c.muted}}">Business date</span><span style="font-size: 13px; font-weight: 600">{{d.biz}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11.5px; color: {{c.muted}}">Remarks</span><span style="font-size: 13px; font-weight: 600">{{d.remarks}}</span></div>
+</div>
+
+<div style="padding: 12px 18px 6px">
+<h3 style="margin: 0 0 6px; font-size: 13px; font-weight: 800">Lines · {{d.lineCount}}</h3>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 64px 64px 64px; gap: 8px; padding: 6px 0; font-size: 11.5px; font-weight: 600; color: {{c.muted}}; border-bottom: 1px solid {{c.divider}}"><span>Item · batch</span><span style="text-align: right">Sent</span><span style="text-align: right">Accepted</span><span style="text-align: right">Rejected</span></div>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 64px 64px 64px; gap: 8px; padding: 8px 0; align-items: center; font-size: 12.5px; border-bottom: 1px solid {{l.c.divider}}; font-variant-numeric: tabular-nums">
+<span style="display: flex; flex-direction: column; gap: 1px; min-width: 0"><span style="font-weight: 700">{{l.item}}</span><span style="font-size: 11.5px; color: {{l.expFg}}">{{l.batch}}</span></span>
+<span style="text-align: right; font-weight: 700">{{l.sent}}</span>
+<span style="text-align: right; color: {{l.accFg}}">{{l.acc}}</span>
+<span style="text-align: right; font-weight: {{l.rejW}}; color: {{l.rejFg}}">{{l.rej}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="padding: 12px 18px 4px">
+<h3 style="margin: 0 0 10px; font-size: 13px; font-weight: 800">Timeline</h3>
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="3">
+<div style="display: flex; gap: 10px">
+<div style="display: flex; flex-direction: column; align-items: center; width: 12px">
+<span style="width: 10px; height: 10px; border-radius: 50%; background: {{s.dot}}; border: 2px solid {{s.ring}}; box-sizing: border-box; margin-top: 3px; flex-shrink: 0"></span>
+<sc-if value="{{s.more}}" hint-placeholder-val="{{ true }}"><span style="width: 2px; flex-grow: 1; min-height: 18px; background: {{s.c.divider}}"></span></sc-if>
+</div>
+<div style="display: flex; flex-direction: column; gap: 1px; padding-bottom: 12px"><span style="font-size: 12.5px; font-weight: 700; color: {{s.fg}}">{{s.label}}</span><span style="font-size: 11.5px; color: {{s.c.muted}}">{{s.time}}</span></div>
+</div>
+</sc-for>
+</div>
+
+<div style="margin-top: auto; padding: 12px 18px; border-top: 1px solid {{c.divider}}; display: flex; gap: 8px; flex-wrap: wrap; background: {{c.subtle}}">
+<sc-if value="{{d.isPending}}" hint-placeholder-val="{{ true }}">
+<a href="{{links.ack}}" style="flex: 1 1 140px; height: 38px; border-radius: 10px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 13px; font-weight: 700">Acknowledge</a>
+<button style="flex: 1 1 120px; height: 38px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Send reminder</button>
+<button style="height: 38px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; color: {{c.badFg}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Cancel transfer</button>
+</sc-if>
+<sc-if value="{{d.isDraft}}" hint-placeholder-val="{{ false }}">
+<a href="{{links.newTransfer}}" style="flex: 1 1 140px; height: 38px; border-radius: 10px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 13px; font-weight: 700">Continue draft</a>
+<button style="height: 38px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; color: {{c.badFg}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Discard</button>
+</sc-if>
+<sc-if value="{{d.isDone}}" hint-placeholder-val="{{ false }}">
+<button style="flex: 1 1 140px; height: 38px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Print challan</button>
+<button style="flex: 1 1 140px; height: 38px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Duplicate as new</button>
+</sc-if>
+</div>
+</aside>
+</sc-if>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: 'all', sel: 'TRF0042', checked: {} };
+  }
+  pal(t) {
+    const L = { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', input: '#D5DCE5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', primarySoft: '#E8F0FA', selected: '#F1F6FD', tealText: '#0F6B55', pendBg: '#FEF3C7', pendFg: '#92400E', okBg: '#E3F5EE', okFg: '#0F6B55', badBg: '#FDECEF', badFg: '#B4233F', neuBg: '#EEF2F6', neuFg: '#475569', storeBg: '#E3F5EE', storeFg: '#15803D', kitBg: '#FFF4E6', kitFg: '#C2570C', restBg: '#F3EEFF', restFg: '#6D3FD1', itemBg: '#EAF1FD', itemFg: '#1D5FC9', teal: '#0F7B63', warn: '#F59E0B', ring: '#CBD5E1', shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)' };
+    const D = { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', input: '#334155', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', primarySoft: '#082F49', selected: '#0C2238', tealText: '#5EEAD4', pendBg: '#422006', pendFg: '#FCD34D', okBg: '#042F2E', okFg: '#5EEAD4', badBg: '#4C0519', badFg: '#FDA4AF', neuBg: '#1E293B', neuFg: '#CBD5E1', storeBg: '#052E16', storeFg: '#86EFAC', kitBg: '#431407', kitFg: '#FDBA74', restBg: '#2E1065', restFg: '#C4B5FD', itemBg: '#172554', itemFg: '#93C5FD', teal: '#14B8A6', warn: '#F59E0B', ring: '#334155', shadow: 'none' };
+    return t === 'dark' ? D : L;
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const c = this.pal(theme);
+    const sfx = theme === 'dark' ? '-dark' : '';
+    const links = { newTransfer: 'NewTransfer' + sfx + '.dc.html', ack: 'Acknowledge' + sfx + '.dc.html' };
+    const T = {
+      STORE: ['STORE', c.storeBg, c.storeFg], KITCHEN: ['KITCHEN', c.kitBg, c.kitFg],
+      RESTAURANT: ['RESTAURANT', c.restBg, c.restFg], COUNTER: ['COUNTER', c.itemBg, c.itemFg]
+    };
+    const data = [
+      { no: 'TRF0042', when: 'Today 11:45', by: 'Rahul Verma', loc: 'Max Saket', s: ['STORE', 'Main F&B Store'], d: ['RESTAURANT', 'Main Cafeteria'], st: 'pending', biz: '1 Oct 2026', remarks: 'Lunch top-up',
+        lines: [['Basmati rice', 'B-2409-03 · exp 12 Mar 2027', '25 kg'], ['Toor dal', 'B-2409-11 · exp 20 Jan 2027', '10 kg'], ['Paneer', 'B-2409-17 · exp 3 Oct 2026', '6 kg', 1], ['Toned milk', 'B-2410-01 · exp 4 Oct 2026', '40 L', 1]] },
+      { no: 'TRF0041', when: 'Today 12:20', by: 'Anil Kumar', loc: 'Max Saket', s: ['KITCHEN', 'Main Kitchen'], d: ['RESTAURANT', 'Staff Canteen'], st: 'pending', biz: '1 Oct 2026', remarks: 'Lunch service',
+        lines: [['Veg pulao', 'Produced PRD0016', '18 kg'], ['Dal tadka', 'Produced PRD0016', '12 kg'], ['Chapati', 'Produced PRD0016', '240 pcs']] },
+      { no: 'TRF0040', when: 'Today 10:05', by: 'Neha Arora', loc: 'Max Patparganj', s: ['STORE', 'Main F&B Store'], d: ['RESTAURANT', 'Coffee Lounge'], st: 'ack', out: 'full', biz: '1 Oct 2026', remarks: '—',
+        lines: [['Toned milk', 'B-2410-01 · exp 4 Oct 2026', '20 L', 0, '20 L', '0'], ['Sugar', 'B-2408-02 · exp 1 Aug 2027', '5 kg', 0, '5 kg', '0'], ['Tea leaves', 'B-2407-19 · exp 9 Jul 2027', '2 kg', 0, '2 kg', '0']] },
+      { no: 'TRF0039', when: 'Today 09:40', by: 'Ravi Prasad', loc: 'Max Saket', s: ['KITCHEN', 'Patient Diet Kitchen'], d: ['COUNTER', 'OPD Counter'], st: 'ack', out: 'partial', biz: '1 Oct 2026', remarks: 'Curd short by 2 kg',
+        lines: [['Curd', 'B-2409-22 · exp 3 Oct 2026', '12 kg', 1, '10 kg', '2 kg'], ['Soft diet khichdi', 'Produced PRD0015', '30 por', 0, '30 por', '0']] },
+      { no: 'TRF0038', when: 'Today 09:10', by: 'Pooja Singh', loc: 'Max Gurugram', s: ['STORE', 'Dry Store'], d: ['RESTAURANT', 'Staff Canteen'], st: 'ack', out: 'rejected', biz: '1 Oct 2026', remarks: 'Quality issue',
+        lines: [['Paneer', 'B-2409-15 · exp 1 Oct 2026', '6 kg', 1, '0', '6 kg']] },
+      { no: 'TRF0037', when: 'Today 10:30', by: 'Anil Kumar', loc: 'Max Vaishali', s: ['KITCHEN', 'Main Kitchen'], d: ['RESTAURANT', 'Main Cafeteria'], st: 'pending', biz: '1 Oct 2026', remarks: 'Lunch service',
+        lines: [['Veg thali base', 'Produced PRD0014', '120 por'], ['Jeera rice', 'Produced PRD0014', '25 kg'], ['Dal makhani', 'Produced PRD0014', '18 kg'], ['Raita', 'Produced PRD0014', '10 kg'], ['Chapati', 'Produced PRD0014', '300 pcs'], ['Gulab jamun', 'Produced PRD0014', '120 pcs']] },
+      { no: 'TRF0036', when: 'Today 12:55', by: 'Rahul Verma', loc: 'Max Saket', s: ['STORE', 'Main F&B Store'], d: ['COUNTER', 'Emergency Counter'], st: 'draft', biz: '1 Oct 2026', remarks: '—',
+        lines: [['Packaged water 1 L', 'B-2409-28 · exp 28 Sep 2027', '48 pcs'], ['Glucose biscuits', 'B-2409-05 · exp 5 Mar 2027', '36 pcs']] },
+      { no: 'TRF0035', when: 'Yesterday 18:20', by: 'Meera Sharma', loc: 'Max Saket', s: ['KITCHEN', 'Main Kitchen'], d: ['RESTAURANT', 'Staff Canteen'], st: 'ack', out: 'full', biz: '30 Sep 2026', remarks: 'Dinner',
+        lines: [['Veg biryani', 'Produced PRD0012', '20 kg', 0, '20 kg', '0'], ['Mixed raita', 'Produced PRD0012', '8 kg', 0, '8 kg', '0'], ['Salad', 'Produced PRD0012', '6 kg', 0, '6 kg', '0'], ['Kheer', 'Produced PRD0012', '80 cups', 0, '80 cups', '0']] },
+      { no: 'TRF0034', when: 'Yesterday 16:05', by: 'Rahul Verma', loc: 'Max Saket', s: ['STORE', 'Main F&B Store'], d: ['RESTAURANT', 'Main Cafeteria'], st: 'cancelled', biz: '30 Sep 2026', remarks: 'Raised twice',
+        lines: [['Refined oil', 'B-2408-14 · exp 14 Feb 2027', '15 L'], ['Atta', 'B-2409-08 · exp 8 Jan 2027', '30 kg'], ['Salt', 'B-2407-01 · exp 1 Jul 2028', '5 kg']] },
+      { no: 'TRF0033', when: 'Yesterday 15:30', by: 'Anil Kumar', loc: 'Max Patparganj', s: ['KITCHEN', 'Main Kitchen'], d: ['RESTAURANT', 'Coffee Lounge'], st: 'ack', out: 'full', biz: '30 Sep 2026', remarks: 'Evening snacks',
+        lines: [['Veg sandwich', 'Produced PRD0011', '60 pcs', 0, '60 pcs', '0'], ['Samosa', 'Produced PRD0011', '80 pcs', 0, '80 pcs', '0']] }
+    ];
+    const ST = {
+      draft: ['Draft', 'Draft', c.neuBg, c.neuFg], pending: ['Pending ack', 'Pending acknowledgement', c.pendBg, c.pendFg],
+      ack: ['Acknowledged', 'Acknowledged', c.okBg, c.okFg], cancelled: ['Cancelled', 'Cancelled', c.neuBg, c.neuFg]
+    };
+    const OUT = { full: ['Accepted in full', c.okFg], partial: ['Accepted partially', c.pendFg], rejected: ['Rejected in full', c.badFg] };
+    const viewDefs = [['all', 'All', 42], ['draft', 'Draft', 3], ['pending', 'Pending acknowledgement', 8], ['ack', 'Acknowledged', 29], ['cancelled', 'Cancelled', 2]];
+    const view = this.state.view;
+    const views = viewDefs.map(([id, label, count]) => {
+      const on = id === view;
+      return { label, count, on, line: on ? '#0B57A4' : 'transparent', fg: on ? c.text : c.text3, w: on ? '800' : '600', cbg: on ? c.primarySoft : c.neuBg, cfg: on ? c.link : c.neuFg, pick: () => this.setState({ view: id }) };
+    });
+    const vis = data.filter((t) => view === 'all' || t.st === view);
+    const checked = this.state.checked;
+    const selCount = Object.keys(checked).filter((k) => checked[k]).length;
+    const rows = vis.map((t) => {
+      const st = ST[t.st];
+      const isSel = t.no === this.state.sel;
+      const out = t.out ? OUT[t.out] : null;
+      return {
+        c, no: t.no, when: t.when, src: t.s[1], dst: t.d[1],
+        sType: T[t.s[0]][0], sBg: T[t.s[0]][1], sFg: T[t.s[0]][2],
+        dType: T[t.d[0]][0], dBg: T[t.d[0]][1], dFg: T[t.d[0]][2],
+        lineCount: t.lines.length,
+        stLabel: st[0], stBg: st[2], stFg: st[3],
+        sub: out ? out[0] : t.st === 'pending' ? 'Waiting on restaurant' : t.st === 'draft' ? 'Not submitted' : t.remarks,
+        subFg: out ? out[1] : c.muted,
+        bg: isSel ? c.selected : checked[t.no] ? c.primarySoft : c.surface,
+        checked: !!checked[t.no],
+        toggle: () => this.setState({ checked: Object.assign({}, checked, { [t.no]: !checked[t.no] }) }),
+        open: () => this.setState({ sel: t.no })
+      };
+    });
+    const allChecked = vis.length > 0 && vis.every((t) => checked[t.no]);
+    const toggleAll = () => {
+      const next = Object.assign({}, checked);
+      vis.forEach((t) => { next[t.no] = !allChecked; });
+      this.setState({ checked: next });
+    };
+    const s = data.find((t) => t.no === this.state.sel);
+    let d = {}, lines = [], steps = [];
+    if (s) {
+      const st = ST[s.st];
+      d = { no: s.no, when: s.when, by: s.by, loc: s.loc, src: s.s[1], dst: s.d[1], sType: T[s.s[0]][0], dType: T[s.d[0]][0], biz: s.biz, remarks: s.remarks, lineCount: s.lines.length, stLong: s.out ? OUT[s.out][0] : st[1], stBg: s.out === 'partial' ? c.pendBg : s.out === 'rejected' ? c.badBg : st[2], stFg: s.out === 'partial' ? c.pendFg : s.out === 'rejected' ? c.badFg : st[3], isPending: s.st === 'pending', isDraft: s.st === 'draft', isDone: s.st === 'ack' || s.st === 'cancelled' };
+      lines = s.lines.map(([item, batch, sent, warn, acc, rej]) => ({
+        c, item, batch, sent,
+        acc: acc || '—', rej: rej || '—',
+        expFg: warn && !acc ? c.badFg : c.muted,
+        accFg: acc ? c.okFg : c.muted,
+        rejFg: rej && rej !== '0' ? c.badFg : c.muted,
+        rejW: rej && rej !== '0' ? '800' : '400'
+      }));
+      const done = { dot: c.teal, ring: c.teal, fg: c.text };
+      const wait = { dot: c.surface, ring: c.ring, fg: c.muted };
+      const now = { dot: c.warn, ring: c.warn, fg: c.text };
+      const stop = { dot: c.badFg, ring: c.badFg, fg: c.badFg };
+      steps = [
+        Object.assign({ label: 'Created as draft', time: s.when + ' · ' + s.by }, done),
+        Object.assign({ label: 'Submitted for acknowledgement', time: s.st === 'draft' ? 'Not yet submitted' : s.when + ' · stock reserved at source' }, s.st === 'draft' ? wait : done),
+        s.st === 'cancelled'
+          ? Object.assign({ label: 'Cancelled', time: s.remarks }, stop)
+          : Object.assign({ label: s.out ? OUT[s.out][0] + ' by restaurant' : 'Acknowledgement by ' + s.d[1], time: s.out ? 'Stock moved to ' + s.d[1] : s.st === 'pending' ? 'Waiting · stock reserved at source' : '—' }, s.out === 'rejected' ? stop : s.out ? done : s.st === 'pending' ? now : wait)
+      ].map((x, i, a) => Object.assign(x, { c, more: i < a.length - 1 }));
+    }
+    return {
+      c, theme, links, views, rows,
+      rowCount: rows.length,
+      viewTotal: viewDefs.find((v) => v[0] === view)[2],
+      noneSelected: selCount === 0, someSelected: selCount > 0, selCount,
+      allChecked, toggleAll,
+      clearSel: () => this.setState({ checked: {} }),
+      hasSel: !!s, d, lines, steps,
+      closeSel: () => this.setState({ sel: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

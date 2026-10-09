@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Acknowledge transfer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<div style="flex: 1 1 248px; max-width: 100%; position: sticky; top: 0; align-self: flex-start">
+<dc-import name="Sidebar" theme="{{theme}}" active="transfers" hint-size="248px,100vh"></dc-import>
+</div>
+<div style="flex: 999 1 0; min-width: 62%; display: flex; flex-direction: column">
+<dc-import name="Topbar" theme="{{theme}}" section="Transfers" page="Acknowledge TRF0042" file="Acknowledge" hint-size="100%,64px"></dc-import>
+<main style="width: 100%; max-width: 1240px; box-sizing: border-box; padding: 20px 32px 48px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; flex-direction: column; gap: 6px">
+<a href="{{links.transfers}}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; text-decoration: none; color: {{c.link}}; min-height: 24px; align-self: flex-start"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>Transfers</a>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em">Acknowledge TRF0042</h1>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: {{c.pendBg}}; color: {{c.pendFg}}"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{c.pendFg}}"></span>Pending acknowledgement · 1h 05m</span>
+</div>
+<p style="margin: 0; font-size: 13.5px; color: {{c.muted}}">Check what arrived at Main Cafeteria. Enter the quantity you accept for each line; anything not accepted goes back to the source.</p>
+</section>
+
+<section aria-label="Transfer details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; border-radius: 16px; overflow: hidden; background: {{c.border}}; border: 1px solid {{c.border}}">
+<div style="background: {{c.surface}}; padding: 12px 16px; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">FROM · STORE</span><span style="font-size: 13.5px; font-weight: 700">Main F&amp;B Store</span></div>
+<div style="background: {{c.surface}}; padding: 12px 16px; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">TO · RESTAURANT</span><span style="font-size: 13.5px; font-weight: 700">Main Cafeteria</span></div>
+<div style="background: {{c.surface}}; padding: 12px 16px; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">SENT</span><span style="font-size: 13.5px; font-weight: 700">Today 11:45 · Rahul Verma</span></div>
+<div style="background: {{c.surface}}; padding: 12px 16px; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: {{c.muted}}">REMARKS</span><span style="font-size: 13.5px; font-weight: 700">Lunch top-up</span></div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-labelledby="lines-h" style="flex: 2 1 560px; min-width: 0; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 18px">
+<h2 id="lines-h" style="margin: 0; font-size: 15px; font-weight: 800">Received lines · 4</h2>
+<div style="display: flex; gap: 8px">
+<button onClick="{{acceptAll}}" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.okFg}}; font-family: inherit; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>Accept all</button>
+<button onClick="{{rejectAll}}" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.badFg}}; font-family: inherit; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>Reject all</button>
+</div>
+</div>
+<div style="overflow-x: auto">
+<div style="min-width: 700px">
+<div style="display: grid; grid-template-columns: minmax(200px, 1.4fr) 76px 156px 84px minmax(150px, 1fr); gap: 12px; align-items: center; padding: 0 18px; height: 36px; background: {{c.subtle}}; border-top: 1px solid {{c.divider}}; border-bottom: 1px solid {{c.divider}}; font-size: 12px; font-weight: 600; color: {{c.muted}}">
+<span>Item · batch</span><span style="text-align: right">Sent</span><span>Accepted</span><span style="text-align: right">Rejected</span><span>Reason</span>
+</div>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: minmax(200px, 1.4fr) 76px 156px 84px minmax(150px, 1fr); gap: 12px; align-items: center; padding: 10px 18px; min-height: 60px; box-sizing: border-box; border-bottom: 1px solid {{l.c.divider}}; background: {{l.rowBg}}">
+<span style="display: flex; align-items: center; gap: 10px; min-width: 0">
+<span style="width: 22px; height: 22px; border-radius: 50%; background: {{l.iconBg}}; color: {{l.iconFg}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{l.isFull}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></sc-if>
+<sc-if value="{{l.isPart}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 12h12"></path></svg></sc-if>
+<sc-if value="{{l.isNone}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></sc-if>
+</span>
+<span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 13.5px; font-weight: 700">{{l.name}}</span><span style="font-size: 11.5px; color: {{l.c.muted}}">{{l.batch}}</span></span>
+</span>
+<span style="text-align: right; font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums">{{l.sentText}}</span>
+<span style="display: flex; align-items: center; border: 1.5px solid {{l.c.input}}; border-radius: 10px; overflow: hidden; height: 38px; box-sizing: border-box; background: {{l.c.surface}}">
+<button onClick="{{l.dec}}" aria-label="Decrease accepted {{l.name}}" style="width: 36px; height: 100%; border: 0; background: {{l.c.subtle}}; color: {{l.c.text2}}; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">−</button>
+<input type="number" min="0" aria-label="Accepted quantity for {{l.name}}" value="{{l.acc}}" onChange="{{l.onAcc}}" style="width: 100%; min-width: 0; border: 0; outline: 0; text-align: center; background: transparent; font-family: inherit; font-size: 13.5px; font-weight: 800; color: {{l.c.text}}; font-variant-numeric: tabular-nums">
+<button onClick="{{l.inc}}" aria-label="Increase accepted {{l.name}}" style="width: 36px; height: 100%; border: 0; background: {{l.c.subtle}}; color: {{l.c.text2}}; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">+</button>
+</span>
+<span style="text-align: right; font-size: 13.5px; font-weight: {{l.rejW}}; color: {{l.rejFg}}; font-variant-numeric: tabular-nums">{{l.rejText}}</span>
+<span>
+<sc-if value="{{l.hasRej}}" hint-placeholder-val="{{ false }}"><select aria-label="Rejection reason for {{l.name}}" style="width: 100%; height: 38px; border: 1.5px solid {{l.c.pendFg}}; border-radius: 10px; padding: 0 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; color: {{l.c.text}}; background: {{l.c.surface}}"><option>Short received</option><option>Damaged in transit</option><option>Quality issue</option><option>Expired or near expiry</option><option>Wrong item sent</option></select></sc-if>
+<sc-if value="{{l.noRej}}" hint-placeholder-val="{{ true }}"><span style="font-size: 12.5px; color: {{l.c.muted}}">—</span></sc-if>
+</span>
+</div>
+</sc-for>
+</div>
+</div>
+<p style="margin: 0; padding: 12px 18px; font-size: 12px; color: {{c.muted}}; background: {{c.subtle}}">Tip: press Tab to move between quantities. Rejected quantity is worked out for you.</p>
+</section>
+
+<aside aria-label="Acknowledgement outcome" style="flex: 1 1 300px; min-width: 0; position: sticky; top: 16px; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 800">Outcome</h2>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; background: {{outBg}}">
+<span style="font-size: 15px; font-weight: 800; color: {{outFg}}">{{outLabel}}</span>
+<span style="font-size: 12.5px; color: {{c.text2}}">{{outText}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center">
+<div style="padding: 10px 6px; border-radius: 10px; border: 1px solid {{c.border}}; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 18px; font-weight: 800; color: {{c.okFg}}; font-variant-numeric: tabular-nums">{{nFull}}</span><span style="font-size: 11.5px; color: {{c.muted}}">In full</span></div>
+<div style="padding: 10px 6px; border-radius: 10px; border: 1px solid {{c.border}}; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 18px; font-weight: 800; color: {{c.pendFg}}; font-variant-numeric: tabular-nums">{{nPart}}</span><span style="font-size: 11.5px; color: {{c.muted}}">Partial</span></div>
+<div style="padding: 10px 6px; border-radius: 10px; border: 1px solid {{c.border}}; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 18px; font-weight: 800; color: {{c.badFg}}; font-variant-numeric: tabular-nums">{{nNone}}</span><span style="font-size: 11.5px; color: {{c.muted}}">Rejected</span></div>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 700; color: {{c.text2}}">Remarks for the store
+<textarea rows="3" placeholder="Add details on shortages or damage" style="border: 1px solid {{c.input}}; border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13.5px; color: {{c.text}}; background: {{c.surface}}; resize: vertical"></textarea></label>
+<button style="height: 44px; border-radius: 10px; border: 0; background: #0B57A4; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer">{{confirmLabel}}</button>
+<span style="font-size: 12px; color: {{c.muted}}">Stock moves as soon as you confirm. You can’t edit an acknowledgement afterwards.</span>
+</aside>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { acc: { rice: 25, dal: 10, paneer: 5, milk: 40 } };
+  }
+  pal(t) {
+    const L = { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', input: '#D5DCE5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', pendBg: '#FEF3C7', pendFg: '#92400E', okBg: '#E3F5EE', okFg: '#0F6B55', badBg: '#FDECEF', badFg: '#B4233F', partRow: '#FFFBEB', badRow: '#FFF8F9', shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)' };
+    const D = { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', input: '#334155', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', pendBg: '#422006', pendFg: '#FCD34D', okBg: '#042F2E', okFg: '#5EEAD4', badBg: '#4C0519', badFg: '#FDA4AF', partRow: '#17150F', badRow: '#1A0F1A', shadow: 'none' };
+    return t === 'dark' ? D : L;
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const c = this.pal(theme);
+    const sfx = theme === 'dark' ? '-dark' : '';
+    const defs = [
+      ['rice', 'Basmati rice', 'B-2409-03 · exp 12 Mar 2027', 25, 'kg'],
+      ['dal', 'Toor dal', 'B-2409-11 · exp 20 Jan 2027', 10, 'kg'],
+      ['paneer', 'Paneer', 'B-2409-17 · exp 3 Oct 2026', 6, 'kg'],
+      ['milk', 'Toned milk', 'B-2410-01 · exp 4 Oct 2026', 40, 'L']
+    ];
+    const acc = this.state.acc;
+    const set = (k, v, max) => this.setState({ acc: Object.assign({}, acc, { [k]: Math.max(0, Math.min(max, v)) }) });
+    let nFull = 0, nPart = 0, nNone = 0;
+    const lines = defs.map(([k, name, batch, sent, unit]) => {
+      const a = acc[k];
+      const rej = sent - a;
+      const full = rej === 0, none = a === 0;
+      if (full) nFull++; else if (none) nNone++; else nPart++;
+      return {
+        c, name, batch, acc: a,
+        sentText: sent + ' ' + unit,
+        rejText: rej > 0 ? rej + ' ' + unit : '0',
+        rejFg: rej > 0 ? c.badFg : c.muted, rejW: rej > 0 ? '800' : '500',
+        hasRej: rej > 0, noRej: rej === 0,
+        isFull: full, isPart: !full && !none, isNone: none,
+        iconBg: full ? c.okBg : none ? c.badBg : c.pendBg,
+        iconFg: full ? c.okFg : none ? c.badFg : c.pendFg,
+        rowBg: full ? c.surface : none ? c.badRow : c.partRow,
+        dec: () => set(k, a - 1, sent),
+        inc: () => set(k, a + 1, sent),
+        onAcc: (e) => set(k, parseFloat(e.target.value) || 0, sent)
+      };
+    });
+    const outcome = nFull === defs.length ? 'full' : nNone === defs.length ? 'rejected' : 'partial';
+    const O = {
+      full: ['Accepted in full', c.okBg, c.okFg, 'Everything arrived as sent. All 4 lines move into Main Cafeteria stock.', 'Confirm — accept in full'],
+      partial: ['Accepted partially', c.pendBg, c.pendFg, 'Accepted quantities move into Main Cafeteria stock. Rejected quantities return to Main F&B Store.', 'Confirm partial acceptance'],
+      rejected: ['Rejected in full', c.badBg, c.badFg, 'Nothing is accepted. All quantities return to Main F&B Store.', 'Confirm rejection']
+    }[outcome];
+    return {
+      c, theme, links: { transfers: 'Transfers' + sfx + '.dc.html' }, lines,
+      nFull, nPart, nNone,
+      outLabel: O[0], outBg: O[1], outFg: O[2], outText: O[3], confirmLabel: O[4],
+      acceptAll: () => this.setState({ acc: { rice: 25, dal: 10, paneer: 6, milk: 40 } }),
+      rejectAll: () => this.setState({ acc: { rice: 0, dal: 0, paneer: 0, milk: 0 } })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – GRN verification</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<div style="flex: 1 1 248px; max-width: 100%; position: sticky; top: 0; align-self: flex-start">
+<dc-import name="Sidebar" theme="{{theme}}" active="grns" hint-size="248px,100vh"></dc-import>
+</div>
+<div style="flex: 999 1 0; min-width: 62%; display: flex; flex-direction: column">
+<dc-import name="Topbar" theme="{{theme}}" section="GRNs" page="GRN000128" file="Grn" hint-size="100%,64px"></dc-import>
+<main style="width: 100%; max-width: 1240px; box-sizing: border-box; padding: 20px 32px 48px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<button style="display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 700; color: {{c.link}}; min-height: 24px; cursor: pointer; align-self: flex-start"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>GRNs</button>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums">GRN000128</h1>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: {{c.infoBg}}; color: {{c.infoFg}}"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{c.infoFg}}"></span>Under verification</span>
+</div>
+<p style="margin: 0; font-size: 13.5px; color: {{c.muted}}">Fresh Farms Pvt Ltd → Main F&amp;B Store · received today 12:05 by Imran Khan</p>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.badFg}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Reject GRN</button>
+<button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text}}; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">Save verification</button>
+<button style="height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #0B57A4; color: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>{{postLabel}}</button>
+</div>
+</section>
+
+<ol aria-label="GRN progress" style="margin: 0; padding: 14px 18px; list-style: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="4">
+<li style="display: flex; align-items: center; gap: 8px; flex: 1 1 160px">
+<span style="width: 26px; height: 26px; border-radius: 50%; background: {{s.bg}}; color: {{s.fg}}; border: 2px solid {{s.bd}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0">{{s.mark}}</span>
+<span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700; color: {{s.tc}}">{{s.label}}</span><span style="font-size: 11.5px; color: {{s.c.muted}}">{{s.sub}}</span></span>
+<sc-if value="{{s.more}}" hint-placeholder-val="{{ true }}"><span style="flex-grow: 1; height: 2px; min-width: 16px; background: {{s.line}}; border-radius: 2px"></span></sc-if>
+</li>
+</sc-for>
+</ol>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-labelledby="gl-h" style="flex: 2 1 600px; min-width: 0; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 18px">
+<h2 id="gl-h" style="margin: 0; font-size: 15px; font-weight: 800">Lines · 6</h2>
+<span style="font-size: 12.5px; color: {{c.muted}}">Enter the accepted quantity; rejected is the rest of what was received.</span>
+</div>
+<div style="overflow-x: auto">
+<div style="min-width: 760px">
+<div style="display: grid; grid-template-columns: 32px minmax(180px, 1.4fr) 76px 76px 120px 76px minmax(130px, 1fr); gap: 10px; align-items: center; padding: 0 16px; height: 36px; background: {{c.subtle}}; border-top: 1px solid {{c.divider}}; border-bottom: 1px solid {{c.divider}}; font-size: 12px; font-weight: 600; color: {{c.muted}}">
+<span></span><span>Item</span><span style="text-align: right">Ordered</span><span style="text-align: right">Received</span><span>Accepted</span><span style="text-align: right">Rejected</span><span>Reason</span>
+</div>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="6">
+<div style="border-bottom: 1px solid {{l.c.divider}}">
+<div style="display: grid; grid-template-columns: 32px minmax(180px, 1.4fr) 76px 76px 120px 76px minmax(130px, 1fr); gap: 10px; align-items: center; padding: 8px 16px; min-height: 56px; box-sizing: border-box; background: {{l.rowBg}}">
+<button onClick="{{l.toggle}}" aria-expanded="{{l.open}}" aria-label="Show batches for {{l.name}}" style="width: 28px; height: 28px; border-radius: 7px; border: 1px solid {{l.c.border}}; background: {{l.c.surface}}; color: {{l.c.text3}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<sc-if value="{{l.open}}" hint-placeholder-val="{{ false }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
+<sc-if value="{{l.closed}}" hint-placeholder-val="{{ true }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
+</button>
+<span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 13.5px; font-weight: 700">{{l.name}}</span><span style="font-size: 11.5px; color: {{l.subFg}}; font-weight: {{l.subW}}">{{l.sub}}</span></span>
+<span style="text-align: right; font-size: 13px; color: {{l.c.text3}}; font-variant-numeric: tabular-nums">{{l.ord}}</span>
+<span style="text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums">{{l.rec}}</span>
+<label style="display: flex; align-items: center; height: 36px; border: 1.5px solid {{l.c.input}}; border-radius: 9px; background: {{l.c.surface}}; overflow: hidden; box-sizing: border-box"><input type="number" min="0" aria-label="Accepted quantity for {{l.name}}" value="{{l.acc}}" onChange="{{l.onAcc}}" style="width: 100%; min-width: 0; border: 0; outline: 0; padding: 0 8px; background: transparent; font-family: inherit; font-size: 13px; font-weight: 800; color: {{l.c.text}}; font-variant-numeric: tabular-nums"><span style="padding: 0 8px; font-size: 11.5px; color: {{l.c.muted}}">{{l.unit}}</span></label>
+<span style="text-align: right; font-size: 13px; font-weight: {{l.rejW}}; color: {{l.rejFg}}; font-variant-numeric: tabular-nums">{{l.rej}}</span>
+<span>
+<sc-if value="{{l.hasRej}}" hint-placeholder-val="{{ false }}"><select aria-label="Rejection reason for {{l.name}}" style="width: 100%; height: 36px; border: 1.5px solid {{l.c.pendFg}}; border-radius: 9px; padding: 0 6px; font-family: inherit; font-size: 12.5px; font-weight: 600; color: {{l.c.text}}; background: {{l.c.surface}}"><option>{{l.reason}}</option><option>Damaged packs</option><option>Quality issue</option><option>Near expiry</option><option>Wrong item</option></select></sc-if>
+<sc-if value="{{l.noRej}}" hint-placeholder-val="{{ true }}"><span style="font-size: 12.5px; color: {{l.c.muted}}">—</span></sc-if>
+</span>
+</div>
+<sc-if value="{{l.open}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 4px 16px 12px 58px; background: {{l.c.subtle}}">
+<div style="display: grid; grid-template-columns: minmax(110px, 1fr) 96px 120px 70px 70px; gap: 10px; padding: 6px 0; font-size: 11.5px; font-weight: 600; color: {{l.c.muted}}"><span>Batch</span><span>Mfg date</span><span>Expiry</span><span style="text-align: right">Received</span><span style="text-align: right">Accepted</span></div>
+<sc-for list="{{l.batches}}" as="b" hint-placeholder-count="2">
+<div style="display: grid; grid-template-columns: minmax(110px, 1fr) 96px 120px 70px 70px; gap: 10px; padding: 6px 0; align-items: center; font-size: 12.5px; border-top: 1px solid {{b.c.divider}}; font-variant-numeric: tabular-nums">
+<span style="font-weight: 700">{{b.no}}</span>
+<span style="color: {{b.c.text3}}">{{b.mfg}}</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="color: {{b.expFg}}; font-weight: {{b.expW}}">{{b.exp}}</span><sc-if value="{{b.soon}}" hint-placeholder-val="{{ false }}"><span style="font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 5px; background: {{b.c.pendBg}}; color: {{b.c.pendFg}}">{{b.left}}</span></sc-if></span>
+<span style="text-align: right">{{b.rec}}</span>
+<span style="text-align: right; font-weight: 700">{{b.acc}}</span>
+</div>
+</sc-for>
+<button style="margin-top: 6px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px dashed {{l.c.input}}; background: transparent; color: {{l.c.link}}; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer">+ Add batch</button>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; justify-content: flex-end; gap: 24px; flex-wrap: wrap; padding: 12px 18px; background: {{c.subtle}}; font-size: 12.5px; color: {{c.muted}}">
+<span>Accepted <strong style="color: {{c.okFg}}; font-variant-numeric: tabular-nums">{{totAcc}}</strong></span>
+<span>Rejected <strong style="color: {{c.badFg}}; font-variant-numeric: tabular-nums">{{totRej}}</strong></span>
+</div>
+</section>
+
+<div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<section aria-labelledby="gd-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+<h2 id="gd-h" style="margin: 0; font-size: 15px; font-weight: 800">Receipt details</h2>
+<dl style="margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; font-size: 13px">
+<dt style="color: {{c.muted}}">Store</dt><dd style="margin: 0; font-weight: 700">Main F&amp;B Store · Max Saket</dd>
+<dt style="color: {{c.muted}}">Vendor</dt><dd style="margin: 0; font-weight: 700">Fresh Farms Pvt Ltd</dd>
+<dt style="color: {{c.muted}}">PO number</dt><dd style="margin: 0; font-weight: 700">PO-2026-0912</dd>
+<dt style="color: {{c.muted}}">Invoice</dt><dd style="margin: 0; font-weight: 700">FF/26-27/4471</dd>
+<dt style="color: {{c.muted}}">Received</dt><dd style="margin: 0; font-weight: 700">1 Oct 2026, 12:05</dd>
+<dt style="color: {{c.muted}}">Received by</dt><dd style="margin: 0; font-weight: 700">Imran Khan</dd>
+</dl>
+</section>
+
+<section aria-labelledby="ck-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px">
+<h2 id="ck-h" style="margin: 0 0 4px; font-size: 15px; font-weight: 800">Before you post</h2>
+<sc-for list="{{checks}}" as="k" hint-placeholder-count="4">
+<label style="display: flex; align-items: flex-start; gap: 10px; min-height: 36px; font-size: 13px; color: {{k.c.text2}}; cursor: pointer"><input type="checkbox" checked="{{k.on}}" onChange="{{k.toggle}}" style="width: 18px; height: 18px; margin: 1px 0 0; accent-color: #0B57A4; flex-shrink: 0"><span><span style="font-weight: 700; color: {{k.c.text}}">{{k.label}}</span><br><span style="font-size: 12px; color: {{k.c.muted}}">{{k.hint}}</span></span></label>
+</sc-for>
+</section>
+
+<section aria-label="Expiry warning" style="display: flex; gap: 10px; padding: 14px 16px; border-radius: 16px; background: {{c.pendBg}}; color: {{c.pendFg}}; font-size: 12.5px; font-weight: 600">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M12 3 2 20h20z"></path><path d="M12 10v4M12 17h.01"></path></svg>
+<span>3 batches expire within 5 days. They’ll be picked first for transfers (FEFO).</span>
+</section>
+</div>
+</div>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      open: { paneer: true },
+      acc: { paneer: 18, curd: 30, tomato: 48, onion: 60, cori: 3, milk: 80 },
+      checks: { invoice: true, batches: true, temp: false, photos: false }
+    };
+  }
+  pal(t) {
+    const L = { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', input: '#D5DCE5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', pendBg: '#FEF3C7', pendFg: '#92400E', infoBg: '#E8F0FA', infoFg: '#0B57A4', okBg: '#E3F5EE', okFg: '#0F6B55', badBg: '#FDECEF', badFg: '#B4233F', partRow: '#FFFBEB', teal: '#0F7B63', ring: '#CBD5E1', shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)' };
+    const D = { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', input: '#334155', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', pendBg: '#422006', pendFg: '#FCD34D', infoBg: '#082F49', infoFg: '#7DD3FC', okBg: '#042F2E', okFg: '#5EEAD4', badBg: '#4C0519', badFg: '#FDA4AF', partRow: '#17150F', teal: '#0F7B63', ring: '#334155', shadow: 'none' };
+    return t === 'dark' ? D : L;
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const c = this.pal(theme);
+    const st = this.state;
+    const defs = [
+      ['paneer', 'Paneer', 'kg', 20, 20, 'Damaged packs', [['B-2410-05', '30 Sep 2026', '6 Oct 2026', 12, 12, 'In 5 days'], ['B-2410-06', '30 Sep 2026', '7 Oct 2026', 8, 6]]],
+      ['curd', 'Curd', 'kg', 30, 30, '', [['B-2410-02', '30 Sep 2026', '5 Oct 2026', 30, 30, 'In 4 days']]],
+      ['tomato', 'Tomatoes', 'kg', 50, 48, '', [['B-2410-09', '1 Oct 2026', '8 Oct 2026', 48, 48]]],
+      ['onion', 'Onions', 'kg', 60, 60, '', [['B-2410-10', '28 Sep 2026', '30 Oct 2026', 60, 60]]],
+      ['cori', 'Coriander', 'kg', 5, 5, 'Quality issue', [['B-2410-11', '1 Oct 2026', '3 Oct 2026', 5, 3, 'In 2 days']]],
+      ['milk', 'Toned milk', 'L', 80, 80, '', [['B-2410-01', '30 Sep 2026', '4 Oct 2026', 80, 80, 'In 3 days']]]
+    ];
+    let anyRej = false;
+    const tot = { acc: {}, rej: {} };
+    const lines = defs.map(([k, name, unit, ord, rec, reason, batches]) => {
+      const a = st.acc[k];
+      const rej = Math.max(0, rec - a);
+      if (rej > 0) anyRej = true;
+      tot.acc[unit] = (tot.acc[unit] || 0) + a;
+      tot.rej[unit] = (tot.rej[unit] || 0) + rej;
+      const short = rec < ord;
+      const isOpen = !!st.open[k];
+      return {
+        c, name, unit, acc: a,
+        ord: ord + ' ' + unit, rec: rec + ' ' + unit,
+        rej: rej > 0 ? rej + ' ' + unit : '0',
+        rejFg: rej > 0 ? c.badFg : c.muted, rejW: rej > 0 ? '800' : '500',
+        hasRej: rej > 0, noRej: rej === 0, reason: reason || 'Short received',
+        sub: short ? (ord - rec) + ' ' + unit + ' short against PO' : batches.length + (batches.length === 1 ? ' batch' : ' batches'),
+        subFg: short ? c.pendFg : c.muted, subW: short ? '700' : '500',
+        rowBg: rej > 0 ? c.partRow : c.surface,
+        open: isOpen, closed: !isOpen,
+        toggle: () => this.setState({ open: Object.assign({}, st.open, { [k]: !isOpen }) }),
+        onAcc: (e) => this.setState({ acc: Object.assign({}, st.acc, { [k]: Math.max(0, Math.min(rec, parseFloat(e.target.value) || 0)) }) }),
+        batches: batches.map(([no, mfg, exp, br, ba, left]) => ({
+          c, no, mfg, exp, rec: br + ' ' + unit, acc: ba + ' ' + unit,
+          soon: !!left, left: left || '', expFg: left ? c.pendFg : c.text3, expW: left ? '700' : '500'
+        }))
+      };
+    });
+    const fmt = (o) => Object.keys(o).map((u) => o[u] + ' ' + u).join(' · ');
+    const target = anyRej ? 'Partially accepted' : 'Accepted';
+    const S = [
+      ['Draft', 'Created 12:05', 'done'],
+      ['Under verification', 'In progress', 'now'],
+      [target, anyRej ? 'Some lines rejected' : 'All lines accepted', 'todo'],
+      ['Posted to stock', 'Adds to store stock', 'todo']
+    ];
+    const steps = S.map(([label, sub, s], i) => ({
+      c, label, sub, more: i < S.length - 1,
+      mark: s === 'done' ? '✓' : String(i + 1),
+      bg: s === 'done' ? c.teal : s === 'now' ? c.infoBg : c.surface,
+      fg: s === 'done' ? '#FFFFFF' : s === 'now' ? c.infoFg : c.muted,
+      bd: s === 'done' ? c.teal : s === 'now' ? c.infoFg : c.ring,
+      tc: s === 'todo' ? c.text3 : c.text,
+      line: s === 'done' ? c.teal : c.divider
+    }));
+    const C = [
+      ['invoice', 'Invoice matches PO', 'Quantities checked against PO-2026-0912'],
+      ['batches', 'Batch & expiry captured', 'Every line has at least one batch'],
+      ['temp', 'Cold-chain check done', 'Dairy received at 4 °C or below'],
+      ['photos', 'Rejected items photographed', 'Attach to the vendor note']
+    ];
+    const checks = C.map(([k, label, hint]) => ({ c, label, hint, on: !!st.checks[k], toggle: () => this.setState({ checks: Object.assign({}, st.checks, { [k]: !st.checks[k] }) }) }));
+    return {
+      c, theme, lines, steps, checks,
+      totAcc: fmt(tot.acc), totRej: fmt(tot.rej),
+      postLabel: anyRej ? 'Accept partially & post' : 'Accept & post to stock'
+    };
+  }
+}
+</script>
+</body>
+</html>

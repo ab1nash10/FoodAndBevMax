@@ -771,7 +771,6 @@ export function insights(input: {
 export interface SetupCounts {
   employees?: number;
   hospitals?: number;
-  itemPrices?: number;
   items?: number;
   kitchenItems?: number;
   kitchens?: number;
@@ -779,7 +778,6 @@ export interface SetupCounts {
   restaurants?: number;
   storeItems?: number;
   stores?: number;
-  timeSlots?: number;
 }
 
 export interface SetupStep {
@@ -843,10 +841,6 @@ export function setupSteps(
     href: '/masters/items/new',
     label: 'Add items',
   });
-  countStep('itemPrices', 'Item prices', 'Set Normal, Staff, Room and Counter rates', {
-    href: '/masters/item-prices/new',
-    label: 'Set prices',
-  });
 
   if (counts.storeItems !== undefined || counts.kitchenItems !== undefined) {
     const storeDone = (counts.storeItems ?? 1) > 0;
@@ -872,21 +866,15 @@ export function setupSteps(
     });
   }
 
-  if (counts.menus !== undefined || counts.timeSlots !== undefined) {
-    const slotsDone = (counts.timeSlots ?? 1) > 0;
-    const menusDone = (counts.menus ?? 1) > 0;
+  if (counts.menus !== undefined) {
+    const menusDone = counts.menus > 0;
 
     steps.push({
-      cta: slotsDone
-        ? { href: '/masters/restaurant-menus', label: 'Build menus' }
-        : { href: '/masters/time-slots', label: 'Add time slots' },
-      detail:
-        slotsDone && menusDone
-          ? 'Menus and time slots set'
-          : 'Decide what each restaurant serves, and when',
-      done: slotsDone && menusDone,
+      cta: { href: '/masters/restaurant-menus', label: 'Build menus' },
+      detail: menusDone ? 'Menus set' : 'Decide what each restaurant serves, and when',
+      done: menusDone,
       key: 'menus',
-      title: 'Restaurant menus & time slots',
+      title: 'Restaurant menus',
     });
   }
 

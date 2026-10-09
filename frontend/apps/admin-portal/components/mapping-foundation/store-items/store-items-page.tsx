@@ -85,7 +85,7 @@ export function StoreItemsPageClient() {
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const storesQuery = useStoreOptions(hospitalFilter);
-  const itemsQuery = useItemOptions('MRP', hospitalFilter);
+  const itemsQuery = useItemOptions('MRP');
   const invalidateStoreItems = useInvalidateMappingQueries('store-items', 'store-options');
   const { showToast } = useToast();
 

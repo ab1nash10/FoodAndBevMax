@@ -1,0 +1,113 @@
+# An in-cluster Redis for the shared dev-cluster deployment (the `fandb-api` Helm release from
+# the platform Jenkins, namespace `dev`). That release does not use infra/helm/fandb, so the
+# chart's own Redis (redis.enabled) never reaches it; this is the same thing as a plain manifest.
+#
+# With REDIS_URL set the backend keeps OTPs, refresh tokens and rate limits here instead of in
+# its own memory, so a deploy no longer signs everyone out and the backend can run more than
+# one replica. For production use ElastiCache instead (infra/aws/README.md).
+#
+# The namespace is shared with other applications, and what this Redis holds is sign-in
+# material, so unlike the chart's copy it requires a password. Create the Secret first; the
+# REDIS_URL key is the one infra/aws/README.md step 4 wires into the backend container:
+#
+#   PASS=$(openssl rand -hex 32)
+#   kubectl -n dev create secret generic fandb-redis \
+#     --from-literal=REDIS_PASSWORD="$PASS" \
+#     --from-literal=REDIS_URL="redis://:$PASS@fandb-redis:6379"
+#   kubectl apply -f infra/k8s/fandb-redis-dev.yaml
+#
+# Then check `checks.redis.status` is `ok` at /fandb/api/v1/health.
+#
+# ponytail: one replica, memory only, no persistence. OTPs expire in minutes and losing the
+# rest on a restart signs people out rather than corrupting anything.
+#
+# DELETE THIS before deploying via the Helm chart with redis.enabled=true: the chart creates a
+# Deployment and Service with the same name.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fandb-redis
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: fandb-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: fandb
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fandb-redis
+  strategy:
+    # Two Redis pods would split the OTP store between them, so the old one goes first.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fandb-redis
+        app.kubernetes.io/component: cache
+        app.kubernetes.io/part-of: fandb
+    spec:
+      securityContext:
+        # The image's own redis user.
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          # Docker Hub's official image through AWS's mirror, so pulls are not rate-limited.
+          image: public.ecr.aws/docker/library/redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          args: ['--save', '', '--appendonly', 'no', '--requirepass', '$(REDIS_PASSWORD)']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fandb-redis
+                  key: REDIS_PASSWORD
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            # Needs no password: redis-cli exits 0 on any reply, NOAUTH included, and non-zero
+            # only when nothing answers.
+            exec:
+              command: ['redis-cli', 'ping']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fandb-redis
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: fandb-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: fandb
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: fandb-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis

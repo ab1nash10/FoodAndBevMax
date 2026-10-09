@@ -1,13 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Matches,
-  MaxLength,
-} from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class CreateItemCategoryDto {
   @ApiProperty({
@@ -27,13 +19,4 @@ export class CreateItemCategoryDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
-
-  @ApiPropertyOptional({
-    description:
-      'The location the category belongs to; null or omitted shares it with every location',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsUUID()
-  hospitalId?: string | null;
 }

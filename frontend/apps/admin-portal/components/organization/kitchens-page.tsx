@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { invalidateKitchenQueries } from '@/lib/query-invalidation';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -98,8 +99,7 @@ export function KitchensPageClient() {
       setStatusUpdatingId(null);
     },
     onSuccess(_, variables) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.kitchens() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.kitchenOptions() });
+      invalidateKitchenQueries(queryClient);
       showToast({
         title: variables.isActive ? 'Kitchen activated' : 'Kitchen deactivated',
         variant: 'success',

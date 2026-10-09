@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, TimeSlot } from '@prisma/client';
+import { MenuServeAt, Prisma, Restaurant } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
@@ -19,16 +19,74 @@ import {
   RestaurantMenusRepository,
   RestaurantMenuWithRelations,
 } from './restaurant-menus.repository';
-import { assertUsableAt } from '../common/location-masters';
+import { toNumber } from '../common/values';
 
 type RestaurantMenuClient = Prisma.TransactionClient;
-type TimeSlotSummary = Pick<
-  TimeSlot,
-  'endTime' | 'id' | 'isActive' | 'isAlwaysAvailable' | 'slotName' | 'startTime'
->;
 
 function uniqueValues(values: string[] | undefined): string[] {
   return [...new Set(values ?? [])];
+}
+
+const detailFields = [
+  'accompaniments',
+  'addOn',
+  'availableFrom',
+  'availableTo',
+  'gstPercent',
+  'isDiscountable',
+  'isGstInclusive',
+  'preparationTimeMinutes',
+  'price',
+  'roomPrice',
+  'serveAt',
+  'serves',
+] as const;
+
+type MenuDetails = Pick<Prisma.RestaurantMenuUncheckedCreateInput, (typeof detailFields)[number]>;
+
+/** The serving and pricing fields a request sets; blank text is stored as null. */
+export function menuDetails(dto: UpdateRestaurantMenuDto): MenuDetails {
+  return Object.fromEntries(
+    detailFields
+      .filter((field) => dto[field] !== undefined)
+      .map((field) => {
+        const value = dto[field];
+
+        return [field, typeof value === 'string' ? value.trim() || null : value];
+      }),
+  );
+}
+
+/** A window has both ends or neither; neither means the item is on sale all day. */
+export function assertWindow(menu: {
+  availableFrom?: string | null;
+  availableTo?: string | null;
+}): void {
+  if (Boolean(menu.availableFrom) !== Boolean(menu.availableTo)) {
+    throw new BadRequestException('Set both the from and to times, or neither for all day');
+  }
+
+  if (menu.availableFrom && menu.availableFrom === menu.availableTo) {
+    throw new BadRequestException('The from and to times cannot be the same');
+  }
+}
+
+/** Counter sales need a price and in-room dining a room price, depending on where it is served. */
+export function assertPricesFor(menu: {
+  price?: number | null;
+  roomPrice?: number | null;
+  serveAt: MenuServeAt;
+}): void {
+  if (menu.serveAt !== MenuServeAt.ROOM && (menu.price === null || menu.price === undefined)) {
+    throw new BadRequestException('Price is required for an item served at the counter');
+  }
+
+  if (
+    menu.serveAt !== MenuServeAt.COUNTER &&
+    (menu.roomPrice === null || menu.roomPrice === undefined)
+  ) {
+    throw new BadRequestException('In-room price is required for an item served in rooms');
+  }
 }
 
 @Injectable()
@@ -40,9 +98,6 @@ export class RestaurantMenusService {
 
   async list(query: ListRestaurantMenusQueryDto) {
     const { limit, page } = getPagination(query);
-    const timeSlotIdsForSearch = query.search
-      ? await this.restaurantMenus.findActiveTimeSlotIdsBySearch(query.search)
-      : [];
     const where: Prisma.RestaurantMenuWhereInput = {
       deletedAt: null,
       ...(query.dayOfWeek ? { daysOfWeek: { has: query.dayOfWeek } } : {}),
@@ -52,7 +107,6 @@ export class RestaurantMenusService {
       ...(query.itemId ? { itemId: query.itemId } : {}),
       ...(query.itemType ? { item: { itemType: query.itemType } } : {}),
       ...(query.restaurantId ? { restaurantId: query.restaurantId } : {}),
-      ...(query.timeSlotId ? { timeSlotIds: { has: query.timeSlotId } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -60,9 +114,6 @@ export class RestaurantMenusService {
               { item: { itemName: { contains: query.search, mode: 'insensitive' } } },
               { restaurant: { restaurantCode: { contains: query.search, mode: 'insensitive' } } },
               { restaurant: { restaurantName: { contains: query.search, mode: 'insensitive' } } },
-              ...(timeSlotIdsForSearch.length
-                ? [{ timeSlotIds: { hasSome: timeSlotIdsForSearch } }]
-                : []),
             ],
           }
         : {}),
@@ -79,7 +130,7 @@ export class RestaurantMenusService {
     ]);
 
     return {
-      items: await this.toRestaurantMenuResponses(items),
+      items: this.toRestaurantMenuResponses(items),
       meta: getPageMeta(page, limit, total),
     };
   }
@@ -92,12 +143,20 @@ export class RestaurantMenusService {
     try {
       return await this.restaurantMenus.transaction(async (tx) => {
         const restaurant = await this.assertValidRestaurant(dto.restaurantId, tx);
-        const timeSlotIds = uniqueValues(dto.timeSlotIds);
         const daysOfWeek = uniqueValues(dto.daysOfWeek);
 
-        await this.assertValidItem(dto.itemId, restaurant.hospitalId, tx);
-        await this.assertValidTimeSlots(timeSlotIds, restaurant.hospitalId, tx);
+        await this.assertValidItem(dto.itemId, tx);
         await this.assertUniqueMapping(dto.restaurantId, dto.itemId, undefined, tx);
+        assertWindow(dto);
+        assertPricesFor({
+          price: dto.price,
+          roomPrice: dto.roomPrice,
+          serveAt: dto.serveAt ?? MenuServeAt.BOTH,
+        });
+
+        if (dto.kitchenId) {
+          await this.assertRestaurantKitchen(restaurant, dto.kitchenId, tx);
+        }
 
         const displayOrder = await this.resolveDisplayOrder(
           {
@@ -110,6 +169,7 @@ export class RestaurantMenusService {
 
         const mapping = await this.restaurantMenus.create(
           {
+            ...menuDetails(dto),
             createdBy: context.actorId,
             daysOfWeek,
             displayOrder,
@@ -117,13 +177,13 @@ export class RestaurantMenusService {
             isActive: dto.isActive ?? true,
             isAvailable: dto.isAvailable ?? true,
             itemId: dto.itemId,
+            kitchenId: dto.kitchenId ?? null,
             restaurantId: dto.restaurantId,
-            timeSlotIds,
             updatedBy: context.actorId,
           },
           tx,
         );
-        const newValue = await this.toRestaurantMenuResponse(mapping, tx);
+        const newValue = this.toRestaurantMenuResponse(mapping);
 
         await this.auditLog.record(
           {
@@ -151,9 +211,8 @@ export class RestaurantMenusService {
         const existing = await this.findActiveRestaurantMenu(id, tx);
         const nextRestaurantId = dto.restaurantId ?? existing.restaurantId;
         const nextItemId = dto.itemId ?? existing.itemId;
-        const data: Prisma.RestaurantMenuUpdateInput = {};
-        const oldValue = await this.toRestaurantMenuResponse(existing, tx);
-        let nextHospitalId = existing.hospitalId;
+        const data: Prisma.RestaurantMenuUpdateInput = menuDetails(dto);
+        const oldValue = this.toRestaurantMenuResponse(existing);
 
         if (dto.referenceMenuId && dto.positionType === undefined) {
           throw new BadRequestException(
@@ -164,39 +223,57 @@ export class RestaurantMenusService {
         if (dto.restaurantId !== undefined) {
           const restaurant = await this.assertValidRestaurant(dto.restaurantId, tx);
 
-          nextHospitalId = restaurant.hospitalId;
           data.hospital = { connect: { id: restaurant.hospitalId } };
           data.restaurant = { connect: { id: dto.restaurantId } };
         }
 
-        if (dto.itemId !== undefined) {
-          await this.assertValidItem(dto.itemId, nextHospitalId, tx);
-          data.item = { connect: { id: dto.itemId } };
-        } else if (nextHospitalId !== existing.hospitalId) {
-          // Moving to another location's restaurant: the item it keeps must be usable there.
-          const item = await this.restaurantMenus.findActiveItem(existing.itemId, tx);
+        const nextKitchenId = dto.kitchenId === undefined ? existing.kitchenId : dto.kitchenId;
 
-          if (item) {
-            assertUsableAt(item, nextHospitalId, 'item');
-          }
+        if (nextKitchenId && (dto.kitchenId || dto.restaurantId !== undefined)) {
+          await this.assertRestaurantKitchen(
+            await this.assertValidRestaurant(nextRestaurantId, tx),
+            nextKitchenId,
+            tx,
+          );
+        }
+
+        if (dto.kitchenId !== undefined) {
+          data.kitchen = dto.kitchenId ? { connect: { id: dto.kitchenId } } : { disconnect: true };
+        }
+
+        if (dto.serveAt !== undefined || dto.price !== undefined || dto.roomPrice !== undefined) {
+          assertPricesFor({
+            price:
+              dto.price === undefined
+                ? existing.price === null
+                  ? null
+                  : toNumber(existing.price)
+                : dto.price,
+            roomPrice:
+              dto.roomPrice === undefined
+                ? existing.roomPrice === null
+                  ? null
+                  : toNumber(existing.roomPrice)
+                : dto.roomPrice,
+            serveAt: dto.serveAt ?? existing.serveAt,
+          });
+        }
+
+        if (dto.itemId !== undefined) {
+          await this.assertValidItem(dto.itemId, tx);
+          data.item = { connect: { id: dto.itemId } };
         }
 
         if (dto.restaurantId !== undefined || dto.itemId !== undefined) {
           await this.assertUniqueMapping(nextRestaurantId, nextItemId, id, tx);
         }
 
-        if (dto.timeSlotIds !== undefined) {
-          const timeSlotIds = uniqueValues(dto.timeSlotIds);
-
-          await this.assertValidTimeSlots(timeSlotIds, nextHospitalId, tx);
-          data.timeSlotIds = { set: timeSlotIds };
-        } else if (nextHospitalId !== existing.hospitalId) {
-          for (const timeSlot of await this.restaurantMenus.findActiveTimeSlotsByIds(
-            existing.timeSlotIds,
-            tx,
-          )) {
-            assertUsableAt(timeSlot, nextHospitalId, 'time slot');
-          }
+        if (dto.availableFrom !== undefined || dto.availableTo !== undefined) {
+          assertWindow({
+            availableFrom:
+              dto.availableFrom === undefined ? existing.availableFrom : dto.availableFrom,
+            availableTo: dto.availableTo === undefined ? existing.availableTo : dto.availableTo,
+          });
         }
 
         if (dto.daysOfWeek !== undefined) {
@@ -230,7 +307,7 @@ export class RestaurantMenusService {
         const mapping = Object.keys(data).length
           ? await this.restaurantMenus.update(id, data, tx)
           : existing;
-        const newValue = await this.toRestaurantMenuResponse(mapping, tx);
+        const newValue = this.toRestaurantMenuResponse(mapping);
 
         await this.auditLog.record(
           {
@@ -260,7 +337,7 @@ export class RestaurantMenusService {
 
   async remove(id: string, context: ActorContext) {
     const existing = await this.findActiveRestaurantMenu(id);
-    const oldValue = await this.toRestaurantMenuResponse(existing);
+    const oldValue = this.toRestaurantMenuResponse(existing);
 
     await this.restaurantMenus.transaction(async (tx) => {
       await this.restaurantMenus.update(
@@ -308,11 +385,7 @@ export class RestaurantMenusService {
     }
   }
 
-  private async assertValidItem(
-    itemId: string,
-    hospitalId: string,
-    client: RestaurantMenuClient,
-  ): Promise<void> {
+  private async assertValidItem(itemId: string, client: RestaurantMenuClient): Promise<void> {
     const item = await this.restaurantMenus.findActiveItem(itemId, client);
 
     if (!item) {
@@ -322,8 +395,16 @@ export class RestaurantMenusService {
     if (!item.isActive) {
       throw new BadRequestException('This item is inactive and cannot be used.');
     }
+  }
 
-    assertUsableAt(item, hospitalId, 'item');
+  private async assertRestaurantKitchen(
+    restaurant: Restaurant,
+    kitchenId: string,
+    client: RestaurantMenuClient,
+  ): Promise<void> {
+    if (!(await this.restaurantMenus.isRestaurantKitchen(restaurant, kitchenId, client))) {
+      throw new BadRequestException('Choose an active kitchen at this restaurant’s location');
+    }
   }
 
   private async assertValidRestaurant(restaurantId: string, client: RestaurantMenuClient) {
@@ -334,26 +415,6 @@ export class RestaurantMenusService {
     }
 
     return restaurant;
-  }
-
-  private async assertValidTimeSlots(
-    timeSlotIds: string[],
-    hospitalId: string,
-    client: RestaurantMenuClient,
-  ): Promise<void> {
-    if (timeSlotIds.length === 0) {
-      return;
-    }
-
-    const timeSlots = await this.restaurantMenus.findActiveTimeSlotsByIds(timeSlotIds, client);
-
-    if (timeSlots.length !== timeSlotIds.length) {
-      throw new BadRequestException('One or more time slots were not found or inactive');
-    }
-
-    for (const timeSlot of timeSlots) {
-      assertUsableAt(timeSlot, hospitalId, 'time slot');
-    }
   }
 
   private async resolveDisplayOrder(
@@ -424,40 +485,38 @@ export class RestaurantMenusService {
     return mapping;
   }
 
-  private async toRestaurantMenuResponse(
-    mapping: RestaurantMenuWithRelations,
-    client?: RestaurantMenuClient,
-  ) {
-    return (await this.toRestaurantMenuResponses([mapping], client))[0];
+  private toRestaurantMenuResponse(mapping: RestaurantMenuWithRelations) {
+    return this.toRestaurantMenuResponses([mapping])[0];
   }
 
-  private async toRestaurantMenuResponses(
-    mappings: RestaurantMenuWithRelations[],
-    client?: RestaurantMenuClient,
-  ) {
-    const timeSlotIds = [...new Set(mappings.flatMap((mapping) => mapping.timeSlotIds))];
-    const timeSlots = await this.restaurantMenus.findActiveTimeSlotsByIds(timeSlotIds, client);
-    const timeSlotMap = new Map<string, TimeSlotSummary>(
-      timeSlots.map((timeSlot) => [timeSlot.id, timeSlot] as const),
-    );
-
+  private toRestaurantMenuResponses(mappings: RestaurantMenuWithRelations[]) {
     return mappings.map((mapping) => ({
+      accompaniments: mapping.accompaniments,
+      addOn: mapping.addOn,
+      availableFrom: mapping.availableFrom,
+      availableTo: mapping.availableTo,
       createdAt: mapping.createdAt,
       daysOfWeek: mapping.daysOfWeek,
       deletedAt: mapping.deletedAt,
       displayOrder: mapping.displayOrder,
+      gstPercent: toNumber(mapping.gstPercent),
       hospitalId: mapping.hospitalId,
       id: mapping.id,
       isActive: mapping.isActive,
       isAvailable: mapping.isAvailable,
+      isDiscountable: mapping.isDiscountable,
+      isGstInclusive: mapping.isGstInclusive,
       item: mapping.item,
       itemId: mapping.itemId,
+      kitchen: mapping.kitchen,
+      kitchenId: mapping.kitchenId,
+      preparationTimeMinutes: mapping.preparationTimeMinutes,
+      price: mapping.price === null ? null : toNumber(mapping.price),
       restaurant: mapping.restaurant,
       restaurantId: mapping.restaurantId,
-      timeSlotIds: mapping.timeSlotIds,
-      timeSlots: mapping.timeSlotIds
-        .map((timeSlotId) => timeSlotMap.get(timeSlotId))
-        .filter((timeSlot): timeSlot is TimeSlotSummary => Boolean(timeSlot)),
+      roomPrice: mapping.roomPrice === null ? null : toNumber(mapping.roomPrice),
+      serveAt: mapping.serveAt,
+      serves: mapping.serves,
       updatedAt: mapping.updatedAt,
     }));
   }

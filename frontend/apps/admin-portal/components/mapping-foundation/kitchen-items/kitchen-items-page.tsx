@@ -85,7 +85,7 @@ export function KitchenItemsPageClient() {
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const kitchensQuery = useKitchenOptions(hospitalFilter);
-  const itemsQuery = useItemOptions('READYMADE', hospitalFilter);
+  const itemsQuery = useItemOptions('READYMADE');
   const invalidateKitchenItems = useInvalidateMappingQueries('kitchen-items', 'kitchen-options');
   const { showToast } = useToast();
 

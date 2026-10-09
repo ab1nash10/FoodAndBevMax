@@ -106,17 +106,6 @@ exports[`every prefix stays as it is 1`] = `
   "itemOptions": [
     "item-options",
   ],
-  "itemPrices": [
-    "item-prices",
-  ],
-  "itemPricesItem": [
-    "item-prices",
-    "item",
-  ],
-  "itemPricesNormal": [
-    "item-prices",
-    "normal",
-  ],
   "items": [
     "items",
   ],
@@ -218,12 +207,6 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "stores": [
     "stores",
-  ],
-  "timeSlotOptions": [
-    "time-slot-options",
-  ],
-  "timeSlots": [
-    "time-slots",
   ],
   "transferAcknowledgements": [
     "transfer-acknowledgements",

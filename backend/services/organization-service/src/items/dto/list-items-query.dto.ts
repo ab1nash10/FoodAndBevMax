@@ -33,11 +33,6 @@ export class ListItemsQueryDto extends ActivePaginationQueryDto {
   @IsOptional()
   itemType?: ItemType;
 
-  @ApiPropertyOptional({ description: 'Items shared by every location plus this location' })
-  @IsOptional()
-  @IsUUID()
-  hospitalId?: string;
-
   @ApiPropertyOptional({ default: 'createdAt', enum: itemSortFields })
   @IsIn(itemSortFields)
   @IsOptional()

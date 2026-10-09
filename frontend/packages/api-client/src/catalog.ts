@@ -7,7 +7,7 @@ export type ItemType = 'MRP' | 'READYMADE' | 'LIVE';
 
 export type RateType = 'COUNTER' | 'NORMAL' | 'ROOM' | 'STAFF';
 
-export interface ItemCategory extends LocationOwned {
+export interface ItemCategory {
   categoryName: string;
   createdAt: string;
   deletedAt: string | null;
@@ -18,17 +18,12 @@ export interface ItemCategory extends LocationOwned {
 
 export interface ItemCategoryInput {
   categoryName: string;
-  /** The location it belongs to; null shares it with every location. */
-  hospitalId?: string | null;
   isActive?: boolean;
 }
 
-export interface ItemCategoryListQuery extends ListQuery {
-  /** Shared records plus this location's. */
-  hospitalId?: string;
-}
+export type ItemCategoryListQuery = ListQuery;
 
-export interface Item extends LocationOwned {
+export interface Item {
   category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'>;
   categoryId: string;
   createdAt: string;
@@ -46,8 +41,6 @@ export interface Item extends LocationOwned {
 
 export interface ItemInput {
   categoryId: string;
-  /** The location it belongs to; null shares it with every location. */
-  hospitalId?: string | null;
   hsnCode?: string;
   isActive?: boolean;
   itemName: string;
@@ -58,8 +51,6 @@ export interface ItemInput {
 
 export interface ItemListQuery extends ListQuery {
   categoryId?: string;
-  /** Shared records plus this location's. */
-  hospitalId?: string;
   itemType?: ItemType;
   type?: FoodType;
 }
@@ -215,37 +206,63 @@ export type RestaurantMenuDayOfWeek =
 
 export type RestaurantMenuPositionType = 'AFTER_ITEM' | 'BEFORE_ITEM' | 'FIRST' | 'LAST';
 
+/** Where a menu item is sold: everywhere, only in-room dining, or only at the counter. */
+export type MenuServeAt = 'BOTH' | 'COUNTER' | 'ROOM';
+
 export interface RestaurantMenu {
+  accompaniments: string | null;
+  addOn: string | null;
+  /** On sale from / until, HH:mm; both null means all day. */
+  availableFrom: string | null;
+  availableTo: string | null;
   createdAt: string;
   daysOfWeek: RestaurantMenuDayOfWeek[];
   deletedAt: string | null;
   displayOrder: number;
+  gstPercent: number;
   hospitalId: string;
   id: string;
   isActive: boolean;
   isAvailable: boolean;
+  isDiscountable: boolean;
+  isGstInclusive: boolean;
   item: ItemSummary;
   itemId: string;
+  kitchen: Pick<Kitchen, 'id' | 'isActive' | 'kitchenCode' | 'kitchenName'> | null;
+  kitchenId: string | null;
+  preparationTimeMinutes: number | null;
+  price: number | null;
   restaurant: Pick<Restaurant, 'id' | 'isActive' | 'restaurantCode' | 'restaurantName'> & {
     hospital: HospitalSummary;
   };
   restaurantId: string;
-  timeSlotIds: string[];
-  timeSlots: Array<
-    Pick<TimeSlot, 'endTime' | 'id' | 'isActive' | 'isAlwaysAvailable' | 'slotName' | 'startTime'>
-  >;
+  roomPrice: number | null;
+  serveAt: MenuServeAt;
+  serves: number | null;
   updatedAt: string;
 }
 
 export interface RestaurantMenuInput {
+  accompaniments?: string | null;
+  addOn?: string | null;
+  availableFrom?: string | null;
+  availableTo?: string | null;
   daysOfWeek?: RestaurantMenuDayOfWeek[];
+  gstPercent?: number;
   isActive?: boolean;
   isAvailable?: boolean;
+  isDiscountable?: boolean;
+  isGstInclusive?: boolean;
   itemId: string;
+  kitchenId?: string | null;
   positionType?: RestaurantMenuPositionType;
+  preparationTimeMinutes?: number | null;
+  price?: number | null;
   referenceMenuId?: string;
   restaurantId: string;
-  timeSlotIds?: string[];
+  roomPrice?: number | null;
+  serveAt?: MenuServeAt;
+  serves?: number | null;
 }
 
 export interface RestaurantMenuListQuery extends ListQuery {
@@ -255,5 +272,4 @@ export interface RestaurantMenuListQuery extends ListQuery {
   itemId?: string;
   itemType?: ItemType;
   restaurantId?: string;
-  timeSlotId?: string;
 }

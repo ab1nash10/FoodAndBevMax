@@ -2,12 +2,10 @@ import {
   ArrowRightLeft,
   Boxes,
   Building2,
-  CalendarClock,
   ChefHat,
   ClipboardList,
   CookingPot,
   CreditCard,
-  IndianRupee,
   KeyRound,
   LayoutDashboard,
   LayoutGrid,
@@ -153,19 +151,6 @@ export const navigationGroups: NavGroup[] = [
         label: 'Items',
         permissions: ['ITEM_VIEW'],
         record: 'id',
-      },
-      {
-        href: '/masters/item-prices',
-        icon: IndianRupee,
-        label: 'Item Prices',
-        permissions: ['ITEM_PRICE_VIEW'],
-        record: 'q',
-      },
-      {
-        href: '/masters/time-slots',
-        icon: CalendarClock,
-        label: 'Time Slots',
-        permissions: ['TIME_SLOT_VIEW'],
       },
       {
         href: '/masters/restaurant-menus',
@@ -376,18 +361,6 @@ export const subRoutes: SubRoute[] = [
     parent: '/masters/items',
     pattern: '/masters/items/new',
     permissions: ['ITEM_CREATE'],
-  },
-  {
-    label: 'New price',
-    parent: '/masters/item-prices',
-    pattern: '/masters/item-prices/new',
-    permissions: ['ITEM_PRICE_CREATE'],
-  },
-  {
-    label: 'Edit',
-    parent: '/masters/item-prices',
-    pattern: '/masters/item-prices/[id]/edit',
-    permissions: ['ITEM_PRICE_UPDATE'],
   },
 ];
 

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Sidebar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div onMouseLeave="{{closeFly}}" style="position: relative; width: {{width}}; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: {{c.surface}}; border-right: 1px solid {{c.border}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: {{c.text}}; transition: width 160ms ease">
+
+<sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; align-items: center; gap: 10px; padding: 16px 14px 14px 16px">
+<a href="{{dashHref}}" aria-label="AAHAR dashboard" style="width: 40px; height: 40px; border-radius: 12px; background: {{c.logoChip}}; border: 1px solid {{c.border}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box"><img src="/_blob/716a33711f7761f818959480a419eb9d" alt="" style="width: 28px; height: auto"></a>
+<div style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0">
+<span style="font-size: 15px; font-weight: 800; letter-spacing: 0.08em">AAHAR</span>
+<span style="font-size: 11.5px; color: {{c.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Food &amp; Cafeteria Platform</span>
+</div>
+<button onClick="{{toggle}}" aria-label="Collapse sidebar" title="Collapse sidebar  [" aria-expanded="true" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text3}}; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path><path d="m16 10-2 2 2 2"></path></svg></button>
+</div>
+
+<nav aria-label="Modules" style="flex-grow: 1; overflow-y: auto; padding: 4px 10px 12px; display: flex; flex-direction: column; gap: 2px">
+<a href="{{dashHref}}" aria-current="{{dashCur}}" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; text-decoration: none; font-size: 13.5px; font-weight: {{dashW}}; background: {{dashBg}}; color: {{dashFg}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>Dashboard</a>
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="6">
+<sc-if value="{{g.sectionStart}}" hint-placeholder-val="{{ false }}"><span style="padding: 14px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: {{g.c.muted}}">{{g.section}}</span></sc-if>
+<div style="display: flex; flex-direction: column; gap: 1px">
+<button onClick="{{g.toggle}}" aria-expanded="{{g.open}}" style="display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: {{g.hc}}; font-family: inherit; font-size: 13.5px; font-weight: {{g.hw}}; text-align: left; cursor: pointer">
+<sc-if value="{{g.isOrg}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"></path><path d="M16 9h2a2 2 0 0 1 2 2v10"></path><path d="M3 21h18"></path><path d="M8 7h4M8 11h4M8 15h4"></path></svg></sc-if>
+<sc-if value="{{g.isMenu}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"></path><path d="M4 19V5"></path><path d="M9 8h5M9 12h5"></path></svg></sc-if>
+<sc-if value="{{g.isMap}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path></svg></sc-if>
+<sc-if value="{{g.isInv}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></sc-if>
+<sc-if value="{{g.isKit}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 13.9A4 4 0 0 1 7.2 6.1a5 5 0 0 1 9.6 0A4 4 0 0 1 18 13.9V20H6z"></path><path d="M6 17h12"></path></svg></sc-if>
+<sc-if value="{{g.isAcc}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z"></path><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+<span style="flex-grow: 1">{{g.label}}</span>
+<sc-if value="{{g.badge}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: {{g.c.pendBg}}; color: {{g.c.pendFg}}">{{g.badgeText}}</span></sc-if>
+<sc-if value="{{g.open}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
+<sc-if value="{{g.closed}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
+</button>
+<sc-if value="{{g.open}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 1px; margin: 0 0 4px 19px; padding-left: 10px; border-left: 1px solid {{g.c.divider}}">
+<sc-for list="{{g.items}}" as="it" hint-placeholder-count="4">
+<sc-if value="{{it.link}}" hint-placeholder-val="{{ false }}"><a href="{{it.href}}" aria-current="{{it.current}}" style="display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 10px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: {{it.w}}; background: {{it.bg}}; color: {{it.fg}}">{{it.label}}<sc-if value="{{it.hasBadge}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: {{it.c.pendBg}}; color: {{it.c.pendFg}}">{{it.badge}}</span></sc-if></a></sc-if>
+<sc-if value="{{it.nolink}}" hint-placeholder-val="{{ true }}"><button aria-current="{{it.current}}" style="display: flex; align-items: center; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: {{it.bg}}; color: {{it.fg}}; font-family: inherit; font-size: 13px; font-weight: {{it.w}}; text-align: left; cursor: pointer">{{it.label}}</button></sc-if>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</nav>
+
+<div style="padding: 12px; border-top: 1px solid {{c.border}}; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: {{c.subtle}}; border: 1px solid {{c.border}}">
+<span style="background: #FFFFFF; border-radius: 8px; padding: 6px 8px; display: flex; flex-shrink: 0"><img src="/_blob/6be5f540d0720f734c502d9fb9f6932e" alt="Max Healthcare" style="height: 20px; width: auto"></span>
+<span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 12.5px; font-weight: 700">Max Healthcare</span><span style="font-size: 11.5px; color: {{c.muted}}">Hospital workspace</span></span>
+</div>
+<a href="{{paletteHref}}" style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: {{c.text3}}; text-decoration: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"></path></svg>Search &amp; shortcuts<span style="margin-left: auto; display: flex; gap: 4px"><kbd style="font-family: inherit; font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 5px; border: 1px solid {{c.border}}; background: {{c.kbd}}; color: {{c.text3}}">Ctrl</kbd><kbd style="font-family: inherit; font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 5px; border: 1px solid {{c.border}}; background: {{c.kbd}}; color: {{c.text3}}">K</kbd></span></a>
+</div>
+</sc-if>
+
+<sc-if value="{{collapsed}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 0 12px">
+<a href="{{dashHref}}" aria-label="AAHAR dashboard" style="width: 44px; height: 44px; border-radius: 12px; background: {{c.logoChip}}; border: 1px solid {{c.border}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="/_blob/716a33711f7761f818959480a419eb9d" alt="" style="width: 30px; height: auto"></a>
+<button onClick="{{toggle}}" aria-label="Expand sidebar" title="Expand sidebar  [" aria-expanded="false" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.surface}}; color: {{c.text3}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path><path d="m14 10 2 2-2 2"></path></svg></button>
+</div>
+<nav aria-label="Modules" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0">
+<sc-for list="{{rail}}" as="r" hint-placeholder-count="10">
+<sc-if value="{{r.isDivider}}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width: 28px; height: 1px; margin: 6px 0; background: {{r.c.border}}"></span></sc-if>
+<sc-if value="{{r.isItem}}" hint-placeholder-val="{{ true }}">
+<button onMouseEnter="{{r.open}}" onFocus="{{r.open}}" onClick="{{r.open}}" aria-label="{{r.aria}}" aria-haspopup="{{r.popup}}" aria-expanded="{{r.flyOpen}}" aria-current="{{r.current}}" style="position: relative; width: 44px; height: 44px; border-radius: 12px; border: 0; background: {{r.bg}}; color: {{r.fg}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<sc-if value="{{r.isDash}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></sc-if>
+<sc-if value="{{r.isOrg}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"></path><path d="M16 9h2a2 2 0 0 1 2 2v10"></path><path d="M3 21h18"></path><path d="M8 7h4M8 11h4M8 15h4"></path></svg></sc-if>
+<sc-if value="{{r.isMenu}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"></path><path d="M4 19V5"></path><path d="M9 8h5M9 12h5"></path></svg></sc-if>
+<sc-if value="{{r.isMap}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path></svg></sc-if>
+<sc-if value="{{r.isInv}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></sc-if>
+<sc-if value="{{r.isKit}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 13.9A4 4 0 0 1 7.2 6.1a5 5 0 0 1 9.6 0A4 4 0 0 1 18 13.9V20H6z"></path><path d="M6 17h12"></path></svg></sc-if>
+<sc-if value="{{r.isAcc}}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z"></path><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+<sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; box-sizing: border-box; padding: 0 5px; border-radius: 999px; border: 2px solid {{r.c.surface}}; background: {{r.c.pendBg}}; color: {{r.c.pendFg}}; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center">{{r.badge}}</span></sc-if>
+</button>
+</sc-if>
+</sc-for>
+</nav>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0 14px; border-top: 1px solid {{c.border}}">
+<a href="{{paletteHref}}" aria-label="Search and shortcuts (Ctrl K)" title="Search &amp; shortcuts  Ctrl K" style="width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: {{c.text3}}; text-decoration: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></a>
+<span title="Max Healthcare · Hospital workspace" style="width: 48px; height: 32px; border-radius: 8px; background: #FFFFFF; border: 1px solid {{c.border}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="/_blob/6be5f540d0720f734c502d9fb9f6932e" alt="Max Healthcare" style="width: 38px; height: auto"></span>
+</div>
+
+<sc-if value="{{hasFly}}" hint-placeholder-val="{{ false }}">
+<div role="menu" aria-label="{{fly.label}}" style="position: absolute; left: 80px; top: {{fly.top}}; z-index: 20; width: 248px; box-sizing: border-box; padding: 8px; border-radius: 14px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.flyShadow}}; display: flex; flex-direction: column; gap: 2px">
+<span aria-hidden="true" style="position: absolute; left: -9px; top: 0; width: 9px; height: 100%"></span>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 8px"><span style="font-size: 12px; font-weight: 800; letter-spacing: 0.06em; color: {{c.muted}}">{{fly.labelUpper}}</span><sc-if value="{{fly.hasTotal}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: {{c.pendBg}}; color: {{c.pendFg}}">{{fly.total}} pending</span></sc-if></div>
+<sc-for list="{{fly.items}}" as="it" hint-placeholder-count="5">
+<sc-if value="{{it.link}}" hint-placeholder-val="{{ false }}"><a role="menuitem" href="{{it.href}}" aria-current="{{it.current}}" style="display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 0 10px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: {{it.w}}; background: {{it.bg}}; color: {{it.fg}}">{{it.label}}<sc-if value="{{it.hasBadge}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: {{it.c.pendBg}}; color: {{it.c.pendFg}}">{{it.badge}}</span></sc-if></a></sc-if>
+<sc-if value="{{it.nolink}}" hint-placeholder-val="{{ true }}"><button role="menuitem" aria-current="{{it.current}}" style="display: flex; align-items: center; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: {{it.bg}}; color: {{it.fg}}; font-family: inherit; font-size: 13px; font-weight: {{it.w}}; text-align: left; cursor: pointer">{{it.label}}</button></sc-if>
+</sc-for>
+<span style="margin-top: 4px; padding: 8px 10px 4px; border-top: 1px solid {{c.divider}}; font-size: 11.5px; color: {{c.muted}}">Press <kbd style="font-family: inherit; font-weight: 800; color: {{c.text3}}">[</kbd> to expand the sidebar</span>
+</div>
+</sc-if>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"active":{"editor":"enum","options":["dashboard","transfers","grns","ledgers","items","production"],"default":"dashboard"},"collapsed":{"editor":"boolean","default":false},"fly":{"editor":"enum","options":["","dash","org","menu","map","inv","kit","acc"],"default":""},"$preview":{"width":248,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const owner = { items: 'menu', grns: 'inv', transfers: 'inv', ledgers: 'inv', production: 'kit' }[props.active] || 'inv';
+    this.state = { open: { [owner]: true }, collapsed: !!props.collapsed, fly: props.fly || '' };
+  }
+  pal(t) {
+    return t === 'dark'
+      ? { surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', primarySoft: '#082F49', pendBg: '#422006', pendFg: '#FCD34D', logoChip: '#FFFFFF', kbd: '#161F2C', flyShadow: '0 16px 40px rgba(0, 0, 0, 0.55)' }
+      : { surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', primarySoft: '#E8F0FA', pendBg: '#FEF3C7', pendFg: '#92400E', logoChip: '#FFFFFF', kbd: '#FFFFFF', flyShadow: '0 16px 40px rgba(15, 23, 42, 0.16)' };
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const c = this.pal(theme);
+    const sfx = theme === 'dark' ? '-dark' : '';
+    const active = this.props.active || 'dashboard';
+    const st = this.state;
+    const G = [
+      ['org', 'Organization', 'SETUP', [['Locations'], ['Stores'], ['Kitchens'], ['Restaurants'], ['Employees'], ['POS & Payment Machines']]],
+      ['menu', 'Item & Menu Setup', '', [['Item Categories'], ['Items', 'items', 'Items'], ['Item Prices'], ['Time Slots'], ['Restaurant Menus']]],
+      ['map', 'Item Mapping', '', [['Store Items'], ['Kitchen Items']]],
+      ['inv', 'Inventory', 'OPERATIONS', [['GRNs', 'grns', 'Grn', 3], ['Store Stock'], ['Stock Ledgers', 'ledgers'], ['Transfers', 'transfers', 'Transfers', 8], ['Restaurant Stock']]],
+      ['kit', 'Kitchen Operations', '', [['Kitchen Production', 'production', 'Production', 2], ['Kitchen Stock']]],
+      ['acc', 'Access', 'ADMIN', [['Users / Roles']]]
+    ];
+    const mapItems = (items) => items.map(([lab, key, file, b]) => {
+      const on = !!key && key === active;
+      return {
+        c, label: lab, link: !!file, nolink: !file,
+        href: file ? file + sfx + '.dc.html' : '',
+        bg: on ? c.primarySoft : 'transparent', fg: on ? c.link : c.text3, w: on ? '700' : '500',
+        current: on ? 'page' : 'false', hasBadge: !!b, badge: String(b || '')
+      };
+    });
+    const groups = G.map(([k, label, section, items]) => {
+      const isOpen = !!st.open[k];
+      const hasActive = items.some((i) => i[1] === active);
+      const total = items.reduce((n, i) => n + (i[3] || 0), 0);
+      return {
+        c, label, section, sectionStart: !!section, open: isOpen, closed: !isOpen,
+        hc: hasActive ? c.text : c.text2, hw: hasActive ? '700' : '600',
+        badge: !isOpen && total > 0, badgeText: String(total),
+        isOrg: k === 'org', isMenu: k === 'menu', isMap: k === 'map', isInv: k === 'inv', isKit: k === 'kit', isAcc: k === 'acc',
+        toggle: () => this.setState({ open: Object.assign({}, st.open, { [k]: !isOpen }) }),
+        items: mapItems(items)
+      };
+    });
+    // ---- collapsed rail
+    const railDef = [['dash', 'Dashboard', [['Dashboard', 'dashboard', 'Dashboard']]], 'div'].concat(
+      G.slice(0, 3).map((g) => [g[0], g[1], g[3]]), ['div'], G.slice(3, 5).map((g) => [g[0], g[1], g[3]]), ['div'], [[G[5][0], G[5][1], G[5][3]]]);
+    let y = 120;
+    const tops = {};
+    const rail = railDef.map((r) => {
+      if (r === 'div') { y += 17; return { c, isDivider: true, isItem: false }; }
+      const [k, label, items] = r;
+      tops[k] = y; y += 48;
+      const hasActive = items.some((i) => i[1] === active);
+      const total = items.reduce((n, i) => n + (i[3] || 0), 0);
+      const flyOpen = st.fly === k;
+      return {
+        c, isDivider: false, isItem: true, label,
+        aria: label + (total ? ', ' + total + ' pending' : '') + (hasActive ? ', current section' : ''),
+        popup: 'menu', flyOpen, current: hasActive ? 'true' : 'false',
+        bg: hasActive ? c.primarySoft : flyOpen ? c.subtle : 'transparent',
+        fg: hasActive ? c.link : c.text3,
+        hasBadge: total > 0, badge: String(total),
+        isDash: k === 'dash', isOrg: k === 'org', isMenu: k === 'menu', isMap: k === 'map', isInv: k === 'inv', isKit: k === 'kit', isAcc: k === 'acc',
+        open: () => this.setState({ fly: k })
+      };
+    });
+    const fr = railDef.find((r) => r !== 'div' && r[0] === st.fly);
+    const flyTotal = fr ? fr[2].reduce((n, i) => n + (i[3] || 0), 0) : 0;
+    const fly = fr ? { label: fr[1], labelUpper: fr[1].toUpperCase(), items: mapItems(fr[2]), top: (tops[fr[0]] - 6) + 'px', hasTotal: flyTotal > 0, total: flyTotal } : { label: '', labelUpper: '', items: [], top: '0px', hasTotal: false, total: 0 };
+    const dOn = active === 'dashboard';
+    return {
+      c, groups, rail, fly, hasFly: !!fr,
+      expanded: !st.collapsed, collapsed: st.collapsed,
+      width: st.collapsed ? '72px' : '248px',
+      toggle: () => this.setState({ collapsed: !st.collapsed, fly: '' }),
+      closeFly: () => { if (st.fly) this.setState({ fly: '' }); },
+      dashHref: 'Dashboard' + sfx + '.dc.html',
+      dashBg: dOn ? c.primarySoft : 'transparent',
+      dashFg: dOn ? c.link : c.text2,
+      dashW: dOn ? '700' : '600',
+      dashCur: dOn ? 'page' : 'false',
+      paletteHref: 'Palette' + sfx + '.dc.html'
+    };
+  }
+}
+</script>
+</body>
+</html>

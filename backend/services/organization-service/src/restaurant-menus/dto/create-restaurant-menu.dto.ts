@@ -1,13 +1,26 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MenuServeAt } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
+  Matches,
+  MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
+
+export const menuGstSlabs = [0, 5, 12, 18];
+
+const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export enum RestaurantMenuDayOfWeek {
   FRIDAY = 'FRIDAY',
@@ -36,15 +49,22 @@ export class CreateRestaurantMenuDto {
   itemId!: string;
 
   @ApiPropertyOptional({
-    example: ['f54db87f-0255-4326-a579-d6dc7ce78228'],
-    isArray: true,
-    type: String,
+    description: 'On sale from, HH:mm. Leave both times empty for all day.',
+    example: '07:00',
+    nullable: true,
   })
-  @ArrayUnique()
-  @IsArray()
   @IsOptional()
-  @IsUUID('4', { each: true })
-  timeSlotIds?: string[];
+  @Matches(timePattern, { message: 'availableFrom must use HH:mm format' })
+  availableFrom?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'On sale until, HH:mm. Earlier than availableFrom runs past midnight.',
+    example: '10:30',
+    nullable: true,
+  })
+  @IsOptional()
+  @Matches(timePattern, { message: 'availableTo must use HH:mm format' })
+  availableTo?: string | null;
 
   @ApiPropertyOptional({
     enum: RestaurantMenuDayOfWeek,
@@ -86,4 +106,80 @@ export class CreateRestaurantMenuDto {
       dto.positionType === RestaurantMenuPositionType.AFTER_ITEM,
   )
   referenceMenuId?: string;
+  @ApiPropertyOptional({
+    description: "An active kitchen at the restaurant's location.",
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  kitchenId?: string | null;
+
+  @ApiPropertyOptional({ example: 'Extra butter', nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  addOn?: string | null;
+
+  @ApiPropertyOptional({ default: false })
+  @IsBoolean()
+  @IsOptional()
+  isDiscountable?: boolean;
+
+  @ApiPropertyOptional({ example: 15, minimum: 0, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  preparationTimeMinutes?: number | null;
+
+  @ApiPropertyOptional({ description: 'Number of people it serves.', example: 1, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  serves?: number | null;
+
+  @ApiPropertyOptional({ example: 'Pickle, curd', nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  accompaniments?: string | null;
+
+  @ApiPropertyOptional({ default: 0, enum: menuGstSlabs })
+  @IsIn(menuGstSlabs)
+  @IsOptional()
+  @Type(() => Number)
+  gstPercent?: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsBoolean()
+  @IsOptional()
+  isGstInclusive?: boolean;
+
+  @ApiPropertyOptional({ default: MenuServeAt.BOTH, enum: MenuServeAt })
+  @IsEnum(MenuServeAt)
+  @IsOptional()
+  serveAt?: MenuServeAt;
+
+  @ApiPropertyOptional({
+    description: 'Counter / walk-in price. Required unless the item is served in rooms only.',
+    example: 40,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Type(() => Number)
+  price?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'In-room dining price. Required unless the item is served at the counter only.',
+    example: 60,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Type(() => Number)
+  roomPrice?: number | null;
 }

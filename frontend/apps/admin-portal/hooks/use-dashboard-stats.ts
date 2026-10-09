@@ -85,7 +85,6 @@ export function useDashboardStats(period: Period) {
     employees: hasPermission('EMPLOYEE_VIEW'),
     grns: hasPermission('GRN_VIEW'),
     hospitals: hasPermission('HOSPITAL_VIEW'),
-    itemPrices: hasPermission('ITEM_PRICE_VIEW'),
     items: hasPermission('ITEM_VIEW'),
     kitchenItems: hasPermission('KITCHEN_ITEM_VIEW'),
     kitchens: hasPermission('KITCHEN_VIEW'),
@@ -95,7 +94,6 @@ export function useDashboardStats(period: Period) {
     stock: hasPermission('STOCK_VIEW'),
     storeItems: hasPermission('STORE_ITEM_VIEW'),
     stores: hasPermission('STORE_VIEW'),
-    timeSlots: hasPermission('TIME_SLOT_VIEW'),
     transfers: hasPermission(['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW']),
   };
 
@@ -251,11 +249,7 @@ export function useDashboardStats(period: Period) {
       () => organizationApi.listHospitals({ limit: 1 }),
       can.hospitals,
     ),
-    items: useEntityTotal(
-      ['items', scope],
-      () => organizationApi.listItems({ hospitalId, limit: 1 }),
-      can.items,
-    ),
+    items: useEntityTotal('items', () => organizationApi.listItems({ limit: 1 }), can.items),
     kitchens: useEntityTotal(
       ['kitchens', scope],
       () => organizationApi.listKitchens({ hospitalId, limit: 1 }),
@@ -273,11 +267,6 @@ export function useDashboardStats(period: Period) {
     ),
   };
   const setupTotals = {
-    itemPrices: useEntityTotal(
-      ['setup', 'item-prices', scope],
-      () => organizationApi.listItemPrices({ hospitalId, limit: 1 }),
-      can.itemPrices,
-    ),
     kitchenItems: useEntityTotal(
       ['setup', 'kitchen-items', scope],
       () => organizationApi.listKitchenItems({ hospitalId, limit: 1 }),
@@ -292,11 +281,6 @@ export function useDashboardStats(period: Period) {
       ['setup', 'store-items', scope],
       () => organizationApi.listStoreItems({ hospitalId, limit: 1 }),
       can.storeItems,
-    ),
-    timeSlots: useEntityTotal(
-      ['setup', 'time-slots', scope],
-      () => organizationApi.listTimeSlots({ hospitalId, limit: 1 }),
-      can.timeSlots,
     ),
   };
   const firstGrnQuery = useQuery({
@@ -399,8 +383,8 @@ export function useDashboardStats(period: Period) {
       setupSteps(
         {
           employees: total(masters.employees, can.employees),
-          hospitals: total(masters.hospitals, can.hospitals),
-          itemPrices: total(setupTotals.itemPrices, can.itemPrices),
+          // At one location the checklist is about that location, as the Master data card is.
+          hospitals: hospitalId && can.hospitals ? 1 : total(masters.hospitals, can.hospitals),
           items: total(masters.items, can.items),
           kitchenItems: total(setupTotals.kitchenItems, can.kitchenItems),
           kitchens: total(masters.kitchens, can.kitchens),
@@ -408,7 +392,6 @@ export function useDashboardStats(period: Period) {
           restaurants: total(masters.restaurants, can.restaurants),
           storeItems: total(setupTotals.storeItems, can.storeItems),
           stores: total(masters.stores, can.stores),
-          timeSlots: total(setupTotals.timeSlots, can.timeSlots),
         },
         {
           grn: can.grns ? firstGrnQuery.data : undefined,
@@ -421,7 +404,6 @@ export function useDashboardStats(period: Period) {
       can.employees,
       can.grns,
       can.hospitals,
-      can.itemPrices,
       can.items,
       can.kitchenItems,
       can.kitchens,
@@ -429,22 +411,20 @@ export function useDashboardStats(period: Period) {
       can.restaurants,
       can.storeItems,
       can.stores,
-      can.timeSlots,
       can.transfers,
       firstGrnQuery.data,
       firstTransferQuery.data,
       hasPermission,
+      hospitalId,
       masters.employees.data,
       masters.hospitals.data,
       masters.items.data,
       masters.kitchens.data,
       masters.restaurants.data,
       masters.stores.data,
-      setupTotals.itemPrices.data,
       setupTotals.kitchenItems.data,
       setupTotals.menus.data,
       setupTotals.storeItems.data,
-      setupTotals.timeSlots.data,
     ],
   );
   // The mode is known once the period's transfers and the setup counts are in.

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<section aria-label="About AAHAR" style="flex: 1 1 440px; box-sizing: border-box; padding: 48px 56px; background: {{c.brandBg}}; border-right: 1px solid {{c.brandBd}}; color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between; gap: 40px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="width: 52px; height: 52px; border-radius: 14px; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><img src="/_blob/716a33711f7761f818959480a419eb9d" alt="" style="width: 38px; height: auto"></span>
+<span style="display: flex; flex-direction: column"><span style="font-size: 20px; font-weight: 800; letter-spacing: 0.08em">AAHAR</span><span style="font-size: 13px; color: #D6E6F7">Nourishing Health, Enhancing Lives</span></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 24px; max-width: 460px">
+<h1 style="margin: 0; font-size: 34px; line-height: 1.2; font-weight: 800; letter-spacing: -0.015em">Every kitchen, store and cafeteria in one place.</h1>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 14.5px; color: #E6F0FA">
+<li style="display: flex; gap: 12px; align-items: flex-start"><span style="width: 26px; height: 26px; border-radius: 8px; background: rgba(255, 255, 255, 0.14); display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span>Track stock from GRN to the restaurant counter, batch by batch.</li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><span style="width: 26px; height: 26px; border-radius: 8px; background: rgba(255, 255, 255, 0.14); display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span>Acknowledge transfers line by line, with shortages recorded automatically.</li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><span style="width: 26px; height: 26px; border-radius: 8px; background: rgba(255, 255, 255, 0.14); display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span>Role-based access for every hospital location.</li>
+</ul>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; font-size: 12.5px; color: #D6E6F7">
+<span style="background: #FFFFFF; border-radius: 8px; padding: 6px 10px; display: flex"><img src="/_blob/6be5f540d0720f734c502d9fb9f6932e" alt="Max Healthcare" style="height: 22px; width: auto"></span>
+Operated for Max Healthcare
+</div>
+</section>
+
+<section aria-label="Sign in" style="flex: 1 1 440px; box-sizing: border-box; padding: 48px 24px; display: flex; align-items: center; justify-content: center">
+<div style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 24px">
+<sc-if value="{{showChooser}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: {{c.tealText}}">WELCOME BACK</span>
+<h2 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em">Sign in to AAHAR</h2>
+<p style="margin: 0; font-size: 14px; color: {{c.muted}}">{{intro}}</p>
+</div>
+<div role="group" aria-label="Login method" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: {{c.subtle}}; border: 1px solid {{c.border}}">
+<sc-for list="{{methods}}" as="m" hint-placeholder-count="2">
+<button onClick="{{m.pick}}" aria-pressed="{{m.on}}" style="height: 40px; border: 0; border-radius: 9px; background: {{m.bg}}; color: {{m.fg}}; box-shadow: {{m.sh}}; font-family: inherit; font-size: 13.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer">
+<sc-if value="{{m.isPhone}}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"></rect><path d="M11 18h2"></path></svg></sc-if>
+<sc-if value="{{m.isEmail}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg></sc-if>
+{{m.label}}</button>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{stepEmail}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 700; color: {{c.text2}}">Work email
+<input type="email" autocomplete="username" value="{{email}}" onChange="{{onEmail}}" placeholder="name@maxhealthcare.com" aria-invalid="{{emailBad}}" style="height: 48px; box-sizing: border-box; border: 1.5px solid {{emailBd}}; border-radius: 12px; padding: 0 14px; background: {{c.surface}}; font-family: inherit; font-size: 15px; font-weight: 600; color: {{c.text}}">
+<sc-if value="{{emailBad}}" hint-placeholder-val="{{ false }}"><span role="alert" style="font-size: 12.5px; font-weight: 600; color: {{c.badFg}}">Enter a valid email address.</span></sc-if>
+</label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 700; color: {{c.text2}}">Password
+<span style="display: flex; align-items: center; height: 48px; border: 1.5px solid {{pwBd}}; border-radius: 12px; background: {{c.surface}}; overflow: hidden; box-sizing: border-box"><input type="{{pwType}}" autocomplete="current-password" value="{{pw}}" onChange="{{onPw}}" placeholder="Enter your password" aria-invalid="{{pwBad}}" style="flex-grow: 1; min-width: 0; border: 0; outline: 0; padding: 0 14px; background: transparent; font-family: inherit; font-size: 15px; font-weight: 600; color: {{c.text}}"><button onClick="{{togglePw}}" aria-label="{{pwToggleLabel}}" aria-pressed="{{showPw}}" style="width: 48px; height: 100%; border: 0; border-left: 1px solid {{c.border}}; background: {{c.subtle}}; color: {{c.text2}}; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<sc-if value="{{hidePwIcon}}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></sc-if>
+<sc-if value="{{showPw}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path></svg></sc-if>
+</button></span>
+<sc-if value="{{pwBad}}" hint-placeholder-val="{{ false }}"><span role="alert" style="font-size: 12.5px; font-weight: 600; color: {{c.badFg}}">Enter your password.</span></sc-if>
+</label>
+<sc-if value="{{canSubmit}}" hint-placeholder-val="{{ false }}"><a href="{{dashHref}}" style="height: 48px; border-radius: 12px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; font-size: 14.5px; font-weight: 700">Sign in<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"></path></svg></a></sc-if>
+<sc-if value="{{cantSubmit}}" hint-placeholder-val="{{ true }}"><button onClick="{{tryEmail}}" style="height: 48px; border-radius: 12px; border: 0; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; font-size: 14.5px; font-weight: 700; cursor: pointer">Sign in<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"></path></svg></button></sc-if>
+<p style="margin: 0; font-size: 12.5px; color: {{c.muted}}">Forgot your password? Ask your hospital admin to reset it, or sign in with your mobile number instead.</p>
+</div>
+</sc-if>
+<sc-if value="{{stepPhone}}" hint-placeholder-val="{{ false }}">
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 700; color: {{c.text2}}">Mobile number
+<span style="display: flex; align-items: center; height: 48px; border: 1.5px solid {{c.input}}; border-radius: 12px; background: {{c.surface}}; overflow: hidden; box-sizing: border-box"><span style="padding: 0 12px; height: 100%; display: flex; align-items: center; border-right: 1px solid {{c.border}}; font-size: 14px; font-weight: 700; color: {{c.text2}}; background: {{c.subtle}}">+91</span><input type="tel" inputmode="numeric" autocomplete="tel-national" value="{{phone}}" onChange="{{onPhone}}" placeholder="98765 43210" style="flex-grow: 1; min-width: 0; border: 0; outline: 0; padding: 0 12px; background: transparent; font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: {{c.text}}"></span></label>
+<button onClick="{{sendOtp}}" style="height: 48px; border-radius: 12px; border: 0; background: #0B57A4; color: #FFFFFF; font-family: inherit; font-size: 14.5px; font-weight: 700; cursor: pointer">Send OTP</button>
+<p style="margin: 0; font-size: 12.5px; color: {{c.muted}}">Trouble signing in? Ask your hospital admin to check that your number is registered.</p>
+</sc-if>
+<sc-if value="{{stepOtp}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 800">Enter the code</h2>
+<p style="margin: 0; font-size: 14px; color: {{c.muted}}">Sent to +91 {{phone}}. <button onClick="{{back}}" style="padding: 0; border: 0; background: transparent; font-family: inherit; font-size: 14px; font-weight: 700; color: {{c.link}}; cursor: pointer">Change</button></p>
+</div>
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+<legend style="font-size: 13px; font-weight: 700; color: {{c.text2}}; padding: 0 0 8px">6-digit OTP</legend>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{boxes}}" as="b" hint-placeholder-count="6"><input type="text" inputmode="numeric" maxlength="1" aria-label="Digit {{b.n}}" value="{{b.v}}" onChange="{{b.on}}" style="height: 54px; min-width: 0; box-sizing: border-box; border: 1.5px solid {{b.bd}}; border-radius: 12px; background: {{b.c.surface}}; text-align: center; font-family: inherit; font-size: 20px; font-weight: 800; color: {{b.c.text}}"></sc-for>
+</div>
+</fieldset>
+<a href="{{dashHref}}" style="height: 48px; border-radius: 12px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 14.5px; font-weight: 700">Verify &amp; sign in</a>
+<span style="font-size: 13px; color: {{c.muted}}">Didn’t get it? <span style="font-weight: 700; color: {{c.text2}}">Resend in 0:28</span></span>
+</sc-if>
+<div style="display: flex; align-items: center; gap: 8px; padding-top: 16px; border-top: 1px solid {{c.border}}; font-size: 12px; color: {{c.muted}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>{{secureNote}}</div>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1440,"height":860}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 'email', phone: '98765 43210', otp: ['4', '8', '2', '', '', ''], email: 'aaharadmin@maxhealthcare.com', pw: '', showPw: false, tried: false };
+  }
+  renderVals() {
+    const dark = this.props.theme === 'dark';
+    const c = dark
+      ? { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', input: '#334155', text: '#F8FAFC', text2: '#CBD5E1', muted: '#94A3B8', link: '#499EF4', brandBg: '#0E1525', brandBd: '#1F2A3D', focus: '#499EF4', tealText: '#5EEAD4', badFg: '#FDA4AF', segSh: 'none', segOn: '#1F2A3D' }
+      : { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', input: '#D5DCE5', text: '#0F172A', text2: '#334155', muted: '#5B6577', link: '#0B57A4', brandBg: '#0B57A4', brandBd: '#0B57A4', focus: '#0B57A4', tealText: '#0F6B55', badFg: '#B4233F', segSh: '0 1px 2px rgba(15, 23, 42, 0.12)', segOn: '#FFFFFF' };
+    const st = this.state;
+    const firstEmpty = st.otp.indexOf('');
+    const boxes = st.otp.map((v, i) => ({
+      c, n: i + 1, v,
+      bd: i === firstEmpty ? c.focus : v ? c.text2 : c.input,
+      on: (e) => {
+        const next = st.otp.slice();
+        next[i] = (e.target.value || '').replace(/[^0-9]/g, '').slice(-1);
+        this.setState({ otp: next });
+      }
+    }));
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(st.email.trim());
+    const pwOk = st.pw.length > 0;
+    const emailBad = st.tried && !emailOk;
+    const pwBad = st.tried && !pwOk;
+    const methods = [['email', 'Email & password'], ['phone', 'Mobile OTP']].map(([id, label]) => {
+      const on = st.step === id;
+      return { label, on, isEmail: id === 'email', isPhone: id === 'phone', bg: on ? c.segOn : 'transparent', fg: on ? c.text : c.muted, sh: on ? c.segSh : 'none', pick: () => this.setState({ step: id, tried: false }) };
+    });
+    return {
+      c, boxes, phone: st.phone, methods,
+      showChooser: st.step !== 'otp',
+      intro: st.step === 'email' ? 'Use your registered work email and password.' : 'We’ll send a one-time password to your registered mobile number.',
+      stepEmail: st.step === 'email',
+      email: st.email, pw: st.pw, showPw: st.showPw, hidePwIcon: !st.showPw,
+      pwType: st.showPw ? 'text' : 'password',
+      pwToggleLabel: st.showPw ? 'Hide password' : 'Show password',
+      emailBad, pwBad,
+      emailBd: emailBad ? c.badFg : c.input,
+      pwBd: pwBad ? c.badFg : c.input,
+      canSubmit: emailOk && pwOk, cantSubmit: !(emailOk && pwOk),
+      onEmail: (e) => this.setState({ email: e.target.value }),
+      onPw: (e) => this.setState({ pw: e.target.value }),
+      togglePw: () => this.setState({ showPw: !st.showPw }),
+      tryEmail: () => this.setState({ tried: true }),
+      secureNote: st.step === 'email' ? 'Passwords are never shown to admins. Sessions end automatically after inactivity.' : 'Secured with OTP. Sessions end automatically after inactivity.',
+      stepPhone: st.step === 'phone', stepOtp: st.step === 'otp',
+      onPhone: (e) => this.setState({ phone: e.target.value }),
+      sendOtp: () => this.setState({ step: 'otp' }),
+      back: () => this.setState({ step: 'phone' }),
+      dashHref: dark ? 'Dashboard-dark.dc.html' : 'Dashboard.dc.html'
+    };
+  }
+}
+</script>
+</body>
+</html>

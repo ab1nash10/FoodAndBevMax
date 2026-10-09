@@ -322,13 +322,13 @@ assert.equal(table.totals.ackAvgMinutes, stats.ackAvgMinutes);
 // ---- Setup checklist and the mode rule.
 const canOpenAll = () => true;
 const fresh = setupSteps(
-  { hospitals: 6, items: 3, itemPrices: 0, kitchenItems: 0, storeItems: 2, stores: 11 },
+  { hospitals: 6, items: 3, kitchenItems: 0, storeItems: 2, stores: 11 },
   { grn: null, transfer: undefined },
   canOpenAll,
 );
 assert.deepEqual(
   fresh.map((s) => `${s.key}:${s.done ? 'done' : s.doing ? 'doing' : 'todo'}`),
-  ['hospitals:done', 'stores:done', 'items:done', 'itemPrices:doing', 'mappings:todo', 'grn:todo'],
+  ['hospitals:done', 'stores:done', 'items:done', 'mappings:doing', 'grn:todo'],
   'unseen counts are left out; the first unfinished step is the next one',
 );
 assert.equal(fresh.find((s) => s.key === 'mappings').cta.href, '/masters/kitchen-items');

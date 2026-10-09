@@ -623,7 +623,7 @@ export function FilterSearch({
   value: string;
 }>) {
   return (
-    <label className="flex h-9 min-w-[200px] flex-1 items-center gap-2 rounded-control border border-ds-input bg-ds-surface px-2.5 text-ds-muted focus-within:border-ds-primary focus-within:ring-2 focus-within:ring-ds-primary/15">
+    <label className="flex h-9 min-w-[160px] flex-1 items-center gap-2 rounded-control border border-ds-input bg-ds-surface px-2.5 text-ds-muted focus-within:border-ds-primary focus-within:ring-2 focus-within:ring-ds-primary/15">
       <Search aria-hidden="true" className="h-[15px] w-[15px] shrink-0" />
       <input
         aria-label={label}

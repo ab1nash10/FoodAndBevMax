@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AAHAR – Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: {{c.page}}; color: {{c.text}}; font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif">
+<div style="flex: 1 1 248px; max-width: 100%; position: sticky; top: 0; align-self: flex-start">
+<dc-import name="Sidebar" theme="{{theme}}" active="dashboard" hint-size="248px,100vh"></dc-import>
+</div>
+<div style="flex: 999 1 0; min-width: 62%; display: flex; flex-direction: column">
+<dc-import name="Topbar" theme="{{theme}}" section="Overview" page="Dashboard" file="Dashboard" hint-size="100%,64px"></dc-import>
+<main style="width: 100%; max-width: 1240px; box-sizing: border-box; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px">
+
+<section style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="font-size: 12.5px; font-weight: 600; color: {{c.muted}}">Thursday, 1 October 2026 · Max Healthcare · All locations</span>
+<h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em">Good afternoon, Super Admin</h1>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<sc-if value="{{isLive}}" hint-placeholder-val="{{ true }}">
+<div role="group" aria-label="Stats period" style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: {{c.surface}}; border: 1px solid {{c.border}}">
+<sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
+<button onClick="{{r.pick}}" aria-pressed="{{r.on}}" style="height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: {{r.bg}}; color: {{r.fg}}; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer">{{r.label}}</button>
+</sc-for>
+</div>
+<a href="{{links.transfers}}" style="height: 40px; padding: 0 14px; border-radius: 10px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; gap: 8px; text-decoration: none; font-size: 13px; font-weight: 700"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3-3M20 16H6l3 3"></path></svg>Review pending<span style="font-size: 11.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: #FFFFFF; color: #0B57A4">8</span></a>
+</sc-if>
+<sc-if value="{{isNew}}" hint-placeholder-val="{{ false }}">
+<a href="{{links.newTransfer}}" style="height: 40px; padding: 0 14px; border-radius: 10px; background: #0B57A4; color: #FFFFFF; display: flex; align-items: center; gap: 8px; text-decoration: none; font-size: 13px; font-weight: 700"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Create first transfer of the week</a>
+</sc-if>
+</div>
+</section>
+
+<sc-if value="{{isNew}}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="setup-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 20px 14px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 id="setup-h" style="margin: 0; font-size: 17px; font-weight: 800">Finish setting up AAHAR</h2>
+<span style="font-size: 13px; color: {{c.muted}}">{{setupDone}} of {{setupTotal}} done · menus and prices unlock restaurant ordering and stock valuation</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; min-width: 220px; flex: 0 1 300px">
+<div role="progressbar" aria-label="Setup progress" aria-valuemin="0" aria-valuemax="{{setupTotal}}" aria-valuenow="{{setupDone}}" style="flex-grow: 1; height: 8px; border-radius: 999px; background: {{c.neuBg}}; overflow: hidden"><div style="width: {{setupPct}}; height: 100%; background: {{c.sFull}}; border-radius: 999px"></div></div>
+<span style="font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums">{{setupPct}}</span>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); border-top: 1px solid {{c.divider}}">
+<sc-for list="{{setup}}" as="s" hint-placeholder-count="10">
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid {{s.c.divider}}; background: {{s.bg}}">
+<span style="width: 26px; height: 26px; border-radius: 50%; background: {{s.dotBg}}; color: {{s.dotFg}}; border: 2px solid {{s.dotBd}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{s.done}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></sc-if>
+<sc-if value="{{s.doing}}" hint-placeholder-val="{{ false }}"><span style="width: 8px; height: 8px; border-radius: 50%; background: currentColor"></span></sc-if>
+</span>
+<span style="display: flex; flex-direction: column; gap: 1px; flex-grow: 1; min-width: 0"><span style="font-size: 13.5px; font-weight: 700; color: {{s.tc}}">{{s.title}}</span><span style="font-size: 12px; color: {{s.c.muted}}">{{s.detail}}</span></span>
+<sc-if value="{{s.hasCta}}" hint-placeholder-val="{{ false }}"><button style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid {{s.ctaBd}}; background: {{s.ctaBg}}; color: {{s.ctaFg}}; font-family: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer">{{s.cta}}</button></sc-if>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{isLive}}" hint-placeholder-val="{{ true }}">
+<section aria-label="What changed" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px">
+<sc-for list="{{insights}}" as="i" hint-placeholder-count="3">
+<a href="{{i.href}}" style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 14px; background: {{i.bg}}; border: 1px solid {{i.bd}}; text-decoration: none; color: {{i.c.text}}">
+<span style="width: 28px; height: 28px; border-radius: 8px; background: {{i.c.surface}}; color: {{i.fg}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{i.up}}" hint-placeholder-val="{{ true }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-8"></path><path d="M14 7h7v7"></path></svg></sc-if>
+<sc-if value="{{i.warn}}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20z"></path><path d="M12 10v4M12 17h.01"></path></svg></sc-if>
+</span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 13px; font-weight: 700; line-height: 1.35">{{i.title}}</span><span style="font-size: 12px; font-weight: 700; color: {{i.fg}}">{{i.cta}} →</span></span>
+</a>
+</sc-for>
+</section>
+</sc-if>
+
+<section aria-label="Key numbers" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px">
+<sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+<a href="{{k.href}}" style="display: flex; flex-direction: column; gap: 8px; padding: 16px 18px 14px; border-radius: 16px; background: {{k.c.surface}}; border: 1px solid {{k.c.border}}; box-shadow: {{k.c.shadow}}; text-decoration: none; color: {{k.c.text}}">
+<span style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="font-size: 13px; font-weight: 600; color: {{k.c.text3}}">{{k.label}}</span><span style="font-size: 11px; font-weight: 700; color: {{k.c.muted}}">{{k.scope}}</span></span>
+<span style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap"><span style="font-size: 28px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums">{{k.value}}</span><sc-if value="{{k.hasDelta}}" hint-placeholder-val="{{ true }}"><span style="font-size: 11.5px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: {{k.dBg}}; color: {{k.dFg}}; font-variant-numeric: tabular-nums">{{k.delta}}</span></sc-if></span>
+<sc-if value="{{k.hasSpark}}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="{{k.sparkLabel}}" style="width: 100%; height: 32px; display: block"><path d="{{k.area}}" fill="{{k.sparkFill}}"></path><path d="{{k.spark}}" fill="none" stroke="{{k.sparkStroke}}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></path></svg></sc-if>
+<span style="font-size: 12px; color: {{k.c.muted}}">{{k.foot}}</span>
+</a>
+</sc-for>
+</section>
+
+<sc-if value="{{isLive}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch">
+<section aria-labelledby="tc-h" style="flex: 2 1 560px; min-width: 0; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 id="tc-h" style="margin: 0; font-size: 15px; font-weight: 800">Transfers by outcome</h2><span style="font-size: 12.5px; color: {{c.muted}}">{{tSub}}</span></div>
+<div style="display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: {{c.text3}}">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sFull}}"></span>Accepted in full</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sPart}}"></span>Partial</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sRej}}"></span>Rejected</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sPend}}"></span>Pending</span>
+</div>
+</div>
+<div aria-live="polite" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border-radius: 10px; background: {{c.subtle}}; font-size: 12.5px">
+<span style="font-weight: 800">{{hov.label}}</span><span style="color: {{c.text2}}"><strong style="font-variant-numeric: tabular-nums">{{hov.total}}</strong> transfers</span>
+<span style="color: {{c.muted}}">·</span><span style="color: {{c.text3}}">Full <strong style="color: {{c.text}}">{{hov.full}}</strong> · Partial <strong style="color: {{c.text}}">{{hov.part}}</strong> · Rejected <strong style="color: {{c.text}}">{{hov.rej}}</strong> · Pending <strong style="color: {{c.text}}">{{hov.pend}}</strong></span>
+</div>
+<div role="img" aria-label="{{tAria}}" style="position: relative; height: 200px; padding-left: 30px">
+<div style="position: absolute; left: 30px; right: 0; top: 0; border-top: 1px dashed {{c.divider}}"></div>
+<div style="position: absolute; left: 30px; right: 0; top: 50%; border-top: 1px dashed {{c.divider}}"></div>
+<span style="position: absolute; left: 0; top: -7px; font-size: 11px; color: {{c.muted}}; font-variant-numeric: tabular-nums">{{yMax}}</span>
+<span style="position: absolute; left: 0; top: calc(50% - 7px); font-size: 11px; color: {{c.muted}}; font-variant-numeric: tabular-nums">{{yMid}}</span>
+<div style="position: relative; height: 100%; display: flex; align-items: flex-end; gap: {{barGap}}; border-bottom: 1px solid {{c.border}}">
+<sc-for list="{{bars}}" as="b" hint-placeholder-count="7">
+<button onMouseEnter="{{b.hover}}" onFocus="{{b.hover}}" onClick="{{b.hover}}" aria-label="{{b.aria}}" style="flex: 1 1 0; min-width: 0; height: 100%; padding: 0 {{b.pad}}; border: 0; border-radius: 6px 6px 0 0; background: {{b.colBg}}; display: flex; align-items: flex-end; justify-content: center; cursor: pointer">
+<span style="width: 100%; max-width: 40px; height: {{b.h}}; display: flex; flex-direction: column; border-radius: 4px 4px 0 0; overflow: hidden">
+<span style="flex: {{b.pend}} 0 0; background: {{b.c.sPend}}"></span>
+<span style="flex: {{b.rej}} 0 0; background: {{b.c.sRej}}"></span>
+<span style="flex: {{b.part}} 0 0; background: {{b.c.sPart}}"></span>
+<span style="flex: {{b.full}} 0 0; background: {{b.c.sFull}}"></span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; gap: {{barGap}}; padding-left: 30px">
+<sc-for list="{{bars}}" as="b" hint-placeholder-count="7"><span style="flex: 1 1 0; min-width: 0; text-align: center; font-size: 11px; font-weight: {{b.lw}}; color: {{b.lc}}; white-space: nowrap; overflow: visible">{{b.label}}</span></sc-for>
+</div>
+</section>
+
+<section aria-labelledby="oc-h" style="flex: 1 1 300px; min-width: 0; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 id="oc-h" style="margin: 0; font-size: 15px; font-weight: 800">Acknowledgement quality</h2><span style="font-size: 12.5px; color: {{c.muted}}">{{rangeLabel}} · {{oc.acked}} acknowledged</span></div>
+<div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap">
+<div style="position: relative; width: 132px; height: 132px; flex-shrink: 0">
+<svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="{{oc.aria}}">
+<circle cx="60" cy="60" r="46" fill="none" stroke="{{c.neuBg}}" stroke-width="14"></circle>
+<circle cx="60" cy="60" r="46" fill="none" stroke="{{c.sFull}}" stroke-width="14" stroke-dasharray="{{oc.dFull}}" stroke-dashoffset="0" transform="rotate(-90 60 60)"></circle>
+<circle cx="60" cy="60" r="46" fill="none" stroke="{{c.sPart}}" stroke-width="14" stroke-dasharray="{{oc.dPart}}" stroke-dashoffset="{{oc.oPart}}" transform="rotate(-90 60 60)"></circle>
+<circle cx="60" cy="60" r="46" fill="none" stroke="{{c.sRej}}" stroke-width="14" stroke-dasharray="{{oc.dRej}}" stroke-dashoffset="{{oc.oRej}}" transform="rotate(-90 60 60)"></circle>
+</svg>
+<span style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center"><span style="font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums">{{oc.fullPct}}</span><span style="font-size: 11px; color: {{c.muted}}; font-weight: 600">in full</span></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; flex: 1 1 120px; font-size: 12.5px">
+<span style="display: flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sFull}}"></span><span style="flex-grow: 1; color: {{c.text2}}">Full</span><strong style="font-variant-numeric: tabular-nums">{{oc.full}}</strong></span>
+<span style="display: flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sPart}}"></span><span style="flex-grow: 1; color: {{c.text2}}">Partial</span><strong style="font-variant-numeric: tabular-nums">{{oc.part}}</strong></span>
+<span style="display: flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{c.sRej}}"></span><span style="flex-grow: 1; color: {{c.text2}}">Rejected</span><strong style="font-variant-numeric: tabular-nums">{{oc.rej}}</strong></span>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="padding: 10px 12px; border-radius: 12px; background: {{c.subtle}}; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11.5px; color: {{c.muted}}">Acknowledged within 1 h</span><span style="font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums">{{oc.onTime}}</span></div>
+<div style="padding: 10px 12px; border-radius: 12px; background: {{c.subtle}}; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11.5px; color: {{c.muted}}">Top rejection reason</span><span style="font-size: 13.5px; font-weight: 800">Short received</span></div>
+</div>
+</section>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px">
+<section aria-labelledby="ws-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px"><div style="display: flex; flex-direction: column; gap: 2px"><h2 id="ws-h" style="margin: 0; font-size: 15px; font-weight: 800">Kitchen wastage</h2><span style="font-size: 12.5px; color: {{c.muted}}">Average {{w.avg}} · limit 5%</span></div><span style="font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: {{w.chipBg}}; color: {{w.chipFg}}">{{w.chip}}</span></div>
+<div style="position: relative">
+<svg viewBox="0 0 320 140" preserveAspectRatio="none" role="img" aria-label="{{w.aria}}" style="width: 100%; height: 150px; display: block">
+<line x1="0" x2="320" y1="132" y2="132" stroke="{{c.border}}" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+<line x1="0" x2="320" y1="{{w.limitY}}" y2="{{w.limitY}}" stroke="{{c.sRej}}" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"></line>
+<path d="{{w.area}}" fill="{{c.wFill}}"></path>
+<path d="{{w.line}}" fill="none" stroke="{{c.wLine}}" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></path>
+</svg>
+<span style="position: absolute; right: 0; top: {{w.limitTop}}; transform: translateY(-120%); font-size: 11px; font-weight: 700; color: {{c.badFg}}">5% limit</span>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: {{c.muted}}"><span>{{w.first}}</span><span>{{w.last}}</span></div>
+<span style="font-size: 12.5px; color: {{c.text2}}">Highest: <strong>Paneer butter masala</strong> · 8.0% on Tue, Main Kitchen Saket</span>
+</section>
+
+<section aria-labelledby="ti-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 id="ti-h" style="margin: 0; font-size: 15px; font-weight: 800">Most transferred items</h2><span style="font-size: 12.5px; color: {{c.muted}}">Times sent · {{rangeLabel}}</span></div>
+<sc-for list="{{topItems}}" as="t" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px"><span style="font-weight: 700">{{t.name}}</span><span style="font-weight: 800; font-variant-numeric: tabular-nums; color: {{t.c.text2}}">{{t.n}}</span></span>
+<span style="height: 8px; border-radius: 999px; background: {{t.c.neuBg}}; overflow: hidden"><span style="display: block; width: {{t.w}}; height: 100%; border-radius: 999px; background: {{t.c.series}}"></span></span>
+</div>
+</sc-for>
+</section>
+
+<section aria-labelledby="gv-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 id="gv-h" style="margin: 0; font-size: 15px; font-weight: 800">GRN acceptance by vendor</h2><span style="font-size: 12.5px; color: {{c.muted}}">Accepted vs rejected quantity · {{rangeLabel}}</span></div>
+<sc-for list="{{vendors}}" as="v" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px"><span style="font-weight: 700">{{v.name}}</span><span style="font-weight: 800; color: {{v.pctFg}}; font-variant-numeric: tabular-nums">{{v.pct}}</span></span>
+<span style="display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: {{v.c.neuBg}}"><span style="width: {{v.pct}}; background: {{v.c.sFull}}"></span><span style="width: {{v.rejW}}; background: {{v.c.sRej}}"></span></span>
+<span style="font-size: 11.5px; color: {{v.c.muted}}">{{v.meta}}</span>
+</div>
+</sc-for>
+</section>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch">
+<div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+<sc-if value="{{isNew}}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="ghost-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 18px 20px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap">
+<div aria-hidden="true" style="flex: 1 1 320px; height: 140px; display: flex; align-items: flex-end; gap: 10px; padding: 0 4px; border-bottom: 1px solid {{c.border}}">
+<span style="flex: 1; height: 35%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span><span style="flex: 1; height: 55%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span><span style="flex: 1; height: 25%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span><span style="flex: 1; height: 70%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span><span style="flex: 1; height: 60%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span><span style="flex: 1; height: 80%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span><span style="flex: 1; height: 45%; border-radius: 4px 4px 0 0; background: {{c.neuBg}}"></span>
+</div>
+<div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 8px">
+<h2 id="ghost-h" style="margin: 0; font-size: 15px; font-weight: 800">Trends appear after your first busy week</h2>
+<p style="margin: 0; font-size: 13px; color: {{c.text3}}">Transfers by outcome, acknowledgement quality, kitchen wastage, top items and vendor acceptance fill in automatically once transfers, GRNs and productions are recorded.</p>
+<a href="{{links.newTransfer}}" style="align-self: flex-start; margin-top: 4px; height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid {{c.border}}; color: {{c.link}}; display: flex; align-items: center; text-decoration: none; font-size: 12.5px; font-weight: 700">Record a transfer</a>
+</div>
+</section>
+</sc-if>
+<section aria-labelledby="work-h" style="flex-grow: 1; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 0 18px; border-bottom: 1px solid {{c.border}}">
+<h2 id="work-h" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Work queue</h2>
+<div role="tablist" aria-label="Work queue" style="display: flex; gap: 4px">
+<sc-for list="{{wtabs}}" as="t" hint-placeholder-count="2"><button role="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}" style="height: 48px; padding: 0 10px; border: 0; border-bottom: 2px solid {{t.line}}; background: transparent; color: {{t.fg}}; font-family: inherit; font-size: 14px; font-weight: {{t.w}}; display: flex; align-items: center; gap: 8px; cursor: pointer">{{t.label}}<span style="font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: {{t.cbg}}; color: {{t.cfg}}">{{t.count}}</span></button></sc-for>
+</div>
+<a href="{{links.transfers}}" style="font-size: 12.5px; font-weight: 700; text-decoration: none; color: {{c.link}}; display: inline-flex; align-items: center; min-height: 32px">View all</a>
+</div>
+<sc-if value="{{showTasks}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{tasks}}" as="k" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-bottom: 1px solid {{k.c.divider}}">
+<span style="width: 34px; height: 34px; border-radius: 10px; background: {{k.tileBg}}; color: {{k.tileFg}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 10.5px; font-weight: 800">{{k.abbr}}</span>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0">
+<span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><a href="{{k.href}}" style="font-size: 13.5px; font-weight: 800; color: {{k.c.text}}; text-decoration: none; font-variant-numeric: tabular-nums">{{k.ref}}</a><span style="font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: {{k.chipBg}}; color: {{k.chipFg}}">{{k.status}}</span></span>
+<span style="font-size: 12.5px; color: {{k.c.text3}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{k.desc}}</span>
+</div>
+<span style="font-size: 12px; font-weight: 600; color: {{k.ageFg}}; white-space: nowrap">{{k.age}}</span>
+<a href="{{k.href}}" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid {{k.c.border}}; color: {{k.c.link}}; display: flex; align-items: center; text-decoration: none; font-size: 12.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0">{{k.action}}</a>
+</div>
+</sc-for>
+<sc-if value="{{noTasks}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; align-items: center; gap: 14px; padding: 20px 18px">
+<span style="width: 36px; height: 36px; border-radius: 50%; background: {{c.okBg}}; color: {{c.okFg}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13.5px; font-weight: 800">You’re all caught up</span><span style="font-size: 12.5px; color: {{c.muted}}">Transfers to acknowledge, GRNs to verify and draft productions will show up here.</span></span>
+</div>
+</sc-if>
+</sc-if>
+<sc-if value="{{showActivity}}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{activity}}" as="a" hint-placeholder-count="5">
+<div style="display: flex; gap: 12px; padding: 12px 18px; border-bottom: 1px solid {{a.c.divider}}">
+<span style="width: 32px; height: 32px; border-radius: 10px; background: {{a.tileBg}}; color: {{a.tileFg}}; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 800; flex-shrink: 0">{{a.abbr}}</span>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0">
+<span style="font-size: 13px; color: {{a.c.text2}}"><a href="{{a.href}}" style="font-weight: 800; color: {{a.c.text}}; text-decoration: none">{{a.ref}}</a> {{a.what}}<sc-if value="{{a.hasWho}}" hint-placeholder-val="{{ true }}"> by <span style="font-weight: 700; color: {{a.c.text}}">{{a.who}}</span></sc-if></span>
+<span style="font-size: 12px; color: {{a.c.muted}}">{{a.detail}}</span>
+</div>
+<span style="font-size: 12px; color: {{a.c.muted}}; white-space: nowrap">{{a.time}}</span>
+</div>
+</sc-for>
+</sc-if>
+</section>
+</div>
+<div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+<sc-if value="{{isLive}}" hint-placeholder-val="{{ true }}">
+<section aria-labelledby="exp-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; flex-grow: 1">
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px"><h2 id="exp-h" style="margin: 0; font-size: 15px; font-weight: 800">Expiring soon</h2><span style="font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: {{c.badBg}}; color: {{c.badFg}}">Next 7 days</span></div>
+<sc-for list="{{expiring}}" as="e" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid {{e.c.divider}}">
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0"><span style="font-size: 13px; font-weight: 700">{{e.item}} <span style="font-weight: 600; color: {{e.c.muted}}">· {{e.qty}}</span></span><span style="font-size: 12px; color: {{e.c.muted}}">{{e.batch}} · {{e.where}}</span></div>
+<span style="font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; background: {{e.bg}}; color: {{e.fg}}">{{e.left}}</span>
+</div>
+</sc-for>
+</section>
+</sc-if>
+<sc-if value="{{isNew}}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="qc-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<h2 id="qc-h" style="margin: 0 0 2px; font-size: 15px; font-weight: 800">Quick create</h2>
+<sc-for list="{{quick}}" as="q" hint-placeholder-count="3">
+<a href="{{q.href}}" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid {{q.c.border}}; text-decoration: none; color: {{q.c.text}}; font-size: 13px; font-weight: 700"><span style="width: 28px; height: 28px; border-radius: 8px; background: {{q.bg}}; color: {{q.fg}}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">+</span><span style="flex-grow: 1">{{q.label}}</span><kbd style="font-family: inherit; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid {{q.c.border}}; background: {{q.c.kbd}}; color: {{q.c.text3}}">{{q.key}}</kbd></a>
+</sc-for>
+</section>
+<section aria-labelledby="md-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="md-h" style="margin: 0; font-size: 15px; font-weight: 800">Master data</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{masters}}" as="m" hint-placeholder-count="6"><button style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid {{m.c.border}}; background: {{m.c.subtle}}; color: {{m.c.text}}; font-family: inherit; text-align: left; cursor: pointer"><span style="width: 30px; height: 30px; border-radius: 8px; background: {{m.bg}}; color: {{m.fg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0">{{m.abbr}}</span><span style="display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums">{{m.n}}</span><span style="font-size: 11.5px; color: {{m.c.muted}}; font-weight: 600">{{m.label}}</span></span></button></sc-for>
+</div>
+</section>
+</sc-if>
+</div>
+</div>
+
+<sc-if value="{{isLive}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch">
+<div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column">
+<section aria-labelledby="loc-h" style="flex-grow: 1; border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; overflow: hidden; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 18px 12px">
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 id="loc-h" style="margin: 0; font-size: 15px; font-weight: 800">Locations at a glance</h2><span style="font-size: 12.5px; color: {{c.muted}}">{{rangeLabel}} · click a column to sort</span></div>
+</div>
+<div style="overflow-x: auto; flex-grow: 1">
+<div style="min-width: 640px">
+<div style="display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 1fr) 80px 104px 84px; gap: 12px; align-items: center; padding: 0 18px; height: 38px; background: {{c.subtle}}; border-top: 1px solid {{c.divider}}; border-bottom: 1px solid {{c.divider}}">
+<sc-for list="{{cols}}" as="h" hint-placeholder-count="5"><button onClick="{{h.pick}}" aria-label="{{h.aria}}" style="display: flex; align-items: center; justify-content: {{h.justify}}; gap: 4px; height: 100%; padding: 0; border: 0; background: transparent; font-family: inherit; font-size: 12px; font-weight: {{h.w}}; color: {{h.fg}}; cursor: pointer">{{h.label}}<span style="font-size: 10px">{{h.arrow}}</span></button></sc-for>
+</div>
+<sc-for list="{{locs}}" as="l" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 1fr) 80px 104px 84px; gap: 12px; align-items: center; padding: 10px 18px; border-bottom: 1px solid {{l.c.divider}}; font-size: 13px; font-variant-numeric: tabular-nums">
+<a href="{{l.href}}" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: {{l.c.text}}; min-width: 0"><span style="width: 30px; height: 30px; border-radius: 8px; background: {{l.c.locBg}}; color: {{l.c.locFg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0">{{l.code}}</span><span style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{l.name}}</span></a>
+<span style="display: flex; align-items: center; gap: 8px"><span style="flex-grow: 1; height: 8px; border-radius: 999px; background: {{l.c.neuBg}}; overflow: hidden"><span style="display: block; width: {{l.w}}; height: 100%; background: {{l.c.series}}; border-radius: 999px"></span></span><strong style="min-width: 28px; text-align: right">{{l.transfers}}</strong></span>
+<span style="text-align: right"><span style="font-weight: 700; padding: 2px 8px; border-radius: 999px; background: {{l.pBg}}; color: {{l.pFg}}">{{l.pending}}</span></span>
+<span style="text-align: right; font-weight: {{l.aW}}; color: {{l.aFg}}">{{l.ack}}</span>
+<span style="text-align: right; font-weight: {{l.wW}}; color: {{l.wFg}}">{{l.waste}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="overflow-x: auto; background: {{c.subtle}}; border-top: 1px solid {{c.border}}">
+<div style="min-width: 640px; display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 1fr) 80px 104px 84px; gap: 12px; align-items: center; padding: 12px 18px; font-size: 13px; font-variant-numeric: tabular-nums">
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 800">All locations</span><a href="{{links.transfers}}" style="font-size: 12px; font-weight: 700; color: {{c.link}}; text-decoration: none">Open full report →</a></span>
+<span style="display: flex; align-items: center; gap: 8px"><span style="flex-grow: 1; font-size: 12px; color: {{c.muted}}">{{locTot.share}}</span><strong style="min-width: 28px; text-align: right">{{locTot.transfers}}</strong></span>
+<span style="text-align: right; font-weight: 800; color: {{c.pendFg}}">{{locTot.pending}}</span>
+<span style="text-align: right; font-weight: 800">{{locTot.ack}}</span>
+<span style="text-align: right; font-weight: 800">{{locTot.waste}}</span>
+</div>
+</div>
+</section>
+</div>
+<div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+<section aria-labelledby="qc-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<h2 id="qc-h" style="margin: 0 0 2px; font-size: 15px; font-weight: 800">Quick create</h2>
+<sc-for list="{{quick}}" as="q" hint-placeholder-count="3">
+<a href="{{q.href}}" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid {{q.c.border}}; text-decoration: none; color: {{q.c.text}}; font-size: 13px; font-weight: 700"><span style="width: 28px; height: 28px; border-radius: 8px; background: {{q.bg}}; color: {{q.fg}}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">+</span><span style="flex-grow: 1">{{q.label}}</span><kbd style="font-family: inherit; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid {{q.c.border}}; background: {{q.c.kbd}}; color: {{q.c.text3}}">{{q.key}}</kbd></a>
+</sc-for>
+</section>
+<section aria-labelledby="md-h" style="border-radius: 16px; background: {{c.surface}}; border: 1px solid {{c.border}}; box-shadow: {{c.shadow}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="md-h" style="margin: 0; font-size: 15px; font-weight: 800">Master data</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{masters}}" as="m" hint-placeholder-count="6"><button style="display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid {{m.c.border}}; background: {{m.c.subtle}}; color: {{m.c.text}}; font-family: inherit; text-align: left; cursor: pointer"><span style="width: 30px; height: 30px; border-radius: 8px; background: {{m.bg}}; color: {{m.fg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0">{{m.abbr}}</span><span style="display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums">{{m.n}}</span><span style="font-size: 11.5px; color: {{m.c.muted}}; font-weight: 600">{{m.label}}</span></span></button></sc-for>
+</div>
+</section>
+</div>
+</div>
+</sc-if>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"mode":{"editor":"enum","options":["live","new"],"default":"live"},"$preview":{"width":1440,"height":2140}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { range: 7, hover: -1, wtab: null, sort: 'transfers', dir: -1 };
+  }
+  pal(t) {
+    const L = { page: '#F3F5F8', surface: '#FFFFFF', subtle: '#F8FAFC', border: '#E3E8EF', divider: '#EEF1F5', text: '#0F172A', text2: '#334155', text3: '#475569', muted: '#5B6577', link: '#0B57A4', primarySoft: '#E8F0FA', tealText: '#0F6B55', tealSoft: '#E7F6F1', pendBg: '#FEF3C7', pendFg: '#92400E', pendBd: '#FDE68A', infoBg: '#E8F0FA', infoFg: '#0B57A4', infoBd: '#C9DCF2', okBg: '#E3F5EE', okFg: '#0F6B55', okBd: '#BFE6D6', badBg: '#FDECEF', badFg: '#B4233F', neuBg: '#EEF2F6', neuFg: '#475569', storeBg: '#E3F5EE', storeFg: '#15803D', kitBg: '#FFF4E6', kitFg: '#C2570C', restBg: '#F3EEFF', restFg: '#6D3FD1', itemBg: '#EAF1FD', itemFg: '#1D5FC9', empBg: '#FDECEF', empFg: '#C0264B', locBg: '#E7F6F1', locFg: '#0F7B63', sFull: '#0F7B63', sPart: '#F59E0B', sRej: '#E11D48', sPend: '#B8C4D3', series: '#0B57A4', wLine: '#C2570C', wFill: 'rgba(194, 87, 12, 0.10)', sparkFill: 'rgba(11, 87, 164, 0.08)', ring: '#CBD5E1', shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)', kbd: '#FFFFFF' };
+    const D = { page: '#090E1A', surface: '#0E1525', subtle: '#161F2C', border: '#1F2A3D', divider: '#1E293B', text: '#F8FAFC', text2: '#CBD5E1', text3: '#94A3B8', muted: '#94A3B8', link: '#499EF4', primarySoft: '#082F49', tealText: '#5EEAD4', tealSoft: '#042F2E', pendBg: '#422006', pendFg: '#FCD34D', pendBd: '#713F12', infoBg: '#082F49', infoFg: '#7DD3FC', infoBd: '#0C4A6E', okBg: '#042F2E', okFg: '#5EEAD4', okBd: '#134E4A', badBg: '#4C0519', badFg: '#FDA4AF', neuBg: '#1E293B', neuFg: '#CBD5E1', storeBg: '#052E16', storeFg: '#86EFAC', kitBg: '#431407', kitFg: '#FDBA74', restBg: '#2E1065', restFg: '#C4B5FD', itemBg: '#172554', itemFg: '#93C5FD', empBg: '#4C0519', empFg: '#FDA4AF', locBg: '#042F2E', locFg: '#5EEAD4', sFull: '#14B8A6', sPart: '#F59E0B', sRej: '#FB7185', sPend: '#475569', series: '#499EF4', wLine: '#FDBA74', wFill: 'rgba(253, 186, 116, 0.12)', sparkFill: 'rgba(73, 158, 244, 0.12)', ring: '#334155', shadow: 'none', kbd: '#161F2C' };
+    return t === 'dark' ? D : L;
+  }
+  renderVals() {
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const isNew = this.props.mode === 'new';
+    const c = this.pal(theme);
+    const sfx = theme === 'dark' ? '-dark' : '';
+    const L = (f) => f + sfx + '.dc.html';
+    const links = { transfers: L('Transfers'), newTransfer: L('NewTransfer'), grn: L('Grn'), production: L('Production'), ack: L('Acknowledge'), items: L('Items') };
+    const st = this.state;
+    const R = st.range;
+    const seq = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+
+    // ---- transfer outcome series per range: [full, partial, rejected, pending]
+    const T7 = [[8, 1, 1, 0], [6, 1, 1, 0], [4, 0, 0, 0], [11, 2, 0, 0], [10, 1, 1, 0], [12, 2, 0, 0], [8, 1, 1, 4]];
+    const L7 = ['Fri 25', 'Sat 26', 'Sun 27', 'Mon 28', 'Tue 29', 'Wed 30', 'Thu 1'];
+    const T30 = seq(23, (i) => { const sun = (i + 2) % 7 === 0; const part = i % 3 === 0 ? 2 : 1; const rej = i % 5 === 0 ? 1 : 0; const tot = sun ? 4 : 9 + ((i * 5) % 6); return [tot - part - rej, part, rej, 0]; }).concat(T7);
+    const L30 = seq(30, (i) => { const d = i < 29 ? (i + 2) : 1; const m = i < 29 ? 'Sep' : 'Oct'; return (i % 5 === 0 || i === 29) ? d + ' ' + m : ''; });
+    const L30full = seq(30, (i) => (i < 29 ? (i + 2) + ' Sep' : '1 Oct'));
+    const T90 = seq(13, (i) => [52 + ((i * 7) % 11), 5 + (i % 3), 2 + (i % 2), i === 12 ? 8 : 0]);
+    const L90 = ['9 Jul', '16 Jul', '23 Jul', '30 Jul', '6 Aug', '13 Aug', '20 Aug', '27 Aug', '3 Sep', '10 Sep', '17 Sep', '24 Sep', '1 Oct'];
+    const series = R === 7 ? T7 : R === 30 ? T30 : T90;
+    const labels = R === 7 ? L7 : R === 30 ? L30 : L90;
+    const fullLabels = R === 7 ? L7 : R === 30 ? L30full : L90.map((l) => 'Week of ' + l);
+    const totals = series.map(sum);
+    const rawMax = Math.max.apply(null, totals);
+    const yMax = Math.ceil(rawMax / 5) * 5;
+    const hi = st.hover >= 0 && st.hover < series.length ? st.hover : series.length - 1;
+    const bars = series.map((s, i) => ({
+      c, full: s[0], part: s[1], rej: s[2], pend: s[3],
+      h: (totals[i] / yMax) * 100 + '%',
+      label: labels[i],
+      lw: i === hi ? '800' : '500', lc: i === hi ? c.text : c.muted,
+      colBg: i === hi ? c.subtle : 'transparent',
+      pad: R === 30 ? '1px' : '6px',
+      aria: fullLabels[i] + ': ' + totals[i] + ' transfers, ' + s[0] + ' full, ' + s[1] + ' partial, ' + s[2] + ' rejected, ' + s[3] + ' pending',
+      hover: () => this.setState({ hover: i })
+    }));
+    const h = series[hi];
+    const hov = { label: fullLabels[hi], total: totals[hi], full: h[0], part: h[1], rej: h[2], pend: h[3] };
+    const tTotal = sum(totals);
+    const rangeLabel = R === 7 ? 'Last 7 days' : R === 30 ? 'Last 30 days' : 'Last 90 days';
+
+    // ---- outcomes donut
+    const ofull = sum(series.map((s) => s[0])), opart = sum(series.map((s) => s[1])), orej = sum(series.map((s) => s[2]));
+    const acked = ofull + opart + orej;
+    const C = 2 * Math.PI * 46;
+    const lf = (ofull / acked) * C, lp = (opart / acked) * C, lr = (orej / acked) * C;
+    const pct = (n) => Math.round((n / acked) * 100) + '%';
+    const oc = {
+      acked, full: ofull + ' · ' + pct(ofull), part: opart + ' · ' + pct(opart), rej: orej + ' · ' + pct(orej), fullPct: pct(ofull),
+      dFull: lf + ' ' + (C - lf), dPart: lp + ' ' + (C - lp), dRej: lr + ' ' + (C - lr), oPart: -lf, oRej: -(lf + lp),
+      onTime: R === 7 ? '86%' : R === 30 ? '82%' : '79%',
+      aria: 'Acknowledgement outcomes: ' + pct(ofull) + ' in full, ' + pct(opart) + ' partial, ' + pct(orej) + ' rejected'
+    };
+
+    // ---- line / sparkline helpers
+    const linePath = (v, w, hgt, top, bottom, maxV, minV) => v.map((y, i) => {
+      const x = v.length === 1 ? 0 : (i / (v.length - 1)) * w;
+      const yy = top + (1 - (y - minV) / (maxV - minV || 1)) * (hgt - top - bottom);
+      return (i ? 'L' : 'M') + x.toFixed(1) + ',' + yy.toFixed(1);
+    }).join(' ');
+    const spark = (v) => {
+      const mx = Math.max.apply(null, v), mn = Math.min.apply(null, v);
+      const p = linePath(v, 100, 32, 4, 4, mx, mn);
+      return { line: p, area: p + ' L100,32 L0,32 Z' };
+    };
+
+    // ---- wastage
+    const W7 = [2.8, 3.4, 2.1, 4.2, 5.6, 3.0, 3.1];
+    const W = R === 7 ? W7 : R === 30 ? seq(23, (i) => 2.4 + ((i * 13) % 9) / 3).concat(W7) : seq(13, (i) => 3 + ((i * 7) % 5) / 4);
+    const wAvg = sum(W) / W.length;
+    const wl = linePath(W, 320, 140, 8, 8, 8, 0);
+    const limitY = 8 + (1 - 5 / 8) * 124;
+    const over = W.filter((x) => x > 5).length;
+    const w = {
+      line: wl, area: wl + ' L320,132 L0,132 Z', limitY, limitTop: ((limitY / 140) * 150).toFixed(0) + 'px',
+      avg: wAvg.toFixed(1) + '%', first: fullLabels[0], last: fullLabels[fullLabels.length - 1],
+      chip: over ? over + (over === 1 ? ' day' : ' days') + ' over limit' : 'Within limit',
+      chipBg: over ? c.pendBg : c.okBg, chipFg: over ? c.pendFg : c.okFg,
+      aria: 'Kitchen wastage trend, average ' + wAvg.toFixed(1) + '%, ' + over + ' periods above the 5% limit'
+    };
+
+    // ---- KPIs
+    const ackSeries = R === 7 ? [50, 46, 58, 41, 39, 36, 34] : R === 30 ? seq(30, (i) => 62 - i * 0.8 + ((i * 7) % 6)) : seq(13, (i) => 70 - i * 2 + (i % 3) * 2);
+    const ackAvg = Math.round(sum(ackSeries) / ackSeries.length);
+    const sT = spark(totals), sA = spark(ackSeries), sW = spark(W);
+    const good = { dBg: c.okBg, dFg: c.okFg }, info = { dBg: c.infoBg, dFg: c.infoFg };
+    const kpis = isNew ? [
+      { label: 'Transfers', scope: 'Last 7 days', value: '0', foot: 'Your last transfer, TRF0001, was on 22 Sept', href: links.transfers },
+      { label: 'Pending acknowledgement', scope: 'Right now', value: '0', foot: 'Nothing waiting on restaurants', href: links.transfers },
+      { label: 'GRNs to verify', scope: 'Right now', value: '0', foot: 'GRN000001 posted to Main Store', href: links.grn },
+      { label: 'Kitchen production', scope: 'Last 7 days', value: '0', foot: 'PRD0001 posted on 22 Sept', href: links.production }
+    ].map((k) => Object.assign({ c, hasDelta: false, hasSpark: false }, k)) : [
+      Object.assign({ c, label: 'Transfers', scope: rangeLabel, value: String(tTotal), hasDelta: true, delta: R === 7 ? '▲ 12%' : R === 30 ? '▲ 6%' : '▲ 9%', hasSpark: true, spark: sT.line, area: sT.area, sparkStroke: c.series, sparkFill: c.sparkFill, sparkLabel: 'Transfers trend', foot: 'vs previous period · ' + Math.round((ofull / acked) * 100) + '% accepted in full', href: links.transfers }, info),
+      { c, label: 'Pending acknowledgement', scope: 'Right now', value: '8', hasDelta: true, delta: '3 over 1 h', dBg: c.pendBg, dFg: c.pendFg, hasSpark: false, foot: 'Oldest: TRF0037 · 2h 10m · Max Vaishali', href: links.transfers },
+      Object.assign({ c, label: 'Avg time to acknowledge', scope: rangeLabel, value: ackAvg + ' min', hasDelta: true, delta: R === 7 ? '▼ 18%' : R === 30 ? '▼ 9%' : '▼ 6%', hasSpark: true, spark: sA.line, area: sA.area, sparkStroke: c.sFull, sparkFill: c.tealSoft, sparkLabel: 'Acknowledgement time trend', foot: 'Faster than previous period', href: links.transfers }, good),
+      Object.assign({ c, label: 'Kitchen wastage', scope: rangeLabel, value: wAvg.toFixed(1) + '%', hasDelta: true, delta: R === 7 ? '▼ 0.6 pts' : R === 30 ? '▼ 0.3 pts' : '▲ 0.2 pts', hasSpark: true, spark: sW.line, area: sW.area, sparkStroke: c.wLine, sparkFill: c.wFill, sparkLabel: 'Wastage trend', foot: 'Target 5% or less across 12 kitchens', href: links.production }, R === 90 ? { dBg: c.pendBg, dFg: c.pendFg } : good)
+    ];
+
+    const ranges = [[7, '7 days'], [30, '30 days'], [90, '90 days']].map(([v, label]) => ({ label, on: v === R, bg: v === R ? c.primarySoft : 'transparent', fg: v === R ? c.link : c.text3, pick: () => this.setState({ range: v, hover: -1 }) }));
+
+    const insights = [
+      { up: true, warn: false, title: 'Acknowledgements are 18% faster than the previous week', cta: 'See transfers', href: links.transfers, bg: c.okBg, bd: c.okBd, fg: c.okFg },
+      { up: false, warn: true, title: 'Main Kitchen, Saket wasted 5.6% on Tuesday — above the 5% limit', cta: 'Open production', href: links.production, bg: c.pendBg, bd: c.pendBd, fg: c.pendFg },
+      { up: false, warn: true, title: 'Shree Dairy: 9% of quantity rejected across the last 3 GRNs', cta: 'Review GRNs', href: links.grn, bg: c.badBg, bd: c.badBg, fg: c.badFg }
+    ].map((i) => Object.assign({ c }, i));
+
+    const f = R === 7 ? 1 : R === 30 ? 4.1 : 12.3;
+    const ti = [['Toned milk', 42], ['Basmati rice', 31], ['Paneer', 28], ['Chapati', 26], ['Veg thali base', 22], ['Curd', 19]];
+    const topItems = ti.map(([name, n]) => ({ c, name, n: Math.round(n * f), w: (n / 42) * 100 + '%' }));
+    const vendors = [['Metro Wholesale', 99, 6], ['Fresh Farms Pvt Ltd', 97, 9], ['Green Leaf Agro', 94, 4], ['Shree Dairy', 91, 3]].map(([name, p, g]) => ({
+      c, name, pct: p + '%', rejW: (100 - p) + '%', pctFg: p < 95 ? c.pendFg : c.okFg,
+      meta: Math.round(g * (R === 7 ? 1 : R === 30 ? 4 : 11)) + ' GRNs · ' + (100 - p) + '% rejected' + (p < 95 ? ' · above 5% tolerance' : '')
+    }));
+
+    // ---- locations table
+    const LOCS = [['SK', 'Max Saket', 24, 3, 38, 3.9], ['PG', 'Max Patparganj', 14, 2, 44, 2.8], ['VS', 'Max Vaishali', 12, 2, 61, 3.1], ['GG', 'Max Gurugram', 9, 0, 35, 4.6], ['SB', 'Max Shalimar Bagh', 9, 1, 49, 2.5], ['MH', 'Max Mohali', 7, 0, 41, 3.0]];
+    const scale = tTotal / 75;
+    const keyIdx = { name: 1, transfers: 2, pending: 3, ack: 4, waste: 5 };
+    const sorted = LOCS.slice().sort((a, b) => {
+      const k = keyIdx[st.sort];
+      const va = a[k], vb = b[k];
+      return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * st.dir;
+    });
+    const tMax = Math.max.apply(null, LOCS.map((l) => l[2]));
+    const locs = sorted.map(([code, name, t, p, a, wv]) => ({
+      c, code, name, transfers: Math.round(t * scale), w: (t / tMax) * 100 + '%',
+      pending: p, pBg: p > 0 ? c.pendBg : c.neuBg, pFg: p > 0 ? c.pendFg : c.neuFg,
+      ack: a + ' min', aFg: a > 60 ? c.pendFg : c.text2, aW: a > 60 ? '800' : '600',
+      waste: wv.toFixed(1) + '%', wFg: wv > 4.5 ? c.pendFg : c.text2, wW: wv > 4.5 ? '800' : '600',
+      href: links.transfers
+    }));
+    const wsum = LOCS.reduce((n, l) => n + l[2], 0);
+    const locTot = {
+      transfers: tTotal, pending: LOCS.reduce((n, l) => n + l[3], 0),
+      ack: Math.round(LOCS.reduce((n, l) => n + l[4] * l[2], 0) / wsum) + ' min',
+      waste: (LOCS.reduce((n, l) => n + l[5] * l[2], 0) / wsum).toFixed(1) + '%',
+      share: 'Saket handles ' + Math.round((LOCS[0][2] / wsum) * 100) + '%'
+    };
+    const colDefs = [['name', 'Location', 'flex-start'], ['transfers', 'Transfers', 'flex-start'], ['pending', 'Pending', 'flex-end'], ['ack', 'Avg ack time', 'flex-end'], ['waste', 'Wastage', 'flex-end']];
+    const cols = colDefs.map(([k, label, justify]) => {
+      const on = st.sort === k;
+      return { label, justify, w: on ? '800' : '600', fg: on ? c.text : c.muted, arrow: on ? (st.dir > 0 ? '▲' : '▼') : '', aria: 'Sort by ' + label, pick: () => this.setState({ sort: k, dir: on ? -st.dir : (k === 'name' ? 1 : -1) }) };
+    });
+
+    // ---- work queue
+    const tile = { T: [c.infoBg, c.infoFg, 'TRF'], G: [c.storeBg, c.storeFg, 'GRN'], P: [c.kitBg, c.kitFg, 'PRD'] };
+    const chip = { 'Pending ack': [c.pendBg, c.pendFg], 'Under verification': [c.infoBg, c.infoFg], 'Draft': [c.neuBg, c.neuFg] };
+    const tasks = isNew ? [] : [
+      ['T', 'TRF0037', 'Pending ack', 'Main Kitchen → Main Cafeteria · 6 items · Max Vaishali', '2h 10m', 'Acknowledge', links.ack, true],
+      ['T', 'TRF0042', 'Pending ack', 'Main F&B Store → Main Cafeteria · 4 items · Max Saket', '1h 05m', 'Acknowledge', links.ack],
+      ['G', 'GRN000128', 'Under verification', 'Fresh Farms Pvt Ltd · 6 lines · Main F&B Store', '40m', 'Verify', links.grn],
+      ['P', 'PRD0018', 'Draft', 'Main Kitchen · Lunch · 5 items · chef Anil Kumar', '15m', 'Post', links.production],
+      ['T', 'TRF0041', 'Pending ack', 'Main Kitchen → Staff Canteen · 3 items · Max Saket', '25m', 'Acknowledge', links.ack]
+    ].map(([ty, ref, status, desc, age, action, href, oldest]) => ({ c, ref, status, desc, age, action, href, abbr: tile[ty][2], tileBg: tile[ty][0], tileFg: tile[ty][1], chipBg: chip[status][0], chipFg: chip[status][1], ageFg: oldest ? c.pendFg : c.muted }));
+    const activity = (isNew ? [
+      ['P', 'PRD0001', 'posted', '', 'Main Kitchen · 1 item', '22 Sept', links.production],
+      ['T', 'TRF0001', 'acknowledged', '', 'Main Store → main restaurant HO · 1 item', '22 Sept', links.transfers],
+      ['G', 'GRN000001', 'posted to stock', '', 'jtest · 1 line · Main Store', '22 Sept', links.grn]
+    ] : [
+      ['T', 'TRF0040', 'acknowledged in full', 'Priya Mehta', 'Coffee Lounge, Max Patparganj', '12:52', links.transfers],
+      ['P', 'PRD0016', 'posted', 'Anil Kumar', '5 items to Main Kitchen stock · wastage 2.4%', '12:31', links.production],
+      ['T', 'TRF0042', 'sent', 'Rahul Verma', 'Main F&B Store → Main Cafeteria · 4 items', '11:45', links.transfers],
+      ['T', 'TRF0039', 'acknowledged partially', 'Simran Kaur', '2 kg curd short', '11:10', links.transfers],
+      ['G', 'GRN000126', 'posted to stock', 'Imran Khan', 'Fresh Farms Pvt Ltd · 8 lines', '10:24', links.grn]
+    ]).map(([ty, ref, what, who, detail, time, href]) => ({ c, ref, what, who, hasWho: !!who, detail, time, href, abbr: tile[ty][2], tileBg: tile[ty][0], tileFg: tile[ty][1] }));
+    const wtab = st.wtab || (isNew ? 'activity' : 'todo');
+    const wtabs = [['todo', 'Needs your action', isNew ? 0 : 14], ['activity', 'Recent activity', activity.length]].map(([id, label, count]) => {
+      const on = id === wtab;
+      return { label, count, on, line: on ? '#0B57A4' : 'transparent', fg: on ? c.text : c.text3, w: on ? '800' : '600', cbg: on ? c.primarySoft : c.neuBg, cfg: on ? c.link : c.neuFg, pick: () => this.setState({ wtab: id }) };
+    });
+
+    const expiring = [
+      ['Paneer', 'B-2409-17', 'Main F&B Store', '6 kg', 'In 2 days', 'bad'],
+      ['Curd', 'B-2409-22', 'Main F&B Store', '12 kg', 'In 2 days', 'bad'],
+      ['Toned milk', 'B-2410-01', 'Main Cafeteria', '18 L', 'In 3 days', 'pend'],
+      ['Brown bread', 'B-2409-30', 'Coffee Lounge', '24 pcs', 'In 4 days', 'pend']
+    ].map(([item, batch, where, qty, left, k]) => ({ c, item, batch, where, qty, left, bg: c[k + 'Bg'], fg: c[k + 'Fg'] }));
+    const quick = [['New transfer', 'N then T', links.newTransfer, 'info'], ['New GRN', 'N then G', links.grn, 'store'], ['New kitchen production', 'N then P', links.production, 'kit']].map(([label, key, href, k]) => ({ c, label, key, href, bg: c[k + 'Bg'], fg: c[k + 'Fg'] }));
+    const masters = [['LO', 'Locations', 6, 'loc'], ['ST', 'Stores', 11, 'store'], ['KI', 'Kitchens', 12, 'kit'], ['RE', 'Restaurants', 6, 'rest'], ['IT', 'Items', 3, 'item'], ['EM', 'Employees', 2, 'emp']].map(([abbr, label, n, k]) => ({ c, abbr, label, n, bg: c[k + 'Bg'], fg: c[k + 'Fg'] }));
+
+    const S = [
+      ['done', 'Locations', '6 added'], ['done', 'Stores', '11 added'], ['done', 'Kitchens', '12 added'], ['done', 'Restaurants', '6 added'],
+      ['done', 'Employees', '2 added · invite the rest of your team', 'Invite'],
+      ['doing', 'Items', '3 added · add the rest of your menu and raw materials', 'Add items'],
+      ['todo', 'Item prices', 'Set Normal, Staff, Room and Counter rates', 'Set prices'],
+      ['todo', 'Map items to stores & kitchens', 'Only mapped items can be received or produced', 'Map items'],
+      ['todo', 'Restaurant menus & time slots', 'Decide what each restaurant serves, and when', 'Build menus'],
+      ['done', 'First GRN posted', 'GRN000001 · Main Store'], ['done', 'First transfer acknowledged', 'TRF0001 · main restaurant HO']
+    ];
+    const setup = S.map(([s, title, detail, cta]) => ({
+      c, title, detail, cta: cta || '', hasCta: !!cta && s !== 'done' || cta === 'Invite',
+      done: s === 'done', doing: s === 'doing',
+      dotBg: s === 'done' ? c.sFull : c.surface, dotFg: s === 'done' ? '#FFFFFF' : c.sPart, dotBd: s === 'done' ? c.sFull : s === 'doing' ? c.sPart : c.ring,
+      tc: s === 'done' ? c.text3 : c.text,
+      bg: s === 'doing' ? c.pendBg : c.surface,
+      ctaBg: s === 'done' ? c.surface : '#0B57A4', ctaFg: s === 'done' ? c.link : '#FFFFFF', ctaBd: s === 'done' ? c.border : '#0B57A4'
+    }));
+    const setupDone = S.filter((s) => s[0] === 'done').length;
+
+    return {
+      c, theme, links, isNew, isLive: !isNew, ranges, insights, kpis, bars, hov,
+      yMax, yMid: Math.round(yMax / 2), barGap: R === 30 ? '3px' : R === 90 ? '8px' : '14px',
+      tSub: rangeLabel + ' · ' + tTotal + ' transfers · hover a bar for details',
+      tAria: 'Stacked bar chart of transfers by outcome, ' + rangeLabel.toLowerCase() + ', ' + tTotal + ' in total',
+      rangeLabel, oc, w, topItems, vendors, locs, cols, locTot,
+      wtabs, tasks, activity, showTasks: wtab === 'todo', showActivity: wtab === 'activity', noTasks: tasks.length === 0,
+      expiring, quick, masters, setup, setupDone, setupTotal: S.length, setupPct: Math.round((setupDone / S.length) * 100) + '%'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ void test('a location-owned record is visible only at the user locations', () =>
 });
 
 void test('a shared master stays visible everywhere, a location one only there', () => {
-  for (const model of ['Employee', 'Item', 'ItemCategory', 'TimeSlot']) {
+  for (const model of ['Employee', 'TimeSlot']) {
     assert.deepEqual(readScope(model, allowed), {
       OR: [{ hospitalId: null }, { hospitalId: { in: allowed } }],
     });
@@ -19,4 +19,9 @@ void test('a shared master stays visible everywhere, a location one only there',
 void test('mappings follow their store or kitchen; unrelated models are left alone', () => {
   assert.deepEqual(readScope('StoreItem', allowed), { store: { hospitalId: { in: allowed } } });
   assert.equal(readScope('Hospital', allowed), null);
+});
+
+void test('items and their categories are shared by every location', () => {
+  assert.equal(readScope('Item', allowed), null);
+  assert.equal(readScope('ItemCategory', allowed), null);
 });
