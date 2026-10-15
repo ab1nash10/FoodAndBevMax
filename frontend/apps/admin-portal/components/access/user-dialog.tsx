@@ -3,9 +3,10 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AccessRole, AccessUser, AccessUserInput } from '@aahar/api-client';
-import { Loader2, MapPin, X } from 'lucide-react';
+import { Loader2, Lock, MapPin, X } from 'lucide-react';
 import { useState } from 'react';
 import { LocationPickerDialog } from '@/components/access/location-picker-dialog';
+import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel, Select } from '@/components/ui';
 import { PasswordInput } from '@/components/ui-controls';
@@ -67,6 +68,17 @@ export function UserDialog({
   user,
 }: Readonly<{ onClose: () => void; roles: AccessRole[]; user: AccessUser | null }>) {
   const [values, setValues] = useState<FormValues>(() => toFormValues(user));
+  const { currentUser, roles: myRoles } = useAuth();
+  // The server refuses these changes while the user is signed in (8 hours from their last
+  // activity, or until they sign out); the fields say so up front. A Super Admin may change
+  // them at any time, and so may the user on their own record.
+  const [credentialsLockedUntil] = useState(() => {
+    if (myRoles.includes('Super Admin') || currentUser?.id === user?.id) return null;
+
+    const until = user?.credentialsLockedUntil ? new Date(user.credentialsLockedUntil) : null;
+
+    return until && until.getTime() > Date.now() ? until : null;
+  });
   // The user's default location: where they start after sign-in (users.hospital_id).
   const [homeId, setHomeId] = useState(
     () => user?.defaultLocationId ?? user?.hospitals[0]?.id ?? '',
@@ -220,6 +232,23 @@ export function UserDialog({
           </div>
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {credentialsLockedUntil ? (
+              <p
+                className="flex items-start gap-2 rounded-md border border-ds-border bg-ds-subtle px-3 py-2 text-sm text-ds-muted"
+                role="note"
+              >
+                <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  {user?.name} is signed in. Their email, mobile and password can be changed after{' '}
+                  {credentialsLockedUntil.toLocaleString('en-IN', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                  , or once they sign out.
+                </span>
+              </p>
+            ) : null}
+
             <Field label="Name" name="name">
               <Input
                 id="name"
@@ -231,6 +260,7 @@ export function UserDialog({
 
             <Field label="Email" name="email">
               <Input
+                disabled={Boolean(credentialsLockedUntil)}
                 id="email"
                 onChange={(event) => update('email', event.target.value)}
                 placeholder="Email"
@@ -256,6 +286,7 @@ export function UserDialog({
                 </span>
                 <Input
                   className="rounded-l-none"
+                  disabled={Boolean(credentialsLockedUntil)}
                   id="mobile"
                   inputMode="numeric"
                   maxLength={10}
@@ -301,6 +332,7 @@ export function UserDialog({
               */}
               <PasswordInput
                 autoComplete="new-password"
+                disabled={Boolean(credentialsLockedUntil)}
                 id="password"
                 onChange={(event) => update('password', event.target.value)}
                 onFocus={(event) => {

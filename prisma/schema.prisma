@@ -157,6 +157,9 @@ model User {
 
   @@index([hospitalId])
   @@index([deletedAt])
+  /// The user's last signed-in request (written at most once a minute), cleared on sign-out.
+  /// While it is under 8 hours old an admin cannot change their password, email or mobile.
+  lastActiveAt   DateTime?  @map("last_active_at")
   @@map("users")
 }
 

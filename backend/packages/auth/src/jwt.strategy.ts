@@ -60,6 +60,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Your account was updated. Please sign in again.');
     }
 
+    this.access.recordActivity(payload.sub);
+
     return {
       allowedHospitalIds: access.allowedHospitalIds,
       email: payload.email,

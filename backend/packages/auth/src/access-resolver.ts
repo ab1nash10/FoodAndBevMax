@@ -21,6 +21,18 @@ export interface ResolvedAccess {
  * True while a token still belongs to the user's current session. Tokens issued before session
  * versions existed carry none, which counts as 0, so they stay valid until the first bump.
  */
+const ACTIVITY_WRITE_INTERVAL_MS = 60_000;
+
+/** How long after a user's last activity an admin must wait to change their credentials. */
+export const CREDENTIAL_LOCK_MS = 8 * 60 * 60 * 1000;
+
+/** Until when an admin cannot change this user's password, email or mobile; null if they can. */
+export function credentialsLockedUntil(lastActiveAt: Date | null, now = Date.now()): Date | null {
+  const until = lastActiveAt ? lastActiveAt.getTime() + CREDENTIAL_LOCK_MS : 0;
+
+  return until > now ? new Date(until) : null;
+}
+
 export function isSessionCurrent(tokenVersion: number | undefined, userVersion: number): boolean {
   return (tokenVersion ?? 0) === userVersion;
 }
@@ -73,6 +85,27 @@ export function mergePermissionCodes(
 @Injectable()
 export class AccessResolver {
   constructor(@Inject(AUTH_PRISMA) private readonly prisma: PrismaClient) {}
+
+  private readonly activityWrittenAt = new Map<string, number>();
+
+  /**
+   * Notes that the user is signed in and using the portal (users.last_active_at), at most once
+   * a minute per process. Fire and forget: a failed write never fails the request. Raw SQL so
+   * updated_at, which the user lists sort by, does not move on every request.
+   */
+  recordActivity(userId: string, now = Date.now()): void {
+    const lastWrite = this.activityWrittenAt.get(userId);
+
+    if (lastWrite !== undefined && now - lastWrite < ACTIVITY_WRITE_INTERVAL_MS) {
+      return;
+    }
+
+    this.activityWrittenAt.set(userId, now);
+    this.prisma
+      .$executeRaw`UPDATE users SET last_active_at = now() WHERE id = ${userId}::uuid`.catch(() =>
+      this.activityWrittenAt.delete(userId),
+    );
+  }
 
   // ponytail: one query per authenticated request. Redis is already in the stack — cache per
   // user and drop the key on any role/permission write if request volume makes this show up.

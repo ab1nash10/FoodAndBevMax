@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { hashPassword, uniqueViolationTarget, type JwtRequestUser } from '@aahar/auth';
+import {
+  credentialsLockedUntil,
+  hashPassword,
+  uniqueViolationTarget,
+  type JwtRequestUser,
+} from '@aahar/auth';
 import { LocationScope, Prisma, RecordStatus, Role, UserStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -88,11 +93,53 @@ function toUserResponse(user: UserWithRoles) {
     })),
     status: user.status,
     updatedAt: user.updatedAt,
+    /** While set, an admin cannot change this user's password, email or mobile. */
+    credentialsLockedUntil: credentialsLockedUntil(user.lastActiveAt),
   };
 }
 
+// The audit snapshot leaves out the lock: it depends on the clock, not on the change.
 function toUserSnapshot(user: UserWithRoles) {
-  return toUserResponse(user);
+  const { credentialsLockedUntil: _lock, ...snapshot } = toUserResponse(user);
+
+  return snapshot;
+}
+
+/**
+ * A signed-in user's password, email and mobile cannot be changed by an admin until 8 hours
+ * after their last activity, or until they sign out: the change would end their session
+ * mid-work. Their own change (Preferences, or their own record) is never blocked, and a Super
+ * Admin may change anyone's credentials at any time.
+ */
+export function assertCredentialsUnlocked(
+  existing: UserWithRoles,
+  dto: UpdateUserDto,
+  context: ActorContext,
+): void {
+  const credentialsChanged =
+    dto.password !== undefined ||
+    (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
+    (dto.mobile !== undefined && dto.mobile !== existing.mobile);
+  const lockedUntil = credentialsLockedUntil(existing.lastActiveAt);
+
+  if (
+    !credentialsChanged ||
+    !lockedUntil ||
+    context.actorId === existing.id ||
+    context.actorRoles?.includes(SUPER_ADMIN_ROLE)
+  ) {
+    return;
+  }
+
+  const until = lockedUntil.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Kolkata',
+  });
+
+  throw new ConflictException(
+    `${existing.name} is signed in. Their password, email and mobile can be changed after ${until}, or once they sign out.`,
+  );
 }
 
 @Injectable()
@@ -254,6 +301,8 @@ export class UsersService {
           (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
           (dto.mobile !== undefined && dto.mobile !== existing.mobile) ||
           (dto.name !== undefined && dto.name !== existing.name);
+
+        assertCredentialsUnlocked(existing, dto, context);
 
         if (detailsChanged || roleChanged || hospitalsChanged || statusChanged) {
           await this.endSessions([id], tx);

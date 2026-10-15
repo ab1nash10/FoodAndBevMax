@@ -23,6 +23,8 @@ export interface AccessRole {
 export interface AccessUser {
   avatarUrl: string | null;
   createdAt: string;
+  /** While set (ISO time), an admin cannot change this user's email, mobile or password. */
+  credentialsLockedUntil: string | null;
   /** Where the user starts after sign-in: one of their locations (any location for ALL scope). */
   defaultLocationId: string | null;
   designation: string | null;

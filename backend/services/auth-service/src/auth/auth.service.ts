@@ -168,6 +168,10 @@ export class AuthService {
     const payload = await this.tokens.verifyRefreshToken(dto.refreshToken);
 
     await this.tokens.revokeRefreshToken(payload.jti);
+    // Signed out: an admin may change their credentials straight away. Raw SQL keeps
+    // updated_at as it is.
+    await this.prisma
+      .$executeRaw`UPDATE users SET last_active_at = NULL WHERE id = ${payload.sub}::uuid`;
     await this.auditLog.record({
       action: 'AUTH_LOGOUT',
       entityId: payload.sub,
