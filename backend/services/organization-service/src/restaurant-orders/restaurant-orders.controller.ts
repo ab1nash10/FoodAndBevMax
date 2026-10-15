@@ -68,13 +68,22 @@ export class RestaurantOrdersController {
     };
   }
 
-  @Get('order-board/:token')
+  @Get('order-board/:restaurantId')
   @Public()
   @Throttle(sharedAddressLimit)
-  @ApiOperation({ summary: 'Pickup board for a TV: order numbers preparing and ready' })
+  @ApiHeader({ description: 'Or ?token=: the restaurant board secret.', name: 'x-board-token' })
+  @ApiOperation({ summary: 'Pickup board feed for a TV: open orders, meal slot, open hours' })
   @ApiOkResponse({ description: 'Board returned.' })
-  async board(@Param('token') token: string) {
-    return { data: await this.orders.board(token), message: 'Success', success: true };
+  async board(
+    @Param('restaurantId', ParseUUIDPipe) restaurantId: string,
+    @Headers('x-board-token') headerToken: string | undefined,
+    @Query('token') queryToken: string | undefined,
+  ) {
+    return {
+      data: await this.orders.board(restaurantId, headerToken ?? queryToken),
+      message: 'Success',
+      success: true,
+    };
   }
 
   @Get('restaurant-orders')

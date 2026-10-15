@@ -24,7 +24,7 @@ import type {
   TimeSlotListQuery,
 } from './catalog';
 import type { DashboardRecords, DashboardRecordsQuery, DashboardSetup } from './dashboard';
-import type { OrderBoard, OrderStatus, RestaurantOrder } from './orders';
+import type { BoardFeed, OrderStatus, RestaurantOrder } from './orders';
 import { createApiClient, type ApiClientOptions, type ApiList, type ApiResponse } from './http';
 import type {
   Grn,
@@ -297,9 +297,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
     getDashboardSetup(query?: { hospitalId?: string }) {
       return client.request<ApiResponse<DashboardSetup>>('/dashboard/setup', { query });
     },
-    /** Public: the TV pickup board, found by the restaurant's board secret. */
-    getOrderBoard(token: string) {
-      return client.request<ApiResponse<OrderBoard>>(`/order-board/${encodeURIComponent(token)}`);
+    /** Public: the TV pickup board's feed, with the restaurant's board secret. */
+    getBoardFeed(restaurantId: string, token: string) {
+      // A query parameter, not a header: a custom header would need a CORS preflight.
+      return client.request<ApiResponse<BoardFeed>>(`/order-board/${restaurantId}`, {
+        query: { token },
+      });
     },
     /** The restaurant's TV board secret, made on first use; regenerate turns the old link off. */
     getRestaurantBoardLink(restaurantId: string, regenerate = false) {

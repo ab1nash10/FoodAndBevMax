@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { OrderSource } from '@prisma/client';
+import { OrderSource, ServiceType } from '@prisma/client';
 import {
   ArrayMaxSize,
   IsEnum,
@@ -88,6 +88,28 @@ export class PushOrderDto {
   @ValidateNested({ each: true })
   @Type(() => PosOrderItemDto)
   items?: PosOrderItemDto[];
+
+  @ApiPropertyOptional({ description: 'Shown on the pickup board.', enum: ServiceType })
+  @IsOptional()
+  @IsEnum(ServiceType)
+  serviceType?: ServiceType;
+
+  @ApiPropertyOptional({
+    description: "The counter the guest collects from: one of the restaurant's counter codes.",
+    example: 'C2',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  counterCode?: string;
+
+  @ApiPropertyOptional({ description: 'Estimated preparation time; the board shows "~n min".' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(240)
+  prepMinutes?: number;
 
   @ApiPropertyOptional({ enum: ['CANCELLED'] })
   @IsOptional()

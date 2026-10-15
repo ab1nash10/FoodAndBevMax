@@ -82,6 +82,12 @@ enum OrderStatus {
   CANCELLED
 }
 
+/// How the guest eats the order: shown on the pickup board.
+enum ServiceType {
+  DINE_IN
+  TAKE_AWAY
+}
+
 /// Where a guest order came from.
 enum OrderSource {
   POS
@@ -564,8 +570,9 @@ model Counter {
   updatedBy        String?   @map("updated_by") @db.Uuid
   deletedAt        DateTime? @map("deleted_at")
 
-  hospital   Hospital   @relation(fields: [hospitalId], references: [id])
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  hospital   Hospital          @relation(fields: [hospitalId], references: [id])
+  restaurant Restaurant        @relation(fields: [restaurantId], references: [id])
+  orders     RestaurantOrder[]
 
   @@unique([restaurantId, counterCode])
   @@index([hospitalId])
@@ -611,26 +618,33 @@ model PosDevice {
 }
 
 model RestaurantOrder {
-  id              String      @id @default(uuid()) @db.Uuid
-  hospitalId      String      @map("hospital_id") @db.Uuid
-  restaurantId    String      @map("restaurant_id") @db.Uuid
+  id              String       @id @default(uuid()) @db.Uuid
+  hospitalId      String       @map("hospital_id") @db.Uuid
+  restaurantId    String       @map("restaurant_id") @db.Uuid
   source          OrderSource
   /// Set when a POS device's key sent the order.
-  posDeviceId     String?     @map("pos_device_id") @db.Uuid
+  posDeviceId     String?      @map("pos_device_id") @db.Uuid
   /// Whose key sent it: the POS device, or the restaurant (kiosk, QR, other apps).
-  senderId        String      @map("sender_id") @db.Uuid
+  senderId        String       @map("sender_id") @db.Uuid
   /// The sender's own id for the order: sending it again updates the order, never duplicates it.
-  externalOrderId String      @map("external_order_id")
+  externalOrderId String       @map("external_order_id")
   /// What the guest is told and the board shows, e.g. "A-42".
-  orderNumber     String      @map("order_number")
+  orderNumber     String       @map("order_number")
   /// [{ name, quantity, note? }] for the kitchen screen.
-  items           Json        @default("[]")
-  status          OrderStatus @default(PLACED)
-  placedAt        DateTime    @default(now()) @map("placed_at")
-  readyAt         DateTime?   @map("ready_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-  updatedBy       String?     @map("updated_by") @db.Uuid
+  items           Json         @default("[]")
+  /// Optional details the sender may add for the pickup board.
+  serviceType     ServiceType? @map("service_type")
+  /// The counter the guest collects from.
+  counterId       String?      @map("counter_id") @db.Uuid
+  /// The sender's estimate of how long it takes; the board shows "~n min".
+  prepMinutes     Int?         @map("prep_minutes")
+  status          OrderStatus  @default(PLACED)
+  placedAt        DateTime     @default(now()) @map("placed_at")
+  readyAt         DateTime?    @map("ready_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  updatedBy       String?      @map("updated_by") @db.Uuid
 
+  counter    Counter?   @relation(fields: [counterId], references: [id], onDelete: Restrict)
   hospital   Hospital   @relation(fields: [hospitalId], references: [id])
   posDevice  PosDevice? @relation(fields: [posDeviceId], references: [id], onDelete: Restrict)
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])

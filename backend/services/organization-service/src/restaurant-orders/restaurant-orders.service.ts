@@ -11,6 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
+import { boardSchedule } from './board-schedule';
 import type { PushOrderDto } from './dto/push-order.dto';
 
 /** Orders older than this drop off the kitchen screen and the board: yesterday's leftovers. */
@@ -40,6 +41,22 @@ export function hashOrderKey(key: string): string {
   return createHash('sha256').update(key).digest('hex');
 }
 
+// ponytail: one estimate for every order the sender gave none for; derive it from the menu's
+// preparationTimeMinutes if senders start sending item ids.
+const DEFAULT_PREP_MINUTES = 10;
+
+/** How many items an order has, from its stored [{ name, quantity }] list. */
+export function itemCount(items: Prisma.JsonValue): number {
+  return Array.isArray(items)
+    ? items.reduce<number>(
+        (sum, item) =>
+          sum +
+          (item && typeof item === 'object' && 'quantity' in item ? Number(item.quantity) || 0 : 0),
+        0,
+      )
+    : 0;
+}
+
 function activeSince(): Date {
   return new Date(Date.now() - ACTIVE_WINDOW_MS);
 }
@@ -63,6 +80,14 @@ export class RestaurantOrdersService {
 
     const sender = await this.resolveSender(hashOrderKey(orderKey), dto.restaurantCode?.trim());
     const externalOrderId = dto.orderId.trim();
+    const counterId = dto.counterCode
+      ? await this.counterIdFor(sender.restaurant.id, dto.counterCode.trim())
+      : undefined;
+    const details = {
+      ...(counterId ? { counterId } : {}),
+      ...(dto.prepMinutes ? { prepMinutes: dto.prepMinutes } : {}),
+      ...(dto.serviceType ? { serviceType: dto.serviceType } : {}),
+    };
     const items = (dto.items ?? []).map(({ name, note, quantity }) => ({
       name: name.trim(),
       quantity,
@@ -72,6 +97,7 @@ export class RestaurantOrdersService {
     // A resend never moves the kitchen's progress back; only a cancel changes the status.
     return this.prisma.restaurantOrder.upsert({
       create: {
+        ...details,
         externalOrderId,
         hospitalId: sender.restaurant.hospitalId,
         items,
@@ -84,6 +110,7 @@ export class RestaurantOrdersService {
       },
       select: orderSelect,
       update: {
+        ...details,
         orderNumber: dto.orderNumber.trim(),
         ...(dto.items ? { items } : {}),
         ...(dto.status ? { status: dto.status } : {}),
@@ -182,12 +209,47 @@ export class RestaurantOrdersService {
     return this.prisma.restaurantOrder.findFirstOrThrow({ select: orderSelect, where: { id } });
   }
 
-  /** The TV board: order numbers only, found by the restaurant's board secret. */
-  async board(token: string) {
+  private async counterIdFor(restaurantId: string, counterCode: string): Promise<string> {
+    const counter = await this.prisma.counter.findFirst({
+      select: { id: true },
+      where: { counterCode, deletedAt: null, restaurantId },
+    });
+
+    if (!counter) {
+      throw new BadRequestException(`This restaurant has no counter ${counterCode}.`);
+    }
+
+    return counter.id;
+  }
+
+  /**
+   * The TV pickup board's feed: the restaurant, its meal slot and open hours, and its open
+   * orders. Order numbers and counters only, never a guest's name, phone or payment. The
+   * restaurant id and its board secret must match.
+   */
+  async board(restaurantId: string, token: string | undefined) {
+    const now = new Date();
     const restaurant = token
       ? await this.prisma.restaurant.findFirst({
-          select: { id: true, restaurantName: true },
-          where: { boardToken: token, deletedAt: null },
+          select: {
+            closingTime: true,
+            counters: {
+              orderBy: { counterCode: 'asc' },
+              select: { counterName: true },
+              take: 1,
+              where: { deletedAt: null, isActive: true },
+            },
+            hospital: { select: { hospitalName: true } },
+            hospitalId: true,
+            id: true,
+            isActive: true,
+            location: { select: { locationName: true } },
+            offline: true,
+            open24x7: true,
+            openingTime: true,
+            restaurantName: true,
+          },
+          where: { boardToken: token, deletedAt: null, id: restaurantId },
         })
       : null;
 
@@ -195,26 +257,57 @@ export class RestaurantOrdersService {
       throw new NotFoundException('This board link is no longer valid.');
     }
 
-    const orders = await this.prisma.restaurantOrder.findMany({
-      orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
-      select: { orderNumber: true, readyAt: true, status: true },
-      take: 300,
-      where: {
-        placedAt: { gte: activeSince() },
-        restaurantId: restaurant.id,
-        status: { in: ACTIVE_STATUSES },
-      },
-    });
-    const ready = orders
-      .filter((order) => order.status === OrderStatus.READY)
-      .sort((a, b) => (b.readyAt?.getTime() ?? 0) - (a.readyAt?.getTime() ?? 0));
+    const [slots, orders] = await Promise.all([
+      this.prisma.timeSlot.findMany({
+        select: { endTime: true, slotName: true, startTime: true },
+        where: {
+          deletedAt: null,
+          isActive: true,
+          isAlwaysAvailable: false,
+          OR: [{ hospitalId: null }, { hospitalId: restaurant.hospitalId }],
+        },
+      }),
+      this.prisma.restaurantOrder.findMany({
+        orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
+        select: {
+          counter: { select: { counterName: true } },
+          items: true,
+          orderNumber: true,
+          placedAt: true,
+          prepMinutes: true,
+          readyAt: true,
+          serviceType: true,
+          status: true,
+        },
+        take: 300,
+        where: {
+          placedAt: { gte: activeSince() },
+          restaurantId: restaurant.id,
+          status: { in: ACTIVE_STATUSES },
+        },
+      }),
+    ]);
 
     return {
-      preparing: orders
-        .filter((order) => order.status !== OrderStatus.READY)
-        .map((order) => order.orderNumber),
-      ready: ready.map((order) => order.orderNumber),
+      ...boardSchedule(restaurant, slots, now),
+      helpCounterName: restaurant.counters[0]?.counterName,
+      locationName: restaurant.location?.locationName ?? restaurant.hospital.hospitalName,
+      orders: orders.map((order) => ({
+        counterName: order.counter?.counterName,
+        itemCount: itemCount(order.items),
+        orderNumber: order.orderNumber,
+        serviceType: order.serviceType ?? undefined,
+        ...(order.status === OrderStatus.READY
+          ? { readyAt: (order.readyAt ?? order.placedAt).toISOString(), status: 'READY' as const }
+          : {
+              estimatedReadyAt: new Date(
+                order.placedAt.getTime() + (order.prepMinutes ?? DEFAULT_PREP_MINUTES) * 60_000,
+              ).toISOString(),
+              status: 'PREPARING' as const,
+            }),
+      })),
       restaurantName: restaurant.restaurantName,
+      serverTime: now.toISOString(),
     };
   }
 

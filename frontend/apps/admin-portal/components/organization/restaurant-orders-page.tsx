@@ -80,7 +80,7 @@ function BoardLinkControls({ restaurantId }: Readonly<{ restaurantId: string }>)
     },
   });
   const url = linkQuery.data
-    ? `${window.location.origin}${withBasePath(`/board/${linkQuery.data}`)}`
+    ? `${window.location.origin}${withBasePath(`/board/${restaurantId}?token=${linkQuery.data}`)}`
     : null;
 
   return (

@@ -5,7 +5,9 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
 
 - [x] B0 Tokens: board colours map to portal tokens; added `ds-ready-banner` (light + dark).
       Contrast checked in both themes, all pairs ≥ 5.2:1.
-- [ ] B1 Data layer
+- [x] B1 Data layer: GET /order-board/:restaurantId?token= returns the BoardFeed contract;
+      optional serviceType / counterCode / prepMinutes on POST /orders (one additive migration);
+      lib/order-board rules, mock simulation and useBoardFeed, with unit tests.
 - [ ] B2 Route + 1920×1080 canvas
 - [ ] B3 Header
 - [ ] B4 Now ready banner + Ready grid
@@ -27,6 +29,21 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
   #0F766E). Contrast, light / dark: header 7.2 / 18.2, banner 5.2 / 5.5, preparing chip 6.3 /
   8.3, ready tile 5.8 / 9.8, amber 6.4 / 10.1.
 
+- **Data source.** DATA_SOURCE is `api` (the user chose real orders); `?demo=1` runs the
+  moving mock feed. The feed adds four fields to the prompt's contract: `isOpen` and `opensAt`
+  (kitchen closed state), `helpCounterName` (the help line) - all derived on the server.
+- **Device token.** The board URL is `/board/<restaurantId>?token=<board secret>`; the API takes
+  the secret as `?token=` or an `x-board-token` header, and it must match the restaurant. The
+  portal sends the query parameter (a custom header would need a CORS preflight). Replacing the
+  secret (Restaurants > Activity > New link) turns old links off.
+- **Meal slot and open hours.** From the restaurant (active, not offline, opening hours unless
+  open 24x7) and the location's timed Time Slots, in India time on the server.
+- **Estimate.** `estimatedReadyAt` = placed time + the sender's `prepMinutes`, else 10 minutes.
+
 ## TODO(api)
+
+None open: the api adapter reads the real feed. Senders (POS, kiosk, QR) should add
+`serviceType`, `counterCode` and `prepMinutes` to each order for the full board; without them
+a tile shows no icon or counter and the estimate is 10 minutes from the order.
 
 ## Blocked
