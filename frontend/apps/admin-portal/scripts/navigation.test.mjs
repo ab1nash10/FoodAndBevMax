@@ -48,7 +48,7 @@ for (const route of subRoutes) {
   const unnamed = getBreadcrumbTrail(path, null, all);
   const record = route.pattern.includes('[id]')
     ? parent.record === 'q'
-      ? ` › Max Healthcare(${parent.href}?q=Max%20Healthcare)`
+      ? ` › Max Healthcare(${parent.href})`
       : ` › Max Healthcare(${parent.href}?id=${id})`
     : '';
   assert.equal(
@@ -90,7 +90,7 @@ assert.equal(
   show(
     getBreadcrumbTrail(`/masters/hospitals/${id}/locations`, null, all, { [id]: 'Max Healthcare' }),
   ),
-  '[Organization] › Hospitals(/masters/hospitals) › Max Healthcare(/masters/hospitals?q=Max%20Healthcare) › Locations',
+  '[Organization] › Hospitals(/masters/hospitals) › Max Healthcare(/masters/hospitals) › Locations',
 );
 
 // A record crumb on a list is the current crumb: a placeholder until named, then the label.
@@ -191,13 +191,10 @@ assert.equal(getActiveNavHref('/nope'), null);
 
 // Record and location links.
 assert.equal(recordHref('/inventory/grns', { id }), `/inventory/grns?id=${id}`);
-assert.equal(
-  recordHref('/masters/stores', { id, name: 'Main Store' }),
-  '/masters/stores?q=Main%20Store',
-);
+assert.equal(recordHref('/masters/stores', { id, name: 'Main Store' }), '/masters/stores');
 assert.equal(recordHref('/masters/stores', {}), '/masters/stores');
-assert.equal(locationHref('STORE', 'STR0001'), '/masters/stores?q=STR0001');
-assert.equal(locationHref('RESTAURANT', 'RST0001'), '/masters/restaurants?q=RST0001');
+assert.equal(locationHref('STORE', 'STR0001'), '/masters/stores');
+assert.equal(locationHref('RESTAURANT', 'RST0001'), '/masters/restaurants');
 assert.equal(locationHref('COUNTER', 'C1'), null);
 
 // Permission checks by path, with query strings and sub-routes.

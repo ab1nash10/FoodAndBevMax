@@ -56,7 +56,7 @@ export interface NavPage {
   permissions?: string[];
   /**
    * How one record of this list is addressed: `id` lists open it from `?id=<uuid>`; `q`
-   * lists have no detail view, so a record links to the list searched for its name.
+   * lists have no detail view, so a record links to the list itself.
    */
   record?: 'id' | 'q';
 }
@@ -438,14 +438,14 @@ export function canOpenPath(href: string, hasPermission: HasPermission): boolean
 
 /**
  * Where a record lives: `?id=` on a page with a detail view, else the list searched for its
- * name (`?q=`, every list reads it). Without either, the list itself.
+ * Otherwise the list itself: a link never types into the list's search box.
  */
 export function recordHref(pageHref: string, record: { id?: string; name?: string }): string {
   if (findPage(pageHref)?.record === 'id' && record.id) {
     return `${pageHref}?id=${encodeURIComponent(record.id)}`;
   }
 
-  return record.name ? `${pageHref}?q=${encodeURIComponent(record.name)}` : pageHref;
+  return pageHref;
 }
 
 const locationPages: Record<string, string> = {
@@ -454,11 +454,9 @@ const locationPages: Record<string, string> = {
   STORE: '/masters/stores',
 };
 
-/** A store, kitchen or restaurant's list searched for it, by code (unique) or name; null for counters. */
-export function locationHref(type: string, search: string | null | undefined): string | null {
-  const page = locationPages[type];
-
-  return page ? recordHref(page, { name: search ?? undefined }) : null;
+/** A store, kitchen or restaurant's list (its full list, nothing typed in); null for counters. */
+export function locationHref(type: string, _search?: string | null): string | null {
+  return locationPages[type] ?? null;
 }
 
 function isUnder(pathname: string, href: string): boolean {
@@ -534,10 +532,7 @@ function recordCrumb(
   }
 
   return {
-    href:
-      page.record === 'q'
-        ? `${page.href}?q=${encodeURIComponent(label)}`
-        : `${page.href}?id=${encodeURIComponent(id)}`,
+    href: page.record === 'q' ? page.href : `${page.href}?id=${encodeURIComponent(id)}`,
     label,
   };
 }
