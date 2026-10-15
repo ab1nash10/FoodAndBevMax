@@ -1,0 +1,21 @@
+# Production overrides on top of values.yaml. The Jenkinsfile applies this file when
+# DEPLOY_ENV=prod, after a manual approval:
+#   helm upgrade --install fandb infra/helm/fandb --namespace prod -f infra/helm/fandb/values-prod.yaml ...
+# Fill in every REQUIRED value first; the chart refuses to render without them (templates/guards.yaml).
+# Secrets come from the Jenkins credentials with the -prod suffix (aahar-database-url-prod, ...),
+# so production never shares a database or signing keys with dev or UAT.
+namespace: prod
+
+config:
+  env:
+    # REQUIRED: the production site's own https origin, e.g. https://aahar.example.com
+    corsOrigins: ''
+
+ingress:
+  # Its own load-balancer group, so its HTTPS redirect cannot affect apps in other groups.
+  groupName: prod-external
+  # REQUIRED: the production domain, e.g. aahar.example.com
+  host: ''
+  # REQUIRED: the ACM certificate ARN for that domain
+  certificateArn: ''
+  sslRedirect: true

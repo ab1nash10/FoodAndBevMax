@@ -1,0 +1,20 @@
+# UAT overrides on top of values.yaml. The Jenkinsfile applies this file when DEPLOY_ENV=uat:
+#   helm upgrade --install fandb infra/helm/fandb --namespace uat -f infra/helm/fandb/values-uat.yaml ...
+# Fill in every REQUIRED value first; the chart refuses to render without them (templates/guards.yaml).
+# Secrets come from the Jenkins credentials with the -uat suffix (aahar-database-url-uat, ...),
+# so UAT never shares a database or signing keys with dev or prod.
+namespace: uat
+
+config:
+  env:
+    # REQUIRED: the UAT site's own https origin, e.g. https://aahar-uat.example.com
+    corsOrigins: ''
+
+ingress:
+  # Its own load-balancer group, so its HTTPS redirect cannot affect apps in other groups.
+  groupName: uat-external
+  # REQUIRED: the UAT domain, e.g. aahar-uat.example.com
+  host: ''
+  # REQUIRED: the ACM certificate ARN for that domain
+  certificateArn: ''
+  sslRedirect: true

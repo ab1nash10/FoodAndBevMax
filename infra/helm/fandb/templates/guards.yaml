@@ -1,0 +1,17 @@
+{{- /*
+Deploy-time checks. Nothing is rendered here: a failed check stops the deploy before anything
+is applied to the cluster.
+
+1. Every object is placed in .Values.namespace, so helm's own --namespace must match it, or the
+   release would be recorded in one namespace while its objects land in another.
+2. UAT and prod serve real users: they need their own domain, a matching ACM certificate and the
+   HTTP-to-HTTPS redirect. Dev may still run on the load balancer's own DNS name.
+*/ -}}
+{{- if ne .Release.Namespace .Values.namespace }}
+{{- fail (printf "helm --namespace %s does not match namespace: %s in the values. Deploy each environment with its own values-<env>.yaml (the Jenkinsfile's DEPLOY_ENV does this)." .Release.Namespace .Values.namespace) }}
+{{- end }}
+{{- if and .Values.ingress.enabled (ne .Values.namespace "dev") }}
+{{- if not (and .Values.ingress.host .Values.ingress.certificateArn .Values.ingress.sslRedirect) }}
+{{- fail (printf "%s must be served over HTTPS on its own domain: set ingress.host, ingress.certificateArn and ingress.sslRedirect: true in values-%s.yaml." .Values.namespace .Values.namespace) }}
+{{- end }}
+{{- end }}

@@ -1,6 +1,6 @@
 // AAHAR CI/CD.
 //
-// One Helm release, `fandb`, in namespace `dev`, covering all three backend services and
+// One Helm release, `fandb`, per environment namespace (DEPLOY_ENV: dev, uat or prod), covering all three backend services and
 // the portal. The raw manifests under infra/k8s and in backend/ and frontend/ are a
 // separate, unused path - see infra/k8s/README.md. Do not apply both: their ingresses join
 // the same ALB group and the controller rejects the conflict.
@@ -28,6 +28,17 @@
 //   aahar-sms-username         - secret text, bulk SMS gateway login for mobile OTPs
 //   aahar-sms-password         - secret text, bulk SMS gateway password
 //
+// Environments: the DEPLOY_ENV parameter picks dev (the default, unchanged), uat or prod.
+// uat and prod deploy to their own namespace with infra/helm/fandb/values-<env>.yaml (their
+// domain, certificate and HTTPS redirect) and read the credentials above with a -<env> suffix
+// (aahar-database-url-prod, aahar-jwt-access-secret-prod, ...), so no environment shares a
+// database or signing keys. prod waits for a manual approval.
+//
+// Before the migration hooks run, the database is snapshotted when the job defines
+// RDS_INSTANCE_ID_DEV / RDS_INSTANCE_ID_UAT / RDS_INSTANCE_ID_PROD (the RDS instance
+// identifier; aws-ecr then also needs rds:CreateDBSnapshot and rds:DescribeDBSnapshots).
+// prod refuses to deploy without one: its migrations are forward-only.
+//
 // Configure under "Global properties" or here:
 //   AWS_ACCOUNT_ID, AWS_REGION, EKS_CLUSTER_NAME, K8S_NAMESPACE, HELM_RELEASE.
 //
@@ -35,14 +46,26 @@
 // the routing prefix, which the ingress already routes to the services, so one image is
 // correct on any hostname.
 
+// Credential ID suffix: '' for dev (the IDs it has always used), '-uat' or '-prod' otherwise.
+// A function, not an environment value: Jenkins can turn an empty environment value into null.
+def credSuffix() {
+  (params.DEPLOY_ENV ?: 'dev') == 'dev' ? '' : "-${params.DEPLOY_ENV}"
+}
+
 pipeline {
   agent any
+
+  parameters {
+    choice(name: 'DEPLOY_ENV', choices: ['dev', 'uat', 'prod'],
+           description: 'dev keeps today\'s behaviour; uat and prod use values-<env>.yaml and the -<env> credentials.')
+  }
 
   environment {
     AWS_ACCOUNT_ID   = '013929206983'
     AWS_REGION       = 'ap-south-1'
     EKS_CLUSTER_NAME = 'aahar'
-    K8S_NAMESPACE    = 'dev'
+    // The first run of this job has no parameters yet: it deploys dev, as before.
+    K8S_NAMESPACE    = "${params.DEPLOY_ENV ?: 'dev'}"
     HELM_RELEASE     = 'fandb'
     // Path-based routing: the platform is served under /fandb on the shared ALB.
     NEXT_PUBLIC_BASE_PATH = '/fandb'
@@ -113,18 +136,59 @@ pipeline {
       }
     }
 
+    stage('Approve production') {
+      when { environment name: 'K8S_NAMESPACE', value: 'prod' }
+      steps {
+        input message: "Deploy ${env.IMAGE_TAG} to production?", ok: 'Deploy to production'
+      }
+    }
+
+    stage('Snapshot database') {
+      // The migration hooks run before the rollout and are forward-only: this snapshot is the
+      // way back if a release has to be undone together with its schema change.
+      steps {
+        withCredentials([aws(credentialsId: 'aws-ecr')]) {
+          sh '''
+            set -e
+            case "$K8S_NAMESPACE" in
+              dev) RDS_ID="${RDS_INSTANCE_ID_DEV:-}" ;;
+              uat) RDS_ID="${RDS_INSTANCE_ID_UAT:-}" ;;
+              prod) RDS_ID="${RDS_INSTANCE_ID_PROD:-}" ;;
+              *) RDS_ID="" ;;
+            esac
+
+            if [ -z "$RDS_ID" ]; then
+              if [ "$K8S_NAMESPACE" = "prod" ]; then
+                echo "RDS_INSTANCE_ID_PROD is not set: production is never migrated without a snapshot." >&2
+                exit 1
+              fi
+              echo "No RDS instance configured for $K8S_NAMESPACE: skipping the pre-migration snapshot."
+              exit 0
+            fi
+
+            SNAPSHOT="fandb-$K8S_NAMESPACE-pre-$IMAGE_TAG-$(date +%Y%m%d%H%M%S)"
+            aws rds create-db-snapshot --region "$AWS_REGION" \
+              --db-instance-identifier "$RDS_ID" --db-snapshot-identifier "$SNAPSHOT"
+            aws rds wait db-snapshot-available --region "$AWS_REGION" \
+              --db-snapshot-identifier "$SNAPSHOT"
+            echo "Snapshot $SNAPSHOT is available; restore from it to undo this release's migrations."
+          '''
+        }
+      }
+    }
+
     stage('Deploy') {
       steps {
         withCredentials([
           aws(credentialsId: 'aws-ecr'),
-          string(credentialsId: 'aahar-database-url', variable: 'DATABASE_URL'),
-          string(credentialsId: 'aahar-jwt-access-secret', variable: 'JWT_ACCESS_SECRET'),
-          string(credentialsId: 'aahar-jwt-refresh-secret', variable: 'JWT_REFRESH_SECRET'),
-          usernamePassword(credentialsId: 'aahar-admin',
+          string(credentialsId: "aahar-database-url${credSuffix()}", variable: 'DATABASE_URL'),
+          string(credentialsId: "aahar-jwt-access-secret${credSuffix()}", variable: 'JWT_ACCESS_SECRET'),
+          string(credentialsId: "aahar-jwt-refresh-secret${credSuffix()}", variable: 'JWT_REFRESH_SECRET'),
+          usernamePassword(credentialsId: "aahar-admin${credSuffix()}",
                            usernameVariable: 'ADMIN_EMAIL', passwordVariable: 'ADMIN_PASSWORD'),
           // Bulk SMS gateway login for mobile OTPs. Both must exist in Jenkins before this runs.
-          string(credentialsId: 'aahar-sms-username', variable: 'SMS_USERNAME'),
-          string(credentialsId: 'aahar-sms-password', variable: 'SMS_PASSWORD'),
+          string(credentialsId: "aahar-sms-username${credSuffix()}", variable: 'SMS_USERNAME'),
+          string(credentialsId: "aahar-sms-password${credSuffix()}", variable: 'SMS_PASSWORD'),
         ]) {
           // The chart runs the migration and the seed as pre-upgrade hooks, in that order,
           // before any Deployment rolls - so there is nothing to sequence here. `--wait`
@@ -141,7 +205,13 @@ pipeline {
           sh '''
             aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
-            helm upgrade --install "$HELM_RELEASE" infra/helm/fandb \
+            # dev uses values.yaml alone, as before; uat and prod add their own file.
+            ENV_VALUES=""
+            if [ "$K8S_NAMESPACE" != "dev" ]; then
+              ENV_VALUES="-f infra/helm/fandb/values-$K8S_NAMESPACE.yaml"
+            fi
+
+            helm upgrade --install "$HELM_RELEASE" infra/helm/fandb $ENV_VALUES \
               --namespace "$K8S_NAMESPACE" --create-namespace \
               --set-string image.tag="$IMAGE_TAG" \
               --set-string config.secrets.DATABASE_URL="$DATABASE_URL" \

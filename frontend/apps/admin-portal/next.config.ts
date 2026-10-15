@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
           { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
           { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), microphone=()' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Same as the API sends. Browsers ignore it over HTTP or on a certificate error, so
+          // it takes hold once the site is served on its own domain with a valid certificate.
+          { key: 'Strict-Transport-Security', value: 'max-age=15552000; includeSubDomains' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
