@@ -14,7 +14,8 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
       clock on the server's time in India time.
 - [x] B4 Now ready banner (160 px number) + "Ready to collect" grid (3×2, 80 px numbers, counter,
       eat here / take away, "Ready n min ago" or amber "n min · collect soon", "+N more").
-- [ ] B5 Preparing column + How it works
+- [x] B5 Preparing column (3×3, 52 px numbers, eat here / take away icon, "~n min", "+N more")
+      and the How it works panel. Checked at 1920×1080 and 1280×720 on the mock feed.
 - [ ] B6 Footer legend
 - [ ] B7 Live behaviour
 - [ ] B8 States

@@ -37,7 +37,7 @@ export function BoardHeader({
     <header className="flex h-[128px] shrink-0 items-center gap-[28px] bg-ds-brand-panel px-[48px] text-white">
       <LogoChip alt="AAHAR" src="/brand/aahar-logo.png" width={60} />
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[44px] font-extrabold leading-[1.1]">
+        <h1 className="truncate text-[44px] font-extrabold leading-[1.2]">
           {restaurantName ?? ''}
         </h1>
         {locationName ? (

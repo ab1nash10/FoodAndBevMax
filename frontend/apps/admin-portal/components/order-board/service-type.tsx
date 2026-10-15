@@ -1,4 +1,4 @@
-import { ShoppingBag, UtensilsCrossed } from 'lucide-react';
+import { ShoppingBag, Utensils } from 'lucide-react';
 import type { BoardOrder } from '@/lib/order-board/rules';
 
 export const serviceLabels = { DINE_IN: 'Eat here', TAKE_AWAY: 'Take away' } as const;
@@ -8,7 +8,7 @@ export function ServiceIcon({
   className,
   type,
 }: Readonly<{ className?: string; type: NonNullable<BoardOrder['serviceType']> }>) {
-  const Icon = type === 'TAKE_AWAY' ? ShoppingBag : UtensilsCrossed;
+  const Icon = type === 'TAKE_AWAY' ? ShoppingBag : Utensils;
 
   return <Icon aria-hidden="true" className={className} strokeWidth={2.2} />;
 }

@@ -11,7 +11,7 @@ export function ReadyTile({ order }: Readonly<{ order: ReadyTileView }>) {
           : 'border-ds-teal-border bg-ds-teal-soft'
       }`}
     >
-      <p className="truncate text-[80px] font-extrabold leading-none tabular-nums text-ds-teal-text">
+      <p className="truncate text-[80px] font-extrabold leading-[1.2] tabular-nums text-ds-teal-text">
         {order.orderNumber}
       </p>
       <p className="mt-[12px] flex min-w-0 items-center gap-[10px] text-[22px] font-semibold text-ds-teal-text">
