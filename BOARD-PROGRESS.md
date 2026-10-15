@@ -12,7 +12,8 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
       1920×1080 canvas scaled to fit (letterboxed on black), cursor hidden, no text selection.
 - [x] B3 Header: AAHAR and Max logos, restaurant and location, "Lunch · till 3:00 PM" slot pill,
       clock on the server's time in India time.
-- [ ] B4 Now ready banner + Ready grid
+- [x] B4 Now ready banner (160 px number) + "Ready to collect" grid (3×2, 80 px numbers, counter,
+      eat here / take away, "Ready n min ago" or amber "n min · collect soon", "+N more").
 - [ ] B5 Preparing column + How it works
 - [ ] B6 Footer legend
 - [ ] B7 Live behaviour
