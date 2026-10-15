@@ -18,9 +18,13 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
       and the How it works panel. Checked at 1920×1080 and 1280×720 on the mock feed.
 - [x] B6 Footer: eat here / take away legend, "Kept for 15 min once ready", staff ID note, "Can't
       see your number? Ask at <first counter>". HOLD_MINUTES / COLLECT_SOON_MINUTES in rules.ts.
-- [ ] B7 Live behaviour
-- [ ] B8 States
-- [ ] B9 Themes
+- [x] B7 Live: 3 s polling with back-off; a newly ready order slides into the banner and glows for
+      10 s (not what is ready when the screen opens); ?sound=1 chime; reduced motion = outline
+      only; screen wake lock.
+- [x] B8 States: no link, invalid link, loading, never-connected, empty ("No orders right now" +
+      how it works), kitchen closed ("Opens at 7:00 PM"), and a Reconnecting… badge over the last
+      data. Long counter names shorten with "…".
+- [x] B9 Themes: light by default, ?theme=dark, whatever portal theme the device has stored.
 - [ ] B10 Polish
 
 ## Decisions
@@ -47,6 +51,12 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
 
 - **Checking it locally.** A running `next dev` keeps the removed /board/[token] route in its
   manifest and 404s the new one until restarted, so checks run on `next build` + `next start`.
+
+- **B7–B9 in one commit.** All three are wired through the same lines of the board's root
+  component, so separate commits would not each have worked on their own.
+- **Verification.** board-states check (17 cases: every state, live glow and its 10 s end,
+  reduced motion, both themes, a busy board with 3-digit numbers and long counter names at
+  1920×1080 and 1280×720) against made-up feeds answered in the browser.
 
 ## TODO(api)
 

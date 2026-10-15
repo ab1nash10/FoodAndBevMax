@@ -540,3 +540,44 @@
     border-color: rgb(30 41 59);
   }
 }
+
+/* Order board: an order that has just turned ready slides into the banner and glows. */
+@keyframes board-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+}
+
+@keyframes board-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--ds-ready-banner) / 0.6);
+  }
+  60% {
+    box-shadow: 0 0 0 22px rgb(var(--ds-ready-banner) / 0);
+  }
+}
+
+.board-enter {
+  animation: board-enter 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.board-just-ready {
+  animation:
+    board-enter 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    board-glow 1.6s ease-out 600ms infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-enter,
+  .board-just-ready {
+    animation: none;
+  }
+
+  /* Still marked, without motion. */
+  .board-just-ready {
+    outline: 8px solid rgb(var(--ds-teal-border));
+    outline-offset: 6px;
+  }
+}

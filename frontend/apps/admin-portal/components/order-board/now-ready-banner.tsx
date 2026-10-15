@@ -24,7 +24,7 @@ export function NowReadyBanner({
       </div>
       <span aria-hidden="true" className="h-[168px] w-[3px] shrink-0 rounded-full bg-white/35" />
       <div className="min-w-0">
-        <p className="text-[48px] font-extrabold leading-[1.15]">
+        <p className="line-clamp-2 text-[48px] font-extrabold leading-[1.15]">
           Please collect at {order.counterName ?? 'the counter'}
         </p>
         {details ? (
