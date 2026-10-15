@@ -65,6 +65,9 @@ export class PreferencesService {
         ...location,
         displayName: location.displayName ?? location.hospitalName,
       })),
+      // As resolved for this request (not the token's copy): the portal's own server routes,
+      // such as the image upload, check them here.
+      permissions: actor.permissions,
     };
   }
 

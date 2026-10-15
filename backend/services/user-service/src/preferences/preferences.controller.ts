@@ -28,7 +28,10 @@ export class PreferencesController {
 
   @Get('access')
   @ApiOperation({ summary: 'Get my location reach and default location' })
-  @ApiOkResponse({ description: 'locationScope (ALL, MULTI or SINGLE) and defaultLocationId.' })
+  @ApiOkResponse({
+    description:
+      'locationScope (ALL, MULTI or SINGLE), defaultLocationId, locations and permissions.',
+  })
   async access(@CurrentUser() user: JwtRequestUser | undefined) {
     return {
       data: await this.preferences.access(requireUser(user)),

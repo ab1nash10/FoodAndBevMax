@@ -46,6 +46,9 @@ spec:
               value: production
             - name: HOSTNAME
               value: 0.0.0.0
+            # The image-upload route checks the user's sign-in with the user service, in-cluster.
+            - name: USER_SERVICE_URL
+              value: "http://fandb-user{{ .Values.basePath }}/api/v1"
           # Liveness is a socket check: the portal renders independently of the APIs, so a
           # backend outage must not restart these pods.
           livenessProbe:

@@ -1,7 +1,7 @@
 'use client';
 
 import type { Restaurant, RestaurantInput } from '@aahar/api-client';
-import { withBasePath } from '@/lib/base-path';
+import { portalApi } from '@/lib/api';
 import type {
   RestaurantFormValues,
   RestaurantOptionBadge,
@@ -105,18 +105,15 @@ export async function uploadRestaurantImage(file: File): Promise<string> {
 
   formData.append('file', file);
 
-  // withBasePath: Next's basePath does not apply to a raw fetch.
-  const response = await fetch(withBasePath('/api/uploads/restaurant-images'), {
+  // Sent with the user's sign-in (refreshed if it expired): the route refuses anyone who may
+  // not create or edit restaurants.
+  const body = await portalApi.request<{ url?: string }>('/uploads/restaurant-images', {
     body: formData,
     method: 'POST',
   });
-  const body = (await response.json().catch(() => null)) as {
-    message?: string;
-    url?: string;
-  } | null;
 
-  if (!response.ok || !body?.url) {
-    throw new Error(body?.message ?? 'Unable to upload image.');
+  if (!body.url) {
+    throw new Error('Unable to upload image.');
   }
 
   return body.url;

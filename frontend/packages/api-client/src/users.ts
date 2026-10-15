@@ -77,6 +77,8 @@ export interface MyAccess {
   defaultLocationId: string | null;
   locationScope: LocationScope;
   locations: HospitalSummary[];
+  /** The signed-in user's permissions, as the server resolves them now. */
+  permissions: string[];
 }
 
 export interface ChangePasswordInput {

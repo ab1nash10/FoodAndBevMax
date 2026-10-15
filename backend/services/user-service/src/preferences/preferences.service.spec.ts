@@ -70,7 +70,12 @@ function serviceForDefaults(allowedHospitalIds: string[] | null) {
     },
   };
   const service = new PreferencesService({} as AuditLogService, prisma as unknown as PrismaService);
-  const user = { ...actor, allowedHospitalIds, locationScope: 'MULTI' } as JwtRequestUser;
+  const user = {
+    ...actor,
+    allowedHospitalIds,
+    locationScope: 'MULTI',
+    permissions: ['RESTAURANT_UPDATE'],
+  } as JwtRequestUser;
 
   return { prisma, service, update, user };
 }
@@ -87,6 +92,8 @@ test('the default location is the home location, not the old JSON value', async 
       { displayName: 'Hospital A', hospitalName: 'Hospital A', id: 'hospital-a' },
       { displayName: 'B', hospitalName: 'Hospital B', id: 'hospital-b' },
     ],
+    // The caller's current permissions, for the portal's own server routes.
+    permissions: ['RESTAURANT_UPDATE'],
   });
 });
 

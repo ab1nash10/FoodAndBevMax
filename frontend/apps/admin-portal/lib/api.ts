@@ -1,5 +1,6 @@
 import {
   ApiClientError,
+  createApiClient,
   createAuthApi,
   createOrganizationApi,
   createUserApi,
@@ -91,6 +92,14 @@ export const organizationApi = createOrganizationApi({
 
 export const userApi = createUserApi({
   baseUrl: apiConfig.userBaseUrl,
+  getAccessToken: getStoredAccessToken,
+  onUnauthorized: handleUnauthorizedSession,
+  refreshAccessToken: refreshStoredSession,
+});
+
+/** The portal's own server routes (under <base path>/api), signed in like the service APIs. */
+export const portalApi = createApiClient({
+  baseUrl: `${BASE_PATH}/api`,
   getAccessToken: getStoredAccessToken,
   onUnauthorized: handleUnauthorizedSession,
   refreshAccessToken: refreshStoredSession,
