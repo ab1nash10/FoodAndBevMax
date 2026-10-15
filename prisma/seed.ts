@@ -221,6 +221,10 @@ async function main() {
 
     await seedOperationalRoles(tx);
 
+    // From here on the seed only fills in what is missing. This runs on every deploy, so it must
+    // never undo what people do in the app: a record that already exists (even renamed,
+    // deactivated or deleted) is left exactly as it is. Permissions and roles above still sync.
+
     const hospital = await tx.hospital.upsert({
       create: {
         address: 'Saket, New Delhi',
@@ -232,16 +236,7 @@ async function main() {
         isActive: true,
         state: 'Delhi',
       },
-      update: {
-        address: 'Saket, New Delhi',
-        billPrefix: 'MAX',
-        city: 'New Delhi',
-        deletedAt: null,
-        gstApplicable: true,
-        hospitalName: 'Max Healthcare',
-        isActive: true,
-        state: 'Delhi',
-      },
+      update: {},
       where: {
         hospitalCode: 'MAX',
       },
@@ -249,26 +244,12 @@ async function main() {
 
     const existingLocation = await tx.location.findFirst({
       where: {
-        deletedAt: null,
         hospitalId: hospital.id,
         locationName: 'Max Saket',
       },
     });
 
-    if (existingLocation) {
-      await tx.location.update({
-        data: {
-          address: 'Saket campus',
-          area: 'Main Block',
-          building: 'Hospital Tower',
-          floor: 'Ground Floor',
-          isActive: true,
-        },
-        where: {
-          id: existingLocation.id,
-        },
-      });
-    } else {
+    if (!existingLocation) {
       await tx.location.create({
         data: {
           address: 'Saket campus',
@@ -291,13 +272,7 @@ async function main() {
         storeName: 'Main F&B Store',
         storeType: 'F&B',
       },
-      update: {
-        address: 'Ground floor service corridor',
-        deletedAt: null,
-        isActive: true,
-        storeName: 'Main F&B Store',
-        storeType: 'F&B',
-      },
+      update: {},
       where: {
         hospitalId_storeCode: {
           hospitalId: hospital.id,
@@ -315,13 +290,7 @@ async function main() {
         kitchenName: 'Main Kitchen',
         openingTime: '06:00',
       },
-      update: {
-        closingTime: '22:00',
-        deletedAt: null,
-        isActive: true,
-        kitchenName: 'Main Kitchen',
-        openingTime: '06:00',
-      },
+      update: {},
       where: {
         hospitalId_kitchenCode: {
           hospitalId: hospital.id,
@@ -346,20 +315,7 @@ async function main() {
         restaurantName: 'Main Cafeteria',
         storeId: store.id,
       },
-      update: {
-        address: 'Ground floor cafeteria',
-        b2cQrEnabled: true,
-        atTableDining: true,
-        closingTime: '22:00',
-        deletedAt: null,
-        inRoomDiningEnabled: true,
-        isActive: true,
-        kitchenId: kitchen.id,
-        onlineOrderingEnabled: true,
-        openingTime: '07:00',
-        restaurantName: 'Main Cafeteria',
-        storeId: store.id,
-      },
+      update: {},
       where: {
         hospitalId_restaurantCode: {
           hospitalId: hospital.id,
@@ -374,10 +330,7 @@ async function main() {
         kitchenId: kitchen.id,
         restaurantId: restaurant.id,
       },
-      update: {
-        deletedAt: null,
-        isActive: true,
-      },
+      update: {},
       where: {
         restaurantId_kitchenId: {
           kitchenId: kitchen.id,
@@ -394,12 +347,7 @@ async function main() {
         isActive: true,
         restaurantId: restaurant.id,
       },
-      update: {
-        counterName: 'Cafeteria Counter 1',
-        deletedAt: null,
-        hospitalId: hospital.id,
-        isActive: true,
-      },
+      update: {},
       where: {
         restaurantId_counterCode: {
           counterCode: 'COUNTER-01',
@@ -418,13 +366,7 @@ async function main() {
             slotName,
             startTime,
           },
-          update: {
-            deletedAt: null,
-            endTime,
-            isActive: true,
-            isAlwaysAvailable,
-            startTime,
-          },
+          update: {},
           where: {
             slotName,
           },
@@ -441,19 +383,12 @@ async function main() {
         name: 'Super Admin',
         status: UserStatus.ACTIVE,
       },
-      // No mobile here, only in `create`. This runs on every helm upgrade, and mobile is unique:
-      // re-asserting 9999999999 made the whole seed hook - and so the deploy - fail as soon as
-      // any other user held that number, or the admin's own number had been changed. The email
-      // stays, so an environment seeded before the rename to aahar@admin.local still picks it up.
-      //
-      // Neither status nor deletedAt is re-asserted, and the role grant below does not revive
-      // itself: disabling this account (say after a compromise) must survive the next deploy.
-      // The last-Super-Admin guard in user-service already stops anyone locking the platform out.
-      update: {
-        email: 'aahar@admin.local',
-        hospitalId: hospital.id,
-        name: 'Super Admin',
-      },
+      // Create-only. Nothing is re-asserted on an existing account: not its mobile (unique, and
+      // re-asserting it failed the deploy once another user held it), name, email or home
+      // location, nor its status - disabling it (say after a compromise) survives the next deploy,
+      // and the role grant below does not revive itself. The last-Super-Admin guard in
+      // user-service stops anyone locking the platform out.
+      update: {},
       where: {
         employeeCode: 'SA001',
       },
