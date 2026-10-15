@@ -54,6 +54,10 @@ test('opening hours and the restaurant switches close it', () => {
     opensAt: '2026-10-16T02:30:00.000Z',
   });
   assert.equal(boardSchedule({ ...hours, open24x7: true }, [], evening).isOpen, true);
+  // Open 24x7 is open between meal slots too, just without a slot name.
+  assert.deepEqual(boardSchedule({ ...open, open24x7: true }, slots, betweenSlots), {
+    isOpen: true,
+  });
   assert.deepEqual(boardSchedule({ ...open, offline: true }, slots, lunchTime), {
     isOpen: false,
     slotEndsAt: '2026-10-15T09:30:00.000Z',

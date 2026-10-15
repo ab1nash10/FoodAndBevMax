@@ -77,8 +77,8 @@ function minutesUntil(time: string, minute: number): number {
 }
 
 /**
- * Open = the restaurant is active, not offline, and inside its opening hours (any time when
- * open 24x7 or when no hours are set) and, if timed meal slots exist, inside one of them.
+ * Open = the restaurant is active and not offline, and either open 24x7, or inside its opening
+ * hours (any time when none are set) and, if timed meal slots exist, inside one of them.
  */
 export function boardSchedule(
   restaurant: OpeningRules,
@@ -95,7 +95,9 @@ export function boardSchedule(
     !hasHours ||
     isWithin(restaurant.openingTime as string, restaurant.closingTime as string, minute);
   const isOpen =
-    restaurant.isActive && !restaurant.offline && inHours && (timed.length === 0 || Boolean(slot));
+    restaurant.isActive &&
+    !restaurant.offline &&
+    (restaurant.open24x7 || (inHours && (timed.length === 0 || Boolean(slot))));
 
   const current = slot
     ? {
