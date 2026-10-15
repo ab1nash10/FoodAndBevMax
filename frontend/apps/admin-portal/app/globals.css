@@ -80,6 +80,7 @@
 
   --color-ds-status-ok-bg: rgb(var(--ds-status-ok-bg));
   --color-ds-status-ok-fg: rgb(var(--ds-status-ok-fg));
+  --color-ds-ready-banner: rgb(var(--ds-ready-banner));
 
   --color-ds-status-bad-bg: rgb(var(--ds-status-bad-bg));
   --color-ds-status-bad-fg: rgb(var(--ds-status-bad-fg));
@@ -255,6 +256,8 @@
   --ds-status-info-fg: 11 87 164;
   --ds-status-ok-bg: 227 245 238;
   --ds-status-ok-fg: 15 107 85;
+  /* Order board: the "Now ready" banner, white text on it. */
+  --ds-ready-banner: 15 123 99;
   --ds-status-bad-bg: 253 236 239;
   --ds-status-bad-fg: 180 35 63;
   --ds-status-neutral-bg: 238 242 246;
@@ -342,6 +345,7 @@
   --ds-status-info-fg: 125 211 252;
   --ds-status-ok-bg: 4 47 46;
   --ds-status-ok-fg: 94 234 212;
+  --ds-ready-banner: 15 118 110;
   --ds-status-bad-bg: 76 5 25;
   --ds-status-bad-fg: 253 164 175;
   --ds-status-neutral-bg: 30 41 59;
