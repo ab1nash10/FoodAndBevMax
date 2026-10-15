@@ -25,7 +25,9 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
       how it works), kitchen closed ("Opens at 7:00 PM"), and a Reconnecting… badge over the last
       data. Long counter names shorten with "…".
 - [x] B9 Themes: light by default, ?theme=dark, whatever portal theme the device has stored.
-- [ ] B10 Polish
+- [x] B10 Polish: 1920×1080 and 1280×720 checked (busy, empty, closed, reconnecting, both themes);
+      2 h mock run stays bounded (mock.test.ts); README "Order status board (TV)" section on
+      setting up a TV in Chrome/Edge kiosk mode. lint (0 warnings), typecheck, test, build green.
 
 ## Decisions
 
@@ -65,3 +67,5 @@ None open: the api adapter reads the real feed. Senders (POS, kiosk, QR) should 
 a tile shows no icon or counter and the estimate is 10 minutes from the order.
 
 ## Blocked
+
+Nothing.

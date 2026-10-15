@@ -372,6 +372,40 @@ records what each screen does, the decisions behind it, and what still needs an 
 - **Check both themes and four widths.** 1440, 1100, 768 and 390 px, in light and dark, with
   no sideways page scroll (wide tables scroll inside their card).
 
+## Order status board (TV)
+
+The TV above a collection counter shows which orders are being prepared and which are ready.
+Orders reach it from any channel: a POS (with its device's order key, under POS & Payment
+Machines) or a kiosk, QR ordering or another app (with the restaurant's order key, under
+Restaurants → Activity), all through `POST /api/v1/orders`. The kitchen moves them along in
+Restaurants → Activity. See `BOARD-PROGRESS.md` for the design decisions.
+
+**Link.** Restaurants → Activity → Copy link gives
+`https://<host>/fandb/board/<restaurantId>?token=<board secret>`. No sign-in: the secret is the
+access, and "New link" there turns old links off. Add `&theme=dark` for the dark palette and
+`&sound=1` for a chime when an order is ready. `?demo=1` (no token) runs a simulated feed.
+
+**Setting up a TV (Chrome or Edge in kiosk mode).**
+
+1. Use a PC or stick connected to the TV over HDMI, on the hospital network, with the TV
+   set to 1920×1080 (other sizes are letterboxed, never stretched).
+2. Start the browser full screen at the board, with autoplay allowed if the chime is on:
+
+   ```bash
+   chrome --kiosk --noerrdialogs --disable-session-crashed-bubble \
+     --autoplay-policy=no-user-gesture-required \
+     "https://<host>/fandb/board/<restaurantId>?token=<board secret>&sound=1"
+   ```
+
+   On Windows, put the same command in a shortcut in `shell:startup` so it opens after a
+   restart; Edge takes the same flags (`msedge --kiosk … --edge-kiosk-type=fullscreen`).
+
+3. Turn off the operating system's screen saver and sleep. The board also asks the browser
+   to keep the screen on (Wake Lock) where it is allowed.
+4. Leave it running: it refreshes every 3 s, keeps the last orders on screen with a
+   "Reconnecting…" badge if the network drops, and recovers on its own. To exit kiosk mode,
+   press Alt+F4.
+
 ## Key documentation
 
 - `docs/AAHAR_BOOK.md` — consolidated project knowledge base
