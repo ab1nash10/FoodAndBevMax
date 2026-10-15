@@ -9,6 +9,10 @@ config:
   env:
     # REQUIRED: the UAT site's own https origin, e.g. https://aahar-uat.example.com
     corsOrigins: ''
+    # Sign in with Microsoft: its own redirect URI on this domain, also registered on the app;
+    # empty turns it off here. The secret is the aahar-microsoft-client-secret-uat credential.
+    microsoftClientId: ''
+    microsoftRedirectUri: ''
 
 ingress:
   # Its own load-balancer group, so its HTTPS redirect cannot affect apps in other groups.

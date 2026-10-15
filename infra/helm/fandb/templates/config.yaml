@@ -28,6 +28,12 @@ data:
   CORS_ORIGINS: {{ required "config.env.corsOrigins is required - the browser origin, or every sign-in fails CORS" .Values.config.env.corsOrigins | quote }}
   SMS_FEED_ID: {{ .Values.config.env.smsFeedId | default "" | quote }}
   SMS_SENDER_ID: {{ .Values.config.env.smsSenderId | default "" | quote }}
+  {{- if .Values.config.env.microsoftClientId }}
+  # Sign in with Microsoft; its client secret is under the Secret below.
+  MICROSOFT_CLIENT_ID: {{ .Values.config.env.microsoftClientId | quote }}
+  MICROSOFT_TENANT_ID: {{ required "config.env.microsoftTenantId is required with microsoftClientId" .Values.config.env.microsoftTenantId | quote }}
+  MICROSOFT_REDIRECT_URI: {{ required "config.env.microsoftRedirectUri is required with microsoftClientId" .Values.config.env.microsoftRedirectUri | quote }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Secret
@@ -53,6 +59,9 @@ stringData:
   {{- if .Values.config.secrets.SMS_PASSWORD }}
   SMS_USERNAME: {{ required "config.secrets.SMS_USERNAME is required with SMS_PASSWORD" .Values.config.secrets.SMS_USERNAME | quote }}
   SMS_PASSWORD: {{ .Values.config.secrets.SMS_PASSWORD | quote }}
+  {{- end }}
+  {{- if .Values.config.secrets.MICROSOFT_CLIENT_SECRET }}
+  MICROSOFT_CLIENT_SECRET: {{ .Values.config.secrets.MICROSOFT_CLIENT_SECRET | quote }}
   {{- end }}
   {{- if .Values.redis.enabled }}
   # Defaults to the Redis this chart deploys; an explicit value still wins.

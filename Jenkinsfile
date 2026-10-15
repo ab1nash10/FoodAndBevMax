@@ -27,6 +27,8 @@
 //                                account has none. It is never kept in the repository.
 //   aahar-sms-username         - secret text, bulk SMS gateway login for mobile OTPs
 //   aahar-sms-password         - secret text, bulk SMS gateway password
+//   aahar-microsoft-client-secret - secret text, optional: the Entra ID app's client secret
+//                                for "Sign in with Microsoft"; without it that option is off
 //
 // Environments: the DEPLOY_ENV parameter picks dev (the default, unchanged), uat or prod.
 // uat and prod deploy to their own namespace with infra/helm/fandb/values-<env>.yaml (their
@@ -179,6 +181,23 @@ pipeline {
 
     stage('Deploy') {
       steps {
+        script {
+          // Sign in with Microsoft is optional: without this credential its button just does not
+          // show, and the deploy carries on. The secret reaches helm in a private values file
+          // (removed in post), never on a command line. Entra secrets use only [A-Za-z0-9~._-],
+          // so a double-quoted YAML string holds them unchanged.
+          try {
+            withCredentials([string(credentialsId: "aahar-microsoft-client-secret${credSuffix()}",
+                                    variable: 'MICROSOFT_CLIENT_SECRET')]) {
+              sh '''
+                umask 077
+                printf 'config:\n  secrets:\n    MICROSOFT_CLIENT_SECRET: "%s"\n' "$MICROSOFT_CLIENT_SECRET" > .microsoft-secret.yaml
+              '''
+            }
+          } catch (err) {
+            echo "No aahar-microsoft-client-secret${credSuffix()} credential: Sign in with Microsoft stays off."
+          }
+        }
         withCredentials([
           aws(credentialsId: 'aws-ecr'),
           string(credentialsId: "aahar-database-url${credSuffix()}", variable: 'DATABASE_URL'),
@@ -211,7 +230,12 @@ pipeline {
               ENV_VALUES="-f infra/helm/fandb/values-$K8S_NAMESPACE.yaml"
             fi
 
-            helm upgrade --install "$HELM_RELEASE" infra/helm/fandb $ENV_VALUES \
+            MICROSOFT_VALUES=""
+            if [ -f .microsoft-secret.yaml ]; then
+              MICROSOFT_VALUES="-f .microsoft-secret.yaml"
+            fi
+
+            helm upgrade --install "$HELM_RELEASE" infra/helm/fandb $ENV_VALUES $MICROSOFT_VALUES \
               --namespace "$K8S_NAMESPACE" --create-namespace \
               --set-string image.tag="$IMAGE_TAG" \
               --set-string config.secrets.DATABASE_URL="$DATABASE_URL" \
@@ -230,6 +254,7 @@ pipeline {
 
   post {
     always {
+      sh 'rm -f .microsoft-secret.yaml'
       sh 'docker image prune -f || true'
     }
   }

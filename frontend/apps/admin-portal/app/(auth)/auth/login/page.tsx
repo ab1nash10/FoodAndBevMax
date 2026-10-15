@@ -19,14 +19,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { z } from 'zod';
-import { getStartPageOptions } from '@/lib/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/components/toast-provider';
 import { Input } from '@/components/ui';
 import { SegmentedControl } from '@/components/ui-controls';
-import { authApi, getApiErrorMessage, userApi } from '@/lib/api';
+import { authApi, getApiErrorMessage } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
-import { sessionUserFromAccessToken } from '@/lib/session';
+import { startPageAfterSignIn } from '@/lib/start-page';
 import { cn } from '@/lib/utils';
 import {
   applyValidationErrors,
@@ -37,6 +36,7 @@ import {
   type LoginFormValues,
   type LoginMethod,
 } from '@/components/auth/login-form';
+import { MicrosoftSignIn } from '@/components/auth/microsoft-sign-in';
 import { ErrorText, OtpBoxes } from '@/components/auth/otp-boxes';
 
 // What AAHAR covers, on the sign-in brand panel.
@@ -71,32 +71,8 @@ function enterFullscreen() {
 export default function LoginPage() {
   const router = useRouter();
 
-  // After sign-in, open the user's chosen start page if it is one they may open. Anything
-  // unexpected - no preference, a slow or failed request, a since-revoked permission - means
-  // the dashboard, exactly as before Preferences existed.
   const goToStartPage = async (accessToken: string) => {
-    let destination = '/dashboard';
-
-    try {
-      const preferences = await Promise.race([
-        userApi.getMyPreferences().then((response) => response.data),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
-      const permissions = sessionUserFromAccessToken(accessToken)?.permissions ?? [];
-      const hasPermission = (permission: string | string[]) =>
-        (Array.isArray(permission) ? permission : [permission]).some((code) =>
-          permissions.includes(code),
-        );
-      const startPage = preferences?.startPage;
-
-      if (startPage && getStartPageOptions(hasPermission).some((page) => page.href === startPage)) {
-        destination = startPage;
-      }
-    } catch {
-      // The dashboard it is.
-    }
-
-    router.replace(destination);
+    router.replace(await startPageAfterSignIn(accessToken));
   };
   const { isAuthenticated, isReady, signIn } = useAuth();
   const { showToast } = useToast();
@@ -569,6 +545,8 @@ export default function LoginPage() {
                 <ArrowRight aria-hidden="true" className="h-4 w-4" />
               )}
             </Button>
+
+            {loginMethod === 'email' ? <MicrosoftSignIn disabled={isBusy} /> : null}
 
             {loginMethod === 'email' ? (
               <p className="text-[12.5px] text-ds-muted">

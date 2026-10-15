@@ -6,10 +6,12 @@ import { AuthAuditLogService } from '../common/audit/auth-audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { AuthContext, AuthTokens } from './auth.types';
 import { LogoutDto } from './dto/logout.dto';
+import { MicrosoftCallbackDto } from './dto/microsoft-callback.dto';
 import { EmailPasswordLoginDto } from './dto/email-password-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { MicrosoftSignInService } from './services/microsoft.service';
 import { OtpService } from './services/otp.service';
 import { TokenService } from './services/token.service';
 
@@ -50,6 +52,7 @@ export class AuthService {
 
   constructor(
     private readonly auditLog: AuthAuditLogService,
+    private readonly microsoft: MicrosoftSignInService,
     private readonly otp: OtpService,
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
@@ -131,6 +134,33 @@ export class AuthService {
       entityId: user.id,
       ipAddress: context.ipAddress,
       newValue: { channel: 'email-password' },
+      userId: user.id,
+    });
+
+    return tokens;
+  }
+
+  /**
+   * Sign in with Microsoft: the account Microsoft confirms must belong to an active AAHAR user
+   * with that email, created in the portal like every other sign-in.
+   */
+  async loginWithMicrosoft(dto: MicrosoftCallbackDto, context: AuthContext): Promise<AuthTokens> {
+    const email = await this.microsoft.verifiedEmail(dto.code, dto.state);
+    const user = await this.findLoginUser({ channel: 'email', value: email }).catch(() => null);
+
+    if (!user) {
+      throw new NotFoundException(
+        `${email} is not registered in AAHAR. Please contact your administrator.`,
+      );
+    }
+
+    const tokens = await this.tokens.issueTokens(this.toTokenUser(user));
+
+    await this.auditLog.record({
+      action: 'AUTH_LOGIN',
+      entityId: user.id,
+      ipAddress: context.ipAddress,
+      newValue: { channel: 'microsoft' },
       userId: user.id,
     });
 
