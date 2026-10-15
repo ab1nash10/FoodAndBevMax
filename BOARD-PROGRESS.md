@@ -10,7 +10,8 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
       lib/order-board rules, mock simulation and useBoardFeed, with unit tests.
 - [x] B2 Route + canvas: app/(display)/board/[restaurantId] outside the admin shell; a fixed
       1920×1080 canvas scaled to fit (letterboxed on black), cursor hidden, no text selection.
-- [ ] B3 Header
+- [x] B3 Header: AAHAR and Max logos, restaurant and location, "Lunch · till 3:00 PM" slot pill,
+      clock on the server's time in India time.
 - [ ] B4 Now ready banner + Ready grid
 - [ ] B5 Preparing column + How it works
 - [ ] B6 Footer legend

@@ -1,6 +1,7 @@
 'use client';
 
-import { useBoardFeed } from '@/lib/order-board/source';
+import { useBoardFeed, useServerNow } from '@/lib/order-board/source';
+import { BoardHeader } from './board-header';
 import { BoardCanvas } from './board-canvas';
 
 export interface OrderBoardProps {
@@ -13,14 +14,19 @@ export interface OrderBoardProps {
 
 /** The order status board for the TV above the collection counter. */
 export function OrderBoard({ demo, restaurantId, token }: Readonly<OrderBoardProps>) {
-  const { feed } = useBoardFeed(restaurantId, { demo, token });
+  const { feed, serverOffset } = useBoardFeed(restaurantId, { demo, token });
+  const now = useServerNow(serverOffset);
 
   return (
     <BoardCanvas>
       <div className="flex h-full flex-col">
-        <header className="h-[128px] shrink-0 bg-ds-brand-panel px-[48px] text-white">
-          <h1 className="pt-[32px] text-[44px] font-extrabold">{feed?.restaurantName}</h1>
-        </header>
+        <BoardHeader
+          locationName={feed?.locationName}
+          now={now}
+          restaurantName={feed?.restaurantName}
+          slotEndsAt={feed?.slotEndsAt}
+          slotLabel={feed?.slotName}
+        />
         <main className="grid min-h-0 flex-1 grid-cols-[700px_1fr] gap-[40px] p-[40px]">
           <section aria-label="Preparing" />
           <section aria-label="Ready" />
