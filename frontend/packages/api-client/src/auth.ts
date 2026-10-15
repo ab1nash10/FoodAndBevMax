@@ -61,22 +61,5 @@ export function createAuthApi(options: ApiClientOptions) {
         method: 'POST',
       });
     },
-    /** Whether "Sign in with Microsoft" is set up on the server. */
-    microsoftConfig() {
-      return client.request<ApiResponse<{ enabled: boolean }>>('/auth/microsoft/config');
-    },
-    /** Starts Microsoft sign-in: the Microsoft page to send the browser to. */
-    microsoftAuthorize() {
-      return client.request<ApiResponse<{ url: string }>>('/auth/microsoft/authorize', {
-        method: 'POST',
-      });
-    },
-    /** Finishes Microsoft sign-in with what Microsoft sent back to the callback page. */
-    microsoftCallback(body: { code: string; state: string }) {
-      return client.request<ApiResponse<AuthTokens>>('/auth/microsoft/callback', {
-        body,
-        method: 'POST',
-      });
-    },
   };
 }

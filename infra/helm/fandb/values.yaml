@@ -41,12 +41,6 @@ config:
     # Bulk SMS gateway for mobile OTPs. Not secret; the login is under secrets below.
     smsFeedId: '354105'
     smsSenderId: MAXHSP
-    # Sign in with Microsoft (Entra ID app). Not secret; the client secret comes from the
-    # Jenkins credential aahar-microsoft-client-secret. The redirect URI must also be listed on
-    # the app registration (Authentication > Web). Leave microsoftClientId empty to turn it off.
-    microsoftTenantId: 0336464a-c425-408c-a568-15c3416a24b8
-    microsoftClientId: b9da48cb-f966-4d9c-974d-c438db379e35
-    microsoftRedirectUri: https://k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com/fandb/auth/microsoft/callback
   # Never commit real values. Pass them at install time:
   #   helm upgrade ... -f secrets.yaml      (git-ignored)
   # or --set-string config.secrets.DATABASE_URL=...
@@ -63,8 +57,6 @@ config:
     ADMIN_PASSWORD: ''
     SMS_USERNAME: ''
     SMS_PASSWORD: ''
-    # Sign in with Microsoft. Left empty, the button does not show.
-    MICROSOFT_CLIENT_SECRET: ''
     # Optional shared store for OTPs, refresh tokens and rate limits. Set it to run more than
     # one replica of a backend, or to keep people signed in across deploys. For ElastiCache
     # (cluster mode disabled, in-transit encryption on): rediss://<user>:<token>@<primary>:6379.

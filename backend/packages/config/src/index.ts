@@ -29,13 +29,6 @@ const serviceEnvSchema = z.object({
   SMS_PASSWORD: z.string().optional(),
   SMS_SENDER_ID: z.string().optional(),
   SMS_USERNAME: z.string().optional(),
-  // "Sign in with Microsoft" (auth-service): an Entra ID app registration. All four are needed;
-  // with any missing the option is off. The client secret is a secret; the redirect URI is the
-  // portal's /fandb/auth/microsoft/callback and must be registered on the app.
-  MICROSOFT_CLIENT_ID: z.string().optional(),
-  MICROSOFT_CLIENT_SECRET: z.string().optional(),
-  MICROSOFT_REDIRECT_URI: z.string().url().optional(),
-  MICROSOFT_TENANT_ID: z.string().optional(),
   // Unset means on outside production, off in it.
   SWAGGER_ENABLED: z
     .enum(['true', 'false'])

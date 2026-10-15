@@ -43,6 +43,3 @@ infra/helm/**/secrets*.yaml
 
 # Playwright MCP browser-session artefacts (snapshots, screenshots)
 .playwright-mcp/
-
-# Written by the Jenkins deploy for helm and removed after it; holds a secret.
-.microsoft-secret.yaml
