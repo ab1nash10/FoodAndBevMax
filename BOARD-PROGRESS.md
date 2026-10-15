@@ -8,7 +8,8 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
 - [x] B1 Data layer: GET /order-board/:restaurantId?token= returns the BoardFeed contract;
       optional serviceType / counterCode / prepMinutes on POST /orders (one additive migration);
       lib/order-board rules, mock simulation and useBoardFeed, with unit tests.
-- [ ] B2 Route + 1920×1080 canvas
+- [x] B2 Route + canvas: app/(display)/board/[restaurantId] outside the admin shell; a fixed
+      1920×1080 canvas scaled to fit (letterboxed on black), cursor hidden, no text selection.
 - [ ] B3 Header
 - [ ] B4 Now ready banner + Ready grid
 - [ ] B5 Preparing column + How it works
@@ -39,6 +40,9 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
 - **Meal slot and open hours.** From the restaurant (active, not offline, opening hours unless
   open 24x7) and the location's timed Time Slots, in India time on the server.
 - **Estimate.** `estimatedReadyAt` = placed time + the sender's `prepMinutes`, else 10 minutes.
+
+- **Checking it locally.** A running `next dev` keeps the removed /board/[token] route in its
+  manifest and 404s the new one until restarted, so checks run on `next build` + `next start`.
 
 ## TODO(api)
 
