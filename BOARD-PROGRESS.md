@@ -16,7 +16,8 @@ Prompt: `order-board.md`. Settings used: DATA_SOURCE api (real orders, user's ch
       eat here / take away, "Ready n min ago" or amber "n min · collect soon", "+N more").
 - [x] B5 Preparing column (3×3, 52 px numbers, eat here / take away icon, "~n min", "+N more")
       and the How it works panel. Checked at 1920×1080 and 1280×720 on the mock feed.
-- [ ] B6 Footer legend
+- [x] B6 Footer: eat here / take away legend, "Kept for 15 min once ready", staff ID note, "Can't
+      see your number? Ask at <first counter>". HOLD_MINUTES / COLLECT_SOON_MINUTES in rules.ts.
 - [ ] B7 Live behaviour
 - [ ] B8 States
 - [ ] B9 Themes

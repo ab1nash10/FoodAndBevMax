@@ -2,11 +2,12 @@
 
 import { boardView } from '@/lib/order-board/rules';
 import { useBoardFeed, useServerNow } from '@/lib/order-board/source';
+import { BoardFooter } from './board-footer';
 import { BoardHeader } from './board-header';
-import { NowReadyBanner } from './now-ready-banner';
 import { HowItWorks } from './how-it-works';
-import { ReadyGrid } from './ready-grid';
+import { NowReadyBanner } from './now-ready-banner';
 import { PreparingGrid } from './preparing-grid';
+import { ReadyGrid } from './ready-grid';
 import { BoardCanvas } from './board-canvas';
 
 export interface OrderBoardProps {
@@ -47,7 +48,7 @@ export function OrderBoard({ demo, restaurantId, token }: Readonly<OrderBoardPro
             <ReadyGrid more={view.readyMore} orders={view.ready} total={view.readyTotal} />
           </div>
         </main>
-        <footer className="h-[88px] shrink-0 border-t border-ds-border bg-ds-surface" />
+        <BoardFooter helpCounterName={feed?.helpCounterName} />
       </div>
     </BoardCanvas>
   );
