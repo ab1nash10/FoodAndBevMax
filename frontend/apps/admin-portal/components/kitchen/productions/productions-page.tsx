@@ -2,11 +2,13 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, ChefHat, Clock, Plus, RefreshCw, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowRight, ChefHat, Clock, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { KitchenProduction, KitchenProductionStatus, SortOrder } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
@@ -194,6 +196,15 @@ export function KitchenProductionsPageClient() {
 
   const productions = productionsQuery.data?.items ?? [];
   const meta = productionsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const hasFilters = Boolean(searchInput || hospitalParam || kitchenFilter || statusFilter);
+
+  function clearFilters() {
+    setSearch('');
+    setHospitalFilter('');
+    setKitchenFilter('');
+    setStatusFilter('');
+    setPage(1);
+  }
 
   function deleteProduction(production: KitchenProduction) {
     if (window.confirm(`Delete ${production.productionNumber}?`)) {
@@ -250,40 +261,40 @@ export function KitchenProductionsPageClient() {
       />
 
       <Panel>
-        <div className="flex flex-wrap gap-3 border-b border-ds-divider p-4">
-          <div className="min-w-[220px] flex-1">
-            <SearchInput
-              onChange={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              value={searchInput}
-            />
-          </div>
-          <div className="w-full sm:w-48">
-            <HospitalSelect
-              disabled={Boolean(scopedHospitalId)}
-              hospitals={hospitalsQuery.data ?? []}
-              onChange={(value) => {
-                setHospitalFilter(value);
-                setKitchenFilter('');
-                setPage(1);
-              }}
-              value={hospitalFilter}
-            />
-          </div>
-          <div className="w-full sm:w-48">
-            <KitchenSelect
-              disabled={!hospitalFilter}
-              kitchens={kitchensQuery.data ?? []}
-              onChange={(value) => {
-                setKitchenFilter(value);
-                setPage(1);
-              }}
-              value={kitchenFilter}
-            />
-          </div>
-          <div className="w-full sm:w-36">
+        <ListToolbar>
+          <SearchInput
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+            value={searchInput}
+          />
+          <FiltersMenu activeCount={[hospitalParam, kitchenFilter].filter(Boolean).length}>
+            <FilterField label="Location">
+              <HospitalSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setKitchenFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </FilterField>
+            <FilterField label="Kitchen">
+              <KitchenSelect
+                disabled={!hospitalFilter}
+                kitchens={kitchensQuery.data ?? []}
+                onChange={(value) => {
+                  setKitchenFilter(value);
+                  setPage(1);
+                }}
+                value={kitchenFilter}
+              />
+            </FilterField>
+          </FiltersMenu>
+          <div className="w-36">
             <Select
               aria-label="Sort order"
               onChange={(event) => {
@@ -296,16 +307,9 @@ export function KitchenProductionsPageClient() {
               <option value="asc">Oldest</option>
             </Select>
           </div>
-          <Button
-            aria-label="Refresh productions"
-            onClick={() => void productionsQuery.refetch()}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void productionsQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm text-ds-text-3">
           <span className="inline-flex items-center gap-2">
             <ChefHat aria-hidden="true" className="h-4 w-4 text-ds-teal-text" strokeWidth={1.8} />

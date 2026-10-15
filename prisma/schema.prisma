@@ -95,6 +95,12 @@ enum OnlinePaymentOption {
   RAZORPAY
 }
 
+/// Whether an employee is on the hospital's payroll or supplied by an outsourcing agency.
+enum EmploymentType {
+  ON_ROLL
+  OUTSOURCED
+}
+
 enum InventoryLocationType {
   STORE
   KITCHEN
@@ -145,7 +151,6 @@ model User {
   auditLogs                AuditLog[]
   assignedHospitals        UserHospital[]
   hospital                 Hospital?           @relation(fields: [hospitalId], references: [id])
-  notifications            Notification[]
   kitchenProductionsAsChef KitchenProduction[] @relation("KitchenProductionChef")
   permissionOverrides      UserPermission[]
   roles                    UserRole[]
@@ -269,6 +274,7 @@ model Hospital {
   onlinePaymentOption OnlinePaymentOption @default(NONE) @map("online_payment_option")
   gstApplicable       Boolean             @default(true) @map("gst_applicable")
   billPrefix          String?             @map("bill_prefix")
+  legalEntityId       String?             @map("legal_entity_id") @db.Uuid
   isActive            Boolean             @default(true) @map("is_active")
   createdAt           DateTime            @default(now()) @map("created_at")
   createdBy           String?             @map("created_by") @db.Uuid
@@ -276,6 +282,7 @@ model Hospital {
   updatedBy           String?             @map("updated_by") @db.Uuid
   deletedAt           DateTime?           @map("deleted_at")
 
+  legalEntity              LegalEntity?              @relation(fields: [legalEntityId], references: [id])
   auditLogs                AuditLog[]
   counters                 Counter[]
   employees                Employee[]
@@ -284,7 +291,6 @@ model Hospital {
   kitchens                 Kitchen[]
   locations                Location[]
   assignedUsers            UserHospital[]
-  notifications            Notification[]
   itemPrices               ItemPrice[]
   paymentMachines          PaymentMachine[]
   posDevices               PosDevice[]
@@ -300,7 +306,33 @@ model Hospital {
 
   @@index([deletedAt])
   @@index([isActive])
+  @@index([legalEntityId])
   @@map("hospitals")
+}
+
+/// A legal entity a location or restaurant bills under: its registered name, address and GSTIN.
+model LegalEntity {
+  id            String    @id @default(uuid()) @db.Uuid
+  /// The site the entity bills for, e.g. "MSSH SKT"; one company can have several.
+  locationName  String?   @map("location_name")
+  entityName    String    @map("entity_name")
+  entityAddress String    @map("entity_address")
+  gstNumber     String    @map("gst_number")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  deletedAt     DateTime? @map("deleted_at")
+
+  hospitals   Hospital[]
+  posDevices  PosDevice[]
+  restaurants Restaurant[]
+
+  @@index([deletedAt])
+  @@index([gstNumber])
+  @@index([isActive])
+  @@map("legal_entities")
 }
 
 model Location {
@@ -395,6 +427,7 @@ model Restaurant {
   locationId               String?   @map("location_id") @db.Uuid
   storeId                  String?   @map("store_id") @db.Uuid
   kitchenId                String?   @map("kitchen_id") @db.Uuid
+  legalEntityId            String?   @map("legal_entity_id") @db.Uuid
   restaurantCode           String    @map("restaurant_code")
   restaurantName           String    @map("restaurant_name")
   email                    String?
@@ -425,6 +458,8 @@ model Restaurant {
   inCarDining              Boolean   @default(false) @map("in_car_dining")
   posOrders                Boolean   @default(false) @map("pos_orders")
   inventory                Boolean   @default(false)
+  /// Only for IHC.
+  ihcOnly                  Boolean   @default(false) @map("ihc_only")
   qrUnitName               String?   @map("qr_unit_name")
   upiId                    String?   @map("upi_id")
   bankName                 String?   @map("bank_name")
@@ -450,6 +485,7 @@ model Restaurant {
   restaurantKitchens RestaurantKitchen[]
   hospital           Hospital              @relation(fields: [hospitalId], references: [id])
   kitchen            Kitchen?              @relation(fields: [kitchenId], references: [id])
+  legalEntity        LegalEntity?          @relation(fields: [legalEntityId], references: [id])
   location           Location?             @relation(fields: [locationId], references: [id])
   store              Store?                @relation(fields: [storeId], references: [id])
 
@@ -458,6 +494,7 @@ model Restaurant {
   @@index([locationId])
   @@index([storeId])
   @@index([kitchenId])
+  @@index([legalEntityId])
   @@index([deletedAt])
   @@index([isActive])
   @@map("restaurants")
@@ -517,7 +554,9 @@ model PosDevice {
   hospitalId            String    @map("hospital_id") @db.Uuid
   code                  String
   name                  String
+  /// Free text from before entities existed; no longer read or written. legalEntityId replaces it.
   entity                String?
+  legalEntityId         String?   @map("legal_entity_id") @db.Uuid
   hostName              String?   @map("host_name")
   isKotPrintEnabled     Boolean   @default(false) @map("is_kot_print_enabled")
   isInvoicePrintEnabled Boolean   @default(false) @map("is_invoice_print_enabled")
@@ -529,11 +568,13 @@ model PosDevice {
   deletedAt             DateTime? @map("deleted_at")
 
   hospital        Hospital              @relation(fields: [hospitalId], references: [id])
+  legalEntity     LegalEntity?          @relation(fields: [legalEntityId], references: [id])
   paymentMachines PaymentMachine[]
   restaurants     PosDeviceRestaurant[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId])
+  @@index([legalEntityId])
   @@index([deletedAt])
   @@index([isActive])
   @@index([hostName])
@@ -807,6 +848,8 @@ model Employee {
   designation         String?
   mobile              String?
   eligibleForDiscount Boolean   @default(true) @map("eligible_for_discount")
+  /// Null for employees recorded before the type was asked for.
+  employmentType      EmploymentType? @map("employment_type")
   /// The location this record belongs to; null means shared by every location.
   hospitalId          String?   @map("hospital_id") @db.Uuid
   isActive            Boolean   @default(true) @map("is_active")
@@ -1180,33 +1223,6 @@ model AuditLog {
   @@index([userId])
   @@index([deletedAt])
   @@map("audit_logs")
-}
-
-model Notification {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  hospitalId String?   @map("hospital_id") @db.Uuid
-  category   String
-  title      String
-  body       String?
-  entityName String?   @map("entity_name")
-  entityId   String?   @map("entity_id") @db.Uuid
-  link       String?
-  readAt     DateTime? @map("read_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  createdBy  String?   @map("created_by") @db.Uuid
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  updatedBy  String?   @map("updated_by") @db.Uuid
-  deletedAt  DateTime? @map("deleted_at")
-
-  hospital Hospital? @relation(fields: [hospitalId], references: [id])
-  user     User      @relation(fields: [userId], references: [id])
-
-  @@index([userId, readAt])
-  @@index([userId, createdAt])
-  @@index([hospitalId])
-  @@index([deletedAt])
-  @@map("notifications")
 }
 
 /// Locations a user may operate in. Super Admin ignores this (LocationScope.ALL), Admin may hold

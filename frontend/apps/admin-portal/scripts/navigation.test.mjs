@@ -12,7 +12,6 @@ import {
   getBreadcrumbTrail,
   locationHref,
   navigationGroups,
-  notificationHref,
   recordHref,
   subRoutes,
 } from '../lib/navigation.ts';
@@ -200,12 +199,6 @@ assert.equal(recordHref('/masters/stores', {}), '/masters/stores');
 assert.equal(locationHref('STORE', 'STR0001'), '/masters/stores?q=STR0001');
 assert.equal(locationHref('RESTAURANT', 'RST0001'), '/masters/restaurants?q=RST0001');
 assert.equal(locationHref('COUNTER', 'C1'), null);
-assert.equal(notificationHref('/inventory/transfers', id), `/inventory/transfers?id=${id}`);
-assert.equal(notificationHref('/dashboard', id), '/dashboard');
-assert.equal(notificationHref('/inventory/grns?view=DRAFT', id), '/inventory/grns?view=DRAFT');
-assert.equal(notificationHref('https://example.com', id), null);
-assert.equal(notificationHref('//example.com', id), null);
-assert.equal(notificationHref(null, id), null);
 
 // Permission checks by path, with query strings and sub-routes.
 assert.equal(canOpenPath('/inventory/grns?view=DRAFT', onlyGrns), true);

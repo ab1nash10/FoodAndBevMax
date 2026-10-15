@@ -25,6 +25,7 @@ function toEmployeeResponse(employee: EmployeeWithHospital) {
     eligibleForDiscount: employee.eligibleForDiscount,
     employeeCode: employee.employeeCode,
     employeeName: employee.employeeName,
+    employmentType: employee.employmentType,
     hospital: employee.hospital,
     hospitalId: employee.hospitalId,
     id: employee.id,
@@ -128,6 +129,7 @@ export class EmployeesService {
             designation: dto.designation,
             eligibleForDiscount: dto.eligibleForDiscount ?? true,
             employeeCode: dto.employeeCode,
+            employmentType: dto.employmentType,
             hospitalId,
             employeeName: dto.employeeName,
             isActive: dto.isActive ?? true,
@@ -197,6 +199,10 @@ export class EmployeesService {
 
         if (dto.employeeName !== undefined) {
           data.employeeName = dto.employeeName;
+        }
+
+        if (dto.employmentType !== undefined) {
+          data.employmentType = dto.employmentType;
         }
 
         if (dto.isActive !== undefined) {

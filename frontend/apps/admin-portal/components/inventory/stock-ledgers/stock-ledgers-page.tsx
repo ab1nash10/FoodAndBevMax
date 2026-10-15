@@ -1,8 +1,6 @@
 'use client';
 
-import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type {
   InventoryLocationType,
@@ -11,6 +9,14 @@ import type {
   StockReferenceType,
   StockTransactionType,
 } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { Badge, Input, Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
@@ -149,6 +155,32 @@ export function StockLedgersPageClient() {
 
   const ledgers = ledgersQuery.data?.items ?? [];
   const meta = ledgersQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const hasFilters = Boolean(
+    searchInput ||
+    hospitalFilter !== (scopedHospitalId ?? '') ||
+    locationTypeFilter ||
+    locationFilter ||
+    itemFilter ||
+    transactionTypeFilter ||
+    referenceTypeFilter ||
+    businessDateFilter ||
+    fromDateFilter ||
+    toDateFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setLocationTypeFilter('');
+    setLocationFilter('');
+    setItemFilter('');
+    setTransactionTypeFilter('');
+    setReferenceTypeFilter('');
+    setBusinessDateFilter('');
+    setFromDateFilter('');
+    setToDateFilter('');
+    setPage(1);
+  }
 
   return (
     <section className="space-y-5">
@@ -157,7 +189,7 @@ export function StockLedgersPageClient() {
         title="Stock Ledgers"
       />
       <Panel>
-        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -165,139 +197,166 @@ export function StockLedgersPageClient() {
             }}
             value={searchInput}
           />
-          <HospitalSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setLocationFilter('');
+          <FiltersMenu
+            activeCount={
+              [
+                hospitalFilter !== (scopedHospitalId ?? ''),
+                locationTypeFilter,
+                locationFilter,
+                itemFilter,
+                transactionTypeFilter,
+                referenceTypeFilter,
+                businessDateFilter,
+                fromDateFilter,
+                toDateFilter,
+              ].filter(Boolean).length
+            }
+          >
+            <FilterField label="Location">
+              <HospitalSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setLocationFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </FilterField>
+            <FilterField label="Location type">
+              <Select
+                onChange={(event) => {
+                  setLocationTypeFilter(event.target.value as '' | InventoryLocationType);
+                  setLocationFilter('');
+                  setPage(1);
+                }}
+                value={locationTypeFilter}
+              >
+                <option value="">All location types</option>
+                {stockLedgerLocationTypes.map((locationType) => (
+                  <option key={locationType} value={locationType}>
+                    {formatEnum(locationType)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Store / kitchen / restaurant">
+              <Select
+                disabled={!locationTypeFilter || !hospitalFilter}
+                onChange={(event) => {
+                  setLocationFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={locationFilter}
+              >
+                <option value="">All locations</option>
+                {locationOptions?.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Item">
+              <Select
+                onChange={(event) => {
+                  setItemFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={itemFilter}
+              >
+                <option value="">All items</option>
+                {itemOptionsQuery.data?.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.itemName}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Transaction type">
+              <Select
+                onChange={(event) => {
+                  setTransactionTypeFilter(event.target.value as '' | StockTransactionType);
+                  setPage(1);
+                }}
+                value={transactionTypeFilter}
+              >
+                <option value="">All transaction types</option>
+                {stockTransactionTypes.map((transactionType) => (
+                  <option key={transactionType} value={transactionType}>
+                    {formatEnum(transactionType)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Reference type">
+              <Select
+                onChange={(event) => {
+                  setReferenceTypeFilter(event.target.value as '' | StockReferenceType);
+                  setPage(1);
+                }}
+                value={referenceTypeFilter}
+              >
+                <option value="">All reference types</option>
+                {stockReferenceTypes.map((referenceType) => (
+                  <option key={referenceType} value={referenceType}>
+                    {formatEnum(referenceType)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Business date">
+              <Input
+                onChange={(event) => {
+                  setBusinessDateFilter(event.target.value);
+                  setPage(1);
+                }}
+                type="date"
+                value={businessDateFilter}
+              />
+            </FilterField>
+            <FilterField label="From">
+              <Input
+                onChange={(event) => {
+                  setFromDateFilter(event.target.value);
+                  setPage(1);
+                }}
+                type="date"
+                value={fromDateFilter}
+              />
+            </FilterField>
+            <FilterField label="To">
+              <Input
+                onChange={(event) => {
+                  setToDateFilter(event.target.value);
+                  setPage(1);
+                }}
+                type="date"
+                value={toDateFilter}
+              />
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
+              setSortOrder(value);
               setPage(1);
             }}
-            value={hospitalFilter}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Transaction date', value: 'transactionDateTime' },
+              { label: 'Business date', value: 'businessDate' },
+              { label: 'Created date', value: 'createdAt' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <Select
-            onChange={(event) => {
-              setLocationTypeFilter(event.target.value as '' | InventoryLocationType);
-              setLocationFilter('');
-              setPage(1);
-            }}
-            value={locationTypeFilter}
-          >
-            <option value="">All location types</option>
-            {stockLedgerLocationTypes.map((locationType) => (
-              <option key={locationType} value={locationType}>
-                {formatEnum(locationType)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            disabled={!locationTypeFilter || !hospitalFilter}
-            onChange={(event) => {
-              setLocationFilter(event.target.value);
-              setPage(1);
-            }}
-            value={locationFilter}
-          >
-            <option value="">All locations</option>
-            {locationOptions?.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setItemFilter(event.target.value);
-              setPage(1);
-            }}
-            value={itemFilter}
-          >
-            <option value="">All items</option>
-            {itemOptionsQuery.data?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.itemName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setTransactionTypeFilter(event.target.value as '' | StockTransactionType);
-              setPage(1);
-            }}
-            value={transactionTypeFilter}
-          >
-            <option value="">All transaction types</option>
-            {stockTransactionTypes.map((transactionType) => (
-              <option key={transactionType} value={transactionType}>
-                {formatEnum(transactionType)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setReferenceTypeFilter(event.target.value as '' | StockReferenceType);
-              setPage(1);
-            }}
-            value={referenceTypeFilter}
-          >
-            <option value="">All reference types</option>
-            {stockReferenceTypes.map((referenceType) => (
-              <option key={referenceType} value={referenceType}>
-                {formatEnum(referenceType)}
-              </option>
-            ))}
-          </Select>
-          <Input
-            onChange={(event) => {
-              setBusinessDateFilter(event.target.value);
-              setPage(1);
-            }}
-            type="date"
-            value={businessDateFilter}
-          />
-          <Input
-            onChange={(event) => {
-              setFromDateFilter(event.target.value);
-              setPage(1);
-            }}
-            type="date"
-            value={fromDateFilter}
-          />
-          <Input
-            onChange={(event) => {
-              setToDateFilter(event.target.value);
-              setPage(1);
-            }}
-            type="date"
-            value={toDateFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setSortOrder(event.target.value as SortOrder);
-              setPage(1);
-            }}
-            value={sortOrder}
-          >
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </Select>
-          <Button onClick={() => void ledgersQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="grid gap-3 border-b p-4 sm:grid-cols-3">
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="transactionDateTime">Transaction date</option>
-            <option value="businessDate">Business date</option>
-            <option value="createdAt">Created date</option>
-          </Select>
-        </div>
+          <RefreshButton onClick={() => void ledgersQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">

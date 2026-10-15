@@ -67,6 +67,7 @@ export function EmployeeCreatePageClient() {
       department: optionalValue(parsed.data.department),
       designation: optionalValue(parsed.data.designation),
       eligibleForDiscount: parsed.data.eligibleForDiscount,
+      employmentType: parsed.data.employmentType || undefined,
       employeeCode: parsed.data.employeeCode,
       employeeName: parsed.data.employeeName,
       hospitalId: parsed.data.hospitalId || null,

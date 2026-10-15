@@ -19,7 +19,7 @@ test('each write invalidates the same query keys', () => {
   expect(
     Object.fromEntries(Object.entries(invalidation).map(([name, fn]) => [name, keysFor(fn)])),
   ).toEqual({
-    invalidateEmployeeQueries: [['employees'], ['dashboard', 'employees']],
+    invalidateEmployeeQueries: [['employees'], ['dashboard', 'setup']],
     invalidateGrnQueries: [
       ['grns'],
       ['stock-balances'],
@@ -33,7 +33,8 @@ test('each write invalidates the same query keys', () => {
       ['items'],
       ['item-options'],
     ],
-    invalidateItemQueries: [['items'], ['item-options'], ['dashboard', 'items']],
+    invalidateItemQueries: [['items'], ['item-options'], ['dashboard', 'setup']],
+    invalidateLegalEntityQueries: [['legal-entities'], ['legal-entity-options']],
     invalidateKitchenProductionQueries: [
       ['kitchen-productions'],
       ['kitchen-stock'],

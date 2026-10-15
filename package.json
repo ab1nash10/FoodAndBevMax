@@ -21,7 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo lint",
-    "predev": "prisma migrate deploy --schema prisma/schema.prisma && prisma generate --schema prisma/schema.prisma",
+    "predev": "node scripts/predev.mjs",
     "prepare": "husky",
     "test": "turbo test",
     "typecheck": "turbo typecheck"

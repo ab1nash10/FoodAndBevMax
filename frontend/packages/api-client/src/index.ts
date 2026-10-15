@@ -7,4 +7,5 @@ export * from './catalog';
 export * from './pos';
 export * from './inventory';
 export * from './kitchen';
+export * from './dashboard';
 export * from './organization-api';

@@ -1,0 +1,9 @@
+// pnpm dev only (nest-cli.dev.json): keeps the last start's type-check results in dist, so a
+// restart re-checks only what changed. Builds use tsconfig.build.json unchanged.
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo-dev"
+  }
+}

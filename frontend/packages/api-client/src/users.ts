@@ -53,44 +53,12 @@ export interface AccessUserInput {
   status?: UserStatus;
 }
 
-export interface AppNotification {
-  body: string | null;
-  category: string;
-  createdAt: string;
-  entityId: string | null;
-  entityName: string | null;
-  id: string;
-  isRead: boolean;
-  link: string | null;
-  readAt: string | null;
-  title: string;
-}
-
-export interface NotificationList {
-  items: AppNotification[];
-  meta: {
-    limit: number;
-    page: number;
-    total: number;
-    totalPages: number;
-    unreadCount: number;
-  };
-}
-
-export interface NotificationListQuery {
-  limit?: number;
-  page?: number;
-  unreadOnly?: boolean;
-}
-
 export type ThemePreference = 'dark' | 'light' | 'system';
 
 /** Unset fields are null: the portal then keeps its usual behaviour. */
 export interface UserPreferences {
   /** The user's default location (their home location); null only if none is set yet. */
   defaultLocationId: string | null;
-  /** Categories hidden from the bell; ACCESS can never be muted. */
-  mutedNotificationCategories: string[];
   /** A portal path such as /inventory/grns, or null for the dashboard. */
   startPage: string | null;
   theme: ThemePreference | null;
@@ -114,10 +82,6 @@ export interface MyAccess {
 export interface ChangePasswordInput {
   currentPassword: string;
   newPassword: string;
-}
-
-export interface UnreadCount {
-  unreadCount: number;
 }
 
 export interface AccessUserListQuery extends ListQuery {
@@ -153,23 +117,6 @@ export function createUserApi(options: ApiClientOptions) {
   const client = createApiClient(options);
 
   return {
-    listNotifications(query?: NotificationListQuery) {
-      return client.request<ApiResponse<NotificationList>>('/notifications', { query });
-    },
-    getUnreadNotificationCount() {
-      return client.request<ApiResponse<UnreadCount>>('/notifications/unread-count');
-    },
-    markNotificationRead(id: string, isRead = true) {
-      return client.request<ApiResponse<UnreadCount>>(`/notifications/${id}/read`, {
-        body: { isRead },
-        method: 'PATCH',
-      });
-    },
-    markAllNotificationsRead() {
-      return client.request<ApiResponse<UnreadCount>>('/notifications/read-all', {
-        method: 'POST',
-      });
-    },
     getMyAccess() {
       return client.request<ApiResponse<MyAccess>>('/users/me/access');
     },

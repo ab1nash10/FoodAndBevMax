@@ -15,6 +15,7 @@ import { CreateHospitalDto } from './dto/create-hospital.dto';
 import { HospitalSortField, ListHospitalsQueryDto } from './dto/list-hospitals-query.dto';
 import { UpdateHospitalDto } from './dto/update-hospital.dto';
 import { HospitalsRepository } from './hospitals.repository';
+import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
 import { optionalText } from '../common/values';
 
 type HospitalClient = Prisma.TransactionClient;
@@ -40,6 +41,7 @@ function toHospitalResponse(hospital: Hospital) {
     ipAddress: hospital.ipAddress,
     isActive: hospital.isActive,
     latitude: hospital.latitude,
+    legalEntityId: hospital.legalEntityId,
     locationCode,
     longitude: hospital.longitude,
     onlinePaymentOption: hospital.onlinePaymentOption,
@@ -156,6 +158,10 @@ export class HospitalsService {
 
         await this.assertUniqueHospital(hospitalCode, billPrefix, undefined, tx);
 
+        if (dto.legalEntityId) {
+          await assertActiveLegalEntity(tx, dto.legalEntityId);
+        }
+
         const hospital = await this.hospitals.create(
           {
             address: optionalText(dto.address),
@@ -170,6 +176,7 @@ export class HospitalsService {
             ipAddress: optionalText(dto.ipAddress),
             isActive: dto.isActive ?? true,
             latitude: optionalText(dto.latitude),
+            ...(dto.legalEntityId ? { legalEntity: { connect: { id: dto.legalEntityId } } } : {}),
             longitude: optionalText(dto.longitude),
             onlinePaymentOption: dto.onlinePaymentOption ?? OnlinePaymentOption.NONE,
             postalCode: optionalText(dto.postalCode),
@@ -292,6 +299,16 @@ export class HospitalsService {
 
         if (dto.visitingCardAddress !== undefined) {
           data.visitingCardAddress = optionalText(dto.visitingCardAddress);
+        }
+
+        if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          if (dto.legalEntityId) {
+            await assertActiveLegalEntity(tx, dto.legalEntityId);
+          }
+
+          data.legalEntity = dto.legalEntityId
+            ? { connect: { id: dto.legalEntityId } }
+            : { disconnect: true };
         }
 
         const nextHospitalCode =

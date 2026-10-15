@@ -6,6 +6,7 @@ import { HospitalsService } from './hospitals.service';
 
 @Module({
   controllers: [HospitalsController],
+  exports: [HospitalsService],
   imports: [CommonModule],
   providers: [HospitalsRepository, HospitalsService],
 })

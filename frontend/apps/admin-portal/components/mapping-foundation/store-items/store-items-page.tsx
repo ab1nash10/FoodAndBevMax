@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Eye, Pencil, RefreshCw, Store as StoreIcon } from 'lucide-react';
+import { Pencil, Store as StoreIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type {
@@ -12,10 +12,18 @@ import type {
   StoreItemInput,
   StoreItemListQuery,
 } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { DetailsModal, Toggle } from '@/components/ui-controls';
+import { Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
@@ -28,7 +36,6 @@ import {
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
   StatusBadge,
   SubmitButton,
 } from '@/components/mapping-foundation/shared/components';
@@ -81,7 +88,6 @@ export function StoreItemsPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<StoreItem | null>(null);
-  const [viewingMapping, setViewingMapping] = useState<StoreItem | null>(null);
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const storesQuery = useStoreOptions(hospitalFilter);
@@ -186,6 +192,23 @@ export function StoreItemsPageClient() {
     });
   });
 
+  const hasFilters = Boolean(
+    searchInput ||
+    activeFilter ||
+    hospitalFilter !== (scopedHospitalId ?? '') ||
+    storeFilter ||
+    itemFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setStoreFilter('');
+    setItemFilter('');
+    setPage(1);
+  }
+
   function startEditingMapping(mapping: StoreItem) {
     setEditingMapping(mapping);
     form.reset({
@@ -267,7 +290,7 @@ export function StoreItemsPageClient() {
         </form>
       </Panel>
       <Panel>
-        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -275,73 +298,90 @@ export function StoreItemsPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <HospitalFilterSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setStoreFilter('');
-              setPage(1);
-            }}
-            value={hospitalFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStoreFilter(event.target.value);
-              setPage(1);
-            }}
-            value={storeFilter}
+          <FiltersMenu
+            activeCount={
+              [
+                activeFilter,
+                hospitalFilter !== (scopedHospitalId ?? ''),
+                storeFilter,
+                itemFilter,
+              ].filter(Boolean).length
+            }
           >
-            <option value="">All stores</option>
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setItemFilter(event.target.value);
-              setPage(1);
-            }}
-            value={itemFilter}
-          >
-            <option value="">All MRP items</option>
-            {itemsQuery.data?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.itemName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="isActive">Status</option>
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+            <FilterField label="Location">
+              <HospitalFilterSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setStoreFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </FilterField>
+            <FilterField label="Store">
+              <Select
+                onChange={(event) => {
+                  setStoreFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={storeFilter}
+              >
+                <option value="">All stores</option>
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Item">
+              <Select
+                onChange={(event) => {
+                  setItemFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={itemFilter}
+              >
+                <option value="">All MRP items</option>
+                {itemsQuery.data?.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.itemName}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Created date', value: 'createdAt' },
+              { label: 'Updated date', value: 'updatedAt' },
+              { label: 'Status', value: 'isActive' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <Button onClick={() => void mappingsQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void mappingsQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
@@ -411,22 +451,14 @@ export function StoreItemsPageClient() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
+                          aria-label={`Edit ${mapping.item.itemName} in ${mapping.store.storeName}`}
                           onClick={() => startEditingMapping(mapping)}
-                          size="sm"
+                          size="icon"
+                          title="Edit"
                           type="button"
                           variant="outline"
                         >
-                          <Pencil className="h-4 w-4" />
-                          Edit
-                        </Button>
-                        <Button
-                          onClick={() => setViewingMapping(mapping)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View
+                          <Pencil aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       </div>
                     </td>
@@ -452,24 +484,6 @@ export function StoreItemsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
-      <DetailsModal
-        onClose={() => setViewingMapping(null)}
-        rows={
-          viewingMapping && [
-            [
-              'Location',
-              `${viewingMapping.store.hospital.hospitalName} (${viewingMapping.store.hospital.hospitalCode})`,
-            ],
-            ['Store', `${viewingMapping.store.storeName} (${viewingMapping.store.storeCode})`],
-            ['Item', `${viewingMapping.item.itemName} (${viewingMapping.item.itemCode})`],
-            ['Category', viewingMapping.item.category?.categoryName ?? '-'],
-            ['Status', <StatusBadge isActive={viewingMapping.isActive} key="status" />],
-            ['Created', formatDate(viewingMapping.createdAt)],
-            ['Updated', formatDate(viewingMapping.updatedAt)],
-          ]
-        }
-        title="Store Item"
-      />
     </section>
   );
 }

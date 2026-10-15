@@ -41,11 +41,12 @@ export const queryKeys = {
   // Organization: locations, stores, kitchens, restaurants, counters
   counters: key('counters'),
   hospital: key('hospital'),
-  hospitalLocations: key('hospital-locations'),
   hospitalOptions: key('hospital-options'),
   hospitals: key('hospitals'),
   kitchenOptions: key('kitchen-options'),
   kitchens: key('kitchens'),
+  legalEntities: key('legal-entities'),
+  legalEntityOptions: key('legal-entity-options'),
   locationOptions: key('location-options'),
   locationPicker: key('location-picker'),
   locations: key('locations'),
@@ -79,7 +80,7 @@ export const queryKeys = {
   accessUsers: key('access-users'),
   userPermissions: key('user-permissions'),
 
-  // Shell: dashboard, notifications, search, location context
+  // Shell: dashboard, search, location context
   commandPaletteSearch: key('command-palette', 'search'),
   dashboard: key('dashboard'),
   dashboardActivity: key('dashboard', 'activity'),
@@ -89,9 +90,6 @@ export const queryKeys = {
   dashboardSetup: key('dashboard', 'setup'),
   dashboardStats: key('dashboard', 'stats'),
   globalLocationContextActiveLocations: key('global-location-context', 'active-locations'),
-  notifications: key('notifications'),
-  notificationsList: key('notifications', 'list'),
-  notificationsUnreadCount: key('notifications', 'unread-count'),
 };
 
 // Fresh for 5 minutes: master data lists that every write to them invalidates (the entity's own
@@ -103,6 +101,7 @@ export const masterDataKeys = [
   queryKeys.itemCategoryOptions(),
   queryKeys.itemOptions(),
   queryKeys.kitchenOptions(),
+  queryKeys.legalEntityOptions(),
   queryKeys.locationOptions(),
   queryKeys.paymentMachinePosDeviceOptions(),
   queryKeys.restaurantMenuReferenceOptions(),

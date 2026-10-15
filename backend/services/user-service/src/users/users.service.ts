@@ -4,12 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  NotificationPublisher,
-  hashPassword,
-  uniqueViolationTarget,
-  type JwtRequestUser,
-} from '@aahar/auth';
+import { hashPassword, uniqueViolationTarget, type JwtRequestUser } from '@aahar/auth';
 import { LocationScope, Prisma, RecordStatus, Role, UserStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -104,35 +99,8 @@ function toUserSnapshot(user: UserWithRoles) {
 export class UsersService {
   constructor(
     private readonly auditLog: AuditLogService,
-    private readonly notifications: NotificationPublisher,
     private readonly prisma: PrismaService,
   ) {}
-
-  /**
-   * Access now resolves from the database on every request, so a change lands immediately.
-   * Telling the affected user is what stops that feeling like an unexplained failure.
-   */
-  private async notifyAccessChanged(
-    userId: string,
-    title: string,
-    body: string,
-    context: ActorContext,
-    tx: Prisma.TransactionClient,
-  ): Promise<void> {
-    await this.notifications.publish(
-      {
-        actorId: context.actorId,
-        body,
-        category: 'ACCESS',
-        entityId: userId,
-        entityName: 'users',
-        link: '/dashboard',
-        title,
-        userIds: [userId],
-      },
-      tx,
-    );
-  }
 
   /**
    * Ends every session the users have open, so they sign in again and pick up the change.
@@ -180,9 +148,8 @@ export class UsersService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         include: userInclude,
-        orderBy: {
-          createdAt: 'desc',
-        },
+        // id breaks ties, so a page boundary never repeats or skips a row.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
         where,
@@ -486,14 +453,6 @@ export class UsersService {
         tx,
       );
 
-      await this.notifyAccessChanged(
-        id,
-        'Your role was changed',
-        `You are now assigned the ${role.name} role. Your access has been updated.`,
-        context,
-        tx,
-      );
-
       if (holdsSuperAdminRole(existing.roles)) {
         await this.assertSuperAdminRemains(tx);
       }
@@ -542,14 +501,6 @@ export class UsersService {
             ipAddress: context.ipAddress,
             newValue: { hospitalIds: dto.hospitalIds },
           },
-          tx,
-        );
-
-        await this.notifyAccessChanged(
-          userId,
-          'Your locations were updated',
-          `You are now assigned to ${dto.hospitalIds.length} location(s).`,
-          context,
           tx,
         );
 
@@ -623,14 +574,6 @@ export class UsersService {
           ipAddress: context.ipAddress,
           newValue: { permissionIds: dto.permissionIds },
         },
-        tx,
-      );
-
-      await this.notifyAccessChanged(
-        id,
-        'Your permissions were updated',
-        `${grants.length} permission(s) granted and ${revokes.length} revoked beyond your role.`,
-        context,
         tx,
       );
 

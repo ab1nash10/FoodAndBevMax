@@ -13,6 +13,7 @@ import { CreatePosDeviceDto } from './dto/create-pos-device.dto';
 import { ListPosDevicesQueryDto } from './dto/list-pos-devices-query.dto';
 import { UpdatePosDeviceDto } from './dto/update-pos-device.dto';
 import { PosDevicesRepository, PosDeviceWithRelations } from './pos-devices.repository';
+import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
 
 type PosDeviceClient = Prisma.TransactionClient;
 
@@ -25,8 +26,8 @@ function toPosDeviceResponse(posDevice: PosDeviceWithRelations) {
     code: posDevice.code,
     createdAt: posDevice.createdAt,
     deletedAt: posDevice.deletedAt,
-    entity: posDevice.entity,
     hostName: posDevice.hostName,
+    legalEntityId: posDevice.legalEntityId,
     hospital: {
       hospitalCode: posDevice.hospital.hospitalCode,
       hospitalName: posDevice.hospital.hospitalName,
@@ -94,7 +95,6 @@ export class PosDevicesService {
         ? {
             OR: [
               { code: { contains: query.search, mode: 'insensitive' } },
-              { entity: { contains: query.search, mode: 'insensitive' } },
               { hostName: { contains: query.search, mode: 'insensitive' } },
               { name: { contains: query.search, mode: 'insensitive' } },
               { hospital: { hospitalName: { contains: query.search, mode: 'insensitive' } } },
@@ -142,16 +142,20 @@ export class PosDevicesService {
         await this.assertUniqueCode(dto.hospitalId, dto.code, undefined, tx);
         await this.assertUniqueHostName(dto.hostName, undefined, tx);
 
+        if (dto.legalEntityId) {
+          await assertActiveLegalEntity(tx, dto.legalEntityId);
+        }
+
         const posDevice = await this.posDevices.create(
           {
             code: dto.code,
             createdBy: context.actorId,
-            entity: dto.entity,
             hospitalId: dto.hospitalId,
             hostName: dto.hostName,
             isActive: dto.isActive ?? true,
             isInvoicePrintEnabled: dto.isInvoicePrintEnabled ?? false,
             isKotPrintEnabled: dto.isKotPrintEnabled ?? false,
+            legalEntityId: dto.legalEntityId ?? null,
             name: dto.name,
             updatedBy: context.actorId,
           },
@@ -225,8 +229,14 @@ export class PosDevicesService {
           data.code = dto.code;
         }
 
-        if (dto.entity !== undefined) {
-          data.entity = dto.entity;
+        if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          if (dto.legalEntityId) {
+            await assertActiveLegalEntity(tx, dto.legalEntityId);
+          }
+
+          data.legalEntity = dto.legalEntityId
+            ? { connect: { id: dto.legalEntityId } }
+            : { disconnect: true };
         }
 
         if (dto.hostName !== undefined) {

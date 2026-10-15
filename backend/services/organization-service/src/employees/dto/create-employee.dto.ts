@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { EmploymentType } from '@prisma/client';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateEmployeeDto {
   @ApiProperty({ example: 'EMP001' })
@@ -36,6 +45,11 @@ export class CreateEmployeeDto {
   @IsBoolean()
   @IsOptional()
   eligibleForDiscount?: boolean;
+
+  @ApiPropertyOptional({ description: 'On roll or outsourced', enum: EmploymentType })
+  @IsEnum(EmploymentType)
+  @IsOptional()
+  employmentType?: EmploymentType;
 
   @ApiPropertyOptional({ default: true })
   @IsBoolean()

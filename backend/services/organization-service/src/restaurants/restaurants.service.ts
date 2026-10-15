@@ -15,6 +15,7 @@ import { ListRestaurantsQueryDto } from './dto/list-restaurants-query.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
 import { RestaurantsRepository, RestaurantWithRelations } from './restaurants.repository';
 import { toRestaurantResponse } from './restaurants.helpers';
+import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
 
 type RestaurantClient = Prisma.TransactionClient;
 
@@ -127,6 +128,10 @@ export class RestaurantsService {
           await this.assertActiveKitchens(kitchenIds, dto.hospitalId, tx);
         }
 
+        if (dto.legalEntityId) {
+          await assertActiveLegalEntity(tx, dto.legalEntityId);
+        }
+
         const restaurantCode = await this.generateUniqueRestaurantCode(tx);
         const primaryKitchenId = kitchenIds[0];
 
@@ -156,10 +161,12 @@ export class RestaurantsService {
             isActive: dto.isActive ?? true,
             isRegisteredInGst: dto.isRegisteredInGst ?? false,
             kitchenId: primaryKitchenId,
+            legalEntityId: dto.legalEntityId ?? null,
             legalName: dto.legalName,
             locationId: dto.locationId,
             mobile: dto.mobile,
             normalDiscountApplicable: dto.normalDiscountApplicable ?? false,
+            ihcOnly: dto.isIhcOnly ?? false,
             offline: dto.isOffline ?? dto.offline ?? false,
             onlineOrderingEnabled:
               dto.isOnlineOrdersEnabled ?? dto.onlineOrders ?? dto.onlineOrderingEnabled ?? false,
@@ -300,6 +307,15 @@ export class RestaurantsService {
               };
         }
         if (dto.legalName !== undefined) data.legalName = dto.legalName;
+        if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          if (dto.legalEntityId) {
+            await assertActiveLegalEntity(tx, dto.legalEntityId);
+          }
+
+          data.legalEntity = dto.legalEntityId
+            ? { connect: { id: dto.legalEntityId } }
+            : { disconnect: true };
+        }
         if (dto.locationId !== undefined) {
           await this.assertActiveLocation(dto.locationId, hospitalId, tx);
           data.location = {
@@ -315,6 +331,7 @@ export class RestaurantsService {
         if (dto.isOffline !== undefined || dto.offline !== undefined) {
           data.offline = dto.isOffline ?? dto.offline;
         }
+        if (dto.isIhcOnly !== undefined) data.ihcOnly = dto.isIhcOnly;
         if (
           dto.isOnlineOrdersEnabled !== undefined ||
           dto.onlineOrders !== undefined ||

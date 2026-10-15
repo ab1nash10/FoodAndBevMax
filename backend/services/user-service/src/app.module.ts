@@ -4,10 +4,10 @@ import {
   AuditLoggerService,
   createThrottlerStorage,
   HealthCheckService,
-  NotificationPublisher,
   JwtAuthGuard,
   JwtStrategy,
   RbacGuard,
+  UserThrottlerGuard,
 } from '@aahar/auth';
 import {
   getServiceEnvFilePaths,
@@ -18,11 +18,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { PassportModule } from '@nestjs/passport';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CommonModule } from './common/common.module';
 import { PrismaService } from './common/prisma/prisma.service';
 import { HealthController } from './health.controller';
-import { NotificationsModule } from './notifications/notifications.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { RolesModule } from './roles/roles.module';
@@ -41,7 +40,6 @@ import { UsersModule } from './users/users.module';
       skipProcessEnv: shouldUseRootEnvFileOnly(),
       validate: (config) => validateServiceEnvWithPort(config, 'USER_SERVICE_PORT', 4002),
     }),
-    NotificationsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     PermissionsModule,
     PreferencesModule,
@@ -67,15 +65,15 @@ import { UsersModule } from './users/users.module';
     { provide: AUTH_PRISMA, useExisting: PrismaService },
     AuditLoggerService,
     HealthCheckService,
-    NotificationPublisher,
     JwtStrategy,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: JwtAuthGuard,
     },
+    // After JwtAuthGuard: signed-in requests are counted per user, public ones per address.
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: UserThrottlerGuard,
     },
     {
       provide: APP_GUARD,

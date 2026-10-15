@@ -2,11 +2,13 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { Grn, GrnStatus, SortOrder } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
@@ -114,6 +116,17 @@ export function GrnsPageClient() {
 
   const grns = grnsQuery.data?.items ?? [];
   const meta = grnsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const hasFilters = Boolean(
+    searchInput || hospitalFilter !== (scopedHospitalId ?? '') || storeFilter || statusFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setStoreFilter('');
+    setStatusFilter('');
+    setPage(1);
+  }
 
   function deleteGrn(grn: Grn) {
     if (window.confirm(`Delete ${grn.grnNumber}?`)) {
@@ -142,7 +155,7 @@ export function GrnsPageClient() {
         title="GRNs"
       />
       <Panel>
-        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -150,53 +163,69 @@ export function GrnsPageClient() {
             }}
             value={searchInput}
           />
-          <HospitalSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setStoreFilter('');
-              setPage(1);
-            }}
-            value={hospitalFilter}
-          />
-          <StoreSelect
-            disabled={!hospitalFilter}
-            onChange={(value) => {
-              setStoreFilter(value);
-              setPage(1);
-            }}
-            stores={storesQuery.data ?? []}
-            value={storeFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStatusFilter(event.target.value as '' | GrnStatus);
-              setPage(1);
-            }}
-            value={statusFilter}
+          <FiltersMenu
+            activeCount={
+              [hospitalFilter !== (scopedHospitalId ?? ''), storeFilter, statusFilter].filter(
+                Boolean,
+              ).length
+            }
           >
-            <option value="">All statuses</option>
-            {grnStatuses.map((status) => (
-              <option key={status} value={status}>
-                {formatEnum(status)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortOrder(event.target.value as SortOrder);
-              setPage(1);
-            }}
-            value={sortOrder}
-          >
-            <option value="desc">Newest</option>
-            <option value="asc">Oldest</option>
-          </Select>
-          <Button onClick={() => void grnsQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+            <FilterField label="Location">
+              <HospitalSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setStoreFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </FilterField>
+            <FilterField label="Store">
+              <StoreSelect
+                disabled={!hospitalFilter}
+                onChange={(value) => {
+                  setStoreFilter(value);
+                  setPage(1);
+                }}
+                stores={storesQuery.data ?? []}
+                value={storeFilter}
+              />
+            </FilterField>
+            <FilterField label="Status">
+              <Select
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as '' | GrnStatus);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">All statuses</option>
+                {grnStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {formatEnum(status)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <div className="w-36">
+            <Select
+              aria-label="Sort order"
+              onChange={(event) => {
+                setSortOrder(event.target.value as SortOrder);
+                setPage(1);
+              }}
+              value={sortOrder}
+            >
+              <option value="desc">Newest</option>
+              <option value="asc">Oldest</option>
+            </Select>
+          </div>
+          <RefreshButton onClick={() => void grnsQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] table-fixed text-[13px]">
             <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">

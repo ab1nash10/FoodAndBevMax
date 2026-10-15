@@ -7,7 +7,6 @@ import {
   LogOut,
   Menu,
   PanelLeftClose,
-  Plus,
   Search,
   Settings,
   X,
@@ -18,7 +17,6 @@ import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { BreadcrumbLabelsProvider, Breadcrumbs } from '@/components/breadcrumbs';
 import { CommandPalette, type PalettePage } from '@/components/command-palette';
 import { BrandMark, EmptyState, KeyboardHint } from '@/components/design-system';
-import { NotificationBell } from '@/components/notification-bell';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
@@ -190,7 +188,6 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     .map((part) => part.charAt(0).toUpperCase())
     .join('');
   const roleLabel = roles[0] ?? 'Active user';
-  const canCreateTransfer = hasPermission(['TRANSFER_CREATE', 'KITCHEN_TRANSFER_CREATE']);
   const openPalette = openCommandPalette;
 
   return (
@@ -300,12 +297,8 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
               >
                 <Menu className="h-5 w-5" />
               </Button>
-              {/* useSearchParams (record crumbs) needs a Suspense boundary under the layout. */}
-              <Suspense fallback={<span className="min-w-0 flex-1" />}>
-                <Breadcrumbs />
-              </Suspense>
               <button
-                className="mx-auto hidden h-10 max-w-[460px] min-w-28 flex-1 basis-0 items-center gap-2.5 rounded-control border border-ds-border bg-ds-subtle pl-3 pr-2 text-left text-[13px] text-ds-muted transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary md:flex"
+                className="hidden h-10 max-w-[460px] min-w-28 flex-1 basis-0 items-center gap-2.5 rounded-control border border-ds-border bg-ds-subtle pl-3 pr-2 text-left text-[13px] text-ds-muted transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary md:flex"
                 onClick={openPalette}
                 type="button"
               >
@@ -313,7 +306,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
                 <span className="min-w-0 flex-1 truncate">Search transfers, items, GRNs…</span>
                 <KeyboardHint keys={['Ctrl', 'K']} />
               </button>
-              <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 md:ml-0">
+              <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
                 <Button
                   aria-label="Search"
                   className="md:hidden"
@@ -325,15 +318,6 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
                   <Search className="h-[18px] w-[18px]" strokeWidth={1.8} />
                 </Button>
                 <HeaderLocationSelector />
-                {canCreateTransfer ? (
-                  <Button asChild className="hidden w-10 px-0 sm:inline-flex xl:w-auto xl:px-3.5">
-                    <Link href="/inventory/transfers/new">
-                      <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                      <span className="sr-only xl:not-sr-only">New transfer</span>
-                    </Link>
-                  </Button>
-                ) : null}
-                <NotificationBell />
                 {/* Phones reach the theme from Preferences. */}
                 <div className="hidden sm:block">
                   <ThemeToggle />
@@ -390,6 +374,14 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             id="main-content"
             tabIndex={-1}
           >
+            {/* The trail sits above the page, below the top bar. useSearchParams (record crumbs)
+                needs a Suspense boundary under the layout. */}
+            <Suspense fallback={<div className="mb-3 h-5" />}>
+              {/* -ml-1 takes back the crumbs' hover padding, so the text lines up with the title. */}
+              <div className="-ml-1 mb-3">
+                <Breadcrumbs />
+              </div>
+            </Suspense>
             {children}
           </main>
         </div>

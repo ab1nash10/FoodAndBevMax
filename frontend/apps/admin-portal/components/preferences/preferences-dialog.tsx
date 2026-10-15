@@ -24,17 +24,6 @@ const themeOptions: Array<{ icon: typeof Sun; label: string; value: ThemePrefere
   { icon: Monitor, label: 'Match system', value: 'system' },
 ];
 
-// ACCESS is not listed: changes to your own access are always shown.
-const notificationOptions = [
-  { description: 'When goods are received into a store', label: 'GRNs', value: 'GRN' },
-  {
-    description: 'Store and kitchen transfers to restaurants',
-    label: 'Transfers',
-    value: 'TRANSFER',
-  },
-  { description: 'Kitchen production updates', label: 'Kitchen', value: 'KITCHEN' },
-];
-
 const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
 
 /** Personal settings, opened from the profile menu. Mounted only while open, so it starts fresh. */
@@ -186,43 +175,6 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
               <p className="text-xs text-ds-muted">
                 Applied each time you sign in. You can still switch location from the header.
               </p>
-            </div>
-          </FormSection>
-
-          <FormSection description="Choose which updates appear in the bell." title="Notifications">
-            <div className="grid gap-3">
-              {notificationOptions.map((option) => {
-                const shown = !preferences.mutedNotificationCategories.includes(option.value);
-
-                return (
-                  <label
-                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-ds-border p-3"
-                    key={option.value}
-                  >
-                    <input
-                      checked={shown}
-                      className="mt-0.5 h-4 w-4"
-                      onChange={() =>
-                        save({
-                          mutedNotificationCategories: shown
-                            ? [...preferences.mutedNotificationCategories, option.value]
-                            : preferences.mutedNotificationCategories.filter(
-                                (category) => category !== option.value,
-                              ),
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    <span>
-                      <span className="block text-sm font-medium text-ds-text dark:text-white">
-                        {option.label}
-                      </span>
-                      <span className="block text-xs text-ds-muted">{option.description}</span>
-                    </span>
-                  </label>
-                );
-              })}
-              <p className="text-xs text-ds-muted">Changes to your own access are always shown.</p>
             </div>
           </FormSection>
 

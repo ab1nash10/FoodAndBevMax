@@ -2,24 +2,19 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, ClipboardCheck, Download, Plus, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardCheck, Download, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { InventoryLocationType, SortOrder, Transfer, TransferStatus } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { EmptyState, StatusChip, TypeTag } from '@/components/design-system';
 import { statusPresentation, type StatusTone } from '@/lib/status';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Skeleton } from '@/components/ui';
-import {
-  BulkActionBar,
-  DetailPanel,
-  FilterBar,
-  FilterSearch,
-  FilterSelect,
-  SavedViewTabs,
-} from '@/components/ui-controls';
+import { Panel, Select, Skeleton } from '@/components/ui';
+import { BulkActionBar, DetailPanel, FilterSearch, SavedViewTabs } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
 import { downloadCsv } from '@/lib/csv';
@@ -365,6 +360,30 @@ export function TransfersPageClient() {
     setPage(1);
   }
 
+  const hasFilters = Boolean(
+    searchInput ||
+    hospitalParam ||
+    sourceTypeFilter ||
+    storeFilter ||
+    kitchenFilter ||
+    restaurantFilter ||
+    statusFilter ||
+    dateRange,
+  );
+
+  function clearFilters() {
+    changeFilter(() => {
+      setSearch('');
+      setHospitalFilter('');
+      setSourceTypeFilter('');
+      setStoreFilter('');
+      setKitchenFilter('');
+      setRestaurantFilter('');
+      setStatusFilter('');
+      setDateRange('');
+    });
+  }
+
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -428,126 +447,146 @@ export function TransfersPageClient() {
               </Button>
             </BulkActionBar>
           ) : (
-            <FilterBar>
+            <ListToolbar>
               <FilterSearch
                 label="Search transfers"
                 onChange={(value) => changeFilter(() => setSearch(value))}
                 placeholder="Transfer no., item, remarks…"
                 value={searchInput}
               />
-              {!scopedHospitalId ? (
-                <FilterSelect
-                  label="Location"
-                  onChange={(value) =>
-                    changeFilter(() => {
-                      setHospitalFilter(value);
-                      setStoreFilter('');
-                      setKitchenFilter('');
-                      setRestaurantFilter('');
-                    })
-                  }
-                  value={hospitalFilter}
-                >
-                  <option value="">All locations</option>
-                  {(hospitalsQuery.data ?? []).map((hospital) => (
-                    <option key={hospital.id} value={hospital.id}>
-                      {hospital.hospitalName}
-                    </option>
-                  ))}
-                </FilterSelect>
-              ) : null}
-              <FilterSelect
-                label="From"
-                onChange={(value) =>
-                  changeFilter(() => {
-                    setSourceTypeFilter(value as '' | InventoryLocationType);
-                    setStoreFilter('');
-                    setKitchenFilter('');
-                  })
+              <FiltersMenu
+                activeCount={
+                  [
+                    hospitalParam,
+                    sourceTypeFilter,
+                    storeFilter,
+                    kitchenFilter,
+                    restaurantFilter,
+                    dateRange,
+                  ].filter(Boolean).length
                 }
-                value={sourceTypeFilter}
               >
-                <option value="">Any source</option>
-                <option value="STORE">Stores</option>
-                <option value="KITCHEN">Kitchens</option>
-              </FilterSelect>
-              {sourceTypeFilter && hospitalFilter ? (
-                <FilterSelect
-                  label={sourceTypeFilter === 'KITCHEN' ? 'Kitchen' : 'Store'}
-                  onChange={(value) =>
-                    changeFilter(() =>
-                      sourceTypeFilter === 'KITCHEN'
-                        ? setKitchenFilter(value)
-                        : setStoreFilter(value),
-                    )
-                  }
-                  value={sourceTypeFilter === 'KITCHEN' ? kitchenFilter : storeFilter}
-                >
-                  <option value="">
-                    {sourceTypeFilter === 'KITCHEN' ? 'Any kitchen' : 'Any store'}
-                  </option>
-                  {sourceTypeFilter === 'KITCHEN'
-                    ? (kitchensQuery.data ?? []).map((kitchen) => (
-                        <option key={kitchen.id} value={kitchen.id}>
-                          {kitchen.kitchenName}
-                        </option>
-                      ))
-                    : (storesQuery.data ?? []).map((store) => (
-                        <option key={store.id} value={store.id}>
-                          {store.storeName}
+                {!scopedHospitalId ? (
+                  <FilterField label="Location">
+                    <Select
+                      onChange={(event) =>
+                        changeFilter(() => {
+                          setHospitalFilter(event.target.value);
+                          setStoreFilter('');
+                          setKitchenFilter('');
+                          setRestaurantFilter('');
+                        })
+                      }
+                      value={hospitalFilter}
+                    >
+                      <option value="">All locations</option>
+                      {(hospitalsQuery.data ?? []).map((hospital) => (
+                        <option key={hospital.id} value={hospital.id}>
+                          {hospital.hospitalName}
                         </option>
                       ))}
-                </FilterSelect>
-              ) : null}
-              <FilterSelect
-                disabled={!hospitalFilter}
-                label="To"
-                onChange={(value) => changeFilter(() => setRestaurantFilter(value))}
-                value={restaurantFilter}
-              >
-                <option value="">
-                  {hospitalFilter ? 'Any restaurant' : 'Choose a location first'}
-                </option>
-                {(restaurantsQuery.data ?? []).map((restaurant) => (
-                  <option key={restaurant.id} value={restaurant.id}>
-                    {restaurant.restaurantName}
-                  </option>
-                ))}
-              </FilterSelect>
-              <FilterSelect
-                label="Date"
-                onChange={(value) => changeFilter(() => setDateRange(value as TransferDateRange))}
-                value={dateRange}
-              >
-                <option value="">Any time</option>
-                {transferDateRanges.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </FilterSelect>
-              <FilterSelect
-                label="Sort"
-                onChange={(value) => changeFilter(() => setSortOrder(value as SortOrder))}
-                value={sortOrder}
-              >
-                <option value="desc">Newest</option>
-                <option value="asc">Oldest</option>
-              </FilterSelect>
-              <Button
-                aria-label="Refresh transfers"
-                className="h-9 w-9"
+                    </Select>
+                  </FilterField>
+                ) : null}
+                <FilterField label="From">
+                  <Select
+                    onChange={(event) =>
+                      changeFilter(() => {
+                        setSourceTypeFilter(event.target.value as '' | InventoryLocationType);
+                        setStoreFilter('');
+                        setKitchenFilter('');
+                      })
+                    }
+                    value={sourceTypeFilter}
+                  >
+                    <option value="">Any source</option>
+                    <option value="STORE">Stores</option>
+                    <option value="KITCHEN">Kitchens</option>
+                  </Select>
+                </FilterField>
+                {sourceTypeFilter && hospitalFilter ? (
+                  <FilterField label={sourceTypeFilter === 'KITCHEN' ? 'Kitchen' : 'Store'}>
+                    <Select
+                      onChange={(event) =>
+                        changeFilter(() =>
+                          sourceTypeFilter === 'KITCHEN'
+                            ? setKitchenFilter(event.target.value)
+                            : setStoreFilter(event.target.value),
+                        )
+                      }
+                      value={sourceTypeFilter === 'KITCHEN' ? kitchenFilter : storeFilter}
+                    >
+                      <option value="">
+                        {sourceTypeFilter === 'KITCHEN' ? 'Any kitchen' : 'Any store'}
+                      </option>
+                      {sourceTypeFilter === 'KITCHEN'
+                        ? (kitchensQuery.data ?? []).map((kitchen) => (
+                            <option key={kitchen.id} value={kitchen.id}>
+                              {kitchen.kitchenName}
+                            </option>
+                          ))
+                        : (storesQuery.data ?? []).map((store) => (
+                            <option key={store.id} value={store.id}>
+                              {store.storeName}
+                            </option>
+                          ))}
+                    </Select>
+                  </FilterField>
+                ) : null}
+                <FilterField label="To">
+                  <Select
+                    disabled={!hospitalFilter}
+                    onChange={(event) =>
+                      changeFilter(() => setRestaurantFilter(event.target.value))
+                    }
+                    value={restaurantFilter}
+                  >
+                    <option value="">
+                      {hospitalFilter ? 'Any restaurant' : 'Choose a location first'}
+                    </option>
+                    {(restaurantsQuery.data ?? []).map((restaurant) => (
+                      <option key={restaurant.id} value={restaurant.id}>
+                        {restaurant.restaurantName}
+                      </option>
+                    ))}
+                  </Select>
+                </FilterField>
+                <FilterField label="Date">
+                  <Select
+                    onChange={(event) =>
+                      changeFilter(() => setDateRange(event.target.value as TransferDateRange))
+                    }
+                    value={dateRange}
+                  >
+                    <option value="">Any time</option>
+                    {transferDateRanges.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </FilterField>
+              </FiltersMenu>
+              <div className="w-36">
+                <Select
+                  aria-label="Sort order"
+                  onChange={(event) =>
+                    changeFilter(() => setSortOrder(event.target.value as SortOrder))
+                  }
+                  value={sortOrder}
+                >
+                  <option value="desc">Newest</option>
+                  <option value="asc">Oldest</option>
+                </Select>
+              </div>
+              <RefreshButton
                 onClick={() => {
                   void transfersQuery.refetch();
                   void viewCountsQuery.refetch();
                 }}
-                size="icon"
-                type="button"
-                variant="outline"
-              >
-                <RefreshCw aria-hidden="true" className="h-4 w-4" />
-              </Button>
-            </FilterBar>
+              />
+              <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+            </ListToolbar>
           )}
 
           <div className="overflow-x-auto">

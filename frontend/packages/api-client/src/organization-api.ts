@@ -23,6 +23,7 @@ import type {
   TimeSlotInput,
   TimeSlotListQuery,
 } from './catalog';
+import type { DashboardRecords, DashboardRecordsQuery, DashboardSetup } from './dashboard';
 import { createApiClient, type ApiClientOptions, type ApiList, type ApiResponse } from './http';
 import type {
   Grn,
@@ -55,6 +56,9 @@ import type {
   EmployeeValidation,
   Hospital,
   HospitalInput,
+  LegalEntity,
+  LegalEntityInput,
+  LegalEntityListQuery,
   HospitalListQuery,
   Kitchen,
   KitchenInput,
@@ -123,6 +127,9 @@ export function createOrganizationApi(options: ApiClientOptions) {
         body,
         method: 'POST',
       });
+    },
+    createLegalEntity(body: LegalEntityInput) {
+      return client.request<ApiResponse<LegalEntity>>('/legal-entities', { body, method: 'POST' });
     },
     createItemCategory(body: ItemCategoryInput) {
       return client.request<ApiResponse<ItemCategory>>('/item-categories', {
@@ -229,6 +236,11 @@ export function createOrganizationApi(options: ApiClientOptions) {
     deleteItem(id: string) {
       return client.request<ApiResponse<{ id: string }>>(`/items/${id}`, { method: 'DELETE' });
     },
+    deleteLegalEntity(id: string) {
+      return client.request<ApiResponse<{ id: string }>>(`/legal-entities/${id}`, {
+        method: 'DELETE',
+      });
+    },
     deleteItemCategory(id: string) {
       return client.request<ApiResponse<{ id: string }>>(`/item-categories/${id}`, {
         method: 'DELETE',
@@ -277,6 +289,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<{ id: string }>>(`/time-slots/${id}`, {
         method: 'DELETE',
       });
+    },
+    getDashboardRecords(query: DashboardRecordsQuery) {
+      return client.request<ApiResponse<DashboardRecords>>('/dashboard/records', { query });
+    },
+    getDashboardSetup(query?: { hospitalId?: string }) {
+      return client.request<ApiResponse<DashboardSetup>>('/dashboard/setup', { query });
     },
     getCounter(id: string) {
       return client.request<ApiResponse<Counter>>(`/counters/${id}`);
@@ -357,6 +375,9 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     listHospitals(query?: HospitalListQuery) {
       return client.request<ApiResponse<ApiList<Hospital>>>('/hospitals', { query });
+    },
+    listLegalEntities(query?: LegalEntityListQuery) {
+      return client.request<ApiResponse<ApiList<LegalEntity>>>('/legal-entities', { query });
     },
     listItemCategories(query?: ItemCategoryListQuery) {
       return client.request<ApiResponse<ApiList<ItemCategory>>>('/item-categories', { query });
@@ -470,6 +491,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     updateItem(id: string, body: Partial<ItemInput>) {
       return client.request<ApiResponse<Item>>(`/items/${id}`, {
+        body,
+        method: 'PUT',
+      });
+    },
+    updateLegalEntity(id: string, body: Partial<LegalEntityInput>) {
+      return client.request<ApiResponse<LegalEntity>>(`/legal-entities/${id}`, {
         body,
         method: 'PUT',
       });

@@ -172,6 +172,11 @@ export class CreateRestaurantDto {
   @IsOptional()
   isOffline?: boolean;
 
+  @ApiPropertyOptional({ default: false, description: 'IHC only' })
+  @IsBoolean()
+  @IsOptional()
+  isIhcOnly?: boolean;
+
   @ApiPropertyOptional({ default: false })
   @IsBoolean()
   @IsOptional()
@@ -364,4 +369,12 @@ export class CreateRestaurantDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'The legal entity it bills under; null removes the link.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  legalEntityId?: string | null;
 }

@@ -6,6 +6,7 @@ import { KitchenItemsService } from './kitchen-items.service';
 
 @Module({
   controllers: [KitchenItemsController],
+  exports: [KitchenItemsService],
   imports: [CommonModule],
   providers: [KitchenItemsRepository, KitchenItemsService],
 })

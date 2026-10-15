@@ -1,10 +1,16 @@
 'use client';
 
-import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Restaurant, SortOrder, StockBalanceStatus } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { Badge, Input, Panel, Select } from '@/components/ui';
@@ -130,6 +136,28 @@ export function RestaurantStockPageClient() {
 
   const items = stockQuery.data?.items ?? [];
   const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const hasFilters = Boolean(
+    searchInput ||
+    hospitalFilter !== (scopedHospitalId ?? '') ||
+    restaurantFilter ||
+    statusFilter ||
+    sourceFilter ||
+    itemTypeFilter ||
+    itemFilter ||
+    batchFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setRestaurantFilter('');
+    setStatusFilter('');
+    setSourceFilter('');
+    setItemTypeFilter('');
+    setItemFilter('');
+    setBatchFilter('');
+    setPage(1);
+  }
 
   return (
     <section className="space-y-5">
@@ -138,7 +166,7 @@ export function RestaurantStockPageClient() {
         title="Restaurant Stock"
       />
       <Panel>
-        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -146,110 +174,133 @@ export function RestaurantStockPageClient() {
             }}
             value={searchInput}
           />
-          <HospitalSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setRestaurantFilter('');
+          <FiltersMenu
+            activeCount={
+              [
+                hospitalFilter !== (scopedHospitalId ?? ''),
+                restaurantFilter,
+                statusFilter,
+                sourceFilter,
+                itemTypeFilter,
+                itemFilter,
+                batchFilter,
+              ].filter(Boolean).length
+            }
+          >
+            <FilterField label="Location">
+              <HospitalSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setRestaurantFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </FilterField>
+            <FilterField label="Restaurant">
+              <RestaurantSelect
+                disabled={!hospitalFilter}
+                onChange={(value) => {
+                  setRestaurantFilter(value);
+                  setPage(1);
+                }}
+                restaurants={restaurantsQuery.data ?? []}
+                value={restaurantFilter}
+              />
+            </FilterField>
+            <FilterField label="Status">
+              <Select
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as '' | StockBalanceStatus);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">All statuses</option>
+                {stockStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {formatEnum(status)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Source">
+              <Select
+                onChange={(event) => {
+                  setSourceFilter(event.target.value as '' | 'KITCHEN' | 'STORE');
+                  setItemFilter('');
+                  setPage(1);
+                }}
+                value={sourceFilter}
+              >
+                <option value="">All sources</option>
+                <option value="STORE">Store</option>
+                <option value="KITCHEN">Kitchen</option>
+              </Select>
+            </FilterField>
+            <FilterField label="Item type">
+              <Select
+                onChange={(event) => {
+                  setItemTypeFilter(event.target.value as ItemTypeFilter);
+                  setItemFilter('');
+                  setPage(1);
+                }}
+                value={itemTypeFilter}
+              >
+                <option value="">All item types</option>
+                <option value="MRP">MRP</option>
+                <option value="READYMADE">READYMADE</option>
+              </Select>
+            </FilterField>
+            <FilterField label="Item">
+              <Select
+                onChange={(event) => {
+                  setItemFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={itemFilter}
+              >
+                <option value="">All items</option>
+                {itemOptionsQuery.data?.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.itemName}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Batch">
+              <Input
+                onChange={(event) => {
+                  setBatchFilter(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Batch number"
+                value={batchFilter}
+              />
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
+              setSortOrder(value);
               setPage(1);
             }}
-            value={hospitalFilter}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Last updated', value: 'lastUpdatedOn' },
+              { label: 'Available qty', value: 'availableQty' },
+              { label: 'Expiry date', value: 'expiryDate' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <RestaurantSelect
-            disabled={!hospitalFilter}
-            onChange={(value) => {
-              setRestaurantFilter(value);
-              setPage(1);
-            }}
-            restaurants={restaurantsQuery.data ?? []}
-            value={restaurantFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStatusFilter(event.target.value as '' | StockBalanceStatus);
-              setPage(1);
-            }}
-            value={statusFilter}
-          >
-            <option value="">All statuses</option>
-            {stockStatuses.map((status) => (
-              <option key={status} value={status}>
-                {formatEnum(status)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSourceFilter(event.target.value as '' | 'KITCHEN' | 'STORE');
-              setItemFilter('');
-              setPage(1);
-            }}
-            value={sourceFilter}
-          >
-            <option value="">All sources</option>
-            <option value="STORE">Store</option>
-            <option value="KITCHEN">Kitchen</option>
-          </Select>
-          <Select
-            onChange={(event) => {
-              setItemTypeFilter(event.target.value as ItemTypeFilter);
-              setItemFilter('');
-              setPage(1);
-            }}
-            value={itemTypeFilter}
-          >
-            <option value="">All item types</option>
-            <option value="MRP">MRP</option>
-            <option value="READYMADE">READYMADE</option>
-          </Select>
-          <Select
-            onChange={(event) => {
-              setItemFilter(event.target.value);
-              setPage(1);
-            }}
-            value={itemFilter}
-          >
-            <option value="">All items</option>
-            {itemOptionsQuery.data?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.itemName}
-              </option>
-            ))}
-          </Select>
-          <Input
-            onChange={(event) => {
-              setBatchFilter(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Batch number"
-            value={batchFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="lastUpdatedOn">Last updated</option>
-            <option value="availableQty">Available qty</option>
-            <option value="expiryDate">Expiry date</option>
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortOrder(event.target.value as SortOrder);
-              setPage(1);
-            }}
-            value={sortOrder}
-          >
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </Select>
-          <Button onClick={() => void stockQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void stockQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">

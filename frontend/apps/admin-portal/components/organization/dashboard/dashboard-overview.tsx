@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { EmptyState } from '@/components/design-system';
 import { useAuth } from '@/components/auth-provider';
+import { useGreeting } from '@/lib/greeting';
 import { createCommands } from '@/components/command-palette';
 import { useLocationContext } from '@/components/location-context';
 import { IfCanOpen } from '@/components/record-link';
@@ -23,12 +24,6 @@ import {
 import { OutcomeRow } from '@/components/organization/dashboard/outcome-row';
 import { TrendsExplainer, TrendsRow } from '@/components/organization/dashboard/trends-row';
 import { WorkQueue, WorkRow } from '@/components/organization/dashboard/work-queue';
-
-function greeting(): string {
-  const hour = new Date().getHours();
-
-  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-}
 
 const headerDateFormatter = new Intl.DateTimeFormat('en-IN', {
   day: 'numeric',
@@ -61,6 +56,7 @@ function NewWorkspaceRow({ stats }: Readonly<{ stats: DashboardStats }>) {
 }
 
 export function DashboardOverview() {
+  const greeting = useGreeting();
   const { isAllLocations, locationLabel } = useLocationContext();
   const { currentUser, hasPermission } = useAuth();
   const [days, setDays] = useUrlParam<PeriodValue>('days', '7', periodValues);
@@ -86,7 +82,7 @@ export function DashboardOverview() {
           </p>
           {/* The full name always shows: a long one wraps, it is never cut off. */}
           <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text wrap-anywhere">
-            {userName ? `${greeting()}, ${userName}` : 'Dashboard'}
+            {userName ? `${greeting}, ${userName}` : 'Dashboard'}
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">

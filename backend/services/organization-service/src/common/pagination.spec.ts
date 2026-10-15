@@ -12,14 +12,23 @@ describe('pagination helpers', () => {
     expect(getPageMeta(1, 20, 0)).toEqual({ limit: 20, page: 1, total: 0, totalPages: 0 });
   });
 
-  test('getOrderBy sorts by the requested field, else the defaults', () => {
+  test('getOrderBy sorts by the requested field, else the defaults, then by id', () => {
     type Field = 'createdAt' | 'displayOrder';
     const query = (sortBy?: Field, sortOrder?: 'asc' | 'desc') => ({ sortBy, sortOrder });
 
-    expect(getOrderBy(query(), 'createdAt')).toEqual({ createdAt: 'desc' });
-    expect(getOrderBy(query(), 'displayOrder', 'asc')).toEqual({ displayOrder: 'asc' });
-    expect(getOrderBy(query('displayOrder', 'asc'), 'createdAt')).toEqual({ displayOrder: 'asc' });
-    expect(getOrderBy(query(undefined, 'asc'), 'createdAt')).toEqual({ createdAt: 'asc' });
+    expect(getOrderBy(query(), 'createdAt')).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+    expect(getOrderBy(query(), 'displayOrder', 'asc')).toEqual([
+      { displayOrder: 'asc' },
+      { id: 'asc' },
+    ]);
+    expect(getOrderBy(query('displayOrder', 'asc'), 'createdAt')).toEqual([
+      { displayOrder: 'asc' },
+      { id: 'asc' },
+    ]);
+    expect(getOrderBy(query(undefined, 'asc'), 'createdAt')).toEqual([
+      { createdAt: 'asc' },
+      { id: 'asc' },
+    ]);
   });
 
   test('getDocumentOrderBy sorts a document number by creation, then the number', () => {
@@ -34,7 +43,7 @@ describe('pagination helpers', () => {
     ]);
     expect(orderBy('transferNumber')).toEqual([{ createdAt: 'desc' }, { transferNumber: 'desc' }]);
     // Any other sort is exactly getOrderBy's.
-    expect(orderBy()).toEqual({ createdAt: 'desc' });
-    expect(orderBy('status', 'asc')).toEqual({ status: 'asc' });
+    expect(orderBy()).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+    expect(orderBy('status', 'asc')).toEqual([{ status: 'asc' }, { id: 'asc' }]);
   });
 });

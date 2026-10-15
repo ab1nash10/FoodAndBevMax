@@ -6,6 +6,7 @@ import { TransfersService } from './transfers.service';
 
 @Module({
   controllers: [TransfersController],
+  exports: [TransfersService],
   imports: [CommonModule],
   providers: [TransfersRepository, TransfersService],
 })

@@ -1,6 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
@@ -10,16 +18,14 @@ import { INDIAN_STATES, getCitiesForState } from '@/lib/india-locations';
 import type { Hospital as HospitalRecord, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, MapPin, Plus, RefreshCw } from 'lucide-react';
+import { MapPin, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   ActiveFilterSelect,
-  FlexibleToolbar,
   PageHeader,
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
   StatusToggleCell,
 } from '@/components/organization/shared/list-controls';
 import {
@@ -36,6 +42,8 @@ import {
   getLocationTitle,
 } from '@/components/organization/shared/locations';
 import { onlinePaymentOptions } from '@/components/organization/shared/locations';
+import { useLegalEntityNames } from '@/components/organization/shared/hooks';
+import { LegalEntityCell } from '@/components/organization/shared/legal-entity-select';
 import type { ActiveFilter, OnlinePaymentFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -63,6 +71,7 @@ export function HospitalsPageClient() {
     }
   }, [cityFilter, cityOptions]);
 
+  const entityNamesQuery = useLegalEntityNames();
   const locationsQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listHospitals({
@@ -122,6 +131,19 @@ export function HospitalsPageClient() {
     totalPages: 1,
   };
 
+  const hasFilters = Boolean(
+    searchInput || activeFilter || stateFilter || cityFilter || onlinePaymentFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setStateFilter('');
+    setCityFilter('');
+    setOnlinePaymentFilter('');
+    setPage(1);
+  }
+
   function toggleLocationStatus(location: HospitalRecord) {
     const nextIsActive = !location.isActive;
 
@@ -152,7 +174,7 @@ export function HospitalsPageClient() {
         title="Locations"
       />
       <Panel>
-        <FlexibleToolbar>
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -160,139 +182,172 @@ export function HospitalsPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStateFilter(event.target.value);
-              setPage(1);
-            }}
-            value={stateFilter}
+          <FiltersMenu
+            activeCount={
+              [activeFilter, stateFilter, cityFilter, onlinePaymentFilter].filter(Boolean).length
+            }
           >
-            <option value="">All states</option>
-            {INDIAN_STATES.map((state) => (
-              <option key={state} value={state}>
-                {state}
-              </option>
-            ))}
-          </Select>
-          <Select
-            disabled={!stateFilter}
-            onChange={(event) => {
-              setCityFilter(event.target.value);
-              setPage(1);
-            }}
-            value={cityFilter}
-          >
-            <option value="">All cities</option>
-            {cityOptions.map((city) => (
-              <option key={city} value={city}>
-                {city}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setOnlinePaymentFilter(event.target.value as OnlinePaymentFilter);
-              setPage(1);
-            }}
-            value={onlinePaymentFilter}
-          >
-            <option value="">All payment options</option>
-            {onlinePaymentOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="title">Name</option>
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+            <FilterField label="State">
+              <Select
+                onChange={(event) => {
+                  setStateFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={stateFilter}
+              >
+                <option value="">All states</option>
+                {INDIAN_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="City">
+              <Select
+                disabled={!stateFilter}
+                onChange={(event) => {
+                  setCityFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={cityFilter}
+              >
+                <option value="">All cities</option>
+                {cityOptions.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Online payment">
+              <Select
+                onChange={(event) => {
+                  setOnlinePaymentFilter(event.target.value as OnlinePaymentFilter);
+                  setPage(1);
+                }}
+                value={onlinePaymentFilter}
+              >
+                <option value="">All payment options</option>
+                {onlinePaymentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Created date', value: 'createdAt' },
+              { label: 'Updated date', value: 'updatedAt' },
+              { label: 'Name', value: 'title' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <Button onClick={() => void locationsQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </FlexibleToolbar>
+          <RefreshButton onClick={() => void locationsQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-[1180px] table-fixed divide-y divide-ds-divider text-sm">
+          <table className="w-full min-w-[860px] table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[18%] px-4 py-2.5">Title</th>
-                <th className="w-[13%] px-4 py-2.5">Location Code</th>
-                <th className="w-[17%] px-4 py-2.5">Display Name</th>
-                <th className="w-[12%] px-4 py-2.5">State</th>
-                <th className="w-[12%] px-4 py-2.5">City</th>
-                <th className="w-[10%] px-4 py-2.5">Postal Code</th>
-                <th className="w-[12%] px-4 py-2.5">Online Payment</th>
-                <th className="w-[18%] px-4 py-2.5">Status</th>
-                <th className="w-[13%] px-4 py-2.5">Updated</th>
-                <th className="w-[12%] px-4 py-2.5">Actions</th>
+                <th className="w-[22%] px-4 py-2.5">Location</th>
+                <th className="w-[20%] px-4 py-2.5">Entity</th>
+                <th className="w-[21%] px-4 py-2.5">Address</th>
+                <th className="w-[10%] px-4 py-2.5">Online payment</th>
+                <th className="w-[14%] px-4 py-2.5">Status</th>
+                <th className="w-[8%] px-4 py-2.5">Updated</th>
+                <th className="w-16 px-2 py-2.5">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-divider bg-white">
               {items.length > 0 ? (
-                items.map((location) => (
-                  <tr className="hover:bg-ds-subtle" key={location.id}>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-ds-text">{getLocationTitle(location)}</p>
+                items.map((location) => {
+                  const title = getLocationTitle(location);
+                  const displayName = getLocationDisplayName(location);
+                  const place = [location.city, location.state].filter(Boolean).join(', ');
+
+                  return (
+                    <tr className="hover:bg-ds-subtle" key={location.id}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-ds-text">{title}</p>
                         <p className="line-clamp-1 text-xs text-ds-muted">
+                          {[getLocationCode(location), displayName === title ? null : displayName]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <LegalEntityCell
+                          entity={
+                            location.legalEntityId
+                              ? entityNamesQuery.data?.get(location.legalEntityId)
+                              : undefined
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <p
+                          className="line-clamp-1 text-ds-text-3"
+                          title={location.address ?? undefined}
+                        >
                           {nullableText(location.address)}
                         </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-ds-text-3">{getLocationCode(location)}</td>
-                    <td className="px-4 py-3 text-ds-text-3">{getLocationDisplayName(location)}</td>
-                    <td className="px-4 py-3 text-ds-text-3">{nullableText(location.state)}</td>
-                    <td className="px-4 py-3 text-ds-text-3">{nullableText(location.city)}</td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {nullableText(getLocationPostalCode(location))}
-                    </td>
-                    <td className="px-4 py-3 text-ds-text-3">{location.onlinePaymentOption}</td>
-                    <td className="px-4 py-3">
-                      <StatusToggleCell
-                        disabled={statusMutation.isPending && statusUpdatingId === location.id}
-                        isActive={location.isActive}
-                        onToggle={() => toggleLocationStatus(location)}
-                        showFrozenMessage={!location.isActive}
-                      />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-muted">
-                      {formatDate(location.updatedAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/masters/hospitals/${location.id}/locations#details`}>
-                          <Eye className="h-4 w-4" />
-                          View/Edit
-                        </Link>
-                      </Button>
-                    </td>
-                  </tr>
-                ))
+                        <p className="line-clamp-1 text-xs text-ds-muted">
+                          {[place, getLocationPostalCode(location)].filter(Boolean).join(' ') ||
+                            nullableText(null)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-ds-text-3">{location.onlinePaymentOption}</td>
+                      <td className="px-4 py-3">
+                        <StatusToggleCell
+                          disabled={statusMutation.isPending && statusUpdatingId === location.id}
+                          isActive={location.isActive}
+                          onToggle={() => toggleLocationStatus(location)}
+                          showFrozenMessage={!location.isActive}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-ds-muted">
+                        {formatDate(location.updatedAt)}
+                      </td>
+                      <td className="px-2 py-3">
+                        <Button asChild size="icon" variant="outline">
+                          <Link
+                            aria-label={`Edit ${title}`}
+                            href={`/masters/hospitals/${location.id}/locations#details`}
+                            title="Edit"
+                          >
+                            <Pencil aria-hidden="true" className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <QueryState
-                  colSpan={10}
+                  colSpan={7}
                   error={locationsQuery.error}
                   isError={locationsQuery.isError}
                   isLoading={locationsQuery.isLoading}

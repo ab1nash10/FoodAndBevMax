@@ -1,9 +1,16 @@
-import type { Grn, KitchenProduction, Transfer } from '@aahar/api-client';
+import type {
+  DashboardGrn,
+  DashboardProduction,
+  DashboardTransfer,
+  Grn,
+  Transfer,
+} from '@aahar/api-client';
 
 /**
- * Dashboard numbers, computed in the portal from the list endpoints (there is no summary
- * endpoint). Pure functions of the records and "now", so `scripts/dashboard-stats.test.mjs`
- * checks them directly; `hooks/use-dashboard-stats.ts` fetches the records and calls these.
+ * Dashboard numbers, computed in the portal from the period's records (GET /dashboard/records,
+ * which keeps only the fields read here). Pure functions of the records and "now", so
+ * `scripts/dashboard-stats.test.mjs` checks them directly; `hooks/use-dashboard-stats.ts`
+ * fetches the records and calls these.
  * No React and no `@/` imports, for the node test.
  */
 
@@ -102,7 +109,7 @@ const noOutcomes = (): OutcomeCounts => ({ full: 0, partial: 0, pending: 0, reje
  * any rejected quantity a partial one. Null until it is acknowledged.
  */
 export function transferOutcome(
-  transfer: Transfer,
+  transfer: DashboardTransfer,
 ): 'ACCEPTED_FULL' | 'ACCEPTED_PARTIAL' | 'REJECTED_FULL' | null {
   if (transfer.status !== 'ACKNOWLEDGED') {
     return null;
@@ -115,7 +122,7 @@ export function transferOutcome(
 }
 
 /** A sent transfer's outcome; drafts and cancelled transfers have none. */
-export function outcomeOf(transfer: Transfer): keyof OutcomeCounts | null {
+export function outcomeOf(transfer: DashboardTransfer): keyof OutcomeCounts | null {
   if (transfer.status === 'PENDING_ACKNOWLEDGEMENT') {
     return 'pending';
   }
@@ -136,7 +143,7 @@ export function outcomeOf(transfer: Transfer): keyof OutcomeCounts | null {
  * acknowledgement (nothing edits it afterwards); createdAt stands in for the dispatch, which
  * the API does not record separately, so a draft sent later reads slower than it was.
  */
-export function ackMinutes(transfer: Transfer): number | null {
+export function ackMinutes(transfer: DashboardTransfer): number | null {
   if (transfer.status !== 'ACKNOWLEDGED') {
     return null;
   }
@@ -172,7 +179,7 @@ export interface TransferStats {
   topRejectionReason: string | null;
 }
 
-function tally(hospitals: Map<string, HospitalTally>, hospital: Transfer['hospital']) {
+function tally(hospitals: Map<string, HospitalTally>, hospital: DashboardTransfer['hospital']) {
   let entry = hospitals.get(hospital.id);
 
   if (!entry) {
@@ -191,7 +198,7 @@ function tally(hospitals: Map<string, HospitalTally>, hospital: Transfer['hospit
 }
 
 /** Sent transfers (pending or acknowledged) by transfer date; drafts and cancelled ones are left out. */
-export function transferStats(transfers: Transfer[], window: PeriodWindow): TransferStats {
+export function transferStats(transfers: DashboardTransfer[], window: PeriodWindow): TransferStats {
   const outcomeSeries = window.buckets.map(noOutcomes);
   const ackByBucket = window.buckets.map((): number[] => []);
   const outcomes = noOutcomes();
@@ -340,7 +347,10 @@ export interface WastageStats {
 const percentOf = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : null);
 
 /** Posted productions: wasted quantity as a share of produced quantity, weighted by quantity. */
-export function wastageStats(productions: KitchenProduction[], window: PeriodWindow): WastageStats {
+export function wastageStats(
+  productions: DashboardProduction[],
+  window: PeriodWindow,
+): WastageStats {
   const buckets = window.buckets.map(() => ({ produced: 0, wasted: 0 }));
   const hospitals = new Map<string, { produced: number; wasted: number }>();
   const kitchenDays = new Map<
@@ -458,7 +468,7 @@ export interface VendorRow {
 }
 
 /** Posted GRNs in the period, by vendor: accepted vs rejected quantity. */
-export function vendorRows(grns: Grn[], window: PeriodWindow, limit = 4): VendorRow[] {
+export function vendorRows(grns: DashboardGrn[], window: PeriodWindow, limit = 4): VendorRow[] {
   const vendors = new Map<string, Omit<VendorRow, 'acceptedPercent' | 'flagged'>>();
 
   for (const grn of grns) {

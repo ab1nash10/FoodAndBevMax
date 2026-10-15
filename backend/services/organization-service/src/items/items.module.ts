@@ -6,6 +6,7 @@ import { ItemsService } from './items.service';
 
 @Module({
   controllers: [ItemsController],
+  exports: [ItemsService],
   imports: [CommonModule],
   providers: [ItemsRepository, ItemsService],
 })

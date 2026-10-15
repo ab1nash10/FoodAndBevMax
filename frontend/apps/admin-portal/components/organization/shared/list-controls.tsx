@@ -55,7 +55,7 @@ function StatusToggleButton({
       aria-checked={isActive}
       aria-label={isActive ? 'Set inactive' : 'Set active'}
       className={cn(
-        'inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 disabled:cursor-not-allowed disabled:opacity-60',
         isActive ? 'border-ds-teal bg-ds-teal' : 'border-ds-input bg-ds-divider',
       )}
       disabled={disabled}
@@ -86,9 +86,14 @@ export function StatusToggleCell({
 }>) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <StatusBadge isActive={isActive} />
+      {/* The switch, then its state in words, as on the other lists. */}
+      <div className="flex items-center gap-2">
         <StatusToggleButton disabled={disabled} isActive={isActive} onToggle={onToggle} />
+        <span
+          className={cn('text-xs font-bold', isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted')}
+        >
+          {isActive ? 'Active' : 'Inactive'}
+        </span>
       </div>
       {showFrozenMessage ? (
         <p className="max-w-xs text-xs font-medium text-ds-status-pending-fg">

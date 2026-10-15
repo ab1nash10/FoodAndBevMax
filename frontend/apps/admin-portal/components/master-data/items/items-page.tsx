@@ -2,17 +2,18 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Eye, Pencil, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { Item, ItemInput, ItemType, SortOrder } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
 import { EmptyState, FoodTypeMarker } from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Skeleton } from '@/components/ui';
+import { Panel, Select, Skeleton } from '@/components/ui';
 import {
-  FilterBar,
   FilterSearch,
   FilterSelect,
   Modal,
@@ -260,15 +261,12 @@ export function ItemsPageClient() {
     const id = selectedItemId;
     setUrlParams({ id: null });
     setIsEditing(false);
-    window.requestAnimationFrame(() => document.getElementById(`item-view-${id}`)?.focus());
+    window.requestAnimationFrame(() => document.getElementById(`item-edit-${id}`)?.focus());
   }
 
-  function openItem(item: Item, edit: boolean) {
-    if (edit) {
-      form.reset(itemToFormValues(item));
-    }
-
-    setIsEditing(edit);
+  function editItem(item: Item) {
+    form.reset(itemToFormValues(item));
+    setIsEditing(true);
     setUrlParams({ id: item.id });
   }
 
@@ -304,7 +302,7 @@ export function ItemsPageClient() {
   }
 
   const hasFilters = Boolean(
-    search || activeFilter || categoryFilter || foodTypeFilter || itemTypeFilter,
+    searchInput || activeFilter || categoryFilter || foodTypeFilter || itemTypeFilter,
   );
   const firstRow = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
   const lastRow = Math.min(meta.page * meta.limit, meta.total);
@@ -334,59 +332,75 @@ export function ItemsPageClient() {
           className="min-w-0 flex-[1_1_560px] overflow-hidden"
           role="region"
         >
-          <FilterBar>
+          <ListToolbar>
             <FilterSearch
               label="Search items"
               onChange={(value) => changeFilter(() => setSearch(value))}
               placeholder="Name or code"
               value={searchInput}
             />
-            <SegmentedControl<FoodTypeFilter>
-              // Same 36px height as the search and selects beside it.
-              className="p-0.5 [&>button]:h-7.5"
-              label="Food type"
-              onChange={(value) => changeFilter(() => setFoodTypeFilter(value))}
-              options={[
-                { label: 'All', value: '' },
-                { label: 'Veg', value: 'VEG' },
-                { label: 'Non-veg', value: 'NON_VEG' },
-                { label: 'Egg', value: 'EGGETARIAN' },
-              ]}
-              value={foodTypeFilter}
-            />
-            <FilterSelect
-              label="Type"
-              onChange={(value) => changeFilter(() => setItemTypeFilter(value as ItemTypeFilter))}
-              value={itemTypeFilter}
+            <FiltersMenu
+              activeCount={
+                [activeFilter, foodTypeFilter, itemTypeFilter, categoryFilter].filter(Boolean)
+                  .length
+              }
             >
-              <option value="">All</option>
-              {itemTypeValues.map((itemType) => (
-                <option key={itemType} value={itemType}>
-                  {itemTypeLabels[itemType]}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              label="Category"
-              onChange={(value) => changeFilter(() => setCategoryFilter(value))}
-              value={categoryFilter}
-            >
-              <option value="">All</option>
-              {(categoryOptionsQuery.data ?? []).map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.categoryName}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              label="Status"
-              onChange={(value) => changeFilter(() => setActiveFilter(value as ActiveFilter))}
-              value={activeFilter}
-            >
-              <option value="">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </FilterSelect>
+              <FilterField label="Status">
+                <Select
+                  onChange={(event) =>
+                    changeFilter(() => setActiveFilter(event.target.value as ActiveFilter))
+                  }
+                  value={activeFilter}
+                >
+                  <option value="">All</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </Select>
+              </FilterField>
+              <FilterField group label="Food type">
+                <SegmentedControl<FoodTypeFilter>
+                  // Same 36px height as the search and selects beside it.
+                  className="p-0.5 [&>button]:h-7.5"
+                  label="Food type"
+                  onChange={(value) => changeFilter(() => setFoodTypeFilter(value))}
+                  options={[
+                    { label: 'All', value: '' },
+                    { label: 'Veg', value: 'VEG' },
+                    { label: 'Non-veg', value: 'NON_VEG' },
+                    { label: 'Egg', value: 'EGGETARIAN' },
+                  ]}
+                  value={foodTypeFilter}
+                />
+              </FilterField>
+              <FilterField label="Type">
+                <Select
+                  onChange={(event) =>
+                    changeFilter(() => setItemTypeFilter(event.target.value as ItemTypeFilter))
+                  }
+                  value={itemTypeFilter}
+                >
+                  <option value="">All</option>
+                  {itemTypeValues.map((itemType) => (
+                    <option key={itemType} value={itemType}>
+                      {itemTypeLabels[itemType]}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+              <FilterField label="Category">
+                <Select
+                  onChange={(event) => changeFilter(() => setCategoryFilter(event.target.value))}
+                  value={categoryFilter}
+                >
+                  <option value="">All</option>
+                  {(categoryOptionsQuery.data ?? []).map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.categoryName}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+            </FiltersMenu>
             <FilterSelect
               label="Sort"
               onChange={(value) => changeFilter(() => setSort(value))}
@@ -398,7 +412,8 @@ export function ItemsPageClient() {
                 </option>
               ))}
             </FilterSelect>
-          </FilterBar>
+            <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          </ListToolbar>
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px] table-fixed text-[13px]">
@@ -493,29 +508,18 @@ export function ItemsPageClient() {
                         </td>
                         <td className="px-3 py-1.5 pr-4">
                           <span className="flex justify-end gap-2">
-                            <Button
-                              aria-label={`View ${item.itemName}`}
-                              className="h-9 w-9"
-                              id={`item-view-${item.id}`}
-                              onClick={() => openItem(item, false)}
-                              size="icon"
-                              title="View"
-                              type="button"
-                              variant="outline"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
                             {canEditItems ? (
                               <Button
                                 aria-label={`Edit ${item.itemName}`}
                                 className="h-9 w-9"
-                                onClick={() => openItem(item, true)}
+                                id={`item-edit-${item.id}`}
+                                onClick={() => editItem(item)}
                                 size="icon"
                                 title="Edit"
                                 type="button"
                                 variant="outline"
                               >
-                                <Pencil className="h-4 w-4" />
+                                <Pencil aria-hidden="true" className="h-4 w-4" />
                               </Button>
                             ) : null}
                           </span>
@@ -580,7 +584,7 @@ export function ItemsPageClient() {
       <Modal
         footer={
           selectedItem && !isEditing && canEditItems ? (
-            <Button onClick={() => openItem(selectedItem, true)} type="button" variant="outline">
+            <Button onClick={() => editItem(selectedItem)} type="button" variant="outline">
               <Pencil aria-hidden="true" className="h-4 w-4" />
               Edit details
             </Button>

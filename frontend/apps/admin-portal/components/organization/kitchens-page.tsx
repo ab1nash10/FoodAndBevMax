@@ -1,8 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { invalidateKitchenQueries } from '@/lib/query-invalidation';
+import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
+import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import {
@@ -16,7 +26,7 @@ import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import type { Kitchen, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChefHat, Plus, RefreshCw } from 'lucide-react';
+import { ChefHat, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   ActiveFilterSelect,
@@ -24,9 +34,7 @@ import {
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
   StatusToggleCell,
-  ToolbarGrid,
 } from '@/components/organization/shared/list-controls';
 import {
   activeFilterToBoolean,
@@ -45,6 +53,9 @@ import { queryKeys } from '@/lib/query-keys';
 
 export function KitchensPageClient() {
   const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('KITCHEN_UPDATE');
+  const [editingKitchen, setEditingKitchen] = useState<Kitchen | null>(null);
   const { showToast } = useToast();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
@@ -85,6 +96,23 @@ export function KitchensPageClient() {
     queryKey: queryKeys.kitchens({ activeFilter, hospitalFilter, page, search, sortBy, sortOrder }),
   });
 
+  const editMutation = useMutation({
+    mutationFn: ({ id, isActive, name }: { id: string; isActive: boolean; name: string }) =>
+      organizationApi.updateKitchen(id, { isActive, kitchenName: name }),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Kitchen was not updated',
+        variant: 'error',
+      });
+    },
+    onSuccess() {
+      invalidateKitchenQueries(queryClient);
+      showToast({ title: 'Kitchen updated', variant: 'success' });
+      setEditingKitchen(null);
+    },
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       organizationApi.updateKitchen(id, { isActive }),
@@ -114,6 +142,17 @@ export function KitchensPageClient() {
     total: 0,
     totalPages: 1,
   };
+
+  const hasFilters = Boolean(
+    searchInput || activeFilter || hospitalFilter !== (scopedHospitalId ?? ''),
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setPage(1);
+  }
 
   function toggleKitchenStatus(kitchen: Kitchen) {
     const nextIsActive = !kitchen.isActive;
@@ -154,7 +193,7 @@ export function KitchensPageClient() {
         title="Kitchens"
       />
       <Panel>
-        <ToolbarGrid>
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -162,59 +201,69 @@ export function KitchensPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            disabled={hospitalOptionsQuery.isLoading || Boolean(scopedHospitalId)}
-            onChange={(event) => {
-              setHospitalFilter(event.target.value);
-              setPage(1);
-            }}
-            value={hospitalFilter}
+          <FiltersMenu
+            activeCount={
+              [activeFilter, hospitalFilter !== (scopedHospitalId ?? '')].filter(Boolean).length
+            }
           >
-            <option value="">All locations</option>
-            {hospitalOptionsQuery.data?.map((hospital) => (
-              <option key={hospital.id} value={hospital.id}>
-                {formatLocationOption(hospital)}
-              </option>
-            ))}
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+            <FilterField label="Location">
+              <Select
+                disabled={hospitalOptionsQuery.isLoading || Boolean(scopedHospitalId)}
+                onChange={(event) => {
+                  setHospitalFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              >
+                <option value="">All locations</option>
+                {hospitalOptionsQuery.data?.map((hospital) => (
+                  <option key={hospital.id} value={hospital.id}>
+                    {formatLocationOption(hospital)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
-          />
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
+            onSortByChange={(value) => {
+              setSortBy(value);
               setPage(1);
             }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="kitchenName">Name</option>
-          </Select>
-          <Button onClick={() => void kitchensQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </ToolbarGrid>
+            options={[
+              { label: 'Created date', value: 'createdAt' },
+              { label: 'Updated date', value: 'updatedAt' },
+              { label: 'Name', value: 'kitchenName' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
+          />
+          <RefreshButton onClick={() => void kitchensQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[28%] px-4 py-2.5">Kitchen</th>
+                <th className="w-[30%] px-4 py-2.5">Kitchen</th>
                 <th className="w-[26%] px-4 py-2.5">Location</th>
                 <th className="w-[22%] px-4 py-2.5">Status</th>
                 <th className="w-[16%] px-4 py-2.5">Updated</th>
+                <th className="w-16 px-2 py-2.5">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-divider bg-white">
@@ -241,11 +290,25 @@ export function KitchensPageClient() {
                     <td className="whitespace-nowrap px-4 py-3 text-ds-muted">
                       {formatDate(kitchen.updatedAt)}
                     </td>
+                    <td className="px-2 py-3">
+                      {canEdit ? (
+                        <Button
+                          aria-label={`Edit ${kitchen.kitchenName}`}
+                          onClick={() => setEditingKitchen(kitchen)}
+                          size="icon"
+                          title="Edit"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil aria-hidden="true" className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <QueryState
-                  colSpan={4}
+                  colSpan={5}
                   error={kitchensQuery.error}
                   isError={kitchensQuery.isError}
                   isLoading={kitchensQuery.isLoading}
@@ -263,6 +326,21 @@ export function KitchensPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <EditMasterDialog
+        isPending={editMutation.isPending}
+        location={editingKitchen ? getLocationDisplayName(editingKitchen.hospital) : ''}
+        nameLabel="Kitchen name"
+        onClose={() => setEditingKitchen(null)}
+        onSave={(values) =>
+          editingKitchen && editMutation.mutate({ id: editingKitchen.id, ...values })
+        }
+        record={
+          editingKitchen
+            ? { isActive: editingKitchen.isActive, name: editingKitchen.kitchenName }
+            : null
+        }
+        title="Edit kitchen"
+      />
     </section>
   );
 }

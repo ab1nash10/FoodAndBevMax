@@ -6,10 +6,10 @@ import {
   HealthCheckService,
   HospitalScopeGuard,
   HospitalScopeInterceptor,
-  NotificationPublisher,
   JwtAuthGuard,
   JwtStrategy,
   RbacGuard,
+  UserThrottlerGuard,
 } from '@aahar/auth';
 import {
   getServiceEnvFilePaths,
@@ -20,8 +20,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PassportModule } from '@nestjs/passport';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CountersModule } from './counters/counters.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { EmployeesModule } from './employees/employees.module';
 import { GrnsModule } from './grns/grns.module';
 import { CommonModule } from './common/common.module';
@@ -29,6 +30,7 @@ import { PrismaService } from './common/prisma/prisma.service';
 import { HealthController } from './health.controller';
 import { HospitalsModule } from './hospitals/hospitals.module';
 import { ItemCategoriesModule } from './item-categories/item-categories.module';
+import { LegalEntitiesModule } from './legal-entities/legal-entities.module';
 import { ItemPricesModule } from './item-prices/item-prices.module';
 import { ItemsModule } from './items/items.module';
 import { KitchenItemsModule } from './kitchen-items/kitchen-items.module';
@@ -75,10 +77,12 @@ import { TransfersModule } from './transfers/transfers.module';
       }),
     }),
     CountersModule,
+    DashboardModule,
     EmployeesModule,
     GrnsModule,
     HospitalsModule,
     ItemCategoriesModule,
+    LegalEntitiesModule,
     ItemPricesModule,
     ItemsModule,
     KitchenItemsModule,
@@ -101,15 +105,15 @@ import { TransfersModule } from './transfers/transfers.module';
     { provide: AUTH_PRISMA, useExisting: PrismaService },
     AuditLoggerService,
     HealthCheckService,
-    NotificationPublisher,
     JwtStrategy,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: JwtAuthGuard,
     },
+    // After JwtAuthGuard: signed-in requests are counted per user, public ones per address.
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: UserThrottlerGuard,
     },
     {
       provide: APP_GUARD,

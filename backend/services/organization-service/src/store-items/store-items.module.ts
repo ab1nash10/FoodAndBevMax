@@ -6,6 +6,7 @@ import { StoreItemsService } from './store-items.service';
 
 @Module({
   controllers: [StoreItemsController],
+  exports: [StoreItemsService],
   imports: [CommonModule],
   providers: [StoreItemsRepository, StoreItemsService],
 })

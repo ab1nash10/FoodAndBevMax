@@ -45,9 +45,13 @@ export function KpiCard({
       className="flex flex-col gap-2 rounded-card border border-ds-border bg-ds-surface px-[18px] pb-3.5 pt-4 text-ds-text shadow-card transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
       href={href}
     >
-      <span className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ds-text-3">{label}</span>
-        <span className="whitespace-nowrap text-[11px] font-bold text-ds-muted">{scope}</span>
+      {/* The scope sits under the label, as on the chart cards, so a long label keeps the full
+          width on one line and every card's value starts at the same height. */}
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-[13px] font-semibold text-ds-text-3" title={label}>
+          {label}
+        </span>
+        <span className="text-[11px] font-bold text-ds-muted">{scope}</span>
       </span>
       {loading ? (
         <Skeleton className="h-[34px] w-20" />

@@ -3,12 +3,14 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AccessUser } from '@aahar/api-client';
-import { Loader2, Pencil, Plus, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Loader2, Pencil, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { AppPageHeader } from '@/components/design-system';
 import { BulkLocationBar } from '@/components/access/bulk-location-bar';
 import { UserDialog } from '@/components/access/user-dialog';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Input, Panel, Skeleton } from '@/components/ui';
@@ -197,6 +199,8 @@ export function UsersRolesPageClient() {
       else next.add(id);
       return next;
     });
+  const hasFilters = Boolean(searchInput);
+  const clearFilters = () => setSearch('');
   return (
     <section className="space-y-5">
       <AppPageHeader
@@ -211,22 +215,16 @@ export function UsersRolesPageClient() {
         title="Users / Roles"
       />
       <Panel>
-        <div className="flex gap-3 border-b p-4">
+        <ListToolbar>
           <Input
             aria-label="Search users"
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search users"
             value={searchInput}
           />
-          <Button
-            aria-label="Refresh users"
-            onClick={() => void usersQuery.refetch()}
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void usersQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         {selectedUsers.length > 0 ? (
           <BulkLocationBar onDone={() => setSelectedIds(new Set())} selected={selectedUsers} />
         ) : null}

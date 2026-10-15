@@ -31,7 +31,8 @@ import {
   uploadRestaurantImage,
 } from '@/components/organization/shared/restaurants';
 import { restaurantSchema, isUuid } from '@/components/organization/shared/schemas';
-import { useHospitalOptions } from '@/components/organization/shared/hooks';
+import { useHospitalOptions, useLegalEntityOptions } from '@/components/organization/shared/hooks';
+import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
 import type { RestaurantFormValues } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 import { restaurantDetailQuery } from '@/lib/detail-queries';
@@ -48,6 +49,8 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
   const hospitalId = form.watch('hospitalId');
   const restaurantName = form.watch('restaurantName');
   const hospitalOptionsQuery = useHospitalOptions();
+  const legalEntitiesQuery = useLegalEntityOptions();
+  const legalEntityField = form.register('legalEntityId');
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();
@@ -302,7 +305,17 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
             </Field>
           </div>
           <CheckboxLine
-            input={<input className="h-4 w-4" type="checkbox" {...form.register('isActive')} />}
+            input={
+              <input
+                className="h-4 w-4"
+                type="checkbox"
+                {...form.register('isActive', {
+                  // Offline means not active: the two always move together.
+                  onChange: (event: { target: { checked: boolean } }) =>
+                    form.setValue('isOffline', !event.target.checked, { shouldDirty: true }),
+                })}
+              />
+            }
           >
             Active
           </CheckboxLine>
@@ -345,6 +358,33 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
 
         <div className="space-y-4 border-t border-ds-divider pt-6">
           <SectionHeading title="GST Information" />
+          <Field
+            error={form.formState.errors.legalEntityId?.message}
+            label="Entity"
+            name="restaurant-legal-entity"
+          >
+            <LegalEntitySelect
+              id="restaurant-legal-entity"
+              value={form.watch('legalEntityId')}
+              {...legalEntityField}
+              onChange={(event) => {
+                void legalEntityField.onChange(event);
+                // Choosing an entity fills its GST details; they stay editable.
+                const entity = legalEntitiesQuery.data?.find(
+                  (option) => option.id === event.target.value,
+                );
+
+                if (entity) {
+                  const filled = { shouldDirty: true, shouldValidate: true };
+
+                  form.setValue('legalName', entity.entityName, filled);
+                  form.setValue('gstNumber', entity.gstNumber, filled);
+                  form.setValue('address', entity.entityAddress, filled);
+                  form.setValue('isRegisteredInGst', true, filled);
+                }
+              }}
+            />
+          </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.panNumber?.message}
@@ -431,23 +471,31 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
             {[
               ['isOffline', 'Offline'],
               ['isOpen24x7', 'Open 24x7'],
-              ['isVegOnly', 'Veg Only'],
-              ['isTakeawayEnabled', 'Takeaway'],
-              ['isDeliveryEnabled', 'Delivery'],
-              ['isHomeDeliveryEnabled', 'Home Delivery'],
-              ['isAtTableDiningEnabled', 'At Table Dining'],
-              ['isInRoomDiningEnabled', 'In Room Dining'],
-              ['isInCarDiningEnabled', 'In Car Dining'],
               ['isPosOrdersEnabled', 'POS Orders'],
+              ['isInRoomDiningEnabled', 'In Room Dining'],
+              ['isTakeawayEnabled', 'Takeaway'],
               ['isOnlineOrdersEnabled', 'Online Orders'],
               ['isInventoryEnabled', 'Inventory'],
+              ['isIhcOnly', 'IHC Only'],
+              // Veg only, delivery, home delivery, at-table and in-car dining are no longer
+              // offered; their saved values (like the Sodexo MID/TID) still round-trip unchanged.
             ].map(([name, label]) => (
               <CheckboxLine
                 input={
                   <input
                     className="h-4 w-4"
                     type="checkbox"
-                    {...form.register(name as Path<RestaurantFormValues>)}
+                    {...form.register(
+                      name as Path<RestaurantFormValues>,
+                      name === 'isOffline'
+                        ? {
+                            onChange: (event: { target: { checked: boolean } }) =>
+                              form.setValue('isActive', !event.target.checked, {
+                                shouldDirty: true,
+                              }),
+                          }
+                        : undefined,
+                    )}
                   />
                 }
                 key={name}
@@ -455,26 +503,6 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
                 {label}
               </CheckboxLine>
             ))}
-          </div>
-        </div>
-
-        <div className="space-y-4 border-t border-ds-divider pt-6">
-          <SectionHeading title="Sodexo Information" />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              error={form.formState.errors.sodexoMid?.message}
-              label="Sodexo MID"
-              name="restaurant-sodexo-mid"
-            >
-              <Input id="restaurant-sodexo-mid" {...form.register('sodexoMid')} />
-            </Field>
-            <Field
-              error={form.formState.errors.sodexoTid?.message}
-              label="Sodexo TID"
-              name="restaurant-sodexo-tid"
-            >
-              <Input id="restaurant-sodexo-tid" {...form.register('sodexoTid')} />
-            </Field>
           </div>
         </div>
 

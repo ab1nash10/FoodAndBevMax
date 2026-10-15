@@ -43,6 +43,8 @@ export function toRestaurantResponse(restaurant: RestaurantWithRelations) {
     isHomeDeliveryEnabled: restaurant.homeDelivery,
     isInCarDiningEnabled: restaurant.inCarDining,
     isInRoomDiningEnabled: restaurant.inRoomDiningEnabled,
+    ihcOnly: restaurant.ihcOnly,
+    isIhcOnly: restaurant.ihcOnly,
     isInventoryEnabled: restaurant.inventory,
     isOffline: restaurant.offline,
     isOnlineOrdersEnabled: restaurant.onlineOrderingEnabled,
@@ -68,6 +70,7 @@ export function toRestaurantResponse(restaurant: RestaurantWithRelations) {
       kitchenCode: mapping.kitchen.kitchenCode,
       kitchenName: mapping.kitchen.kitchenName,
     })),
+    legalEntityId: restaurant.legalEntityId,
     legalName: restaurant.legalName,
     location: restaurant.location
       ? {

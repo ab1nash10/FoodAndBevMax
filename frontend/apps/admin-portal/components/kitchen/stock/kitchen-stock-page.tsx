@@ -1,10 +1,16 @@
 'use client';
 
-import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Item, ItemType, SortOrder, StockBalanceStatus } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { Input, Panel, Select } from '@/components/ui';
@@ -133,6 +139,24 @@ export function KitchenStockPageClient() {
 
   const items = stockQuery.data?.items ?? [];
   const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const hasFilters = Boolean(
+    searchInput ||
+    hospitalFilter !== (scopedHospitalId ?? '') ||
+    kitchenFilter ||
+    statusFilter ||
+    itemFilter ||
+    businessDateFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setKitchenFilter('');
+    setStatusFilter('');
+    setItemFilter('');
+    setBusinessDateFilter('');
+    setPage(1);
+  }
 
   return (
     <section className="space-y-5">
@@ -141,7 +165,7 @@ export function KitchenStockPageClient() {
         title="Kitchen Stock"
       />
       <Panel>
-        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -149,85 +173,102 @@ export function KitchenStockPageClient() {
             }}
             value={searchInput}
           />
-          <HospitalSelect
-            disabled={Boolean(scopedHospitalId)}
-            hospitals={hospitalsQuery.data ?? []}
-            onChange={(value) => {
-              setHospitalFilter(value);
-              setKitchenFilter('');
+          <FiltersMenu
+            activeCount={
+              [
+                hospitalFilter !== (scopedHospitalId ?? ''),
+                kitchenFilter,
+                statusFilter,
+                itemFilter,
+                businessDateFilter,
+              ].filter(Boolean).length
+            }
+          >
+            <FilterField label="Location">
+              <HospitalSelect
+                disabled={Boolean(scopedHospitalId)}
+                hospitals={hospitalsQuery.data ?? []}
+                onChange={(value) => {
+                  setHospitalFilter(value);
+                  setKitchenFilter('');
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              />
+            </FilterField>
+            <FilterField label="Kitchen">
+              <KitchenSelect
+                disabled={!hospitalFilter}
+                kitchens={kitchensQuery.data ?? []}
+                onChange={(value) => {
+                  setKitchenFilter(value);
+                  setPage(1);
+                }}
+                value={kitchenFilter}
+              />
+            </FilterField>
+            <FilterField label="Status">
+              <Select
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as '' | StockBalanceStatus);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">All statuses</option>
+                {kitchenStockStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {formatEnum(status)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Item">
+              <Select
+                onChange={(event) => {
+                  setItemFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={itemFilter}
+              >
+                <option value="">All items</option>
+                {itemOptionsQuery.data?.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.itemName}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Business date">
+              <Input
+                onChange={(event) => {
+                  setBusinessDateFilter(event.target.value);
+                  setPage(1);
+                }}
+                type="date"
+                value={businessDateFilter}
+              />
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
+              setSortOrder(value);
               setPage(1);
             }}
-            value={hospitalFilter}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Last updated', value: 'lastUpdatedOn' },
+              { label: 'Available qty', value: 'availableQty' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <KitchenSelect
-            disabled={!hospitalFilter}
-            kitchens={kitchensQuery.data ?? []}
-            onChange={(value) => {
-              setKitchenFilter(value);
-              setPage(1);
-            }}
-            value={kitchenFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setStatusFilter(event.target.value as '' | StockBalanceStatus);
-              setPage(1);
-            }}
-            value={statusFilter}
-          >
-            <option value="">All statuses</option>
-            {kitchenStockStatuses.map((status) => (
-              <option key={status} value={status}>
-                {formatEnum(status)}
-              </option>
-            ))}
-          </Select>
-          <Select
-            onChange={(event) => {
-              setItemFilter(event.target.value);
-              setPage(1);
-            }}
-            value={itemFilter}
-          >
-            <option value="">All items</option>
-            {itemOptionsQuery.data?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.itemName}
-              </option>
-            ))}
-          </Select>
-          <Input
-            onChange={(event) => {
-              setBusinessDateFilter(event.target.value);
-              setPage(1);
-            }}
-            type="date"
-            value={businessDateFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="lastUpdatedOn">Last updated</option>
-            <option value="availableQty">Available qty</option>
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortOrder(event.target.value as SortOrder);
-              setPage(1);
-            }}
-            value={sortOrder}
-          >
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </Select>
-          <Button onClick={() => void stockQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void stockQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">

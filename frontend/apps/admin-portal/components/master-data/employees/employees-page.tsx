@@ -2,10 +2,18 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Loader2, Pencil, Plus, RefreshCw, UsersRound } from 'lucide-react';
+import { Loader2, Pencil, Plus, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { Employee, EmployeeInput, SortOrder } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Panel, Select } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
@@ -24,14 +32,12 @@ import {
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
   StatusBadge,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  formatDate,
   formatDateOnly,
   listLimit,
   optionalValue,
@@ -67,6 +73,7 @@ function employeeToFormValues(employee: Employee): EmployeeFormValues {
     department: employee.department ?? '',
     designation: employee.designation ?? '',
     eligibleForDiscount: employee.eligibleForDiscount,
+    employmentType: employee.employmentType ?? '',
     employeeCode: employee.employeeCode,
     employeeName: employee.employeeName,
     hospitalId: employee.hospitalId ?? '',
@@ -75,8 +82,7 @@ function employeeToFormValues(employee: Employee): EmployeeFormValues {
   };
 }
 
-type EmployeeDialog =
-  { mode: 'create' } | { employee: Employee; mode: 'edit' } | { employee: Employee; mode: 'view' };
+type EmployeeDialog = { mode: 'create' } | { employee: Employee; mode: 'edit' };
 
 export function EmployeesPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
@@ -89,7 +95,7 @@ export function EmployeesPageClient() {
   const [discountFilter, setDiscountFilter] = useState<DiscountFilter>('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  // One pop-up for create, view and edit.
+  // One pop-up for create and edit.
   const [dialog, setDialog] = useState<EmployeeDialog | null>(null);
   const editingEmployee = dialog?.mode === 'edit' ? dialog.employee : null;
   const queryClient = useQueryClient();
@@ -208,6 +214,7 @@ export function EmployeesPageClient() {
       department: optionalValue(parsed.data.department),
       designation: optionalValue(parsed.data.designation),
       eligibleForDiscount: parsed.data.eligibleForDiscount,
+      employmentType: parsed.data.employmentType || undefined,
       employeeCode: parsed.data.employeeCode,
       employeeName: parsed.data.employeeName,
       hospitalId: parsed.data.hospitalId || null,
@@ -215,6 +222,15 @@ export function EmployeesPageClient() {
       mobile: optionalValue(parsed.data.mobile),
     });
   });
+
+  const hasFilters = Boolean(searchInput || activeFilter || discountFilter);
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setDiscountFilter('');
+    setPage(1);
+  }
 
   function openCreate() {
     form.reset(emptyEmployeeFormValues(defaultHospitalId));
@@ -231,12 +247,7 @@ export function EmployeesPageClient() {
     form.reset(emptyEmployeeFormValues());
   }
 
-  const dialogTitle =
-    dialog?.mode === 'create'
-      ? 'Create employee'
-      : dialog?.mode === 'edit'
-        ? 'Edit employee'
-        : 'Employee details';
+  const dialogTitle = dialog?.mode === 'create' ? 'Create employee' : 'Edit employee';
 
   return (
     <section className="space-y-5">
@@ -254,7 +265,7 @@ export function EmployeesPageClient() {
       />
 
       <Panel className="overflow-hidden">
-        <div className="grid gap-3 border-b border-ds-divider p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:[&>*:first-child]:col-span-2 [&>button]:justify-self-start">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -262,61 +273,58 @@ export function EmployeesPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setDiscountFilter(event.target.value as DiscountFilter);
-              setPage(1);
-            }}
-            value={discountFilter}
-          >
-            <option value="">All discount eligibility</option>
-            <option value="eligible">Eligible</option>
-            <option value="notEligible">Not eligible</option>
-          </Select>
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="employeeName">Employee name</option>
-            <option value="employeeCode">Employee code</option>
-            <option value="department">Department</option>
-            <option value="designation">Designation</option>
-            <option value="mobile">Mobile</option>
-            <option value="eligibleForDiscount">Discount eligible</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="isActive">Status</option>
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+          <FiltersMenu activeCount={[activeFilter, discountFilter].filter(Boolean).length}>
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+            <FilterField label="Discount eligibility">
+              <Select
+                onChange={(event) => {
+                  setDiscountFilter(event.target.value as DiscountFilter);
+                  setPage(1);
+                }}
+                value={discountFilter}
+              >
+                <option value="">All discount eligibility</option>
+                <option value="eligible">Eligible</option>
+                <option value="notEligible">Not eligible</option>
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Created date', value: 'createdAt' },
+              { label: 'Employee name', value: 'employeeName' },
+              { label: 'Employee code', value: 'employeeCode' },
+              { label: 'Department', value: 'department' },
+              { label: 'Designation', value: 'designation' },
+              { label: 'Mobile', value: 'mobile' },
+              { label: 'Discount eligible', value: 'eligibleForDiscount' },
+              { label: 'Updated date', value: 'updatedAt' },
+              { label: 'Status', value: 'isActive' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <Button
-            aria-label="Refresh employees"
-            onClick={() => void employeesQuery.refetch()}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void employeesQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
-          {/* The created date/time sits on two lines so the table stays narrow; the updated
-              time is in the View pop-up. */}
+          {/* The created date/time sits on two lines so the table stays narrow. */}
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-ds-subtle text-left">
               <tr>
@@ -373,17 +381,6 @@ export function EmployeesPageClient() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex justify-end gap-2">
-                        <Button
-                          aria-label={`View ${employee.employeeName}`}
-                          className="h-9 w-9"
-                          onClick={() => setDialog({ employee, mode: 'view' })}
-                          size="icon"
-                          title="View"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
                         {canEdit(employee) ? (
                           <Button
                             aria-label={`Edit ${employee.employeeName}`}
@@ -394,7 +391,7 @@ export function EmployeesPageClient() {
                             type="button"
                             variant="outline"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil aria-hidden="true" className="h-4 w-4" />
                           </Button>
                         ) : null}
                       </div>
@@ -424,92 +421,29 @@ export function EmployeesPageClient() {
 
       <Modal
         footer={
-          dialog?.mode === 'view' ? (
-            // Separate keys: React must not reuse the Edit button as the form's submit button,
-            // or the click that switches to edit mode would also submit the form.
-            <div
-              className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
-              key="view-footer"
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button onClick={closeDialog} type="button" variant="outline">
+              Cancel
+            </Button>
+            <Button
+              disabled={!canSave || saveEmployeeMutation.isPending}
+              form="employee-form"
+              type="submit"
             >
-              <Button onClick={closeDialog} type="button" variant="outline">
-                Close
-              </Button>
-              <Button onClick={() => openEdit(dialog.employee)} type="button">
-                <Pencil className="h-4 w-4" />
-                Edit employee
-              </Button>
-            </div>
-          ) : (
-            <div
-              className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
-              key="form-footer"
-            >
-              <Button onClick={closeDialog} type="button" variant="outline">
-                Cancel
-              </Button>
-              <Button
-                disabled={!canSave || saveEmployeeMutation.isPending}
-                form="employee-form"
-                type="submit"
-              >
-                {saveEmployeeMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : dialog?.mode === 'create' ? (
-                  <Plus className="h-4 w-4" />
-                ) : null}
-                {dialog?.mode === 'create' ? 'Create employee' : 'Save changes'}
-              </Button>
-            </div>
-          )
+              {saveEmployeeMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : dialog?.mode === 'create' ? (
+                <Plus className="h-4 w-4" />
+              ) : null}
+              {dialog?.mode === 'create' ? 'Create employee' : 'Save changes'}
+            </Button>
+          </div>
         }
         onClose={closeDialog}
         open={dialog !== null}
         title={dialogTitle}
       >
-        {dialog?.mode === 'view' ? (
-          <div className="space-y-4">
-            <div>
-              <p className="text-lg font-bold text-ds-text">{dialog.employee.employeeName}</p>
-              <p className="text-[13px] text-ds-muted">{dialog.employee.employeeCode}</p>
-            </div>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              {[
-                ['Department', dialog.employee.department || 'Not set'],
-                ['Designation', dialog.employee.designation || 'Not set'],
-                ['Mobile', dialog.employee.mobile || 'Not set'],
-                ['Created', formatDate(dialog.employee.createdAt)],
-                ['Updated', formatDate(dialog.employee.updatedAt)],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs font-semibold text-ds-muted">{label}</dt>
-                  <dd className="mt-0.5 wrap-break-word text-sm font-medium text-ds-text">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-              <div>
-                <dt className="text-xs font-semibold text-ds-muted">Location</dt>
-                <dd className="mt-1">
-                  <MasterLocationCell hospital={dialog.employee.hospital} />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold text-ds-muted">Discount</dt>
-                <dd className="mt-1">
-                  <Badge variant={dialog.employee.eligibleForDiscount ? 'success' : 'neutral'}>
-                    {dialog.employee.eligibleForDiscount ? 'Eligible' : 'Not eligible'}
-                  </Badge>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold text-ds-muted">Status</dt>
-                <dd className="mt-1">
-                  <StatusBadge isActive={dialog.employee.isActive} />
-                </dd>
-              </div>
-            </dl>
-          </div>
-        ) : dialog ? (
+        {dialog ? (
           <form
             className="grid gap-4"
             id="employee-form"

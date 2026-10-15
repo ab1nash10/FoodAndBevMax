@@ -1,4 +1,3 @@
-import { NotificationPublisher } from '@aahar/auth';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   GrnStatus,
@@ -9,7 +8,6 @@ import {
   StockTransactionType,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { NOTIFY_ROLES } from '../common/notification-roles';
 import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import { lockRow } from '../common/row-lock';
@@ -28,7 +26,6 @@ export class GrnsService {
   constructor(
     private readonly auditLog: AuditLogService,
     private readonly grns: GrnsRepository,
-    private readonly notifications: NotificationPublisher,
   ) {}
 
   async list(query: ListGrnsQueryDto) {
@@ -383,21 +380,6 @@ export class GrnsService {
           ipAddress: context.ipAddress,
           newValue: toGrnResponse(posted),
           oldValue: toGrnResponse(existing),
-        },
-        tx,
-      );
-
-      await this.notifications.publish(
-        {
-          actorId: context.actorId,
-          body: `${posted.lines.length} line(s) received into store stock.`,
-          category: 'GRN',
-          entityId: posted.id,
-          entityName: 'grns',
-          hospitalId: posted.hospitalId,
-          link: '/inventory/grns',
-          roleNames: NOTIFY_ROLES,
-          title: `GRN ${posted.grnNumber} posted to stock`,
         },
         tx,
       );

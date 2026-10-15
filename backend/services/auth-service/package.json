@@ -6,7 +6,7 @@
     "build": "nest build",
     "db:generate": "pnpm -w db:generate",
     "db:migrate": "pnpm -w db:migrate",
-    "dev": "nest start --watch",
+    "dev": "nest start --watch -c nest-cli.dev.json",
     "lint": "eslint . --max-warnings 0",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",

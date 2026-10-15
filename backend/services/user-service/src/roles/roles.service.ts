@@ -81,9 +81,8 @@ export class RolesService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.role.findMany({
         include: roleInclude,
-        orderBy: {
-          createdAt: 'desc',
-        },
+        // id breaks ties, so a page boundary never repeats or skips a row.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
         where,

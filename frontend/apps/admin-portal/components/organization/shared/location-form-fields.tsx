@@ -7,6 +7,7 @@ import { getCitiesForState, INDIAN_STATES } from '@/lib/india-locations';
 import { CheckboxLine, Textarea } from '@/components/organization/shared/form-controls';
 import { SectionHeading } from '@/components/organization/shared/list-controls';
 import { onlinePaymentOptions } from '@/components/organization/shared/locations';
+import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
 import type { HospitalFormValues } from '@/components/organization/shared/types';
 
 export function LocationMasterFormFields({
@@ -131,6 +132,18 @@ export function LocationMasterFormFields({
           name="location-ip-address"
         >
           <Input disabled={disabled} id="location-ip-address" {...form.register('ipAddress')} />
+        </Field>
+        <Field
+          error={form.formState.errors.legalEntityId?.message}
+          label="Entity"
+          name="location-legal-entity"
+        >
+          <LegalEntitySelect
+            disabled={disabled}
+            id="location-legal-entity"
+            value={form.watch('legalEntityId')}
+            {...form.register('legalEntityId')}
+          />
         </Field>
       </div>
       <Field

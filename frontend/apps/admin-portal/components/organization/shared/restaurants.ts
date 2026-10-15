@@ -12,25 +12,32 @@ const restaurantImageMaxSizeBytes = 5 * 1024 * 1024;
 
 const restaurantImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
-export function isRestaurantOnline(restaurant: Restaurant): boolean {
+/** Active and not Offline: the restaurant is open for any orders. */
+export function isRestaurantOpen(restaurant: Restaurant): boolean {
+  return restaurant.isActive && !(restaurant.isOffline || restaurant.offline);
+}
+
+/**
+ * Whether food can be ordered online (by QR) right now: the Online Orders option, but only
+ * while the restaurant is open. The option itself is kept while it is closed, so reactivating
+ * the restaurant brings online ordering back as it was.
+ */
+export function allowsOnlineOrdering(restaurant: Restaurant): boolean {
   return (
-    restaurant.isOnlineOrdersEnabled || restaurant.onlineOrders || restaurant.onlineOrderingEnabled
+    isRestaurantOpen(restaurant) && (restaurant.isOnlineOrdersEnabled || restaurant.onlineOrders)
   );
 }
 
-export function getRestaurantOptionBadges(restaurant: Restaurant): RestaurantOptionBadge[] {
-  const badges: RestaurantOptionBadge[] = [
-    {
-      label: restaurant.isActive ? 'Active' : 'Inactive',
-      variant: restaurant.isActive ? 'success' : 'danger',
-    },
-  ];
+/**
+ * What the restaurant offers, for the list's Restaurant Status column. Online/Offline and
+ * Active/Inactive (Restaurant Availability) have their own columns, so they are not repeated.
+ */
+export function getRestaurantStatusBadges(restaurant: Restaurant): RestaurantOptionBadge[] {
   const enabledOptions: Array<RestaurantOptionBadge & { enabled: boolean }> = [
-    { enabled: isRestaurantOnline(restaurant), label: 'Online', variant: 'info' },
     {
       enabled: restaurant.isOpen24x7 || restaurant.open24x7,
       label: 'Open 24x7',
-      variant: 'info',
+      variant: 'neutral',
     },
     {
       enabled:
@@ -51,33 +58,18 @@ export function getRestaurantOptionBadges(restaurant: Restaurant): RestaurantOpt
       variant: 'neutral',
     },
     {
-      enabled: restaurant.isVegOnly || restaurant.vegOnly,
-      label: 'Veg Only',
-      variant: 'success',
-    },
-    {
       enabled: restaurant.isTakeawayEnabled || restaurant.takeaway,
       label: 'Takeaway',
       variant: 'neutral',
     },
     {
-      enabled: restaurant.isDeliveryEnabled || restaurant.delivery,
-      label: 'Delivery',
+      enabled: allowsOnlineOrdering(restaurant),
+      label: 'Online Orders',
       variant: 'neutral',
     },
     {
-      enabled: restaurant.isHomeDeliveryEnabled || restaurant.homeDelivery,
-      label: 'Home Delivery',
-      variant: 'neutral',
-    },
-    {
-      enabled: restaurant.isAtTableDiningEnabled || restaurant.atTableDining,
-      label: 'At Table Dining',
-      variant: 'neutral',
-    },
-    {
-      enabled: restaurant.isInCarDiningEnabled || restaurant.inCarDining,
-      label: 'In Car Dining',
+      enabled: restaurant.isIhcOnly || restaurant.ihcOnly,
+      label: 'IHC Only',
       variant: 'neutral',
     },
     {
@@ -87,13 +79,9 @@ export function getRestaurantOptionBadges(restaurant: Restaurant): RestaurantOpt
     },
   ];
 
-  badges.push(
-    ...enabledOptions
-      .filter((option) => option.enabled)
-      .map(({ enabled: _enabled, ...option }) => option),
-  );
-
-  return badges;
+  return enabledOptions
+    .filter((option) => option.enabled)
+    .map(({ enabled: _enabled, ...option }) => option);
 }
 
 export function getRestaurantImageError(file: File): string | undefined {
@@ -149,6 +137,7 @@ export const restaurantFormDefaultValues: RestaurantFormValues = {
   isInCarDiningEnabled: false,
   isInRoomDiningEnabled: false,
   isInventoryEnabled: false,
+  isIhcOnly: false,
   isOffline: false,
   isOnlineOrdersEnabled: false,
   isOpen24x7: false,
@@ -157,6 +146,7 @@ export const restaurantFormDefaultValues: RestaurantFormValues = {
   isTakeawayEnabled: false,
   isVegOnly: false,
   isActive: true,
+  legalEntityId: '',
   legalName: '',
   mobile: '',
   panNumber: '',
@@ -191,13 +181,15 @@ export function toRestaurantFormDefaults(restaurant?: Restaurant): RestaurantFor
     isInCarDiningEnabled: restaurant.isInCarDiningEnabled ?? restaurant.inCarDining,
     isInRoomDiningEnabled: restaurant.isInRoomDiningEnabled ?? restaurant.inRoomDiningEnabled,
     isInventoryEnabled: restaurant.isInventoryEnabled ?? restaurant.inventory,
+    isIhcOnly: restaurant.isIhcOnly ?? restaurant.ihcOnly,
     isOffline: restaurant.isOffline ?? restaurant.offline,
-    isOnlineOrdersEnabled: isRestaurantOnline(restaurant),
+    isOnlineOrdersEnabled: restaurant.isOnlineOrdersEnabled ?? restaurant.onlineOrders,
     isOpen24x7: restaurant.isOpen24x7 ?? restaurant.open24x7,
     isPosOrdersEnabled: restaurant.isPosOrdersEnabled ?? restaurant.posOrders,
     isRegisteredInGst: restaurant.isRegisteredInGst,
     isTakeawayEnabled: restaurant.isTakeawayEnabled ?? restaurant.takeaway,
     isVegOnly: restaurant.isVegOnly ?? restaurant.vegOnly,
+    legalEntityId: restaurant.legalEntityId ?? '',
     legalName: restaurant.legalName ?? '',
     mobile: restaurant.mobile ?? '',
     panNumber: restaurant.panNumber ?? '',
@@ -236,13 +228,16 @@ export function toRestaurantInput(
     isInCarDiningEnabled: values.isInCarDiningEnabled,
     isInRoomDiningEnabled: values.isInRoomDiningEnabled,
     isInventoryEnabled: values.isInventoryEnabled,
-    isOffline: values.isOffline,
+    isIhcOnly: values.isIhcOnly,
+    // Offline is not active; Active decides, so an older record with both set is repaired on save.
+    isOffline: !values.isActive,
     isOnlineOrdersEnabled: values.isOnlineOrdersEnabled,
     isOpen24x7: values.isOpen24x7,
     isPosOrdersEnabled: values.isPosOrdersEnabled,
     isRegisteredInGst: values.isRegisteredInGst,
     isTakeawayEnabled: values.isTakeawayEnabled,
     isVegOnly: values.isVegOnly,
+    legalEntityId: values.legalEntityId || null,
     legalName: optionalValue(values.legalName),
     mobile: optionalValue(values.mobile),
     panNumber: optionalValue(values.panNumber),

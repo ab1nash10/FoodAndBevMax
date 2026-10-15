@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsPostalCode,
   IsString,
+  IsUUID,
   MaxLength,
 } from 'class-validator';
 
@@ -125,4 +126,12 @@ export class CreateHospitalDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'The legal entity it bills under; null removes the link.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  legalEntityId?: string | null;
 }

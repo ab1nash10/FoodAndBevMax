@@ -148,7 +148,7 @@ export function KpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   const acked = transfers
     ? transfers.outcomes.full + transfers.outcomes.partial + transfers.outcomes.rejected
     : 0;
-  const lowerBound = stats.transfers.truncated ? 'from the newest 1,000' : null;
+  const lowerBound = stats.transfers.truncated ? 'from the newest 5,000' : null;
   const ackDelta = transfers
     ? percentDelta(transfers.ackAvgMinutes, transfers.ackPrevAvgMinutes, 'down')
     : null;

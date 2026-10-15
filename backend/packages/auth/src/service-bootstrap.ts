@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compression from 'compression';
 import helmet from 'helmet';
 import { correlationIdMiddleware } from './correlation-id.middleware';
 import { GlobalExceptionFilter } from './global-exception.filter';
@@ -101,6 +102,9 @@ export function configureSecurityBaseline(
   });
   app.use(correlationIdMiddleware);
   app.use(requestLoggingMiddleware(options.serviceName));
+  // gzip or brotli for responses over 1 KB when the client accepts it: list JSON shrinks about
+  // tenfold, and nothing in front of the services (ALB) compresses for them.
+  app.use(compression());
   app.useGlobalFilters(new GlobalExceptionFilter());
   // BASE_PATH lets the whole API sit under a routing prefix, e.g. BASE_PATH=/fandb serves
   // /fandb/api/v1/... An AWS ALB cannot rewrite paths the way an NGINX ingress can, so when

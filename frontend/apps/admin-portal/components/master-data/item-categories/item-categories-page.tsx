@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Loader2, Pencil, Plus, RefreshCw, Tags } from 'lucide-react';
+import { Loader2, Pencil, Plus, Tags } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -14,9 +14,17 @@ import type {
   ListQuery,
   SortOrder,
 } from '@aahar/api-client';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Select } from '@/components/ui';
-import { DetailsModal, Modal, Toggle } from '@/components/ui-controls';
+import { Panel } from '@/components/ui';
+import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { IfCanOpen } from '@/components/record-link';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
@@ -33,7 +41,6 @@ import {
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
   StatusBadge,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
@@ -70,7 +77,6 @@ export function ItemCategoriesPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
-  const [viewingCategory, setViewingCategory] = useState<ItemCategory | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -167,6 +173,14 @@ export function ItemCategoriesPageClient() {
     });
   });
 
+  const hasFilters = Boolean(searchInput || activeFilter);
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setPage(1);
+  }
+
   function startEditingCategory(category: ItemCategory) {
     setEditingCategory(category);
     form.reset({
@@ -245,7 +259,7 @@ export function ItemCategoriesPageClient() {
       </Modal>
 
       <Panel>
-        <div className="grid gap-3 border-b p-4 md:grid-cols-[minmax(0,1fr)_160px_180px_130px_auto]">
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -253,37 +267,38 @@ export function ItemCategoriesPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="categoryName">Category name</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="isActive">Status</option>
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+          <FiltersMenu activeCount={activeFilter ? 1 : 0}>
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={[
+              { label: 'Created date', value: 'createdAt' },
+              { label: 'Category name', value: 'categoryName' },
+              { label: 'Updated date', value: 'updatedAt' },
+              { label: 'Status', value: 'isActive' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <Button onClick={() => void categoriesQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
+          <RefreshButton onClick={() => void categoriesQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
@@ -321,22 +336,14 @@ export function ItemCategoriesPageClient() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button
+                          aria-label={`Edit ${category.categoryName}`}
                           onClick={() => startEditingCategory(category)}
-                          size="sm"
+                          size="icon"
+                          title="Edit"
                           type="button"
                           variant="outline"
                         >
-                          <Pencil className="h-4 w-4" />
-                          Edit
-                        </Button>
-                        <Button
-                          onClick={() => setViewingCategory(category)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View
+                          <Pencil aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       </div>
                     </td>
@@ -363,18 +370,6 @@ export function ItemCategoriesPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
-      <DetailsModal
-        onClose={() => setViewingCategory(null)}
-        rows={
-          viewingCategory && [
-            ['Category Name', viewingCategory.categoryName],
-            ['Status', <StatusBadge isActive={viewingCategory.isActive} key="status" />],
-            ['Created', formatDate(viewingCategory.createdAt)],
-            ['Updated', formatDate(viewingCategory.updatedAt)],
-          ]
-        }
-        title="Item Category"
-      />
     </section>
   );
 }

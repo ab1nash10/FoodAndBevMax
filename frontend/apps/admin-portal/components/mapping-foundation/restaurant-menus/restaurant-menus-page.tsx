@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Eye, Loader2, Pencil, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -16,17 +16,12 @@ import type {
 } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { FoodTypeMarker } from '@/components/design-system';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Panel } from '@/components/ui';
-import {
-  DetailsModal,
-  FilterBar,
-  FilterSearch,
-  FilterSelect,
-  Modal,
-  Toggle,
-} from '@/components/ui-controls';
+import { Panel, Select } from '@/components/ui';
+import { FilterSearch, Modal, Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -39,16 +34,11 @@ import {
   serveAtOptions,
   type RestaurantMenuFormValues,
 } from '@/components/mapping-foundation/restaurant-menus/shared';
-import {
-  BooleanBadge,
-  QueryState,
-  StatusBadge,
-} from '@/components/mapping-foundation/shared/components';
+import { QueryState } from '@/components/mapping-foundation/shared/components';
 import type { ActiveFilter } from '@/components/mapping-foundation/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  formatDate,
   listLimit,
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
@@ -265,7 +255,6 @@ export function RestaurantMenusPageClient() {
   const [restaurantFilter, setRestaurantFilter] = useState('');
   // null: the form is closed; 'new': creating; a menu: editing it.
   const [formMenu, setFormMenu] = useState<'new' | RestaurantMenu | null>(null);
-  const [viewingMenu, setViewingMenu] = useState<RestaurantMenu | null>(null);
   const editingMenu = formMenu === 'new' ? null : formMenu;
   const form = useForm<RestaurantMenuFormValues>({
     defaultValues: emptyRestaurantMenuFormValues(),
@@ -426,7 +415,6 @@ export function RestaurantMenusPageClient() {
 
   function openForm(menu: 'new' | RestaurantMenu) {
     form.reset(menu === 'new' ? emptyRestaurantMenuFormValues() : restaurantMenuToFormValues(menu));
-    setViewingMenu(null);
     setFormMenu(menu);
   }
 
@@ -475,6 +463,19 @@ export function RestaurantMenusPageClient() {
     setPage(1);
   }
 
+  const hasFilters = Boolean(
+    searchInput || restaurantFilter || dayFilter || availabilityFilter || activeFilter,
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setRestaurantFilter('');
+    setDayFilter('');
+    setAvailabilityFilter('');
+    setActiveFilter('');
+    setPage(1);
+  }
+
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -502,58 +503,75 @@ export function RestaurantMenusPageClient() {
       ) : null}
 
       <Panel aria-label="Menu items" className="overflow-hidden" role="region">
-        <FilterBar>
+        <ListToolbar>
           <FilterSearch
             label="Search menu items"
             onChange={(value) => changeFilter(() => setSearch(value))}
             placeholder="Item or restaurant"
             value={searchInput}
           />
-          <FilterSelect
-            label="Restaurant"
-            onChange={(value) => changeFilter(() => setRestaurantFilter(value))}
-            value={restaurantFilter}
-          >
-            <option value="">All</option>
-            {restaurantsQuery.data?.map((restaurant) => (
-              <option key={restaurant.id} value={restaurant.id}>
-                {restaurant.restaurantName}
-              </option>
-            ))}
-          </FilterSelect>
-          <FilterSelect
-            label="Day"
-            onChange={(value) => changeFilter(() => setDayFilter(value as DayFilter))}
-            value={dayFilter}
-          >
-            <option value="">Any</option>
-            {dayOfWeekValues.map((day) => (
-              <option key={day} value={day}>
-                {formatEnum(day)}
-              </option>
-            ))}
-          </FilterSelect>
-          <FilterSelect
-            label="Available"
-            onChange={(value) =>
-              changeFilter(() => setAvailabilityFilter(value as AvailabilityFilter))
+          <FiltersMenu
+            activeCount={
+              [restaurantFilter, dayFilter, availabilityFilter, activeFilter].filter(Boolean).length
             }
-            value={availabilityFilter}
           >
-            <option value="">All</option>
-            <option value="available">Yes</option>
-            <option value="unavailable">No</option>
-          </FilterSelect>
-          <FilterSelect
-            label="Status"
-            onChange={(value) => changeFilter(() => setActiveFilter(value as ActiveFilter))}
-            value={activeFilter}
-          >
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </FilterSelect>
-        </FilterBar>
+            <FilterField label="Status">
+              <Select
+                onChange={(event) =>
+                  changeFilter(() => setActiveFilter(event.target.value as ActiveFilter))
+                }
+                value={activeFilter}
+              >
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </Select>
+            </FilterField>
+            <FilterField label="Restaurant">
+              <Select
+                onChange={(event) => changeFilter(() => setRestaurantFilter(event.target.value))}
+                value={restaurantFilter}
+              >
+                <option value="">All</option>
+                {restaurantsQuery.data?.map((restaurant) => (
+                  <option key={restaurant.id} value={restaurant.id}>
+                    {restaurant.restaurantName}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Day">
+              <Select
+                onChange={(event) =>
+                  changeFilter(() => setDayFilter(event.target.value as DayFilter))
+                }
+                value={dayFilter}
+              >
+                <option value="">Any</option>
+                {dayOfWeekValues.map((day) => (
+                  <option key={day} value={day}>
+                    {formatEnum(day)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Available">
+              <Select
+                onChange={(event) =>
+                  changeFilter(() =>
+                    setAvailabilityFilter(event.target.value as AvailabilityFilter),
+                  )
+                }
+                value={availabilityFilter}
+              >
+                <option value="">All</option>
+                <option value="available">Yes</option>
+                <option value="unavailable">No</option>
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] table-fixed text-[13px]">
@@ -659,17 +677,6 @@ export function RestaurantMenusPageClient() {
                       </td>
                       <td className="px-3 py-1.5 pr-4">
                         <span className="flex justify-end gap-2">
-                          <Button
-                            aria-label={`View ${menu.item.itemName}`}
-                            className="h-9 w-9"
-                            onClick={() => setViewingMenu(menu)}
-                            size="icon"
-                            title="View"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
                           {canEdit ? (
                             <Button
                               aria-label={`Edit ${menu.item.itemName}`}
@@ -680,7 +687,7 @@ export function RestaurantMenusPageClient() {
                               type="button"
                               variant="outline"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Pencil aria-hidden="true" className="h-4 w-4" />
                             </Button>
                           ) : null}
                         </span>
@@ -773,60 +780,6 @@ export function RestaurantMenusPageClient() {
           />
         </form>
       </Modal>
-
-      <DetailsModal
-        onClose={() => setViewingMenu(null)}
-        rows={
-          viewingMenu && [
-            ['Item', `${viewingMenu.item.itemName} (${viewingMenu.item.itemCode})`],
-            ['Category', viewingMenu.item.category?.categoryName ?? '—'],
-            [
-              'Restaurant',
-              `${viewingMenu.restaurant.restaurantName} · ${viewingMenu.restaurant.hospital.hospitalName}`,
-            ],
-            ['Kitchen', viewingMenu.kitchen?.kitchenName ?? '—'],
-            ['Add-On', viewingMenu.addOn ?? '—'],
-            ['Accompaniments', viewingMenu.accompaniments ?? '—'],
-            [
-              'Preparation',
-              viewingMenu.preparationTimeMinutes === null
-                ? '—'
-                : `${viewingMenu.preparationTimeMinutes} min`,
-            ],
-            ['Serves', viewingMenu.serves ?? '—'],
-            ['Serve At', serveAtLabels[viewingMenu.serveAt]],
-            ['Price', viewingMenu.price === null ? '—' : rupees.format(viewingMenu.price)],
-            [
-              'In-Room Price',
-              viewingMenu.roomPrice === null ? '—' : rupees.format(viewingMenu.roomPrice),
-            ],
-            [
-              'GST',
-              `${viewingMenu.gstPercent}%${viewingMenu.isGstInclusive ? ', inclusive' : ', extra'}`,
-            ],
-            ['Available Time', windowText(viewingMenu)],
-            [
-              'Days',
-              viewingMenu.daysOfWeek.length
-                ? viewingMenu.daysOfWeek.map((day) => formatEnum(day)).join(', ')
-                : 'Every day',
-            ],
-            [
-              'Available',
-              <BooleanBadge
-                falseLabel="Unavailable"
-                key="available"
-                trueLabel="Available"
-                value={viewingMenu.isAvailable}
-              />,
-            ],
-            ['Discountable', viewingMenu.isDiscountable ? 'Yes' : 'No'],
-            ['Status', <StatusBadge isActive={viewingMenu.isActive} key="status" />],
-            ['Updated', formatDate(viewingMenu.updatedAt)],
-          ]
-        }
-        title="Menu Item"
-      />
     </section>
   );
 }

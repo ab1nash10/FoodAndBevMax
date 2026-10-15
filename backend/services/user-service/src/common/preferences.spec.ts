@@ -5,7 +5,6 @@ import { test } from 'vitest';
 test('parsePreferences', () => {
   const unset = {
     defaultLocationId: null,
-    mutedNotificationCategories: [],
     startPage: null,
     theme: null,
   };
@@ -27,17 +26,10 @@ test('parsePreferences', () => {
     }),
     {
       defaultLocationId: 'all',
-      mutedNotificationCategories: ['GRN', 'TRANSFER'],
       startPage: '/inventory/grns',
       theme: 'system',
     },
   );
 
   assert.equal(parsePreferences({ theme: 'neon' }).theme, null, 'an unknown theme falls back');
-  assert.deepEqual(
-    parsePreferences({ mutedNotificationCategories: ['ACCESS', 'GRN', 7] })
-      .mutedNotificationCategories,
-    ['GRN'],
-    'ACCESS can never be muted, even if it was stored',
-  );
 });

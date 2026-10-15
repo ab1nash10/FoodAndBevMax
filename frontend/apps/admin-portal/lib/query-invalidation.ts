@@ -28,16 +28,16 @@ export function invalidateKitchenQueries(queryClient: QueryClient): void {
   ]);
 }
 
+export function invalidateLegalEntityQueries(queryClient: QueryClient): void {
+  invalidate(queryClient, [queryKeys.legalEntities(), queryKeys.legalEntityOptions()]);
+}
+
 export function invalidateItemQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [
-    queryKeys.items(),
-    queryKeys.itemOptions(),
-    queryKeys.dashboard('items'),
-  ]);
+  invalidate(queryClient, [queryKeys.items(), queryKeys.itemOptions(), queryKeys.dashboardSetup()]);
 }
 
 export function invalidateEmployeeQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [queryKeys.employees(), queryKeys.dashboard('employees')]);
+  invalidate(queryClient, [queryKeys.employees(), queryKeys.dashboardSetup()]);
 }
 
 export function invalidateGrnQueries(queryClient: QueryClient): void {

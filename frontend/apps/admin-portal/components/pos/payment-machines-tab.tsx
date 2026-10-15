@@ -30,6 +30,7 @@ import {
   useHospitalOptions,
 } from '@/components/pos/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { StatusToggleCell } from '@/components/organization/shared/list-controls';
 import { SetupNotice } from '@/components/location-empty-states';
 
 const primaryUpiValues: PrimaryUpiProvider[] = [
@@ -456,6 +457,11 @@ export function PaymentMachinesTab() {
             setActiveFilter(value);
             setPage(1);
           }}
+          onClear={() => {
+            setSearch('');
+            setActiveFilter('');
+            setPage(1);
+          }}
           onRefresh={() => void query.refetch()}
           onSearchChange={(value) => {
             setSearch(value);
@@ -465,17 +471,17 @@ export function PaymentMachinesTab() {
         />
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+            <thead className="whitespace-nowrap bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[15%] px-4 py-2.5">Name</th>
-                <th className="w-[8%] px-4 py-2.5">Active</th>
+                <th className="w-[14%] px-4 py-2.5">Name</th>
+                <th className="w-[12%] px-4 py-2.5">Status</th>
                 <th className="w-[8%] px-4 py-2.5">Primary</th>
-                <th className="w-[13%] px-4 py-2.5">Serial Number</th>
+                <th className="w-[12%] px-4 py-2.5">Serial Number</th>
                 <th className="w-[11%] px-4 py-2.5">Merchant ID</th>
-                <th className="w-[13%] px-4 py-2.5">Store POS Code</th>
-                <th className="w-[15%] px-4 py-2.5">POS Device</th>
+                <th className="w-[12%] px-4 py-2.5">Store POS Code</th>
+                <th className="w-[14%] px-4 py-2.5">POS Device</th>
                 <th className="w-[11%] px-4 py-2.5">Primary UPI</th>
-                <th className="w-[120px] px-4 py-2.5">Actions</th>
+                <th className="w-20 px-2 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-divider bg-white">
@@ -486,16 +492,20 @@ export function PaymentMachinesTab() {
                       {machine.name}
                     </td>
                     <td className="px-4 py-3">
-                      <Toggle
-                        checked={machine.isActive}
+                      <StatusToggleCell
                         disabled={flagMutation.isPending}
-                        onChange={(checked) =>
-                          flagMutation.mutate({ body: { isActive: checked }, id: machine.id })
+                        isActive={machine.isActive}
+                        onToggle={() =>
+                          flagMutation.mutate({
+                            body: { isActive: !machine.isActive },
+                            id: machine.id,
+                          })
                         }
                       />
                     </td>
                     <td className="px-4 py-3">
                       <Toggle
+                        ariaLabel={`Primary machine: ${machine.name}`}
                         checked={machine.isDefault}
                         disabled={flagMutation.isPending}
                         onChange={(checked) =>
@@ -518,21 +528,20 @@ export function PaymentMachinesTab() {
                     <td className="px-4 py-3 text-ds-text-3">
                       {formatUpiProvider(machine.primaryUpi)}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          aria-label={`Edit ${machine.name}`}
-                          onClick={() => {
-                            setEditingMachine(machine);
-                            setIsFormOpen(true);
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </div>
+                    <td className="px-2 py-3">
+                      <Button
+                        aria-label={`Edit ${machine.name}`}
+                        onClick={() => {
+                          setEditingMachine(machine);
+                          setIsFormOpen(true);
+                        }}
+                        size="icon"
+                        title="Edit"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Pencil aria-hidden="true" className="h-4 w-4" />
+                      </Button>
                     </td>
                   </tr>
                 ))

@@ -1,18 +1,10 @@
 'use client';
 
-import type {
-  ApiList,
-  ApiResponse,
-  HospitalSummary,
-  KitchenProduction,
-  StockBalance,
-  Transfer,
-} from '@aahar/api-client';
+import type { DashboardSetup, HospitalSummary, StockBalance } from '@aahar/api-client';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import { useEntityTotal } from '@/components/organization/shared/hooks';
 import { organizationApi } from '@/lib/api';
 import {
   dashboardMode,
@@ -31,31 +23,7 @@ import { queryKeys } from '@/lib/query-keys';
 
 /** Period stats change slowly; the work queue keeps the app's default 30s. */
 const STATS_STALE_MS = 60_000;
-/** ponytail: up to 10 pages of 100 per source; a summary endpoint when a period outgrows it. */
-const MAX_PAGES = 10;
 const EXPIRY_WINDOW_DAYS = 7;
-
-interface Fetched<T> {
-  items: T[];
-  /** More records exist than were fetched (MAX_PAGES), so the numbers are a lower bound. */
-  truncated: boolean;
-}
-
-/** Page 1, then the remaining pages in parallel (one round trip after the first). */
-async function fetchAll<T>(
-  fetchPage: (page: number) => Promise<ApiResponse<ApiList<T>>>,
-): Promise<Fetched<T>> {
-  const first = (await fetchPage(1)).data;
-  const pages = Math.min(first.meta.totalPages, MAX_PAGES);
-  const rest = await Promise.all(
-    Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
-      fetchPage(index + 2).then((response) => response.data.items),
-    ),
-  );
-  const items = [first.items, ...rest].flat();
-
-  return { items, truncated: first.meta.total > items.length };
-}
 
 function daysUntil(dateIso: string): number {
   const today = new Date();
@@ -97,66 +65,22 @@ export function useDashboardStats(period: Period) {
     transfers: hasPermission(['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW']),
   };
 
-  // ---- Period records: this period and the one before (for deltas).
-  const transfersQuery = useQuery({
-    enabled: can.transfers,
-    queryFn: () => {
+  // ---- Period records: this period and the one before (for deltas). One request returns the
+  // transfers, posted productions and posted GRNs the user may view, with only the fields the
+  // numbers below read.
+  const recordsQuery = useQuery({
+    enabled: can.transfers || can.productions || can.grns,
+    queryFn: async () => {
       const window = periodWindow(period, new Date());
 
-      return fetchAll((page) =>
-        organizationApi.listTransfers({
-          fromDate: iso(window.prevStart),
-          hospitalId,
-          limit: 100,
-          page,
-          sortBy: 'transferDate',
-          sortOrder: 'desc',
-        }),
-      );
+      return (
+        await organizationApi.getDashboardRecords({ fromDate: iso(window.prevStart), hospitalId })
+      ).data;
     },
-    queryKey: queryKeys.dashboardStats('transfers', period, scope),
+    queryKey: queryKeys.dashboardStats('records', period, scope),
     staleTime: STATS_STALE_MS,
   });
-  const productionsQuery = useQuery({
-    enabled: can.productions,
-    queryFn: () => {
-      const window = periodWindow(period, new Date());
-
-      return fetchAll((page) =>
-        organizationApi.listKitchenProductions({
-          fromDate: iso(window.prevStart),
-          hospitalId,
-          limit: 100,
-          page,
-          sortBy: 'productionDate',
-          sortOrder: 'desc',
-          status: 'POSTED',
-        }),
-      );
-    },
-    queryKey: queryKeys.dashboardStats('productions', period, scope),
-    staleTime: STATS_STALE_MS,
-  });
-  const grnsQuery = useQuery({
-    enabled: can.grns,
-    queryFn: () => {
-      const window = periodWindow(period, new Date());
-
-      return fetchAll((page) =>
-        organizationApi.listGrns({
-          fromDate: iso(window.start),
-          hospitalId,
-          limit: 100,
-          page,
-          sortBy: 'receivedDate',
-          sortOrder: 'desc',
-          status: 'POSTED_TO_STOCK',
-        }),
-      );
-    },
-    queryKey: queryKeys.dashboardStats('grns', period, scope),
-    staleTime: STATS_STALE_MS,
-  });
+  const records = recordsQuery.data;
 
   // ---- Right now: the work queue (oldest first), recent activity and expiring stock.
   const pendingTransfersQuery = useQuery({
@@ -237,99 +161,44 @@ export function useDashboardStats(period: Period) {
     queryKey: queryKeys.dashboardExpiring(scope),
   });
 
-  // ---- Master data totals (the existing keys) and the setup checklist's counts.
+  // ---- Master data totals and the setup checklist: one request with every count the user may
+  // see (each counted by its list endpoint) and the first posted GRN and acknowledged transfer.
+  const setupQuery = useQuery({
+    enabled: Object.values(can).some(Boolean),
+    queryFn: async () => (await organizationApi.getDashboardSetup({ hospitalId })).data,
+    queryKey: queryKeys.dashboardSetup('counts', scope),
+  });
+  const setup = setupQuery.data;
+  // Shaped like the queries the Master data card used to get, one per count.
+  const countOf = (key: keyof DashboardSetup['counts'], allowed: boolean) => ({
+    data: allowed ? setup?.counts[key] : undefined,
+    isLoading: allowed && setupQuery.isLoading,
+  });
   const masters = {
-    employees: useEntityTotal(
-      ['employees', scope],
-      () => organizationApi.listEmployees({ hospitalId, limit: 1 }),
-      can.employees,
-    ),
-    hospitals: useEntityTotal(
-      'hospitals',
-      () => organizationApi.listHospitals({ limit: 1 }),
-      can.hospitals,
-    ),
-    items: useEntityTotal('items', () => organizationApi.listItems({ limit: 1 }), can.items),
-    kitchens: useEntityTotal(
-      ['kitchens', scope],
-      () => organizationApi.listKitchens({ hospitalId, limit: 1 }),
-      can.kitchens,
-    ),
-    restaurants: useEntityTotal(
-      ['restaurants', scope],
-      () => organizationApi.listRestaurants({ hospitalId, limit: 1 }),
-      can.restaurants,
-    ),
-    stores: useEntityTotal(
-      ['stores', scope],
-      () => organizationApi.listStores({ hospitalId, limit: 1 }),
-      can.stores,
-    ),
+    employees: countOf('employees', can.employees),
+    hospitals: countOf('hospitals', can.hospitals),
+    items: countOf('items', can.items),
+    kitchens: countOf('kitchens', can.kitchens),
+    restaurants: countOf('restaurants', can.restaurants),
+    stores: countOf('stores', can.stores),
   };
-  const setupTotals = {
-    kitchenItems: useEntityTotal(
-      ['setup', 'kitchen-items', scope],
-      () => organizationApi.listKitchenItems({ hospitalId, limit: 1 }),
-      can.kitchenItems,
-    ),
-    menus: useEntityTotal(
-      ['setup', 'restaurant-menus', scope],
-      () => organizationApi.listRestaurantMenus({ hospitalId, limit: 1 }),
-      can.menus,
-    ),
-    storeItems: useEntityTotal(
-      ['setup', 'store-items', scope],
-      () => organizationApi.listStoreItems({ hospitalId, limit: 1 }),
-      can.storeItems,
-    ),
-  };
-  const firstGrnQuery = useQuery({
-    enabled: can.grns,
-    queryFn: async () =>
-      (
-        await organizationApi.listGrns({
-          hospitalId,
-          limit: 1,
-          sortBy: 'createdAt',
-          sortOrder: 'asc',
-          status: 'POSTED_TO_STOCK',
-        })
-      ).data.items[0] ?? null,
-    queryKey: queryKeys.dashboardSetup('first-grn', scope),
-    staleTime: STATS_STALE_MS,
-  });
-  const firstTransferQuery = useQuery({
-    enabled: can.transfers,
-    queryFn: async () =>
-      (
-        await organizationApi.listTransfers({
-          hospitalId,
-          limit: 1,
-          sortBy: 'createdAt',
-          sortOrder: 'asc',
-          status: 'ACKNOWLEDGED',
-        })
-      ).data.items[0] ?? null,
-    queryKey: queryKeys.dashboardSetup('first-transfer', scope),
-    staleTime: STATS_STALE_MS,
-  });
 
   // ---- Derived numbers. The window follows the fetch, so buckets match the records.
   const window = useMemo(
-    () => periodWindow(period, new Date(transfersQuery.dataUpdatedAt || Date.now())),
-    [period, transfersQuery.dataUpdatedAt],
+    () => periodWindow(period, new Date(recordsQuery.dataUpdatedAt || Date.now())),
+    [period, recordsQuery.dataUpdatedAt],
   );
   const transfers = useMemo(
-    () => (transfersQuery.data ? transferStats(transfersQuery.data.items, window) : undefined),
-    [transfersQuery.data, window],
+    () => (records?.transfers ? transferStats(records.transfers.items, window) : undefined),
+    [records, window],
   );
   const wastage = useMemo(
-    () => (productionsQuery.data ? wastageStats(productionsQuery.data.items, window) : undefined),
-    [productionsQuery.data, window],
+    () => (records?.productions ? wastageStats(records.productions.items, window) : undefined),
+    [records, window],
   );
   const vendors = useMemo(
-    () => (grnsQuery.data ? vendorRows(grnsQuery.data.items, window) : undefined),
-    [grnsQuery.data, window],
+    () => (records?.grns ? vendorRows(records.grns.items, window) : undefined),
+    [records, window],
   );
   const pending = useMemo(
     () =>
@@ -350,83 +219,57 @@ export function useDashboardStats(period: Period) {
         name: hospital.displayName || hospital.hospitalName,
       });
 
-    (transfersQuery.data?.items ?? []).forEach((transfer: Transfer) => remember(transfer.hospital));
+    (records?.transfers?.items ?? []).forEach((transfer) => remember(transfer.hospital));
     (pendingTransfersQuery.data?.items ?? []).forEach((transfer) => remember(transfer.hospital));
-    (productionsQuery.data?.items ?? []).forEach((production: KitchenProduction) =>
-      remember(production.hospital),
-    );
+    (records?.productions?.items ?? []).forEach((production) => remember(production.hospital));
 
     return locationRows(transfers, pending, wastage, names);
-  }, [
-    pending,
-    pendingTransfersQuery.data,
-    productionsQuery.data,
-    transfers,
-    transfersQuery.data,
-    wastage,
-  ]);
+  }, [pending, pendingTransfersQuery.data, records, transfers, wastage]);
   const cards = useMemo(
     () => insights({ pending, period, transfers, vendors, wastage }),
     [pending, period, transfers, vendors, wastage],
   );
 
-  const total = (query: { data?: number }, allowed: boolean) => (allowed ? query.data : undefined);
-  const setupQueries = [
-    ...Object.values(masters),
-    ...Object.values(setupTotals),
-    firstGrnQuery,
-    firstTransferQuery,
-  ];
-  const setupLoading = setupQueries.some((query) => query.isLoading);
-  const steps = useMemo(
-    () =>
-      setupSteps(
-        {
-          employees: total(masters.employees, can.employees),
-          // At one location the checklist is about that location, as the Master data card is.
-          hospitals: hospitalId && can.hospitals ? 1 : total(masters.hospitals, can.hospitals),
-          items: total(masters.items, can.items),
-          kitchenItems: total(setupTotals.kitchenItems, can.kitchenItems),
-          kitchens: total(masters.kitchens, can.kitchens),
-          menus: total(setupTotals.menus, can.menus),
-          restaurants: total(masters.restaurants, can.restaurants),
-          storeItems: total(setupTotals.storeItems, can.storeItems),
-          stores: total(masters.stores, can.stores),
-        },
-        {
-          grn: can.grns ? firstGrnQuery.data : undefined,
-          transfer: can.transfers ? firstTransferQuery.data : undefined,
-        },
-        (href) => canOpenPath(href, hasPermission),
-      ),
-    // The counts are plain numbers; list them rather than the query objects.
-    [
-      can.employees,
-      can.grns,
-      can.hospitals,
-      can.items,
-      can.kitchenItems,
-      can.kitchens,
-      can.menus,
-      can.restaurants,
-      can.storeItems,
-      can.stores,
-      can.transfers,
-      firstGrnQuery.data,
-      firstTransferQuery.data,
-      hasPermission,
-      hospitalId,
-      masters.employees.data,
-      masters.hospitals.data,
-      masters.items.data,
-      masters.kitchens.data,
-      masters.restaurants.data,
-      masters.stores.data,
-      setupTotals.kitchenItems.data,
-      setupTotals.menus.data,
-      setupTotals.storeItems.data,
-    ],
-  );
+  const setupLoading = setupQuery.isLoading;
+  const steps = useMemo(() => {
+    const count = (key: keyof DashboardSetup['counts'], allowed: boolean) =>
+      allowed ? setup?.counts[key] : undefined;
+
+    return setupSteps(
+      {
+        employees: count('employees', can.employees),
+        // At one location the checklist is about that location, as the Master data card is.
+        hospitals: hospitalId && can.hospitals ? 1 : count('hospitals', can.hospitals),
+        items: count('items', can.items),
+        kitchenItems: count('kitchenItems', can.kitchenItems),
+        kitchens: count('kitchens', can.kitchens),
+        menus: count('menus', can.menus),
+        restaurants: count('restaurants', can.restaurants),
+        storeItems: count('storeItems', can.storeItems),
+        stores: count('stores', can.stores),
+      },
+      {
+        grn: can.grns ? setup?.firstGrn : undefined,
+        transfer: can.transfers ? setup?.firstTransfer : undefined,
+      },
+      (href) => canOpenPath(href, hasPermission),
+    );
+  }, [
+    can.employees,
+    can.grns,
+    can.hospitals,
+    can.items,
+    can.kitchenItems,
+    can.kitchens,
+    can.menus,
+    can.restaurants,
+    can.storeItems,
+    can.stores,
+    can.transfers,
+    hasPermission,
+    hospitalId,
+    setup,
+  ]);
   // The mode is known once the period's transfers and the setup counts are in.
   const isModeKnown = !can.transfers || (Boolean(transfers) && !setupLoading);
   const mode = dashboardMode({
@@ -439,7 +282,7 @@ export function useDashboardStats(period: Period) {
     activity: activityQuery,
     can,
     expiring: expiringQuery,
-    grns: { ...grnsQuery, truncated: grnsQuery.data?.truncated ?? false },
+    grns: { ...recordsQuery, truncated: records?.grns?.truncated ?? false },
     insights: cards,
     isModeKnown,
     locations,
@@ -447,7 +290,7 @@ export function useDashboardStats(period: Period) {
     mode,
     pending: { ...pendingTransfersQuery, stats: pending },
     period,
-    productions: { ...productionsQuery, truncated: productionsQuery.data?.truncated ?? false },
+    productions: { ...recordsQuery, truncated: records?.productions?.truncated ?? false },
     queue: {
       grns: grnsToVerifyQuery,
       productions: draftProductionsQuery,
@@ -455,9 +298,9 @@ export function useDashboardStats(period: Period) {
     },
     setup: { isLoading: setupLoading, steps },
     transfers: {
-      ...transfersQuery,
+      ...recordsQuery,
       stats: transfers,
-      truncated: transfersQuery.data?.truncated ?? false,
+      truncated: records?.transfers?.truncated ?? false,
     },
     vendors,
     wastage,

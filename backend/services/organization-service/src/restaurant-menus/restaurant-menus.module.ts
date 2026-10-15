@@ -6,6 +6,7 @@ import { RestaurantMenusService } from './restaurant-menus.service';
 
 @Module({
   controllers: [RestaurantMenusController],
+  exports: [RestaurantMenusService],
   imports: [CommonModule],
   providers: [RestaurantMenusRepository, RestaurantMenusService],
 })

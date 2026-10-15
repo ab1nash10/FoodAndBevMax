@@ -1,7 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
+import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
+import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import {
@@ -15,7 +25,7 @@ import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import type { SortOrder, Store as StoreRecord } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Store } from 'lucide-react';
+import { Pencil, Plus, Store } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   ActiveFilterSelect,
@@ -23,9 +33,7 @@ import {
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
   StatusToggleCell,
-  ToolbarGrid,
 } from '@/components/organization/shared/list-controls';
 import {
   activeFilterToBoolean,
@@ -44,6 +52,9 @@ import { queryKeys } from '@/lib/query-keys';
 
 export function StoresPageClient() {
   const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('STORE_UPDATE');
+  const [editingStore, setEditingStore] = useState<StoreRecord | null>(null);
   const { showToast } = useToast();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
@@ -84,6 +95,24 @@ export function StoresPageClient() {
     queryKey: queryKeys.stores({ activeFilter, hospitalFilter, page, search, sortBy, sortOrder }),
   });
 
+  const editMutation = useMutation({
+    mutationFn: ({ id, isActive, name }: { id: string; isActive: boolean; name: string }) =>
+      organizationApi.updateStore(id, { isActive, storeName: name }),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Store was not updated',
+        variant: 'error',
+      });
+    },
+    onSuccess() {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.stores() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.storeOptions() });
+      showToast({ title: 'Store updated', variant: 'success' });
+      setEditingStore(null);
+    },
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       organizationApi.updateStore(id, { isActive }),
@@ -114,6 +143,17 @@ export function StoresPageClient() {
     total: 0,
     totalPages: 1,
   };
+
+  const hasFilters = Boolean(
+    searchInput || activeFilter || hospitalFilter !== (scopedHospitalId ?? ''),
+  );
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setHospitalFilter(scopedHospitalId ?? '');
+    setPage(1);
+  }
 
   function toggleStoreStatus(store: StoreRecord) {
     const nextIsActive = !store.isActive;
@@ -154,7 +194,7 @@ export function StoresPageClient() {
         title="Stores"
       />
       <Panel>
-        <ToolbarGrid>
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -162,59 +202,69 @@ export function StoresPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            disabled={hospitalOptionsQuery.isLoading || Boolean(scopedHospitalId)}
-            onChange={(event) => {
-              setHospitalFilter(event.target.value);
-              setPage(1);
-            }}
-            value={hospitalFilter}
+          <FiltersMenu
+            activeCount={
+              [activeFilter, hospitalFilter !== (scopedHospitalId ?? '')].filter(Boolean).length
+            }
           >
-            <option value="">All locations</option>
-            {hospitalOptionsQuery.data?.map((hospital) => (
-              <option key={hospital.id} value={hospital.id}>
-                {formatLocationOption(hospital)}
-              </option>
-            ))}
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+            <FilterField label="Location">
+              <Select
+                disabled={hospitalOptionsQuery.isLoading || Boolean(scopedHospitalId)}
+                onChange={(event) => {
+                  setHospitalFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={hospitalFilter}
+              >
+                <option value="">All locations</option>
+                {hospitalOptionsQuery.data?.map((hospital) => (
+                  <option key={hospital.id} value={hospital.id}>
+                    {formatLocationOption(hospital)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
-          />
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
+            onSortByChange={(value) => {
+              setSortBy(value);
               setPage(1);
             }}
-            value={sortBy}
-          >
-            <option value="createdAt">Created date</option>
-            <option value="updatedAt">Updated date</option>
-            <option value="storeName">Name</option>
-          </Select>
-          <Button onClick={() => void storesQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </ToolbarGrid>
+            options={[
+              { label: 'Created date', value: 'createdAt' },
+              { label: 'Updated date', value: 'updatedAt' },
+              { label: 'Name', value: 'storeName' },
+            ]}
+            order={sortOrder}
+            sortBy={sortBy}
+          />
+          <RefreshButton onClick={() => void storesQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
             <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[28%] px-4 py-2.5">Store/F&B</th>
+                <th className="w-[30%] px-4 py-2.5">Store/F&B</th>
                 <th className="w-[26%] px-4 py-2.5">Location</th>
                 <th className="w-[22%] px-4 py-2.5">Status</th>
                 <th className="w-[16%] px-4 py-2.5">Updated</th>
+                <th className="w-16 px-2 py-2.5">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-divider bg-white">
@@ -241,11 +291,25 @@ export function StoresPageClient() {
                     <td className="whitespace-nowrap px-4 py-3 text-ds-muted">
                       {formatDate(store.updatedAt)}
                     </td>
+                    <td className="px-2 py-3">
+                      {canEdit ? (
+                        <Button
+                          aria-label={`Edit ${store.storeName}`}
+                          onClick={() => setEditingStore(store)}
+                          size="icon"
+                          title="Edit"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil aria-hidden="true" className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <QueryState
-                  colSpan={4}
+                  colSpan={5}
                   error={storesQuery.error}
                   isError={storesQuery.isError}
                   isLoading={storesQuery.isLoading}
@@ -263,6 +327,17 @@ export function StoresPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <EditMasterDialog
+        isPending={editMutation.isPending}
+        location={editingStore ? getLocationDisplayName(editingStore.hospital) : ''}
+        nameLabel="Store name"
+        onClose={() => setEditingStore(null)}
+        onSave={(values) => editingStore && editMutation.mutate({ id: editingStore.id, ...values })}
+        record={
+          editingStore ? { isActive: editingStore.isActive, name: editingStore.storeName } : null
+        }
+        title="Edit store"
+      />
     </section>
   );
 }

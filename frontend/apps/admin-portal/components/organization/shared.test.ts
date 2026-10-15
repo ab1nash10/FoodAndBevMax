@@ -12,7 +12,14 @@ import {
   toHospitalFormDefaults,
   toHospitalInput,
 } from '@/components/organization/shared/locations';
+import {
+  allowsOnlineOrdering,
+  getRestaurantStatusBadges,
+  restaurantFormDefaultValues,
+  toRestaurantInput,
+} from '@/components/organization/shared/restaurants';
 import { type LocationDisplaySource } from '@/components/organization/shared/types';
+import type { Restaurant } from '@aahar/api-client';
 
 const base: LocationDisplaySource = {
   hospitalCode: 'H01',
@@ -100,6 +107,7 @@ describe('form helpers', () => {
       ipAddress: undefined,
       isActive: true,
       latitude: undefined,
+      legalEntityId: null,
       locationCode: 'SKT',
       longitude: undefined,
       onlinePaymentOption: 'NONE',
@@ -107,6 +115,59 @@ describe('form helpers', () => {
       state: 'Delhi',
       title: 'Saket',
       visitingCardAddress: undefined,
+    });
+  });
+});
+
+describe('restaurant options', () => {
+  const restaurant = (offline: boolean, onlineOrders: boolean, isActive = !offline) =>
+    ({
+      isActive,
+      isOffline: offline,
+      isOnlineOrdersEnabled: onlineOrders,
+      offline,
+      onlineOrderingEnabled: onlineOrders,
+      onlineOrders,
+    }) as unknown as Restaurant;
+
+  test('online ordering is the Online Orders (QR) option, and only while the restaurant is open', () => {
+    expect(allowsOnlineOrdering(restaurant(false, true))).toBe(true);
+    expect(allowsOnlineOrdering(restaurant(false, false))).toBe(false);
+    // Inactive and Offline (as BLK was): no online orders, whatever the option says.
+    expect(allowsOnlineOrdering(restaurant(true, true))).toBe(false);
+    expect(allowsOnlineOrdering(restaurant(false, true, false))).toBe(false);
+    expect(allowsOnlineOrdering(restaurant(true, true, true))).toBe(false);
+  });
+
+  test('the status badges follow Online Orders and show Offline', () => {
+    const labels = (r: Restaurant) => getRestaurantStatusBadges(r).map((badge) => badge.label);
+
+    expect(labels(restaurant(false, true))).toEqual(['Online Orders']);
+    expect(labels(restaurant(false, false))).toEqual([]);
+    expect(labels(restaurant(true, false))).toEqual(['Offline']);
+    expect(labels(restaurant(true, true))).toEqual(['Offline']);
+  });
+
+  test('Offline is saved as the opposite of Active, repairing a record with both set', () => {
+    const save = (isActive: boolean, isOffline: boolean) =>
+      toRestaurantInput({ ...restaurantFormDefaultValues, isActive, isOffline }).isOffline;
+
+    expect(save(true, true)).toBe(false);
+    expect(save(false, false)).toBe(true);
+    expect(save(true, false)).toBe(false);
+  });
+
+  test('IHC only and the entity reach the API input', () => {
+    const input = toRestaurantInput({
+      ...restaurantFormDefaultValues,
+      isIhcOnly: true,
+      legalEntityId: 'entity-1',
+    });
+
+    expect(input).toMatchObject({ isIhcOnly: true, legalEntityId: 'entity-1' });
+    expect(toRestaurantInput(restaurantFormDefaultValues)).toMatchObject({
+      isIhcOnly: false,
+      legalEntityId: null,
     });
   });
 });

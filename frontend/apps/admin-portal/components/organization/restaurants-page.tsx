@@ -1,10 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Badge, Panel, Select } from '@/components/ui';
-import { DetailsModal, Toggle } from '@/components/ui-controls';
+import { Badge, Panel } from '@/components/ui';
+import { Toggle } from '@/components/ui-controls';
 import { IfCanOpen } from '@/components/record-link';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
@@ -16,8 +24,9 @@ import {
 } from '@/lib/use-url-state';
 import type { Restaurant, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
+import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Eye, Pencil, Plus, QrCode, RefreshCw, Utensils } from 'lucide-react';
+import { Activity, Pencil, Plus, QrCode, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import {
   ActiveFilterSelect,
@@ -25,22 +34,20 @@ import {
   PaginationControls,
   QueryState,
   SearchInput,
-  SortOrderSelect,
-  ToolbarGrid,
 } from '@/components/organization/shared/list-controls';
 import {
   activeFilterToBoolean,
   formatDate,
   listLimit,
-  nullableText,
 } from '@/components/organization/shared/utils';
 import {
   formatRestaurantLocationDisplay,
   freezeServicesMessage,
 } from '@/components/organization/shared/locations';
 import {
-  getRestaurantOptionBadges,
-  isRestaurantOnline,
+  getRestaurantStatusBadges,
+  allowsOnlineOrdering,
+  isRestaurantOpen,
 } from '@/components/organization/shared/restaurants';
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
@@ -80,7 +87,6 @@ export function RestaurantsPageClient() {
   ]);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [viewingRestaurant, setViewingRestaurant] = useState<Restaurant | null>(null);
   const [onlineUpdatingId, setOnlineUpdatingId] = useState<string | null>(null);
 
   const restaurantsQuery = useQuery({
@@ -112,16 +118,13 @@ export function RestaurantsPageClient() {
   });
 
   const onlineToggleMutation = useMutation({
+    // The Online Ordering switch is the Online Orders option, not the Offline one.
     mutationFn: ({ id, nextIsOnline }: { id: string; nextIsOnline: boolean }) =>
-      organizationApi.updateRestaurant(id, {
-        isOnlineOrdersEnabled: nextIsOnline,
-        onlineOrders: nextIsOnline,
-        onlineOrderingEnabled: nextIsOnline,
-      }),
+      organizationApi.updateRestaurant(id, { isOnlineOrdersEnabled: nextIsOnline }),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
-        title: 'Online status was not updated',
+        title: 'Online ordering was not updated',
         variant: 'error',
       });
     },
@@ -131,7 +134,7 @@ export function RestaurantsPageClient() {
     onSuccess(_, variables) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
       showToast({
-        title: variables.nextIsOnline ? 'Restaurant is online' : 'Restaurant is offline',
+        title: variables.nextIsOnline ? 'Online ordering turned on' : 'Online ordering turned off',
         variant: 'success',
       });
     },
@@ -139,7 +142,8 @@ export function RestaurantsPageClient() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      organizationApi.updateRestaurant(id, { isActive }),
+      // Offline means not active, so it follows this switch.
+      organizationApi.updateRestaurant(id, { isActive, isOffline: !isActive }),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
@@ -156,6 +160,14 @@ export function RestaurantsPageClient() {
       });
     },
   });
+
+  const hasFilters = Boolean(searchInput || activeFilter);
+
+  function clearFilters() {
+    setSearch('');
+    setActiveFilter('');
+    setPage(1);
+  }
 
   function toggleRestaurantStatus(restaurant: Restaurant) {
     const nextIsActive = !restaurant.isActive;
@@ -185,7 +197,7 @@ export function RestaurantsPageClient() {
     setOnlineUpdatingId(restaurant.id);
     onlineToggleMutation.mutate({
       id: restaurant.id,
-      nextIsOnline: !isRestaurantOnline(restaurant),
+      nextIsOnline: !allowsOnlineOrdering(restaurant),
     });
   };
 
@@ -208,7 +220,7 @@ export function RestaurantsPageClient() {
         title="Restaurants"
       />
       <Panel>
-        <ToolbarGrid>
+        <ListToolbar>
           <SearchInput
             onChange={(value) => {
               setSearch(value);
@@ -216,58 +228,55 @@ export function RestaurantsPageClient() {
             }}
             value={searchInput}
           />
-          <ActiveFilterSelect
-            onChange={(value) => {
-              setActiveFilter(value);
-              setPage(1);
-            }}
-            value={activeFilter}
-          />
-          <Select
-            onChange={(event) => {
-              setSortBy(event.target.value);
-              setPage(1);
-            }}
-            value={sortBy}
-          >
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          <SortOrderSelect
-            onChange={(value) => {
+          <FiltersMenu activeCount={activeFilter ? 1 : 0}>
+            <FilterField label="Status">
+              <ActiveFilterSelect
+                onChange={(value) => {
+                  setActiveFilter(value);
+                  setPage(1);
+                }}
+                value={activeFilter}
+              />
+            </FilterField>
+          </FiltersMenu>
+          <SortControl
+            onOrderChange={(value) => {
               setSortOrder(value);
               setPage(1);
             }}
-            value={sortOrder}
+            onSortByChange={(value) => {
+              setSortBy(value);
+              setPage(1);
+            }}
+            options={sortOptions}
+            order={sortOrder}
+            sortBy={sortBy}
           />
-          <Button onClick={() => void restaurantsQuery.refetch()} type="button" variant="outline">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </ToolbarGrid>
-        <div className="overflow-x-auto px-4 pb-4">
-          <table className="w-full min-w-[980px] border-separate border-spacing-y-3 text-left text-sm">
-            <thead className="text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <RefreshButton onClick={() => void restaurantsQuery.refetch()} />
+          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+        </ListToolbar>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] table-fixed divide-y divide-ds-divider text-sm">
+            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[33%] px-4 py-2">Restaurant</th>
-                <th className="w-[12%] px-4 py-2">Online</th>
-                <th className="w-[29%] px-4 py-2">Status / Options</th>
-                <th className="w-[26%] px-4 py-2 text-right">Actions</th>
+                <th className="w-[30%] px-3 py-2.5">Restaurant</th>
+                <th className="w-[14%] whitespace-nowrap px-3 py-2.5">Online Ordering</th>
+                <th className="w-[17%] whitespace-nowrap px-3 py-2.5">Restaurant Availability</th>
+                <th className="w-[19%] px-3 py-2.5">Restaurant Status</th>
+                <th className="w-[168px] px-3 py-2.5 min-[1320px]:w-[300px]">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-ds-divider bg-white">
               {items.length > 0 ? (
                 items.map((restaurant) => {
-                  const isOnline = isRestaurantOnline(restaurant);
-                  const optionBadges = getRestaurantOptionBadges(restaurant);
+                  const isOpen = isRestaurantOpen(restaurant);
+                  const isOnline = allowsOnlineOrdering(restaurant);
+                  const statusBadges = getRestaurantStatusBadges(restaurant);
                   const isOnlineUpdating = onlineUpdatingId === restaurant.id;
 
                   return (
-                    <tr className="group" key={restaurant.id}>
-                      <td className="rounded-l-xl border-y border-l border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
+                    <tr className="hover:bg-ds-subtle" key={restaurant.id}>
+                      <td className="px-3 py-3">
                         <div className="flex min-w-0 items-center gap-4">
                           <RestaurantThumbnail restaurant={restaurant} />
                           <div className="min-w-0">
@@ -278,81 +287,106 @@ export function RestaurantsPageClient() {
                               {formatRestaurantLocationDisplay(restaurant.hospital)}
                             </p>
                             <p className="mt-1 text-xs font-medium text-ds-muted">
-                              {restaurant.restaurantCode}
+                              {restaurant.restaurantCode} · Updated{' '}
+                              {formatDate(restaurant.updatedAt)}
                             </p>
                           </div>
                         </div>
                       </td>
-                      <td className="border-y border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
-                        <div className="flex flex-col gap-2">
+                      <td className="px-3 py-3">
+                        {/* Both switches read the same way: the switch, then its state. */}
+                        <div
+                          className="flex items-center gap-2"
+                          // A closed restaurant takes no online orders; its switch is locked off.
+                          title={
+                            isOpen ? undefined : 'Activate the restaurant to change online ordering'
+                          }
+                        >
                           <Toggle
-                            ariaLabel={`${restaurant.restaurantName} online`}
+                            ariaLabel={`${restaurant.restaurantName} online ordering`}
                             checked={isOnline}
-                            disabled={isOnlineUpdating}
+                            disabled={isOnlineUpdating || !isOpen}
                             onChange={() => handleOnlineToggle(restaurant)}
                           />
-                          <span className="text-xs font-medium text-ds-muted">
-                            {isOnline ? 'Online' : 'Offline'}
+                          <span
+                            className={cn(
+                              'text-xs font-bold',
+                              isOnline ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                            )}
+                          >
+                            {isOnline ? 'On' : 'Off'}
                           </span>
                         </div>
                       </td>
-                      <td className="border-y border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
-                        <div className="flex flex-wrap items-center gap-2">
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
                           <Toggle
-                            ariaLabel={`${restaurant.restaurantName} active`}
+                            ariaLabel={`${restaurant.restaurantName} restaurant availability`}
                             checked={restaurant.isActive}
                             disabled={statusMutation.isPending}
                             onChange={() => toggleRestaurantStatus(restaurant)}
                           />
-                          {optionBadges.map((badge) => (
-                            <Badge key={badge.label} variant={badge.variant}>
-                              {badge.label}
-                            </Badge>
-                          ))}
+                          <span
+                            className={cn(
+                              'text-xs font-bold',
+                              restaurant.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                            )}
+                          >
+                            {restaurant.isActive ? 'Active' : 'Inactive'}
+                          </span>
                         </div>
-                        <p className="mt-3 text-xs text-ds-muted">
-                          Updated {formatDate(restaurant.updatedAt)}
-                        </p>
                       </td>
-                      <td className="rounded-r-xl border-y border-r border-ds-border bg-white p-4 shadow-xs shadow-ds-text/5 transition group-hover:border-ds-teal-border group-hover:bg-ds-teal-soft/30 dark:shadow-black/20">
-                        <div className="grid grid-cols-2 gap-2 *:w-full">
+                      <td className="px-3 py-3">
+                        {statusBadges.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {statusBadges.map((badge) => (
+                              <Badge key={badge.label} variant={badge.variant}>
+                                {badge.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-ds-muted">None set</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
                           <IfCanOpen href={`/masters/restaurants/${restaurant.id}/edit`}>
-                            <Button asChild size="sm" variant="outline">
+                            <Button asChild size="icon" variant="outline">
                               <Link
+                                aria-label={`Edit ${restaurant.restaurantName}`}
                                 href={`/masters/restaurants/${restaurant.id}/edit`}
+                                title="Edit"
                                 {...prefetchOnIntent(() =>
                                   queryClient.prefetchQuery(restaurantDetailQuery(restaurant.id)),
                                 )}
                               >
-                                <Pencil className="h-4 w-4" />
-                                Edit
+                                <Pencil aria-hidden="true" className="h-4 w-4" />
                               </Link>
                             </Button>
                           </IfCanOpen>
+                          {/* Square like Edit on narrower screens, where the labels would push
+                              the row past the window; the title names them there. */}
                           <Button
-                            onClick={() => setViewingRestaurant(restaurant)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Eye className="h-4 w-4" />
-                            View
-                          </Button>
-                          <Button
+                            aria-label={`Print QR for ${restaurant.restaurantName}`}
+                            className="min-[1320px]:w-auto min-[1320px]:px-4"
                             onClick={() =>
                               showToast({
                                 title: 'QR printing will be available in QR module.',
                                 variant: 'info',
                               })
                             }
-                            size="sm"
+                            size="icon"
+                            title="Print QR"
                             type="button"
                             variant="outline"
                           >
-                            <QrCode className="h-4 w-4" />
-                            Print QR
+                            <QrCode aria-hidden="true" className="h-4 w-4" />
+                            <span className="hidden min-[1320px]:inline">Print QR</span>
                           </Button>
                           <Button
+                            aria-label={`Activity for ${restaurant.restaurantName}`}
+                            className="min-[1320px]:w-auto min-[1320px]:px-4"
                             onClick={() =>
                               showToast({
                                 title:
@@ -360,12 +394,13 @@ export function RestaurantsPageClient() {
                                 variant: 'info',
                               })
                             }
-                            size="sm"
+                            size="icon"
+                            title="Activity"
                             type="button"
                             variant="outline"
                           >
-                            <Activity className="h-4 w-4" />
-                            Activity
+                            <Activity aria-hidden="true" className="h-4 w-4" />
+                            <span className="hidden min-[1320px]:inline">Activity</span>
                           </Button>
                         </div>
                       </td>
@@ -374,7 +409,7 @@ export function RestaurantsPageClient() {
                 })
               ) : (
                 <QueryState
-                  colSpan={4}
+                  colSpan={5}
                   error={restaurantsQuery.error}
                   isError={restaurantsQuery.isError}
                   isLoading={restaurantsQuery.isLoading}
@@ -392,40 +427,6 @@ export function RestaurantsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
-      <DetailsModal
-        onClose={() => setViewingRestaurant(null)}
-        rows={
-          viewingRestaurant && [
-            [
-              'Restaurant',
-              `${viewingRestaurant.restaurantName} (${viewingRestaurant.restaurantCode})`,
-            ],
-            ['Location', formatRestaurantLocationDisplay(viewingRestaurant.hospital)],
-            ['Legal Name', nullableText(viewingRestaurant.legalName)],
-            ['Address', nullableText(viewingRestaurant.address)],
-            ['Mobile', nullableText(viewingRestaurant.mobile)],
-            ['Email', nullableText(viewingRestaurant.email)],
-            ['GST Number', nullableText(viewingRestaurant.gstNumber)],
-            ['FSSAI Number', nullableText(viewingRestaurant.fssaiNumber)],
-            ['Kitchen', nullableText(viewingRestaurant.kitchen?.kitchenName)],
-            ['Store', nullableText(viewingRestaurant.store?.storeName)],
-            ['Online', isRestaurantOnline(viewingRestaurant) ? 'Online' : 'Offline'],
-            [
-              'Status / Options',
-              <span className="flex flex-wrap gap-2" key="options">
-                {getRestaurantOptionBadges(viewingRestaurant).map((badge) => (
-                  <Badge key={badge.label} variant={badge.variant}>
-                    {badge.label}
-                  </Badge>
-                ))}
-              </span>,
-            ],
-            ['Created', formatDate(viewingRestaurant.createdAt)],
-            ['Updated', formatDate(viewingRestaurant.updatedAt)],
-          ]
-        }
-        title="Restaurant"
-      />
     </section>
   );
 }

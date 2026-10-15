@@ -7,6 +7,7 @@ import {
   CookingPot,
   CreditCard,
   KeyRound,
+  Landmark,
   LayoutDashboard,
   LayoutGrid,
   Link2,
@@ -95,6 +96,12 @@ export const navigationGroups: NavGroup[] = [
         href: '/masters/locations',
         icon: MapPin,
         label: 'Locations',
+        permissions: ['HOSPITAL_VIEW'],
+      },
+      {
+        href: '/masters/entities',
+        icon: Landmark,
+        label: 'Entities',
         permissions: ['HOSPITAL_VIEW'],
       },
       {
@@ -452,18 +459,6 @@ export function locationHref(type: string, search: string | null | undefined): s
   const page = locationPages[type];
 
   return page ? recordHref(page, { name: search ?? undefined }) : null;
-}
-
-/**
- * A notification's in-app link (the API stores list routes such as `/inventory/grns`),
- * pointed at its record when that page has a detail view. Off-site links are dropped.
- */
-export function notificationHref(link: string | null, entityId: string | null): string | null {
-  if (!link?.startsWith('/') || link.startsWith('//')) {
-    return null;
-  }
-
-  return entityId && !link.includes('?') ? recordHref(link, { id: entityId }) : link;
 }
 
 function isUnder(pathname: string, href: string): boolean {

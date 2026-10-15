@@ -15,7 +15,6 @@ export interface PosDevice {
   code: string;
   createdAt: string;
   deletedAt: string | null;
-  entity: string | null;
   hostName: string | null;
   hospital: HospitalSummary;
   hospitalId: string;
@@ -23,6 +22,8 @@ export interface PosDevice {
   isActive: boolean;
   isInvoicePrintEnabled: boolean;
   isKotPrintEnabled: boolean;
+  /** The legal entity the device bills under. */
+  legalEntityId: string | null;
   name: string;
   restaurantIds: string[];
   restaurants: PosDeviceRestaurantSummary[];
@@ -31,8 +32,9 @@ export interface PosDevice {
 
 export interface PosDeviceInput {
   code: string;
-  entity?: string;
   hospitalId: string;
+  /** null removes the link. */
+  legalEntityId?: string | null;
   hostName?: string;
   isActive?: boolean;
   isInvoicePrintEnabled?: boolean;

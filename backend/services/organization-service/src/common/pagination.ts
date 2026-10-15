@@ -23,17 +23,20 @@ export function getPageMeta(page: number, limit: number, total: number): PageMet
   };
 }
 
-/** A list query's Prisma orderBy: `{ [sortBy]: sortOrder }`, falling back to the given defaults. */
+/**
+ * A list query's Prisma orderBy: `[{ [sortBy]: sortOrder }, { id: sortOrder }]`, falling back to
+ * the given defaults. The id breaks ties: rows sharing a date or name would otherwise come back
+ * in any order, so a page boundary between them could repeat one row and skip another.
+ */
 export function getOrderBy<Field extends string>(
   query: { sortBy?: Field; sortOrder?: SortOrder },
   defaultField: Field,
   defaultOrder: SortOrder = 'desc',
-): { [field: string]: SortOrder } {
+): { [field: string]: SortOrder }[] {
   const sortBy: Field = query.sortBy ?? defaultField;
+  const order = query.sortOrder ?? defaultOrder;
 
-  return {
-    [sortBy]: query.sortOrder ?? defaultOrder,
-  };
+  return [{ [sortBy]: order }, { id: order }];
 }
 
 /**
@@ -46,7 +49,7 @@ export function getDocumentOrderBy<Field extends string>(
   query: { sortBy?: Field; sortOrder?: SortOrder },
   numberField: Field,
   defaultField: Field,
-): { [field: string]: SortOrder } | { [field: string]: SortOrder }[] {
+): { [field: string]: SortOrder }[] {
   if (query.sortBy !== numberField) {
     return getOrderBy(query, defaultField);
   }

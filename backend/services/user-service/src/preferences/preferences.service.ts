@@ -81,10 +81,6 @@ export class PreferencesService {
 
     const next: UserPreferences = {
       defaultLocationId: dto.defaultLocationId ?? current.defaultLocationId,
-      mutedNotificationCategories:
-        dto.mutedNotificationCategories === undefined
-          ? current.mutedNotificationCategories
-          : (dto.mutedNotificationCategories ?? []),
       startPage: dto.startPage === undefined ? current.startPage : dto.startPage,
       theme: dto.theme === undefined ? current.theme : dto.theme,
     };

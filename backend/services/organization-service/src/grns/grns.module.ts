@@ -6,6 +6,7 @@ import { GrnsService } from './grns.service';
 
 @Module({
   controllers: [GrnsController],
+  exports: [GrnsService],
   imports: [CommonModule],
   providers: [GrnsRepository, GrnsService],
 })

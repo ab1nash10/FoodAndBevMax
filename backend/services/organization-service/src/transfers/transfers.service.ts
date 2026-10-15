@@ -1,8 +1,6 @@
-import { NotificationPublisher } from '@aahar/auth';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InventoryLocationType, Prisma, StockReferenceType, TransferStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { NOTIFY_ROLES } from '../common/notification-roles';
 import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
@@ -31,7 +29,6 @@ type TransferClient = Prisma.TransactionClient;
 export class TransfersService {
   constructor(
     private readonly auditLog: AuditLogService,
-    private readonly notifications: NotificationPublisher,
     private readonly transfers: TransfersRepository,
   ) {}
 
@@ -255,23 +252,6 @@ export class TransfersService {
           ipAddress: context.ipAddress,
           newValue: toTransferResponse(dispatched),
           oldValue: toTransferResponse(existing),
-        },
-        tx,
-      );
-
-      // The transfer now sits in PENDING_ACKNOWLEDGEMENT and cannot move stock until someone
-      // at the destination acts on it, so this is the moment worth telling them about.
-      await this.notifications.publish(
-        {
-          actorId: context.actorId,
-          body: `${dispatched.lines.length} line(s) are waiting to be acknowledged before the stock is credited.`,
-          category: 'TRANSFER',
-          entityId: dispatched.id,
-          entityName: 'transfers',
-          hospitalId: dispatched.hospitalId,
-          link: '/inventory/transfers',
-          roleNames: NOTIFY_ROLES,
-          title: `Transfer ${dispatched.transferNumber} awaiting acknowledgement`,
         },
         tx,
       );

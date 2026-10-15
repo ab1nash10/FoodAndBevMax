@@ -1,4 +1,3 @@
-import { NotificationPublisher } from '@aahar/auth';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   InventoryLocationType,
@@ -9,7 +8,6 @@ import {
   StockTransactionType,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { NOTIFY_ROLES } from '../common/notification-roles';
 import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import { lockRow } from '../common/row-lock';
@@ -73,7 +71,6 @@ function toKitchenProductionResponse(production: KitchenProductionWithRelations)
 export class KitchenProductionsService {
   constructor(
     private readonly auditLog: AuditLogService,
-    private readonly notifications: NotificationPublisher,
     private readonly productions: KitchenProductionsRepository,
   ) {}
 
@@ -374,21 +371,6 @@ export class KitchenProductionsService {
           ipAddress: context.ipAddress,
           newValue: toKitchenProductionResponse(posted),
           oldValue: toKitchenProductionResponse(existing),
-        },
-        tx,
-      );
-
-      await this.notifications.publish(
-        {
-          actorId: context.actorId,
-          body: `${posted.lines.length} item(s) are now available in kitchen stock for distribution.`,
-          category: 'KITCHEN',
-          entityId: posted.id,
-          entityName: 'kitchen_productions',
-          hospitalId: posted.hospitalId,
-          link: '/kitchen/productions',
-          roleNames: NOTIFY_ROLES,
-          title: `Kitchen production ${posted.productionNumber} posted`,
         },
         tx,
       );

@@ -7,7 +7,6 @@ import type { Hospital as HospitalRecord, OnlinePaymentOption } from '@aahar/api
 import type {
   hospitalSchema,
   kitchenSchema,
-  locationSchema,
   restaurantSchema,
   storeSchema,
 } from '@/components/organization/shared/schemas';
@@ -42,8 +41,6 @@ export type RestaurantOptionBadge = {
 };
 
 export type HospitalFormValues = z.infer<typeof hospitalSchema>;
-
-export type LocationFormValues = z.infer<typeof locationSchema>;
 
 export type StoreFormValues = z.infer<typeof storeSchema>;
 

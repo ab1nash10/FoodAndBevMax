@@ -1,7 +1,9 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import { RefreshCw, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { Toggle } from '@/components/ui-controls';
 import { Input, Select } from '@/components/ui';
 import type { ActiveFilter } from '@/components/pos/shared/types';
@@ -69,18 +71,21 @@ export function PaginationControls({
 export function FilterBar({
   activeFilter,
   onActiveFilterChange,
+  onClear,
   onRefresh,
   onSearchChange,
   search,
 }: Readonly<{
   activeFilter: ActiveFilter;
   onActiveFilterChange: (value: ActiveFilter) => void;
+  /** Puts the search and status back to their defaults. */
+  onClear: () => void;
   onRefresh: () => void;
   onSearchChange: (value: string) => void;
   search: string;
 }>) {
   return (
-    <div className="grid gap-3 border-b p-4 md:grid-cols-[minmax(0,1fr)_160px_auto]">
+    <ListToolbar>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-muted" />
         <Input
@@ -91,19 +96,21 @@ export function FilterBar({
           value={search}
         />
       </div>
-      <Select
-        onChange={(event) => onActiveFilterChange(event.target.value as ActiveFilter)}
-        value={activeFilter}
-      >
-        <option value="">All status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </Select>
-      <Button onClick={onRefresh} type="button" variant="outline">
-        <RefreshCw className="h-4 w-4" />
-        Refresh
-      </Button>
-    </div>
+      <FiltersMenu activeCount={activeFilter ? 1 : 0}>
+        <FilterField label="Status">
+          <Select
+            onChange={(event) => onActiveFilterChange(event.target.value as ActiveFilter)}
+            value={activeFilter}
+          >
+            <option value="">All status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </Select>
+        </FilterField>
+      </FiltersMenu>
+      <RefreshButton onClick={onRefresh} />
+      <ClearFiltersButton active={Boolean(search || activeFilter)} onClear={onClear} />
+    </ListToolbar>
   );
 }
 

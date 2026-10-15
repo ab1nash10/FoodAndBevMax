@@ -7,6 +7,7 @@ import {
   JwtAuthGuard,
   JwtStrategy,
   RbacGuard,
+  UserThrottlerGuard,
 } from '@aahar/auth';
 import {
   getServiceEnvFilePaths,
@@ -18,7 +19,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
 import { PrismaService } from './common/prisma/prisma.service';
@@ -74,11 +75,12 @@ type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y
     JwtStrategy,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: JwtAuthGuard,
     },
+    // After JwtAuthGuard: signed-in requests are counted per user, public ones per address.
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: UserThrottlerGuard,
     },
     {
       provide: APP_GUARD,

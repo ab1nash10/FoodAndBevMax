@@ -30,6 +30,8 @@ export const hospitalSchema = z.object({
   ipAddress: optionalText(100),
   isActive: z.boolean(),
   latitude: optionalText(50),
+  /** Empty: not linked to an entity. */
+  legalEntityId: z.string(),
   locationCode: z.string().trim().min(1, 'Location code is required.').max(50),
   longitude: optionalText(50),
   onlinePaymentOption: z.enum(['NONE', 'PAYU', 'RAZORPAY']),
@@ -37,16 +39,6 @@ export const hospitalSchema = z.object({
   state: z.string().trim().min(1, 'State is required.').max(100),
   title: z.string().trim().min(1, 'Title is required.').max(255),
   visitingCardAddress: optionalText(500),
-});
-
-export const locationSchema = z.object({
-  address: optionalText(255),
-  area: optionalText(100),
-  building: optionalText(100),
-  floor: optionalText(50),
-  hospitalId: z.string().uuid('Select a location.'),
-  isActive: z.boolean(),
-  locationName: z.string().trim().min(1, 'Location name is required.').max(150),
 });
 
 export const storeSchema = z.object({
@@ -76,6 +68,7 @@ export const restaurantSchema = z.object({
   isInCarDiningEnabled: z.boolean(),
   isInRoomDiningEnabled: z.boolean(),
   isInventoryEnabled: z.boolean(),
+  isIhcOnly: z.boolean(),
   isOffline: z.boolean(),
   isOnlineOrdersEnabled: z.boolean(),
   isOpen24x7: z.boolean(),
@@ -84,6 +77,8 @@ export const restaurantSchema = z.object({
   isTakeawayEnabled: z.boolean(),
   isVegOnly: z.boolean(),
   isActive: z.boolean(),
+  /** Empty: not linked to an entity. */
+  legalEntityId: z.string(),
   legalName: optionalText(255),
   mobile: optionalText(30),
   panNumber: optionalText(50),

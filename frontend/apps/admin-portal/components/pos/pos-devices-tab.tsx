@@ -2,8 +2,8 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus, Store } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Loader2, Pencil, Plus, Utensils } from 'lucide-react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PosDevice, PosDeviceInput } from '@aahar/api-client';
@@ -27,11 +27,16 @@ import {
   defaultPageLimit,
   formatLocationOption,
   optionalText,
-  optionalValue,
   useHospitalOptions,
   useRestaurantOptions,
 } from '@/components/pos/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { StatusToggleCell } from '@/components/organization/shared/list-controls';
+import { useLegalEntityNames } from '@/components/organization/shared/hooks';
+import {
+  LegalEntityCell,
+  LegalEntitySelect,
+} from '@/components/organization/shared/legal-entity-select';
 
 const deviceText = (maxLength: number) =>
   optionalText(maxLength).regex(
@@ -39,11 +44,19 @@ const deviceText = (maxLength: number) =>
     'Use letters, numbers, spaces, dots, hyphens or underscores only.',
   );
 
+// The API's host name rule (RFC 1123, create-pos-device.dto.ts): dot-separated parts of letters,
+// digits and hyphens, 1-63 characters each, no hyphen at either end; 253 in all. Empty is allowed.
+const hostNameText = optionalText(253).regex(
+  /^$|^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/,
+  'Enter a valid host name: letters, numbers and hyphens, with dots between parts (e.g. MAX-LKO-POS-01).',
+);
+
 const posDeviceSchema = z.object({
   code: deviceText(50).min(1, 'Code is required.'),
-  entity: optionalText(150),
   hospitalId: z.string().uuid('Select a location.'),
-  hostName: deviceText(150),
+  /** Empty: not linked to an entity. */
+  legalEntityId: z.string(),
+  hostName: hostNameText,
   isActive: z.boolean(),
   isInvoicePrintEnabled: z.boolean(),
   isKotPrintEnabled: z.boolean(),
@@ -73,10 +86,13 @@ function PosDeviceForm({
   open: boolean;
 }>) {
   const form = useForm<PosDeviceFormValues>({
+    // Field rules (the host name's) run when a field is left, then as it is corrected; the
+    // whole form is still checked on Submit.
+    mode: 'onTouched',
     defaultValues: {
       code: '',
-      entity: '',
       hospitalId: '',
+      legalEntityId: '',
       hostName: '',
       isActive: true,
       isInvoicePrintEnabled: false,
@@ -96,6 +112,10 @@ function PosDeviceForm({
   const selectedRestaurantIds = form.watch('restaurantIds');
   // Same query as the Restaurant's Accessibility pop-up, so both list the same restaurants.
   const restaurantsQuery = useRestaurantOptions(selectedHospitalId || undefined);
+  const hospitals = hospitalsQuery.data;
+  // A device bills under its location's entity unless another one is chosen.
+  const locationEntityId = (hospitalId: string) =>
+    hospitals?.find((hospital) => hospital.id === hospitalId)?.legalEntityId ?? '';
 
   const toggleRestaurant = (restaurantId: string) => {
     form.setValue(
@@ -114,8 +134,8 @@ function PosDeviceForm({
     if (editingDevice) {
       form.reset({
         code: editingDevice.code,
-        entity: editingDevice.entity ?? '',
         hospitalId: editingDevice.hospitalId,
+        legalEntityId: editingDevice.legalEntityId ?? locationEntityId(editingDevice.hospitalId),
         hostName: editingDevice.hostName ?? '',
         isActive: editingDevice.isActive,
         isInvoicePrintEnabled: editingDevice.isInvoicePrintEnabled,
@@ -126,8 +146,8 @@ function PosDeviceForm({
     } else {
       form.reset({
         code: '',
-        entity: '',
         hospitalId: scopedHospitalId ?? '',
+        legalEntityId: locationEntityId(scopedHospitalId ?? ''),
         hostName: '',
         isActive: true,
         isInvoicePrintEnabled: false,
@@ -136,7 +156,8 @@ function PosDeviceForm({
         restaurantIds: [],
       });
     }
-  }, [editingDevice, form, open, scopedHospitalId]);
+    // hospitals: the location's entity is known once the locations have loaded.
+  }, [editingDevice, form, hospitals, open, scopedHospitalId]);
 
   const mutation = useMutation({
     mutationFn: (body: PosDeviceInput) =>
@@ -185,8 +206,8 @@ function PosDeviceForm({
 
     mutation.mutate({
       code: parsed.data.code,
-      entity: optionalValue(parsed.data.entity),
       hospitalId: parsed.data.hospitalId,
+      legalEntityId: parsed.data.legalEntityId || null,
       hostName: parsed.data.hostName.trim(),
       isActive: parsed.data.isActive,
       isInvoicePrintEnabled: parsed.data.isInvoicePrintEnabled,
@@ -246,7 +267,15 @@ function PosDeviceForm({
             {...form.register('hospitalId', {
               // Restaurants belong to one location, and the service rejects any that are not
               // in the selected one, so a change of location clears the picks.
-              onChange: () => form.setValue('restaurantIds', []),
+              onChange: (event: ChangeEvent<HTMLSelectElement>) => {
+                form.setValue('restaurantIds', []);
+                // The entity follows the location, unless another one was chosen.
+                const entityId = form.getValues('legalEntityId');
+
+                if (!entityId || entityId === locationEntityId(selectedHospitalId)) {
+                  form.setValue('legalEntityId', locationEntityId(event.target.value));
+                }
+              },
             })}
           >
             <option value="">Select location</option>
@@ -299,11 +328,31 @@ function PosDeviceForm({
               : null}
           </div>
         </Field>
-        <Field error={form.formState.errors.entity?.message} label="Entity" name="pos-entity">
-          <Input id="pos-entity" placeholder="Optional" {...form.register('entity')} />
+        <Field
+          error={form.formState.errors.legalEntityId?.message}
+          label="Entity"
+          name="pos-entity"
+        >
+          <LegalEntitySelect
+            id="pos-entity"
+            value={form.watch('legalEntityId')}
+            {...form.register('legalEntityId')}
+          />
         </Field>
         <Field error={form.formState.errors.hostName?.message} label="Host Name" name="pos-host">
-          <Input id="pos-host" placeholder="Optional" {...form.register('hostName')} />
+          <Input
+            id="pos-host"
+            placeholder="Optional"
+            {...form.register('hostName', {
+              validate: (value) => {
+                const result = hostNameText.safeParse(value);
+
+                return (
+                  result.success || (result.error.issues[0]?.message ?? 'Enter a valid host name.')
+                );
+              },
+            })}
+          />
         </Field>
         <ToggleField
           label="KOT Print"
@@ -321,6 +370,7 @@ function PosDeviceForm({
 }
 
 export function PosDevicesTab() {
+  const entityNamesQuery = useLegalEntityNames();
   const { scopedHospitalId } = useLocationContext();
   const [accessibilityDevice, setAccessibilityDevice] = useState<PosDevice | undefined>();
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -400,6 +450,11 @@ export function PosDevicesTab() {
             setActiveFilter(value);
             setPage(1);
           }}
+          onClear={() => {
+            setSearch('');
+            setActiveFilter('');
+            setPage(1);
+          }}
           onRefresh={() => void query.refetch()}
           onSearchChange={(value) => {
             setSearch(value);
@@ -409,45 +464,57 @@ export function PosDevicesTab() {
         />
         <div className="overflow-x-auto">
           <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+            <thead className="whitespace-nowrap bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
               <tr>
-                <th className="w-[16%] px-4 py-2.5">Name</th>
-                <th className="w-[12%] px-4 py-2.5">Code</th>
-                <th className="w-[14%] px-4 py-2.5">Location</th>
-                <th className="w-[16%] px-4 py-2.5">Restaurants</th>
-                <th className="w-[12%] px-4 py-2.5">Entity</th>
-                <th className="w-[12%] px-4 py-2.5">Hostname</th>
-                <th className="w-[8%] px-4 py-2.5">Status</th>
-                <th className="w-[8%] px-4 py-2.5">KOT Print</th>
-                <th className="w-[8%] px-4 py-2.5">Invoice Print</th>
-                <th className="w-[112px] px-4 py-2.5">Actions</th>
+                <th className="w-[13%] px-4 py-2.5">Name</th>
+                <th className="w-[13%] px-4 py-2.5">Location</th>
+                <th className="w-[13%] px-4 py-2.5">Restaurants</th>
+                <th className="w-[13%] px-4 py-2.5">Entity</th>
+                <th className="w-[10%] px-4 py-2.5">Hostname</th>
+                <th className="w-[12%] px-4 py-2.5">Status</th>
+                <th className="w-[9%] px-4 py-2.5">KOT Print</th>
+                <th className="w-[10%] px-4 py-2.5">Invoice Print</th>
+                <th className="w-[112px] px-4 py-2.5 min-[1340px]:w-[184px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-divider bg-white">
               {items.length > 0 ? (
                 items.map((device) => (
                   <tr className="hover:bg-ds-subtle" key={device.id}>
-                    <td className="px-4 py-3 font-medium text-ds-text dark:text-white">
-                      {device.name}
+                    {/* The code under the name, as the Locations list shows its codes. */}
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ds-text dark:text-white">{device.name}</p>
+                      <p className="line-clamp-1 text-xs text-ds-muted">{device.code}</p>
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">{device.code}</td>
                     <td className="px-4 py-3 text-ds-text-3">{device.hospital.hospitalName}</td>
                     <td className="px-4 py-3 text-ds-text-3">
                       {formatRestaurants(device.restaurants)}
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">{device.entity ?? 'Not set'}</td>
+                    <td className="px-4 py-3">
+                      <LegalEntityCell
+                        entity={
+                          device.legalEntityId
+                            ? entityNamesQuery.data?.get(device.legalEntityId)
+                            : undefined
+                        }
+                      />
+                    </td>
                     <td className="px-4 py-3 text-ds-text-3">{device.hostName ?? 'Not set'}</td>
                     <td className="px-4 py-3">
-                      <Toggle
-                        checked={device.isActive}
+                      <StatusToggleCell
                         disabled={flagMutation.isPending}
-                        onChange={(checked) =>
-                          flagMutation.mutate({ body: { isActive: checked }, id: device.id })
+                        isActive={device.isActive}
+                        onToggle={() =>
+                          flagMutation.mutate({
+                            body: { isActive: !device.isActive },
+                            id: device.id,
+                          })
                         }
                       />
                     </td>
                     <td className="px-4 py-3">
                       <Toggle
+                        ariaLabel={`KOT print for ${device.name}`}
                         checked={device.isKotPrintEnabled}
                         disabled={flagMutation.isPending}
                         onChange={(checked) =>
@@ -460,6 +527,7 @@ export function PosDevicesTab() {
                     </td>
                     <td className="px-4 py-3">
                       <Toggle
+                        ariaLabel={`Invoice print for ${device.name}`}
                         checked={device.isInvoicePrintEnabled}
                         disabled={flagMutation.isPending}
                         onChange={(checked) =>
@@ -473,15 +541,18 @@ export function PosDevicesTab() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Button
-                          aria-label={`Manage restaurant accessibility for ${device.name}`}
-                          className="text-ds-teal-text hover:text-ds-teal-text"
+                          aria-label={`Map restaurants to ${device.name}`}
+                          // Square like Edit; on wide screens it also says what it does.
+                          className="min-[1340px]:w-auto min-[1340px]:px-4"
                           onClick={() => setAccessibilityDevice(device)}
-                          size="sm"
-                          title="Restaurant accessibility"
+                          size="icon"
+                          title="Map restaurants to this POS device"
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                         >
-                          <Store className="h-4 w-4" />
+                          <Utensils aria-hidden="true" className="h-4 w-4" />
+                          {/* Narrow screens keep the icon only; the title names it. */}
+                          <span className="hidden min-[1340px]:inline">Restaurants</span>
                         </Button>
                         <Button
                           aria-label={`Edit ${device.name}`}
@@ -489,12 +560,12 @@ export function PosDevicesTab() {
                             setEditingDevice(device);
                             setIsFormOpen(true);
                           }}
-                          size="sm"
-                          title="Edit POS device"
+                          size="icon"
+                          title="Edit"
                           type="button"
                           variant="outline"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       </div>
                     </td>
@@ -502,7 +573,7 @@ export function PosDevicesTab() {
                 ))
               ) : (
                 <TableState
-                  colSpan={10}
+                  colSpan={9}
                   error={query.error}
                   isError={query.isError}
                   isLoading={query.isLoading}

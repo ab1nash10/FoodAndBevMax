@@ -6,6 +6,7 @@ import { KitchensService } from './kitchens.service';
 
 @Module({
   controllers: [KitchensController],
+  exports: [KitchensService],
   imports: [CommonModule],
   providers: [KitchensRepository, KitchensService],
 })

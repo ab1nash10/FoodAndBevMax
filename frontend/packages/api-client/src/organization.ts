@@ -1,6 +1,8 @@
 import type { ListQuery } from './http';
 
 export type OnlinePaymentOption = 'NONE' | 'PAYU' | 'RAZORPAY';
+/** On the hospital's payroll, or supplied by an outsourcing agency. */
+export type EmploymentType = 'ON_ROLL' | 'OUTSOURCED';
 
 export interface Hospital {
   address: string | null;
@@ -18,6 +20,8 @@ export interface Hospital {
   ipAddress: string | null;
   isActive: boolean;
   latitude: string | null;
+  /** The legal entity the location bills under. */
+  legalEntityId: string | null;
   locationCode: string;
   longitude: string | null;
   onlinePaymentOption: OnlinePaymentOption;
@@ -27,6 +31,30 @@ export interface Hospital {
   updatedAt: string;
   visitingCardAddress: string | null;
 }
+
+/** A legal entity a location or restaurant bills under. */
+export interface LegalEntity {
+  createdAt: string;
+  entityAddress: string;
+  entityName: string;
+  gstNumber: string;
+  id: string;
+  isActive: boolean;
+  /** The site it bills for, e.g. "MSSH SKT"; one company can have several. */
+  locationName: string | null;
+  updatedAt: string;
+}
+
+export interface LegalEntityInput {
+  entityAddress: string;
+  entityName: string;
+  locationName: string;
+  /** The 15-character GSTIN; stored without spaces, in capitals. */
+  gstNumber: string;
+  isActive?: boolean;
+}
+
+export type LegalEntityListQuery = ListQuery;
 
 export interface HospitalInput {
   address?: string;
@@ -41,6 +69,8 @@ export interface HospitalInput {
   ipAddress?: string;
   isActive?: boolean;
   latitude?: string;
+  /** null removes the link. */
+  legalEntityId?: string | null;
   locationCode?: string;
   longitude?: string;
   onlinePaymentOption?: OnlinePaymentOption;
@@ -196,6 +226,8 @@ export interface Restaurant {
   isInCarDiningEnabled: boolean;
   isInRoomDiningEnabled: boolean;
   isInventoryEnabled: boolean;
+  ihcOnly: boolean;
+  isIhcOnly: boolean;
   isOffline: boolean;
   isOnlineOrdersEnabled: boolean;
   isOpen24x7: boolean;
@@ -207,6 +239,8 @@ export interface Restaurant {
   kitchenId: string | null;
   kitchenIds: string[];
   kitchens: Pick<Kitchen, 'id' | 'isActive' | 'kitchenCode' | 'kitchenName'>[];
+  /** The legal entity the restaurant bills under. */
+  legalEntityId: string | null;
   legalName: string | null;
   location: Pick<Location, 'id' | 'isActive' | 'locationName'> | null;
   locationId: string | null;
@@ -268,6 +302,7 @@ export interface RestaurantInput {
   isInCarDiningEnabled?: boolean;
   isInRoomDiningEnabled?: boolean;
   isInventoryEnabled?: boolean;
+  isIhcOnly?: boolean;
   isOffline?: boolean;
   isOnlineOrdersEnabled?: boolean;
   isOpen24x7?: boolean;
@@ -277,6 +312,8 @@ export interface RestaurantInput {
   isVegOnly?: boolean;
   kitchenId?: string;
   kitchenIds?: string[];
+  /** null removes the link. */
+  legalEntityId?: string | null;
   legalName?: string;
   locationId?: string;
   mobile?: string;
@@ -353,6 +390,8 @@ export interface Employee extends LocationOwned {
   eligibleForDiscount: boolean;
   employeeCode: string;
   employeeName: string;
+  /** Null for employees recorded before the type was asked for. */
+  employmentType: EmploymentType | null;
   id: string;
   isActive: boolean;
   mobile: string | null;
@@ -365,6 +404,7 @@ export interface EmployeeInput {
   eligibleForDiscount?: boolean;
   employeeCode: string;
   employeeName: string;
+  employmentType?: EmploymentType;
   /** The location it belongs to; null shares it with every location. */
   hospitalId?: string | null;
   isActive?: boolean;
