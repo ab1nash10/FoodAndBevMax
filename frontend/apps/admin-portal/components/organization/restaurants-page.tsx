@@ -384,24 +384,23 @@ export function RestaurantsPageClient() {
                             <QrCode aria-hidden="true" className="h-4 w-4" />
                             <span className="hidden min-[1320px]:inline">Print QR</span>
                           </Button>
-                          <Button
-                            aria-label={`Activity for ${restaurant.restaurantName}`}
-                            className="min-[1320px]:w-auto min-[1320px]:px-4"
-                            onClick={() =>
-                              showToast({
-                                title:
-                                  'Customer Orders Activity will be available in Restaurant Operations.',
-                                variant: 'info',
-                              })
-                            }
-                            size="icon"
-                            title="Activity"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Activity aria-hidden="true" className="h-4 w-4" />
-                            <span className="hidden min-[1320px]:inline">Activity</span>
-                          </Button>
+                          <IfCanOpen href={`/masters/restaurants/${restaurant.id}/orders`}>
+                            <Button
+                              asChild
+                              className="min-[1320px]:w-auto min-[1320px]:px-4"
+                              size="icon"
+                              variant="outline"
+                            >
+                              <Link
+                                aria-label={`Orders for ${restaurant.restaurantName}`}
+                                href={`/masters/restaurants/${restaurant.id}/orders`}
+                                title="Activity: live orders and the TV board"
+                              >
+                                <Activity aria-hidden="true" className="h-4 w-4" />
+                                <span className="hidden min-[1320px]:inline">Activity</span>
+                              </Link>
+                            </Button>
+                          </IfCanOpen>
                         </div>
                       </td>
                     </tr>

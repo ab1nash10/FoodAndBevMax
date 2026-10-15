@@ -8,4 +8,5 @@ export * from './pos';
 export * from './inventory';
 export * from './kitchen';
 export * from './dashboard';
+export * from './orders';
 export * from './organization-api';

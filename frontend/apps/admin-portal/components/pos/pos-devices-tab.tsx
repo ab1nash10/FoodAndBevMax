@@ -13,6 +13,7 @@ import { Modal, Toggle } from '@/components/ui-controls';
 import { Field, Input, Panel, Select, Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { OrderKeyButton } from '@/components/order-key-button';
 import { RestaurantAccessibilityModal } from '@/components/pos/restaurant-accessibility-modal';
 import {
   FilterBar,
@@ -474,7 +475,7 @@ export function PosDevicesTab() {
                 <th className="w-[12%] px-4 py-2.5">Status</th>
                 <th className="w-[9%] px-4 py-2.5">KOT Print</th>
                 <th className="w-[10%] px-4 py-2.5">Invoice Print</th>
-                <th className="w-[112px] px-4 py-2.5 min-[1340px]:w-[184px]">Actions</th>
+                <th className="w-[156px] px-4 py-2.5 min-[1340px]:w-[228px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ds-divider bg-white">
@@ -567,6 +568,13 @@ export function PosDevicesTab() {
                         >
                           <Pencil aria-hidden="true" className="h-4 w-4" />
                         </Button>
+                        <OrderKeyButton
+                          issue={async () =>
+                            (await organizationApi.issuePosDeviceKey(device.id)).data.apiKey
+                          }
+                          name={device.name}
+                          usage="lets this POS send orders to the kitchen screen and TV board"
+                        />
                       </div>
                     </td>
                   </tr>

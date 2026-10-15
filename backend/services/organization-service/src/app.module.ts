@@ -40,6 +40,7 @@ import { LocationsModule } from './locations/locations.module';
 import { PaymentMachinesModule } from './payment-machines/payment-machines.module';
 import { PosDevicesModule } from './pos-devices/pos-devices.module';
 import { RestaurantMenusModule } from './restaurant-menus/restaurant-menus.module';
+import { RestaurantOrdersModule } from './restaurant-orders/restaurant-orders.module';
 import { RestaurantsModule } from './restaurants/restaurants.module';
 import { StockModule } from './stock/stock.module';
 import { StoreItemsModule } from './store-items/store-items.module';
@@ -92,6 +93,7 @@ import { TransfersModule } from './transfers/transfers.module';
     PaymentMachinesModule,
     PosDevicesModule,
     RestaurantMenusModule,
+    RestaurantOrdersModule,
     RestaurantsModule,
     StockModule,
     StoreItemsModule,

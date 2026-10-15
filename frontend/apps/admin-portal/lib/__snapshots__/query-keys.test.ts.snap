@@ -155,6 +155,9 @@ exports[`every prefix stays as it is 1`] = `
   "mappingHospitalOptions": [
     "mapping-hospital-options",
   ],
+  "orderBoard": [
+    "order-board",
+  ],
   "paymentMachinePosDeviceOptions": [
     "payment-machine-pos-device-options",
   ],
@@ -173,6 +176,9 @@ exports[`every prefix stays as it is 1`] = `
   "restaurant": [
     "restaurant",
   ],
+  "restaurantBoardLink": [
+    "restaurant-board-link",
+  ],
   "restaurantMenuReferenceOptions": [
     "restaurant-menu-reference-options",
   ],
@@ -181,6 +187,9 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "restaurantOptions": [
     "restaurant-options",
+  ],
+  "restaurantOrders": [
+    "restaurant-orders",
   ],
   "restaurantStock": [
     "restaurant-stock",

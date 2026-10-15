@@ -37,6 +37,7 @@ export const HOSPITAL_SCOPED_MODELS = new Set([
   'PosDevice',
   'Restaurant',
   'RestaurantMenu',
+  'RestaurantOrder',
   'StockBalance',
   'StockLedger',
   'Store',

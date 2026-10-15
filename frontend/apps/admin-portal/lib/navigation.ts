@@ -352,6 +352,12 @@ export const subRoutes: SubRoute[] = [
     permissions: ['RESTAURANT_UPDATE'],
   },
   {
+    label: 'Orders',
+    parent: '/masters/restaurants',
+    pattern: '/masters/restaurants/[id]/orders',
+    permissions: ['ORDER_VIEW'],
+  },
+  {
     label: 'New employee',
     parent: '/masters/employees',
     pattern: '/masters/employees/new',

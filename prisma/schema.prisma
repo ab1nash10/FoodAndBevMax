@@ -73,6 +73,23 @@ enum TransferStatus {
   CANCELLED
 }
 
+/// A guest order from the POS: the kitchen moves it along, the pickup board shows it.
+enum OrderStatus {
+  PLACED
+  PREPARING
+  READY
+  COLLECTED
+  CANCELLED
+}
+
+/// Where a guest order came from.
+enum OrderSource {
+  POS
+  KIOSK
+  QR
+  OTHER
+}
+
 enum TransferAcknowledgementStatus {
   ACCEPTED_FULL
   ACCEPTED_PARTIAL
@@ -140,6 +157,9 @@ model User {
   /// Bumped whenever an admin changes the user. Tokens carry the version they were issued at,
   /// so a bump ends every session the user has open and they must sign in again.
   sessionVersion Int        @default(0) @map("session_version")
+  /// The user's last signed-in request (written at most once a minute), cleared on sign-out.
+  /// While it is under 8 hours old an admin cannot change their password, email or mobile.
+  lastActiveAt   DateTime?  @map("last_active_at")
   status         UserStatus @default(ACTIVE)
   hospitalId     String?    @map("hospital_id") @db.Uuid
   createdAt      DateTime   @default(now()) @map("created_at")
@@ -157,9 +177,6 @@ model User {
 
   @@index([hospitalId])
   @@index([deletedAt])
-  /// The user's last signed-in request (written at most once a minute), cleared on sign-out.
-  /// While it is under 8 hours old an admin cannot change their password, email or mobile.
-  lastActiveAt   DateTime?  @map("last_active_at")
   @@map("users")
 }
 
@@ -299,6 +316,7 @@ model Hospital {
   posDevices               PosDevice[]
   restaurants              Restaurant[]
   restaurantMenus          RestaurantMenu[]
+  restaurantOrders         RestaurantOrder[]
   stockBalances            StockBalance[]
   stockLedgers             StockLedger[]
   stores                   Store[]
@@ -474,6 +492,10 @@ model Restaurant {
   sunBu                    String?   @map("sun_bu")
   sunT1                    String?   @map("sun_t1")
   sunT2                    String?   @map("sun_t2")
+  /// The secret in the pickup board's link for a TV; replacing it turns the old link off.
+  boardToken               String?   @unique @map("board_token")
+  /// SHA-256 of the key kiosks, QR ordering and other apps send this restaurant's orders with.
+  orderKeyHash             String?   @unique @map("order_key_hash")
   isActive                 Boolean   @default(true) @map("is_active")
   createdAt                DateTime  @default(now()) @map("created_at")
   createdBy                String?   @map("created_by") @db.Uuid
@@ -486,6 +508,7 @@ model Restaurant {
   posDeviceMappings  PosDeviceRestaurant[]
   restaurantMenus    RestaurantMenu[]
   restaurantKitchens RestaurantKitchen[]
+  orders             RestaurantOrder[]
   hospital           Hospital              @relation(fields: [hospitalId], references: [id])
   kitchen            Kitchen?              @relation(fields: [kitchenId], references: [id])
   legalEntity        LegalEntity?          @relation(fields: [legalEntityId], references: [id])
@@ -563,6 +586,8 @@ model PosDevice {
   hostName              String?   @map("host_name")
   isKotPrintEnabled     Boolean   @default(false) @map("is_kot_print_enabled")
   isInvoicePrintEnabled Boolean   @default(false) @map("is_invoice_print_enabled")
+  /// SHA-256 of the key the POS sends orders with; the key itself is shown once and never stored.
+  apiKeyHash            String?   @unique @map("api_key_hash")
   isActive              Boolean   @default(true) @map("is_active")
   createdAt             DateTime  @default(now()) @map("created_at")
   createdBy             String?   @map("created_by") @db.Uuid
@@ -574,6 +599,7 @@ model PosDevice {
   legalEntity     LegalEntity?          @relation(fields: [legalEntityId], references: [id])
   paymentMachines PaymentMachine[]
   restaurants     PosDeviceRestaurant[]
+  orders          RestaurantOrder[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId])
@@ -582,6 +608,37 @@ model PosDevice {
   @@index([isActive])
   @@index([hostName])
   @@map("pos_devices")
+}
+
+model RestaurantOrder {
+  id              String      @id @default(uuid()) @db.Uuid
+  hospitalId      String      @map("hospital_id") @db.Uuid
+  restaurantId    String      @map("restaurant_id") @db.Uuid
+  source          OrderSource
+  /// Set when a POS device's key sent the order.
+  posDeviceId     String?     @map("pos_device_id") @db.Uuid
+  /// Whose key sent it: the POS device, or the restaurant (kiosk, QR, other apps).
+  senderId        String      @map("sender_id") @db.Uuid
+  /// The sender's own id for the order: sending it again updates the order, never duplicates it.
+  externalOrderId String      @map("external_order_id")
+  /// What the guest is told and the board shows, e.g. "A-42".
+  orderNumber     String      @map("order_number")
+  /// [{ name, quantity, note? }] for the kitchen screen.
+  items           Json        @default("[]")
+  status          OrderStatus @default(PLACED)
+  placedAt        DateTime    @default(now()) @map("placed_at")
+  readyAt         DateTime?   @map("ready_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  updatedBy       String?     @map("updated_by") @db.Uuid
+
+  hospital   Hospital   @relation(fields: [hospitalId], references: [id])
+  posDevice  PosDevice? @relation(fields: [posDeviceId], references: [id], onDelete: Restrict)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@unique([senderId, externalOrderId])
+  @@index([hospitalId])
+  @@index([restaurantId, status, placedAt])
+  @@map("restaurant_orders")
 }
 
 model PosDeviceRestaurant {
@@ -844,23 +901,23 @@ model RestaurantMenu {
 }
 
 model Employee {
-  id                  String    @id @default(uuid()) @db.Uuid
-  employeeCode        String    @unique @map("employee_code")
-  employeeName        String    @map("employee_name")
+  id                  String          @id @default(uuid()) @db.Uuid
+  employeeCode        String          @unique @map("employee_code")
+  employeeName        String          @map("employee_name")
   department          String?
   designation         String?
   mobile              String?
-  eligibleForDiscount Boolean   @default(true) @map("eligible_for_discount")
+  eligibleForDiscount Boolean         @default(true) @map("eligible_for_discount")
   /// Null for employees recorded before the type was asked for.
   employmentType      EmploymentType? @map("employment_type")
   /// The location this record belongs to; null means shared by every location.
-  hospitalId          String?   @map("hospital_id") @db.Uuid
-  isActive            Boolean   @default(true) @map("is_active")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  createdBy           String?   @map("created_by") @db.Uuid
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-  updatedBy           String?   @map("updated_by") @db.Uuid
-  deletedAt           DateTime? @map("deleted_at")
+  hospitalId          String?         @map("hospital_id") @db.Uuid
+  isActive            Boolean         @default(true) @map("is_active")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  createdBy           String?         @map("created_by") @db.Uuid
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  updatedBy           String?         @map("updated_by") @db.Uuid
+  deletedAt           DateTime?       @map("deleted_at")
 
   hospital Hospital? @relation(fields: [hospitalId], references: [id])
 

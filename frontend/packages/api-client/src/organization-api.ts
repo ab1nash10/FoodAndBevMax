@@ -24,6 +24,7 @@ import type {
   TimeSlotListQuery,
 } from './catalog';
 import type { DashboardRecords, DashboardRecordsQuery, DashboardSetup } from './dashboard';
+import type { OrderBoard, OrderStatus, RestaurantOrder } from './orders';
 import { createApiClient, type ApiClientOptions, type ApiList, type ApiResponse } from './http';
 import type {
   Grn,
@@ -295,6 +296,44 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     getDashboardSetup(query?: { hospitalId?: string }) {
       return client.request<ApiResponse<DashboardSetup>>('/dashboard/setup', { query });
+    },
+    /** Public: the TV pickup board, found by the restaurant's board secret. */
+    getOrderBoard(token: string) {
+      return client.request<ApiResponse<OrderBoard>>(`/order-board/${encodeURIComponent(token)}`);
+    },
+    /** The restaurant's TV board secret, made on first use; regenerate turns the old link off. */
+    getRestaurantBoardLink(restaurantId: string, regenerate = false) {
+      return client.request<ApiResponse<{ boardToken: string }>>(
+        `/restaurants/${restaurantId}/board-link`,
+        { body: { regenerate }, method: 'POST' },
+      );
+    },
+    /** The restaurant's order key for kiosks, QR ordering and other apps; shown once. */
+    issueRestaurantOrderKey(restaurantId: string) {
+      return client.request<ApiResponse<{ apiKey: string }>>(
+        `/restaurants/${restaurantId}/order-key`,
+        { method: 'POST' },
+      );
+    },
+    /** A new key for the POS to send orders with; shown once, the old key stops working. */
+    issuePosDeviceKey(posDeviceId: string) {
+      return client.request<ApiResponse<{ apiKey: string }>>(
+        `/pos-devices/${posDeviceId}/api-key`,
+        {
+          method: 'POST',
+        },
+      );
+    },
+    listRestaurantOrders(restaurantId: string) {
+      return client.request<ApiResponse<RestaurantOrder[]>>('/restaurant-orders', {
+        query: { restaurantId },
+      });
+    },
+    setRestaurantOrderStatus(id: string, status: OrderStatus) {
+      return client.request<ApiResponse<RestaurantOrder>>(`/restaurant-orders/${id}/status`, {
+        body: { status },
+        method: 'PATCH',
+      });
     },
     getCounter(id: string) {
       return client.request<ApiResponse<Counter>>(`/counters/${id}`);

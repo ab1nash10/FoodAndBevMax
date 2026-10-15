@@ -125,6 +125,8 @@ const defaultPermissions = [
     'VIEW',
     'View restaurant stock ledger and balances',
   ],
+  ['ORDER_VIEW', 'ORDER', 'VIEW', 'View guest orders on the kitchen screen'],
+  ['ORDER_UPDATE', 'ORDER', 'UPDATE', 'Move guest orders to preparing, ready and collected'],
   ['AUDIT_LOG_VIEW', 'AUDIT_LOG', 'VIEW', 'View audit logs'],
 ] as const;
 
