@@ -2,9 +2,9 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Pencil, Store as StoreIcon } from 'lucide-react';
+import { Loader2, Pencil, Store as StoreIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormReturn } from 'react-hook-form';
 import type {
   SortOrder,
   Store,
@@ -23,7 +23,7 @@ import {
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { Toggle } from '@/components/ui-controls';
+import { Modal, Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
@@ -98,6 +98,8 @@ export function StoreItemsPageClient({
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<StoreItem | null>(null);
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
+  // Edit has its own form in a pop-up, so the Create form above keeps what was typed in it.
+  const editForm = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const storesQuery = useStoreOptions(hospitalFilter);
   const itemsQuery = useItemOptions('MRP', { includeUnmapped: true });
@@ -109,11 +111,8 @@ export function StoreItemsPageClient({
     setHospitalFilter(scopedHospitalId ?? '');
     setStoreFilter('');
     setPage(1);
-
-    if (!editingMapping) {
-      form.setValue('parentId', '', { shouldValidate: true });
-    }
-  }, [editingMapping, form, scopedHospitalId]);
+    form.setValue('parentId', '', { shouldValidate: true });
+  }, [form, scopedHospitalId]);
 
   const mappingsQuery = useEntityList<StoreItem, StoreItemListQuery>(
     'store-items',
@@ -132,25 +131,27 @@ export function StoreItemsPageClient({
   );
 
   const saveMappingMutation = useMutation({
-    mutationFn: (body: StoreItemInput) =>
-      editingMapping
-        ? organizationApi.updateStoreItem(editingMapping.id, body)
-        : organizationApi.createStoreItem(body),
-    onError(error) {
+    mutationFn: ({ body, id }: { body: StoreItemInput; id?: string }) =>
+      id ? organizationApi.updateStoreItem(id, body) : organizationApi.createStoreItem(body),
+    onError(error, variables) {
       showToast({
         description: getApiErrorMessage(error),
-        title: editingMapping ? 'Store item was not updated' : 'Store item was not created',
+        title: variables.id ? 'Store item was not updated' : 'Store item was not created',
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, variables) {
       invalidateStoreItems();
       showToast({
-        title: editingMapping ? 'Store item updated' : 'Store item created',
+        title: variables.id ? 'Store item updated' : 'Store item created',
         variant: 'success',
       });
-      setEditingMapping(null);
-      form.reset(emptyMappingFormValues());
+
+      if (variables.id) {
+        setEditingMapping(null);
+      } else {
+        form.reset(emptyMappingFormValues());
+      }
     },
   });
 
@@ -187,21 +188,26 @@ export function StoreItemsPageClient({
     totalPages: 1,
   };
 
-  const handleSubmit = form.handleSubmit((values) => {
-    const parsed = mappingSchema.safeParse(values);
+  /** Submits the Create form (no id) or the Edit pop-up's form (the mapping's id). */
+  const submitMapping = (target: UseFormReturn<MappingFormValues>, id?: string) =>
+    target.handleSubmit((values) => {
+      const parsed = mappingSchema.safeParse(values);
 
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
+      if (!parsed.success) {
+        applyValidationErrors(target, parsed.error);
+        return;
+      }
 
-    saveMappingMutation.mutate({
-      categoryId: parsed.data.categoryId || undefined,
-      isActive: parsed.data.isActive,
-      itemId: parsed.data.itemId,
-      storeId: parsed.data.parentId,
+      saveMappingMutation.mutate({
+        body: {
+          categoryId: parsed.data.categoryId || undefined,
+          isActive: parsed.data.isActive,
+          itemId: parsed.data.itemId,
+          storeId: parsed.data.parentId,
+        },
+        id,
+      });
     });
-  });
 
   const hasFilters = Boolean(
     searchInput ||
@@ -222,8 +228,8 @@ export function StoreItemsPageClient({
 
   function startEditingMapping(mapping: StoreItem) {
     setEditingMapping(mapping);
-    form.reset({
-      categoryId: mapping.item.category?.id ?? '',
+    editForm.reset({
+      categoryId: mapping.categoryId ?? '',
       isActive: mapping.isActive,
       itemId: mapping.itemId,
       parentId: mapping.storeId,
@@ -232,7 +238,6 @@ export function StoreItemsPageClient({
 
   function cancelEditingMapping() {
     setEditingMapping(null);
-    form.reset(emptyMappingFormValues());
   }
 
   function toggleMappingStatus(mapping: StoreItem) {
@@ -262,9 +267,7 @@ export function StoreItemsPageClient({
       <Panel className="p-4">
         <div className="mb-5">
           {formSwitch ? <div className="mb-4">{formSwitch}</div> : null}
-          <h2 className="text-lg font-semibold tracking-normal text-ds-text">
-            {editingMapping ? 'Edit Store Item' : 'Create Store Item'}
-          </h2>
+          <h2 className="text-lg font-semibold tracking-normal text-ds-text">Create Store Item</h2>
           <p className="text-sm text-ds-muted">
             Pick an item not mapped yet, or an MRP item: mapping it here makes it MRP and sets its
             category. A Readymade item cannot be mapped to a store.
@@ -273,7 +276,7 @@ export function StoreItemsPageClient({
         <form
           className="grid gap-4"
           onSubmit={(event) => {
-            void handleSubmit(event);
+            void submitMapping(form)(event);
           }}
         >
           {storesQuery.data?.length === 0 ? (
@@ -297,18 +300,46 @@ export function StoreItemsPageClient({
             parents={stores}
           />
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            {editingMapping ? (
-              <Button onClick={cancelEditingMapping} type="button" variant="outline">
-                Cancel
-              </Button>
-            ) : null}
-            <SubmitButton
-              isPending={saveMappingMutation.isPending}
-              label={editingMapping ? 'Update Store Item' : 'Create Store Item'}
-            />
+            <SubmitButton isPending={saveMappingMutation.isPending} label="Create Store Item" />
           </div>
         </form>
       </Panel>
+      <Modal
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button onClick={cancelEditingMapping} type="button" variant="outline">
+              Cancel
+            </Button>
+            <Button disabled={saveMappingMutation.isPending} form="edit-store-item" type="submit">
+              {saveMappingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save changes
+            </Button>
+          </div>
+        }
+        onClose={cancelEditingMapping}
+        open={editingMapping !== null}
+        title="Edit Store Item"
+      >
+        <form
+          className="grid gap-4"
+          id="edit-store-item"
+          onSubmit={(event) => {
+            if (editingMapping) {
+              void submitMapping(editForm, editingMapping.id)(event);
+            }
+          }}
+        >
+          <MappingFormFields
+            categories={categoriesQuery.data}
+            form={editForm}
+            itemLabel="Item"
+            typeLabel="MRP"
+            items={itemsQuery.data}
+            parentLabel="Store"
+            parents={stores}
+          />
+        </form>
+      </Modal>
       <Panel>
         {listTabs ? <div className="border-b border-ds-divider px-4 pt-3">{listTabs}</div> : null}
         <ListToolbar>
@@ -450,7 +481,7 @@ export function StoreItemsPageClient({
                       <p className="text-xs text-ds-muted">{mapping.item.itemCode}</p>
                     </td>
                     <td className="px-4 py-3 text-ds-text-3">
-                      {mapping.item.category?.categoryName ?? '-'}
+                      {mapping.category?.categoryName ?? '-'}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge isActive={mapping.isActive} />

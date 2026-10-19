@@ -2,9 +2,9 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChefHat, Pencil } from 'lucide-react';
+import { ChefHat, Loader2, Pencil } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormReturn } from 'react-hook-form';
 import type {
   Kitchen,
   KitchenItem,
@@ -23,7 +23,7 @@ import {
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { Toggle } from '@/components/ui-controls';
+import { Modal, Toggle } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
@@ -98,6 +98,8 @@ export function KitchenItemsPageClient({
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<KitchenItem | null>(null);
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
+  // Edit has its own form in a pop-up, so the Create form above keeps what was typed in it.
+  const editForm = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const kitchensQuery = useKitchenOptions(hospitalFilter);
   const itemsQuery = useItemOptions('READYMADE', { includeUnmapped: true });
@@ -109,11 +111,8 @@ export function KitchenItemsPageClient({
     setHospitalFilter(scopedHospitalId ?? '');
     setKitchenFilter('');
     setPage(1);
-
-    if (!editingMapping) {
-      form.setValue('parentId', '', { shouldValidate: true });
-    }
-  }, [editingMapping, form, scopedHospitalId]);
+    form.setValue('parentId', '', { shouldValidate: true });
+  }, [form, scopedHospitalId]);
 
   const mappingsQuery = useEntityList<KitchenItem, KitchenItemListQuery>(
     'kitchen-items',
@@ -132,25 +131,27 @@ export function KitchenItemsPageClient({
   );
 
   const saveMappingMutation = useMutation({
-    mutationFn: (body: KitchenItemInput) =>
-      editingMapping
-        ? organizationApi.updateKitchenItem(editingMapping.id, body)
-        : organizationApi.createKitchenItem(body),
-    onError(error) {
+    mutationFn: ({ body, id }: { body: KitchenItemInput; id?: string }) =>
+      id ? organizationApi.updateKitchenItem(id, body) : organizationApi.createKitchenItem(body),
+    onError(error, variables) {
       showToast({
         description: getApiErrorMessage(error),
-        title: editingMapping ? 'Kitchen item was not updated' : 'Kitchen item was not created',
+        title: variables.id ? 'Kitchen item was not updated' : 'Kitchen item was not created',
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, variables) {
       invalidateKitchenItems();
       showToast({
-        title: editingMapping ? 'Kitchen item updated' : 'Kitchen item created',
+        title: variables.id ? 'Kitchen item updated' : 'Kitchen item created',
         variant: 'success',
       });
-      setEditingMapping(null);
-      form.reset(emptyMappingFormValues());
+
+      if (variables.id) {
+        setEditingMapping(null);
+      } else {
+        form.reset(emptyMappingFormValues());
+      }
     },
   });
 
@@ -189,21 +190,26 @@ export function KitchenItemsPageClient({
     totalPages: 1,
   };
 
-  const handleSubmit = form.handleSubmit((values) => {
-    const parsed = mappingSchema.safeParse(values);
+  /** Submits the Create form (no id) or the Edit pop-up's form (the mapping's id). */
+  const submitMapping = (target: UseFormReturn<MappingFormValues>, id?: string) =>
+    target.handleSubmit((values) => {
+      const parsed = mappingSchema.safeParse(values);
 
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
+      if (!parsed.success) {
+        applyValidationErrors(target, parsed.error);
+        return;
+      }
 
-    saveMappingMutation.mutate({
-      categoryId: parsed.data.categoryId || undefined,
-      isActive: parsed.data.isActive,
-      itemId: parsed.data.itemId,
-      kitchenId: parsed.data.parentId,
+      saveMappingMutation.mutate({
+        body: {
+          categoryId: parsed.data.categoryId || undefined,
+          isActive: parsed.data.isActive,
+          itemId: parsed.data.itemId,
+          kitchenId: parsed.data.parentId,
+        },
+        id,
+      });
     });
-  });
 
   const hasFilters = Boolean(
     searchInput ||
@@ -224,8 +230,8 @@ export function KitchenItemsPageClient({
 
   function startEditingMapping(mapping: KitchenItem) {
     setEditingMapping(mapping);
-    form.reset({
-      categoryId: mapping.item.category?.id ?? '',
+    editForm.reset({
+      categoryId: mapping.categoryId ?? '',
       isActive: mapping.isActive,
       itemId: mapping.itemId,
       parentId: mapping.kitchenId,
@@ -234,7 +240,6 @@ export function KitchenItemsPageClient({
 
   function cancelEditingMapping() {
     setEditingMapping(null);
-    form.reset(emptyMappingFormValues());
   }
 
   function toggleMappingStatus(mapping: KitchenItem) {
@@ -265,7 +270,7 @@ export function KitchenItemsPageClient({
         <div className="mb-5">
           {formSwitch ? <div className="mb-4">{formSwitch}</div> : null}
           <h2 className="text-lg font-semibold tracking-normal text-ds-text">
-            {editingMapping ? 'Edit Kitchen Item' : 'Create Kitchen Item'}
+            Create Kitchen Item
           </h2>
           <p className="text-sm text-ds-muted">
             Pick an item not mapped yet, or a Readymade item: mapping it here makes it Readymade and
@@ -275,7 +280,7 @@ export function KitchenItemsPageClient({
         <form
           className="grid gap-4"
           onSubmit={(event) => {
-            void handleSubmit(event);
+            void submitMapping(form)(event);
           }}
         >
           {kitchensQuery.data?.length === 0 ? (
@@ -299,18 +304,46 @@ export function KitchenItemsPageClient({
             parents={kitchens}
           />
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            {editingMapping ? (
-              <Button onClick={cancelEditingMapping} type="button" variant="outline">
-                Cancel
-              </Button>
-            ) : null}
-            <SubmitButton
-              isPending={saveMappingMutation.isPending}
-              label={editingMapping ? 'Update Kitchen Item' : 'Create Kitchen Item'}
-            />
+            <SubmitButton isPending={saveMappingMutation.isPending} label="Create Kitchen Item" />
           </div>
         </form>
       </Panel>
+      <Modal
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button onClick={cancelEditingMapping} type="button" variant="outline">
+              Cancel
+            </Button>
+            <Button disabled={saveMappingMutation.isPending} form="edit-kitchen-item" type="submit">
+              {saveMappingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save changes
+            </Button>
+          </div>
+        }
+        onClose={cancelEditingMapping}
+        open={editingMapping !== null}
+        title="Edit Kitchen Item"
+      >
+        <form
+          className="grid gap-4"
+          id="edit-kitchen-item"
+          onSubmit={(event) => {
+            if (editingMapping) {
+              void submitMapping(editForm, editingMapping.id)(event);
+            }
+          }}
+        >
+          <MappingFormFields
+            categories={categoriesQuery.data}
+            form={editForm}
+            itemLabel="Item"
+            typeLabel="Readymade"
+            items={itemsQuery.data}
+            parentLabel="Kitchen"
+            parents={kitchens}
+          />
+        </form>
+      </Modal>
       <Panel>
         {listTabs ? <div className="border-b border-ds-divider px-4 pt-3">{listTabs}</div> : null}
         <ListToolbar>
@@ -454,7 +487,7 @@ export function KitchenItemsPageClient({
                       <p className="text-xs text-ds-muted">{mapping.item.itemCode}</p>
                     </td>
                     <td className="px-4 py-3 text-ds-text-3">
-                      {mapping.item.category?.categoryName ?? '-'}
+                      {mapping.category?.categoryName ?? '-'}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge isActive={mapping.isActive} />

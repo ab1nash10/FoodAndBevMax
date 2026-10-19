@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { Loader2, Plus, Search } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import type { Hospital, Item, ItemCategory, SortOrder } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
@@ -201,11 +201,6 @@ export function MappingFormFields({
   const itemId = form.watch('itemId');
   const selectedItem = items?.find((item) => item.id === itemId);
 
-  // The category follows the chosen item; it can then be changed here.
-  useEffect(() => {
-    form.setValue('categoryId', selectedItem?.category?.id ?? '');
-  }, [form, selectedItem]);
-
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -246,8 +241,8 @@ export function MappingFormFields({
         {selectedItem ? (
           <p className="mt-1.5 text-xs text-ds-muted">
             {selectedItem.itemType
-              ? "Changing it changes this item's category everywhere."
-              : `First mapping: choose a category. The item becomes ${typeLabel}.`}
+              ? 'This category applies to this mapping only.'
+              : `First mapping: the item becomes ${typeLabel}.`}
           </p>
         ) : null}
       </Field>

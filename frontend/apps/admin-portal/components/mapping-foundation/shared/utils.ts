@@ -12,8 +12,8 @@ import { queryKeys } from '@/lib/query-keys';
 export const listLimit = 10;
 
 export const mappingSchema = z.object({
-  // Required by the server only on an item's first mapping; empty keeps the item's category.
-  categoryId: z.string(),
+  // Each mapping carries its own category.
+  categoryId: z.string().uuid('Select a category.'),
   isActive: z.boolean(),
   itemId: z.string().uuid('Select an item.'),
   parentId: z.string().uuid('Select a parent.'),
