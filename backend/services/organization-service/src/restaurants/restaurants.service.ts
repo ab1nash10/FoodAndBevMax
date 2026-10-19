@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -392,6 +393,9 @@ export class RestaurantsService {
         if (shouldSyncKitchens) {
           await this.restaurants.syncKitchens(id, requestedKitchenIds, context.actorId, tx);
         }
+
+        // A new legal entity must still match every POS device that serves it.
+        await assertPosEntitiesMatch(tx, { restaurantId: id });
 
         const mappedRestaurant = await this.findActiveRestaurant(restaurant.id, tx);
 

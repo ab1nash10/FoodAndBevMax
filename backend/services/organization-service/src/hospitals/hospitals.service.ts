@@ -7,6 +7,7 @@ import {
 import { getAllowedHospitalIds } from '@aahar/auth';
 import { Hospital, OnlinePaymentOption, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
 import { getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
@@ -338,6 +339,11 @@ export class HospitalsService {
         const hospital = Object.keys(data).length
           ? await this.hospitals.update(id, data, tx)
           : existing;
+
+        // Devices and restaurants without an entity of their own bill under this location's.
+        await assertPosEntitiesMatch(tx, {
+          OR: [{ posDevice: { hospitalId: id } }, { restaurant: { hospitalId: id } }],
+        });
 
         await this.auditLog.record(
           {

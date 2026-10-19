@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -166,6 +167,8 @@ export class PosDevicesService {
           await this.posDevices.syncRestaurants(posDevice.id, restaurantIds, context.actorId, tx);
         }
 
+        await assertPosEntitiesMatch(tx, { posDeviceId: posDevice.id });
+
         const mappedPosDevice = await this.findActivePosDevice(posDevice.id, tx);
 
         await this.auditLog.record(
@@ -270,6 +273,9 @@ export class PosDevicesService {
         if (shouldSyncRestaurants) {
           await this.posDevices.syncRestaurants(id, restaurantIds, context.actorId, tx);
         }
+
+        // Its restaurants, or its own entity or location, may have changed.
+        await assertPosEntitiesMatch(tx, { posDeviceId: id });
 
         const mappedPosDevice = await this.findActivePosDevice(posDevice.id, tx);
 
