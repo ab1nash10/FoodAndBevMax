@@ -50,6 +50,7 @@ export function RestaurantMenuFormFields({
   form,
   isEditing,
   items,
+  menuItemCode,
   referenceMenus,
   restaurants,
 }: Readonly<{
@@ -57,6 +58,8 @@ export function RestaurantMenuFormFields({
   form: UseFormReturn<RestaurantMenuFormValues>;
   isEditing: boolean;
   items: Item[] | undefined;
+  /** The menu item's code when editing; a new one is generated on save. */
+  menuItemCode?: string;
   referenceMenus: RestaurantMenu[] | undefined;
   restaurants: Restaurant[] | undefined;
 }>) {
@@ -170,6 +173,14 @@ export function RestaurantMenuFormFields({
             </option>
           ))}
         </Select>
+      </Field>
+      <Field label="Menu item code" name="menu-item-code">
+        <Input
+          disabled
+          id="menu-item-code"
+          readOnly
+          value={menuItemCode ?? 'Auto-generated after save'}
+        />
       </Field>
       <Field error={errors.addOn?.message} label="Add-On" name="add-on">
         <Input id="add-on" {...form.register('addOn')} />

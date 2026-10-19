@@ -216,6 +216,8 @@ export type RestaurantMenuPositionType = 'AFTER_ITEM' | 'BEFORE_ITEM' | 'FIRST' 
 export type MenuServeAt = 'BOTH' | 'COUNTER' | 'ROOM';
 
 export interface RestaurantMenu {
+  /** Auto-generated when the item is added to the menu, e.g. RMI0001; never changes. */
+  menuItemCode: string;
   accompaniments: string | null;
   addOn: string | null;
   /** On sale from / until, HH:mm; both null means all day. */

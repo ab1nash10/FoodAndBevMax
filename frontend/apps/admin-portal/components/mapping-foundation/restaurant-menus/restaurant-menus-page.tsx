@@ -507,7 +507,7 @@ export function RestaurantMenusPageClient() {
           <FilterSearch
             label="Search menu items"
             onChange={(value) => changeFilter(() => setSearch(value))}
-            placeholder="Item or restaurant"
+            placeholder="Item, menu code or restaurant"
             value={searchInput}
           />
           <FiltersMenu
@@ -600,8 +600,8 @@ export function RestaurantMenusPageClient() {
                             <span className="truncate text-[13.5px] font-bold text-ds-text">
                               {menu.item.itemName}
                             </span>
-                            <span className="truncate text-[11.5px] text-ds-muted">
-                              {menu.item.itemCode} · {windowText(menu)}
+                            <span className="truncate text-[11.5px] tabular-nums text-ds-muted">
+                              {menu.menuItemCode} · {windowText(menu)}
                             </span>
                           </span>
                         </span>
@@ -775,6 +775,7 @@ export function RestaurantMenusPageClient() {
             form={form}
             isEditing={Boolean(editingMenu)}
             items={itemsQuery.data}
+            menuItemCode={editingMenu?.menuItemCode}
             referenceMenus={referenceMenus}
             restaurants={restaurantsQuery.data}
           />

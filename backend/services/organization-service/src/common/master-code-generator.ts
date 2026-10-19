@@ -7,7 +7,11 @@ interface SequenceRow {
 
 export async function getNextSequenceNumber(
   client: Prisma.TransactionClient,
-  sequenceName: 'store_code_sequence' | 'kitchen_code_sequence' | 'restaurant_code_sequence',
+  sequenceName:
+    | 'store_code_sequence'
+    | 'kitchen_code_sequence'
+    | 'restaurant_code_sequence'
+    | 'restaurant_menu_code_sequence',
 ): Promise<number> {
   const rows = await client.$queryRawUnsafe<SequenceRow[]>(
     `SELECT nextval('${sequenceName}')::bigint AS "nextValue"`,

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { MenuServeAt, Prisma, Restaurant } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -110,6 +111,7 @@ export class RestaurantMenusService {
       ...(query.search
         ? {
             OR: [
+              { menuItemCode: { contains: query.search, mode: 'insensitive' } },
               { item: { itemCode: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemName: { contains: query.search, mode: 'insensitive' } } },
               { restaurant: { restaurantCode: { contains: query.search, mode: 'insensitive' } } },
@@ -167,9 +169,16 @@ export class RestaurantMenusService {
           tx,
         );
 
+        // Only after every check: a number taken from the sequence is never given back.
+        const menuItemCode = formatMasterCode(
+          'RMI',
+          await getNextSequenceNumber(tx, 'restaurant_menu_code_sequence'),
+        );
+
         const mapping = await this.restaurantMenus.create(
           {
             ...menuDetails(dto),
+            menuItemCode,
             createdBy: context.actorId,
             daysOfWeek,
             displayOrder,
@@ -506,6 +515,7 @@ export class RestaurantMenusService {
       isAvailable: mapping.isAvailable,
       isDiscountable: mapping.isDiscountable,
       isGstInclusive: mapping.isGstInclusive,
+      menuItemCode: mapping.menuItemCode,
       item: mapping.item,
       itemId: mapping.itemId,
       kitchen: mapping.kitchen,
