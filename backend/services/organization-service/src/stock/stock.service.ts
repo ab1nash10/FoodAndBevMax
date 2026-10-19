@@ -162,6 +162,10 @@ export class StockService {
     const storeLocationMap = getStoreLocationMap(
       await this.stock.findStoresByIds(getStoreLocationIds(balances)),
     );
+    // The category each store gave the item on its own mapping.
+    const storeCategories = await this.stock.findStoreItemCategories(
+      balances.map((balance) => ({ itemId: balance.itemId, storeId: balance.locationId })),
+    );
     const groupMap = new Map<
       string,
       {
@@ -202,7 +206,7 @@ export class StockService {
       const status = getBalanceStatus(balance);
       const existing = groupMap.get(key) ?? {
         batches: [],
-        categoryName: balance.item.category?.categoryName ?? null,
+        categoryName: storeCategories.get(key) ?? null,
         hospitalId: balance.hospitalId,
         itemCode: balance.item.itemCode,
         itemId: balance.itemId,

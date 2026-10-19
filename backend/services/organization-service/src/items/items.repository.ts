@@ -1,10 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { ItemCategory, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 
-export const itemInclude = {
-  category: true,
-} satisfies Prisma.ItemInclude;
+// Items have no category of their own: each mapping and menu item has one.
+export const itemInclude = {} satisfies Prisma.ItemInclude;
 
 export type ItemWithCategory = Prisma.ItemGetPayload<{ include: typeof itemInclude }>;
 
@@ -43,17 +42,6 @@ export class ItemsRepository {
     return client.item.findFirst({
       include: itemInclude,
       where: {
-        // No category yet (not mapped) still counts; a deleted category does not.
-        OR: [{ categoryId: null }, { category: { deletedAt: null } }],
-        deletedAt: null,
-        id,
-      },
-    });
-  }
-
-  async findActiveCategory(id: string, client: ItemClient): Promise<ItemCategory | null> {
-    return client.itemCategory.findFirst({
-      where: {
         deletedAt: null,
         id,
       },
@@ -85,14 +73,13 @@ export class ItemsRepository {
 
   async findByNormalizedName(
     normalizedName: string,
-    categoryId: string | null,
     excludeId?: string,
     client: ItemClient = this.prisma,
   ): Promise<ItemWithCategory | null> {
     return client.item.findFirst({
       include: itemInclude,
       where: {
-        categoryId,
+        deletedAt: null,
         normalizedName,
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },

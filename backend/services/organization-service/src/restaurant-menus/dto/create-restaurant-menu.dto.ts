@@ -48,6 +48,13 @@ export class CreateRestaurantMenuDto {
   @IsUUID()
   itemId!: string;
 
+  @ApiProperty({
+    description: "This menu item's category; the item's other menus and mappings keep their own.",
+    example: 'd2d2f99b-0d2d-4c94-8c8a-21d4f90c4f80',
+  })
+  @IsUUID()
+  categoryId!: string;
+
   @ApiPropertyOptional({
     description: 'On sale from, HH:mm. Leave both times empty for all day.',
     example: '07:00',

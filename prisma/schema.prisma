@@ -718,7 +718,10 @@ model ItemCategory {
   updatedBy      String?   @map("updated_by") @db.Uuid
   deletedAt      DateTime? @map("deleted_at")
 
-  items Item[]
+  items           Item[]
+  kitchenItems    KitchenItem[]
+  restaurantMenus RestaurantMenu[]
+  storeItems      StoreItem[]
 
   @@index([deletedAt])
   @@index([isActive])
@@ -731,7 +734,8 @@ model Item {
   itemCode               String    @unique @map("item_code")
   itemName               String    @map("item_name")
   normalizedName         String    @map("normalized_name")
-  /// Chosen on the Item Mapping screens (Store Items, Kitchen Items); empty until first mapped.
+  /// No longer used: each store/kitchen mapping and menu item has its own category. Kept so no
+  /// data is dropped; nothing reads or writes it.
   categoryId             String?   @map("category_id") @db.Uuid
   type                   FoodType
   /// Set by where the item is mapped: a store makes it MRP, a kitchen READYMADE. Empty until then.
@@ -826,46 +830,54 @@ model TimeSlot {
 }
 
 model StoreItem {
-  id        String    @id @default(uuid()) @db.Uuid
-  storeId   String    @map("store_id") @db.Uuid
-  itemId    String    @map("item_id") @db.Uuid
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  createdBy String?   @map("created_by") @db.Uuid
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  updatedBy String?   @map("updated_by") @db.Uuid
-  deletedAt DateTime? @map("deleted_at")
+  id         String    @id @default(uuid()) @db.Uuid
+  storeId    String    @map("store_id") @db.Uuid
+  itemId     String    @map("item_id") @db.Uuid
+  /// Its own category, chosen on this mapping; other mappings of the item are independent.
+  categoryId String?   @map("category_id") @db.Uuid
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  createdBy  String?   @map("created_by") @db.Uuid
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  updatedBy  String?   @map("updated_by") @db.Uuid
+  deletedAt  DateTime? @map("deleted_at")
 
-  item  Item  @relation(fields: [itemId], references: [id])
-  store Store @relation(fields: [storeId], references: [id])
+  category ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  item     Item          @relation(fields: [itemId], references: [id])
+  store    Store         @relation(fields: [storeId], references: [id])
 
   @@index([deletedAt])
   @@index([isActive])
   @@index([itemId])
   @@index([storeId])
   @@index([storeId, itemId])
+  @@index([categoryId])
   @@map("store_items")
 }
 
 model KitchenItem {
-  id        String    @id @default(uuid()) @db.Uuid
-  kitchenId String    @map("kitchen_id") @db.Uuid
-  itemId    String    @map("item_id") @db.Uuid
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  createdBy String?   @map("created_by") @db.Uuid
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  updatedBy String?   @map("updated_by") @db.Uuid
-  deletedAt DateTime? @map("deleted_at")
+  id         String    @id @default(uuid()) @db.Uuid
+  kitchenId  String    @map("kitchen_id") @db.Uuid
+  itemId     String    @map("item_id") @db.Uuid
+  /// Its own category, chosen on this mapping; other mappings of the item are independent.
+  categoryId String?   @map("category_id") @db.Uuid
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  createdBy  String?   @map("created_by") @db.Uuid
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  updatedBy  String?   @map("updated_by") @db.Uuid
+  deletedAt  DateTime? @map("deleted_at")
 
-  item    Item    @relation(fields: [itemId], references: [id])
-  kitchen Kitchen @relation(fields: [kitchenId], references: [id])
+  category ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  item     Item          @relation(fields: [itemId], references: [id])
+  kitchen  Kitchen       @relation(fields: [kitchenId], references: [id])
 
   @@index([deletedAt])
   @@index([isActive])
   @@index([itemId])
   @@index([kitchenId])
   @@index([kitchenId, itemId])
+  @@index([categoryId])
   @@map("kitchen_items")
 }
 
@@ -876,6 +888,8 @@ model RestaurantMenu {
   hospitalId             String      @map("hospital_id") @db.Uuid
   restaurantId           String      @map("restaurant_id") @db.Uuid
   itemId                 String      @map("item_id") @db.Uuid
+  /// Its own category, chosen on this mapping; other mappings of the item are independent.
+  categoryId             String?     @map("category_id") @db.Uuid
   /// The kitchen that prepares it; one at the restaurant's location.
   kitchenId              String?     @map("kitchen_id") @db.Uuid
   /// When it is on sale each day, as HH:mm; both empty means all day. A window that ends
@@ -903,14 +917,16 @@ model RestaurantMenu {
   updatedBy              String?     @map("updated_by") @db.Uuid
   deletedAt              DateTime?   @map("deleted_at")
 
-  hospital   Hospital   @relation(fields: [hospitalId], references: [id])
-  item       Item       @relation(fields: [itemId], references: [id])
-  kitchen    Kitchen?   @relation(fields: [kitchenId], references: [id])
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  hospital   Hospital      @relation(fields: [hospitalId], references: [id])
+  category   ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  item       Item          @relation(fields: [itemId], references: [id])
+  kitchen    Kitchen?      @relation(fields: [kitchenId], references: [id])
+  restaurant Restaurant    @relation(fields: [restaurantId], references: [id])
 
   @@index([deletedAt])
   @@index([hospitalId])
   @@index([isActive])
+  @@index([categoryId])
   @@index([itemId])
   @@index([kitchenId])
   @@index([restaurantId])

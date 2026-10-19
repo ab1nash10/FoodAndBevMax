@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { MenuServeAt, Prisma, Restaurant } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { assertUsableCategory } from '../common/item-classification';
 import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
@@ -112,6 +113,7 @@ export class RestaurantMenusService {
         ? {
             OR: [
               { menuItemCode: { contains: query.search, mode: 'insensitive' } },
+              { category: { categoryName: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemCode: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemName: { contains: query.search, mode: 'insensitive' } } },
               { restaurant: { restaurantCode: { contains: query.search, mode: 'insensitive' } } },
@@ -148,6 +150,7 @@ export class RestaurantMenusService {
         const daysOfWeek = uniqueValues(dto.daysOfWeek);
 
         await this.assertValidItem(dto.itemId, tx);
+        await assertUsableCategory(tx, dto.categoryId);
         await this.assertUniqueMapping(dto.restaurantId, dto.itemId, undefined, tx);
         assertWindow(dto);
         assertPricesFor({
@@ -178,6 +181,7 @@ export class RestaurantMenusService {
         const mapping = await this.restaurantMenus.create(
           {
             ...menuDetails(dto),
+            categoryId: dto.categoryId,
             menuItemCode,
             createdBy: context.actorId,
             daysOfWeek,
@@ -227,6 +231,12 @@ export class RestaurantMenusService {
           throw new BadRequestException(
             'Position type is required when reference menu is selected',
           );
+        }
+
+        // Only this menu item's category: the item's other menus and mappings keep theirs.
+        if (dto.categoryId !== undefined) {
+          await assertUsableCategory(tx, dto.categoryId);
+          data.category = { connect: { id: dto.categoryId } };
         }
 
         if (dto.restaurantId !== undefined) {
@@ -515,6 +525,8 @@ export class RestaurantMenusService {
       isAvailable: mapping.isAvailable,
       isDiscountable: mapping.isDiscountable,
       isGstInclusive: mapping.isGstInclusive,
+      category: mapping.category,
+      categoryId: mapping.categoryId,
       menuItemCode: mapping.menuItemCode,
       item: mapping.item,
       itemId: mapping.itemId,

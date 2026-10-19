@@ -87,6 +87,8 @@ const restaurantMenuSchema = z
     isAvailable: z.boolean(),
     isDiscountable: z.boolean(),
     isGstInclusive: z.boolean(),
+    // This menu item's own category; the item's other menus and mappings keep theirs.
+    categoryId: z.string().uuid('Select a category.'),
     itemId: z.string().uuid('Select a food item.'),
     kitchenId: z.string(),
     positionType: z.custom<RestaurantMenuPositionType | ''>(
@@ -214,7 +216,7 @@ function restaurantMenuToFormValues(menu: RestaurantMenu): RestaurantMenuFormVal
     addOn: text(menu.addOn),
     availableFrom: text(menu.availableFrom),
     availableTo: text(menu.availableTo),
-    categoryId: menu.item.category?.id ?? '',
+    categoryId: menu.categoryId ?? '',
     daysOfWeek: menu.daysOfWeek,
     gstPercent: String(menu.gstPercent),
     isActive: menu.isActive,
@@ -390,6 +392,7 @@ export function RestaurantMenusPageClient() {
       addOn: data.addOn || null,
       availableFrom: data.availableFrom || null,
       availableTo: data.availableTo || null,
+      categoryId: data.categoryId,
       daysOfWeek: data.daysOfWeek,
       gstPercent: Number(data.gstPercent),
       isActive: data.isActive,
@@ -631,7 +634,9 @@ export function RestaurantMenusPageClient() {
                               {menu.item.itemName}
                             </span>
                             <span className="truncate text-[11.5px] tabular-nums text-ds-muted">
-                              {menu.menuItemCode} · {windowText(menu)}
+                              {menu.menuItemCode}
+                              {menu.category ? ` · ${menu.category.categoryName}` : ''} ·{' '}
+                              {windowText(menu)}
                             </span>
                           </span>
                         </span>

@@ -19,13 +19,6 @@ export const stockLedgerInclude = {
       itemName: true,
       itemType: true,
       type: true,
-      category: {
-        select: {
-          categoryName: true,
-          id: true,
-          isActive: true,
-        },
-      },
     },
   },
 } satisfies Prisma.StockLedgerInclude;
@@ -47,13 +40,6 @@ export const stockBalanceInclude = {
       itemName: true,
       itemType: true,
       type: true,
-      category: {
-        select: {
-          categoryName: true,
-          id: true,
-          isActive: true,
-        },
-      },
     },
   },
 } satisfies Prisma.StockBalanceInclude;
@@ -168,6 +154,24 @@ export class StockRepository {
         },
       },
     });
+  }
+
+  /** Each store's own category for its items, keyed "storeId:itemId". */
+  async findStoreItemCategories(
+    pairs: Array<{ itemId: string; storeId: string }>,
+  ): Promise<Map<string, string | null>> {
+    if (pairs.length === 0) {
+      return new Map();
+    }
+
+    const mappings = await this.prisma.storeItem.findMany({
+      select: { category: { select: { categoryName: true } }, itemId: true, storeId: true },
+      where: { deletedAt: null, OR: pairs },
+    });
+
+    return new Map(
+      mappings.map((m) => [`${m.storeId}:${m.itemId}`, m.category?.categoryName ?? null]),
+    );
   }
 
   async findStoresByIds(ids: string[]): Promise<Store[]> {

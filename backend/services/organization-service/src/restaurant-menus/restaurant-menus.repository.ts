@@ -3,6 +3,14 @@ import { Item, Prisma, Restaurant } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 export const restaurantMenuInclude = {
+  // The mapping's own category (chosen on it; the item's other mappings are independent).
+  category: {
+    select: {
+      categoryName: true,
+      id: true,
+      isActive: true,
+    },
+  },
   kitchen: {
     select: {
       id: true,
@@ -19,13 +27,6 @@ export const restaurantMenuInclude = {
       itemName: true,
       itemType: true,
       type: true,
-      category: {
-        select: {
-          categoryName: true,
-          id: true,
-          isActive: true,
-        },
-      },
     },
   },
   restaurant: {

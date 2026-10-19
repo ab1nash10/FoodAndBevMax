@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { ItemType } from '@prisma/client';
 import { test } from 'vitest';
-import { classifyItem, releaseItemTypeIfUnused } from './item-classification';
+import { assertUsableCategory, classifyItem, releaseItemTypeIfUnused } from './item-classification';
 
 interface FakeItem {
   categoryId: string | null;
@@ -66,42 +66,27 @@ const item = (overrides: Partial<FakeItem> = {}): FakeItem => ({
   ...overrides,
 });
 
-test('the first mapping sets the type from where it is mapped, and needs a category', async () => {
+test('a mapping gives an unmapped item its type; more mappings of that kind are fine', async () => {
   const items = [item()];
-  await assert.rejects(
-    classifyItem(fakeTx(items), 'samosa', ItemType.MRP, undefined, 'u'),
-    (error: unknown) =>
-      error instanceof BadRequestException && /Choose a category/.test(error.message),
-  );
-  await classifyItem(fakeTx(items), 'samosa', ItemType.MRP, 'snacks', 'u');
-  assert.deepEqual([items[0]?.itemType, items[0]?.categoryId], [ItemType.MRP, 'snacks']);
-  // A second store mapping needs no category again.
-  await assert.doesNotReject(classifyItem(fakeTx(items), 'samosa', ItemType.MRP, undefined, 'u'));
+  await classifyItem(fakeTx(items), 'samosa', ItemType.MRP, 'u');
+  assert.equal(items[0]?.itemType, ItemType.MRP);
+  await assert.doesNotReject(classifyItem(fakeTx(items), 'samosa', ItemType.MRP, 'u'));
 });
 
-test('an item of the other type, an inactive category or a twin name is refused', async () => {
+test('an item of the other type is refused', async () => {
   await assert.rejects(
-    classifyItem(
-      fakeTx([item({ categoryId: 'snacks', itemType: ItemType.MRP })]),
-      'samosa',
-      ItemType.READYMADE,
-      undefined,
-      'u',
-    ),
+    classifyItem(fakeTx([item({ itemType: ItemType.MRP })]), 'samosa', ItemType.READYMADE, 'u'),
     (error: unknown) =>
       error instanceof BadRequestException &&
       error.message ===
         'Samosa is an MRP item (mapped to stores), so it cannot be mapped to a kitchen.',
   );
-  await assert.rejects(
-    classifyItem(fakeTx([item()]), 'samosa', ItemType.MRP, 'retired', 'u'),
-    BadRequestException,
-  );
-  const twins = [item(), item({ categoryId: 'snacks', id: 'other' })];
-  await assert.rejects(
-    classifyItem(fakeTx(twins), 'samosa', ItemType.MRP, 'snacks', 'u'),
-    ConflictException,
-  );
+});
+
+test('a mapping may only use an existing, active category', async () => {
+  await assert.doesNotReject(assertUsableCategory(fakeTx([]), 'snacks'));
+  await assert.rejects(assertUsableCategory(fakeTx([]), 'retired'), BadRequestException);
+  await assert.rejects(assertUsableCategory(fakeTx([]), 'missing'), BadRequestException);
 });
 
 test('removing the last mapping of an unused item clears its type, but not once it is used', async () => {
@@ -112,5 +97,4 @@ test('removing the last mapping of an unused item clears its type, but not once 
   assert.equal(items[0]?.itemType, ItemType.MRP, 'it has stock history');
   await releaseItemTypeIfUnused(fakeTx(items), 'samosa', ItemType.MRP);
   assert.equal(items[0]?.itemType, null);
-  assert.equal(items[0]?.categoryId, 'snacks', 'the category stays');
 });

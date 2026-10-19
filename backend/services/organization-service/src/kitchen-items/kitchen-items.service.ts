@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { classifyItem, releaseItemTypeIfUnused } from '../common/item-classification';
+import {
+  assertUsableCategory,
+  classifyItem,
+  releaseItemTypeIfUnused,
+} from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -22,6 +26,8 @@ function toKitchenItemResponse(mapping: KitchenItemWithRelations) {
     createdAt: mapping.createdAt,
     deletedAt: mapping.deletedAt,
     id: mapping.id,
+    category: mapping.category,
+    categoryId: mapping.categoryId,
     isActive: mapping.isActive,
     item: mapping.item,
     itemId: mapping.itemId,
@@ -49,6 +55,7 @@ export class KitchenItemsService {
       ...(query.search
         ? {
             OR: [
+              { category: { categoryName: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemCode: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemName: { contains: query.search, mode: 'insensitive' } } },
               { kitchen: { kitchenCode: { contains: query.search, mode: 'insensitive' } } },
@@ -83,11 +90,13 @@ export class KitchenItemsService {
       const created = await this.kitchenItems.transaction(async (tx) => {
         await this.assertValidKitchen(dto.kitchenId, tx);
         // Mapping to a kitchen makes the item READYMADE and sets its category.
-        await classifyItem(tx, dto.itemId, ItemType.READYMADE, dto.categoryId, context.actorId);
+        await classifyItem(tx, dto.itemId, ItemType.READYMADE, context.actorId);
+        await assertUsableCategory(tx, dto.categoryId);
         await this.assertUniqueMapping(dto.kitchenId, dto.itemId, undefined, tx);
 
         const mapping = await this.kitchenItems.create(
           {
+            categoryId: dto.categoryId,
             createdBy: context.actorId,
             isActive: dto.isActive ?? true,
             itemId: dto.itemId,
@@ -135,9 +144,14 @@ export class KitchenItemsService {
           data.item = { connect: { id: dto.itemId } };
         }
 
-        // The item's type and category are set here; a new category is optional on an edit.
-        if (dto.itemId !== undefined || dto.categoryId !== undefined) {
-          await classifyItem(tx, nextItemId, ItemType.READYMADE, dto.categoryId, context.actorId);
+        if (dto.itemId !== undefined) {
+          await classifyItem(tx, dto.itemId, ItemType.READYMADE, context.actorId);
+        }
+
+        // Only this mapping's category: the item's other mappings keep theirs.
+        if (dto.categoryId !== undefined) {
+          await assertUsableCategory(tx, dto.categoryId);
+          data.category = { connect: { id: dto.categoryId } };
         }
 
         if (dto.kitchenId !== undefined || dto.itemId !== undefined) {

@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { FoodType, ItemType } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsOptional } from 'class-validator';
 import { ActivePaginationQueryDto } from '../../common/dto/active-pagination-query.dto';
 import { toOptionalBoolean } from '../../common/values';
 
@@ -20,11 +20,6 @@ export const itemSortFields = [
 export type ItemSortField = (typeof itemSortFields)[number];
 
 export class ListItemsQueryDto extends ActivePaginationQueryDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  categoryId?: string;
-
   @ApiPropertyOptional({ enum: FoodType })
   @IsEnum(FoodType)
   @IsOptional()

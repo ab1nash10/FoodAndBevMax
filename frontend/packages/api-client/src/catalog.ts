@@ -24,9 +24,6 @@ export interface ItemCategoryInput {
 export type ItemCategoryListQuery = ListQuery;
 
 export interface Item {
-  /** Set on the Item Mapping screens; null until the item is first mapped. */
-  category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
-  categoryId: string | null;
   createdAt: string;
   deletedAt: string | null;
   hsnCode: string | null;
@@ -50,7 +47,6 @@ export interface ItemInput {
 }
 
 export interface ItemListQuery extends ListQuery {
-  categoryId?: string;
   /** With itemType: also items not mapped yet, for the mapping screens. */
   includeUnmapped?: boolean;
   itemType?: ItemType;
@@ -147,11 +143,12 @@ export interface TimeSlotListQuery extends ListQuery {
 export type ItemSummary = Pick<
   Item,
   'id' | 'isActive' | 'itemCode' | 'itemName' | 'itemType' | 'type'
-> & {
-  category?: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
-};
+>;
 
 export interface StoreItem {
+  /** This mapping's own category; the item's other mappings keep theirs. */
+  category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
+  categoryId: string | null;
   createdAt: string;
   deletedAt: string | null;
   id: string;
@@ -166,7 +163,7 @@ export interface StoreItem {
 }
 
 export interface StoreItemInput {
-  /** The item's category: required the first time the item is mapped, optional later. */
+  /** This mapping's category: required when creating; on an edit it changes only this one. */
   categoryId?: string;
   isActive?: boolean;
   itemId: string;
@@ -180,6 +177,9 @@ export interface StoreItemListQuery extends ListQuery {
 }
 
 export interface KitchenItem {
+  /** This mapping's own category; the item's other mappings keep theirs. */
+  category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
+  categoryId: string | null;
   createdAt: string;
   deletedAt: string | null;
   id: string;
@@ -194,7 +194,7 @@ export interface KitchenItem {
 }
 
 export interface KitchenItemInput {
-  /** The item's category: required the first time the item is mapped, optional later. */
+  /** This mapping's category: required when creating; on an edit it changes only this one. */
   categoryId?: string;
   isActive?: boolean;
   itemId: string;
@@ -218,6 +218,9 @@ export type MenuServeAt = 'BOTH' | 'COUNTER' | 'ROOM';
 export interface RestaurantMenu {
   /** Auto-generated when the item is added to the menu, e.g. RMI0001; never changes. */
   menuItemCode: string;
+  /** This menu item's own category; the item's other menus and mappings keep theirs. */
+  category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
+  categoryId: string | null;
   accompaniments: string | null;
   addOn: string | null;
   /** On sale from / until, HH:mm; both null means all day. */
@@ -251,6 +254,8 @@ export interface RestaurantMenu {
 }
 
 export interface RestaurantMenuInput {
+  /** This menu item's category: required when creating; on an edit it changes only this one. */
+  categoryId?: string;
   accompaniments?: string | null;
   addOn?: string | null;
   availableFrom?: string | null;

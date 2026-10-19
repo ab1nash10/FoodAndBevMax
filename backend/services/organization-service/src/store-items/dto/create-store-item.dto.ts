@@ -10,13 +10,12 @@ export class CreateStoreItemDto {
   @IsUUID()
   itemId!: string;
 
-  @ApiPropertyOptional({
-    description:
-      "The item's category: required the first time the item is mapped, optional later to change it.",
+  @ApiProperty({
+    description: "This mapping's category; the item's other mappings keep their own.",
+    example: 'd2d2f99b-0d2d-4c94-8c8a-21d4f90c4f80',
   })
   @IsUUID()
-  @IsOptional()
-  categoryId?: string;
+  categoryId!: string;
 
   @ApiPropertyOptional({ default: true })
   @IsBoolean()

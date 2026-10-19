@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { classifyItem, releaseItemTypeIfUnused } from '../common/item-classification';
+import {
+  assertUsableCategory,
+  classifyItem,
+  releaseItemTypeIfUnused,
+} from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -22,6 +26,8 @@ function toStoreItemResponse(mapping: StoreItemWithRelations) {
     createdAt: mapping.createdAt,
     deletedAt: mapping.deletedAt,
     id: mapping.id,
+    category: mapping.category,
+    categoryId: mapping.categoryId,
     isActive: mapping.isActive,
     item: mapping.item,
     itemId: mapping.itemId,
@@ -49,6 +55,7 @@ export class StoreItemsService {
       ...(query.search
         ? {
             OR: [
+              { category: { categoryName: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemCode: { contains: query.search, mode: 'insensitive' } } },
               { item: { itemName: { contains: query.search, mode: 'insensitive' } } },
               { store: { storeCode: { contains: query.search, mode: 'insensitive' } } },
@@ -83,11 +90,13 @@ export class StoreItemsService {
       const created = await this.storeItems.transaction(async (tx) => {
         await this.assertValidStore(dto.storeId, tx);
         // Mapping to a store makes the item MRP and sets its category.
-        await classifyItem(tx, dto.itemId, ItemType.MRP, dto.categoryId, context.actorId);
+        await classifyItem(tx, dto.itemId, ItemType.MRP, context.actorId);
+        await assertUsableCategory(tx, dto.categoryId);
         await this.assertUniqueMapping(dto.storeId, dto.itemId, undefined, tx);
 
         const mapping = await this.storeItems.create(
           {
+            categoryId: dto.categoryId,
             createdBy: context.actorId,
             isActive: dto.isActive ?? true,
             itemId: dto.itemId,
@@ -135,9 +144,14 @@ export class StoreItemsService {
           data.item = { connect: { id: dto.itemId } };
         }
 
-        // The item's type and category are set here; a new category is optional on an edit.
-        if (dto.itemId !== undefined || dto.categoryId !== undefined) {
-          await classifyItem(tx, nextItemId, ItemType.MRP, dto.categoryId, context.actorId);
+        if (dto.itemId !== undefined) {
+          await classifyItem(tx, dto.itemId, ItemType.MRP, context.actorId);
+        }
+
+        // Only this mapping's category: the item's other mappings keep theirs.
+        if (dto.categoryId !== undefined) {
+          await assertUsableCategory(tx, dto.categoryId);
+          data.category = { connect: { id: dto.categoryId } };
         }
 
         if (dto.storeId !== undefined || dto.itemId !== undefined) {

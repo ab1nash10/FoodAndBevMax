@@ -19,15 +19,6 @@ type ItemClient = Prisma.TransactionClient;
 
 function toItemResponse(item: ItemWithCategory) {
   return {
-    // Empty until the item is mapped to a store or kitchen (Item Mapping).
-    category: item.category
-      ? {
-          categoryName: item.category.categoryName,
-          id: item.category.id,
-          isActive: item.category.isActive,
-        }
-      : null,
-    categoryId: item.categoryId,
     createdAt: item.createdAt,
     deletedAt: item.deletedAt,
     hsnCode: item.hsnCode,
@@ -53,22 +44,18 @@ export class ItemsService {
     const { limit, page } = getPagination(query);
     const where: Prisma.ItemWhereInput = {
       AND: [
-        // No category yet (not mapped) still counts; a deleted category does not.
-        { OR: [{ categoryId: null }, { category: { deletedAt: null } }] },
         // The mapping screens list their type plus items not mapped yet.
         query.itemType && query.includeUnmapped
           ? { OR: [{ itemType: query.itemType }, { itemType: null }] }
           : {},
       ],
       deletedAt: null,
-      ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.itemType && !query.includeUnmapped ? { itemType: query.itemType } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.search
         ? {
             OR: [
-              { category: { categoryName: { contains: query.search, mode: 'insensitive' } } },
               { hsnCode: { contains: query.search, mode: 'insensitive' } },
               { itemCode: { contains: query.search, mode: 'insensitive' } },
               { itemName: { contains: query.search, mode: 'insensitive' } },
@@ -104,8 +91,8 @@ export class ItemsService {
       const created = await this.items.transaction(async (tx) => {
         const normalizedName = normalizeMasterName(dto.itemName);
 
-        // Category and type come later, from the Item Mapping screens.
-        await this.assertUniqueNormalizedItemName(normalizedName, null, undefined, tx);
+        // Type comes later, from Item Mapping; categories belong to each mapping.
+        await this.assertUniqueNormalizedItemName(normalizedName, undefined, tx);
 
         // Only after every check: a code taken from the sequence is never given back, so a
         // refused item would otherwise leave a gap in the numbering.
@@ -166,14 +153,9 @@ export class ItemsService {
           data.normalizedName = normalizeMasterName(dto.itemName);
         }
 
-        // The same name may be used once per category (or once among unmapped items).
+        // An item name is used once in the whole catalogue.
         if (dto.itemName !== undefined) {
-          await this.assertUniqueNormalizedItemName(
-            normalizeMasterName(dto.itemName),
-            existing.categoryId,
-            id,
-            tx,
-          );
+          await this.assertUniqueNormalizedItemName(normalizeMasterName(dto.itemName), id, tx);
         }
 
         if (dto.preparationTimeMinutes !== undefined) {
@@ -248,23 +230,13 @@ export class ItemsService {
 
   private async assertUniqueNormalizedItemName(
     normalizedName: string,
-    categoryId: string | null,
     excludeId: string | undefined,
     client: ItemClient,
   ): Promise<void> {
-    const item = await this.items.findByNormalizedName(
-      normalizedName,
-      categoryId,
-      excludeId,
-      client,
-    );
+    const item = await this.items.findByNormalizedName(normalizedName, excludeId, client);
 
     if (item) {
-      throw new ConflictException(
-        categoryId
-          ? 'Similar item already exists in this category'
-          : 'An item with this name already exists and is waiting to be mapped',
-      );
+      throw new ConflictException('An item with this name already exists');
     }
   }
 

@@ -33,6 +33,7 @@ export const menuColumns: Array<CsvColumn<RestaurantMenu>> = [
   { header: 'Restaurant', readOnly: true, value: (menu) => menu.restaurant.restaurantName },
   { header: 'Item code', value: (menu) => menu.item.itemCode },
   { header: 'Item', readOnly: true, value: (menu) => menu.item.itemName },
+  { header: 'Category', value: (menu) => menu.category?.categoryName },
   { header: 'Kitchen code', value: (menu) => menu.kitchen?.kitchenCode },
   { header: 'Serve at', value: (menu) => serveAtText[menu.serveAt] },
   { header: 'Price', value: (menu) => menu.price },
@@ -115,16 +116,21 @@ export function timeCell(value: string, header: string): string | null {
  * A row with a Menu code updates that menu item, as does a row for a restaurant and item that
  * are already on a menu together; any other row adds the item to the restaurant's menu. Rows
  * refer to restaurants, items and kitchens by code, and the server checks the rest as the
- * form does (prices for where it is served, a kitchen at the restaurant's location).
+ * form does (prices for where it is served, a kitchen at the restaurant's location). Category is
+ * this menu item's own, by name: required to add an item, left as it is when blank on an update.
  */
 export async function startMenuImport(): Promise<CsvRowImporter> {
-  const [restaurants, items, kitchens, menus] = await Promise.all([
+  const [restaurants, items, kitchens, menus, categories] = await Promise.all([
     fetchAllPages((page) => organizationApi.listRestaurants({ limit: 100, page })),
     fetchAllPages((page) => organizationApi.listItems({ limit: 100, page })),
     fetchAllPages((page) => organizationApi.listKitchens({ limit: 100, page })),
     fetchAllPages((page) => organizationApi.listRestaurantMenus({ limit: 100, page })),
+    fetchAllPages((page) => organizationApi.listItemCategories({ limit: 100, page })),
   ]);
   const upper = (value: string) => value.trim().toUpperCase();
+  const categoryByName = new Map(
+    categories.map((category) => [upper(category.categoryName), category]),
+  );
   const itemByCode = new Map(items.map((item) => [upper(item.itemCode), item]));
   const menuByCode = new Map(menus.map((menu) => [upper(menu.menuItemCode), menu]));
   const menuByPair = new Map(menus.map((menu) => [`${menu.restaurantId}:${menu.itemId}`, menu]));
@@ -134,6 +140,7 @@ export async function startMenuImport(): Promise<CsvRowImporter> {
     const restaurantCode = upper(cells('Restaurant code'));
     const itemCode = upper(cells('Item code'));
     const kitchenCode = upper(cells('Kitchen code'));
+    const categoryName = cells('Category').trim();
 
     if (!restaurantCode || !itemCode) {
       throw new Error('Restaurant code and Item code are required');
@@ -180,6 +187,16 @@ export async function startMenuImport(): Promise<CsvRowImporter> {
     }
 
     const match = byCode ?? menuByPair.get(`${restaurant.id}:${item.id}`);
+    const category = categoryName ? categoryByName.get(upper(categoryName)) : undefined;
+
+    if (categoryName && !category) {
+      throw new Error(`No category is named ${categoryName}`);
+    }
+
+    if (!match && !category) {
+      throw new Error('Category is required to add an item to a menu');
+    }
+
     const gstPercent = numberCell(cells('GST %'), 'GST %', 2) ?? 0;
 
     if (!(gstSlabs as readonly number[]).includes(gstPercent)) {
@@ -191,6 +208,7 @@ export async function startMenuImport(): Promise<CsvRowImporter> {
       addOn: cells('Add-on') || null,
       availableFrom: timeCell(cells('Available from'), 'Available from'),
       availableTo: timeCell(cells('Available to'), 'Available to'),
+      ...(category ? { categoryId: category.id } : {}),
       daysOfWeek: daysCell(cells('Days')),
       gstPercent,
       isActive: activeStatus(cells('Status'), match?.isActive ?? true),

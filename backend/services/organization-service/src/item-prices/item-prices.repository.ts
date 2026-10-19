@@ -17,13 +17,6 @@ export const itemPriceInclude = {
   },
   item: {
     select: {
-      category: {
-        select: {
-          categoryName: true,
-          id: true,
-          isActive: true,
-        },
-      },
       id: true,
       isActive: true,
       itemCode: true,

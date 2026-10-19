@@ -72,9 +72,6 @@ export function RestaurantMenuFormFields({
     restaurants?.find((restaurant) => restaurant.id === values.restaurantId)?.hospitalId,
   );
   const kitchens = kitchensQuery.data ?? [];
-  const categoryItems = (items ?? []).filter(
-    (item) => !values.categoryId || item.categoryId === values.categoryId,
-  );
 
   function set<TName extends keyof RestaurantMenuFormValues>(
     name: TName,
@@ -134,16 +131,13 @@ export function RestaurantMenuFormFields({
           ))}
         </Select>
       </Field>
-      <Field label="Food Category" name="category-id">
+      <Field error={errors.categoryId?.message} label="Food Category" name="category-id">
         <Select
           id="category-id"
-          onChange={(event) => {
-            set('categoryId', event.target.value);
-            set('itemId', '');
-          }}
+          onChange={(event) => set('categoryId', event.target.value)}
           value={values.categoryId}
         >
-          <option value="">All categories</option>
+          <option value="">Select category</option>
           {categories?.map((category) => (
             <option key={category.id} value={category.id}>
               {category.categoryName}
@@ -167,7 +161,7 @@ export function RestaurantMenuFormFields({
           value={values.itemId}
         >
           <option value="">Select item</option>
-          {categoryItems.map((item) => (
+          {(items ?? []).map((item) => (
             <option key={item.id} value={item.id}>
               {item.itemName} ({item.itemCode})
             </option>
