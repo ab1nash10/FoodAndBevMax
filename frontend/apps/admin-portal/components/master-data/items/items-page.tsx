@@ -7,8 +7,16 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { Item, ItemInput, SortOrder } from '@aahar/api-client';
+import type { FoodType, Item, ItemInput, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  activeStatus,
+  CsvImportExport,
+  fetchAllPages,
+  numberCell,
+  type CsvColumn,
+  type CsvRowImporter,
+} from '@/components/csv-import-export';
 import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
 import { EmptyState, FoodTypeMarker } from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
@@ -37,6 +45,7 @@ import {
   ItemFormFields,
   LoadingRows,
   emptyItemFormValues,
+  foodTypeFormLabels,
   foodTypeValues,
   similarItemError,
   unmappedTwinError,
@@ -79,6 +88,72 @@ const itemSortOptions = [
   { label: 'Item code', value: 'itemCode:asc' },
   { label: 'Last updated', value: 'updatedAt:desc' },
 ];
+
+const itemColumns: Array<CsvColumn<Item>> = [
+  { header: 'Item code', value: (item) => item.itemCode },
+  { header: 'Item name', value: (item) => item.itemName },
+  { header: 'Food type', value: (item) => foodTypeFormLabels[item.type] },
+  { header: 'HSN code', value: (item) => item.hsnCode },
+  { header: 'Prep time (min)', value: (item) => item.preparationTimeMinutes },
+  { header: 'Status', value: (item) => (item.isActive ? 'Active' : 'Inactive') },
+];
+
+function foodTypeCell(value: string): FoodType {
+  const key = value.toLowerCase().replace(/[\s_-]/g, '');
+  const type = (
+    { egg: 'EGGETARIAN', eggetarian: 'EGGETARIAN', nonveg: 'NON_VEG', veg: 'VEG' } as const
+  )[key as 'egg' | 'eggetarian' | 'nonveg' | 'veg'];
+
+  if (!type) {
+    throw new Error('Food type must be Veg, Non-veg or Egg');
+  }
+
+  return type;
+}
+
+/**
+ * A row with an Item code updates that item; a row without one adds a new item, which gets
+ * the next code. Blank HSN and prep time leave an existing item's values as they are.
+ */
+async function startItemImport(): Promise<CsvRowImporter> {
+  const existing = await fetchAllPages((page) => organizationApi.listItems({ limit: 100, page }));
+  const byCode = new Map(existing.map((item) => [item.itemCode.toUpperCase(), item]));
+
+  return async (cells) => {
+    const itemCode = cells('Item code').toUpperCase();
+    const itemName = cells('Item name');
+
+    if (!itemName) {
+      throw new Error('Item name is required');
+    }
+
+    const match = itemCode ? byCode.get(itemCode) : undefined;
+
+    if (itemCode && !match) {
+      throw new Error(`No item has code ${itemCode}; leave Item code empty to add a new item`);
+    }
+
+    const preparationTimeMinutes = numberCell(cells('Prep time (min)'), 'Prep time (min)');
+    const hsnCode = cells('HSN code');
+    const body: ItemInput = {
+      isActive: activeStatus(cells('Status'), match?.isActive ?? true),
+      itemName,
+      type: foodTypeCell(cells('Food type')),
+      ...(hsnCode ? { hsnCode } : {}),
+      ...(preparationTimeMinutes === null ? {} : { preparationTimeMinutes }),
+    };
+
+    if (match) {
+      await organizationApi.updateItem(match.id, body);
+
+      return 'updated';
+    }
+
+    await organizationApi.createItem(body);
+
+    return 'created';
+  };
+}
 
 export function ItemsPageClient() {
   const searchParams = useSearchParams();
@@ -272,14 +347,36 @@ export function ItemsPageClient() {
             One catalogue for every store, kitchen and restaurant. Prices are set per rate type.
           </p>
         </div>
-        <IfCanOpen href="/masters/items/new">
-          <Button asChild>
-            <Link href="/masters/items/new">
-              <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-              New item
-            </Link>
-          </Button>
-        </IfCanOpen>
+        <div className="flex flex-wrap gap-2">
+          <CsvImportExport
+            columns={itemColumns}
+            exportRows={() =>
+              fetchAllPages((exportPage) =>
+                organizationApi.listItems({
+                  isActive: activeFilterToBoolean(activeFilter),
+                  limit: 100,
+                  page: exportPage,
+                  search,
+                  sortBy,
+                  sortOrder,
+                  type: foodTypeFilter || undefined,
+                }),
+              )
+            }
+            filename="items"
+            noun="items"
+            onImported={() => invalidateItemQueries(queryClient)}
+            startImport={hasPermission('ITEM_CREATE') ? startItemImport : undefined}
+          />
+          <IfCanOpen href="/masters/items/new">
+            <Button asChild>
+              <Link href="/masters/items/new">
+                <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                New item
+              </Link>
+            </Button>
+          </IfCanOpen>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-start gap-5">

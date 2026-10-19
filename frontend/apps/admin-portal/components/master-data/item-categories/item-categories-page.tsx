@@ -14,7 +14,15 @@ import type {
   ListQuery,
   SortOrder,
 } from '@aahar/api-client';
+import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import {
+  activeStatus,
+  CsvImportExport,
+  fetchAllPages,
+  type CsvColumn,
+  type CsvRowImporter,
+} from '@/components/csv-import-export';
 import {
   FilterField,
   FiltersMenu,
@@ -51,6 +59,45 @@ import {
   listLimit,
 } from '@/components/master-data/shared/utils';
 
+const categoryColumns: Array<CsvColumn<ItemCategory>> = [
+  { header: 'Category name', value: (category) => category.categoryName },
+  { header: 'Status', value: (category) => (category.isActive ? 'Active' : 'Inactive') },
+];
+
+/** A row whose name matches a category (ignoring case) updates it; any other name adds one. */
+async function startCategoryImport(): Promise<CsvRowImporter> {
+  const existing = await fetchAllPages((page) =>
+    organizationApi.listItemCategories({ limit: 100, page }),
+  );
+  const byName = new Map(
+    existing.map((category) => [category.categoryName.trim().toLowerCase(), category]),
+  );
+
+  return async (cells) => {
+    const categoryName = cells('Category name');
+
+    if (!categoryName) {
+      throw new Error('Category name is required');
+    }
+
+    const match = byName.get(categoryName.toLowerCase());
+    const isActive = activeStatus(cells('Status'), match?.isActive ?? true);
+
+    if (match) {
+      await organizationApi.updateItemCategory(match.id, { categoryName, isActive });
+
+      return 'updated';
+    }
+
+    const { data } = await organizationApi.createItemCategory({ categoryName, isActive });
+
+    // A second row with the same name in this file updates it rather than adding a twin.
+    byName.set(categoryName.toLowerCase(), data);
+
+    return 'created';
+  };
+}
+
 function useEntityList<TItem>(
   entityKey: string,
   query: ListQuery,
@@ -79,6 +126,7 @@ export function ItemCategoriesPageClient() {
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
 
   const form = useForm<ItemCategoryFormValues>({
     defaultValues: {
@@ -216,14 +264,35 @@ export function ItemCategoriesPageClient() {
     <section className="space-y-5">
       <PageHeader
         action={
-          <IfCanOpen href="/masters/item-categories/new">
-            <Button asChild>
-              <Link href="/masters/item-categories/new">
-                <Plus className="h-4 w-4" />
-                Create
-              </Link>
-            </Button>
-          </IfCanOpen>
+          <div className="flex flex-wrap gap-2">
+            <CsvImportExport
+              columns={categoryColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listItemCategories({
+                    isActive: activeFilterToBoolean(activeFilter),
+                    limit: 100,
+                    page: exportPage,
+                    search,
+                    sortBy,
+                    sortOrder,
+                  }),
+                )
+              }
+              filename="item-categories"
+              noun="item categories"
+              onImported={() => invalidateItemCategoryQueries(queryClient)}
+              startImport={hasPermission('ITEM_CATEGORY_CREATE') ? startCategoryImport : undefined}
+            />
+            <IfCanOpen href="/masters/item-categories/new">
+              <Button asChild>
+                <Link href="/masters/item-categories/new">
+                  <Plus className="h-4 w-4" />
+                  Create
+                </Link>
+              </Button>
+            </IfCanOpen>
+          </div>
         }
         eyebrow="Master Data"
         icon={Tags}

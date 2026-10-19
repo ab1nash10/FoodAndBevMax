@@ -233,29 +233,32 @@ export function RestaurantMenuFormFields({
           value={values.daysOfWeek}
         />
       </Field>
-      <Field error={errors.positionType?.message} label="Position In Menu" name="position-type">
-        <Select
-          id="position-type"
-          onChange={(event) => {
-            const positionType = event.target.value as RestaurantMenuPositionType | '';
+      {/* A new menu item always goes last; only an edit can move it. */}
+      {isEditing ? (
+        <Field error={errors.positionType?.message} label="Position In Menu" name="position-type">
+          <Select
+            id="position-type"
+            onChange={(event) => {
+              const positionType = event.target.value as RestaurantMenuPositionType | '';
 
-            set('positionType', positionType);
+              set('positionType', positionType);
 
-            if (positionType !== 'BEFORE_ITEM' && positionType !== 'AFTER_ITEM') {
-              set('referenceMenuId', '');
-            }
-          }}
-          value={values.positionType}
-        >
-          {isEditing ? <option value="">Keep current position</option> : null}
-          {positionTypeValues.map((positionType) => (
-            <option key={positionType} value={positionType}>
-              {formatPositionType(positionType)}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      {shouldShowReferenceMenu ? (
+              if (positionType !== 'BEFORE_ITEM' && positionType !== 'AFTER_ITEM') {
+                set('referenceMenuId', '');
+              }
+            }}
+            value={values.positionType}
+          >
+            <option value="">Keep current position</option>
+            {positionTypeValues.map((positionType) => (
+              <option key={positionType} value={positionType}>
+                {formatPositionType(positionType)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
+      {isEditing && shouldShowReferenceMenu ? (
         <Field
           error={errors.referenceMenuId?.message}
           label="Reference Item"

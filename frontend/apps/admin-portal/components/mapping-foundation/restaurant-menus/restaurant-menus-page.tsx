@@ -17,6 +17,7 @@ import type {
 import { useAuth } from '@/components/auth-provider';
 import { FoodTypeMarker } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
 import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
@@ -26,6 +27,10 @@ import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RestaurantMenuFormFields } from '@/components/mapping-foundation/restaurant-menus/restaurant-menu-form-fields';
+import {
+  menuColumns,
+  startMenuImport,
+} from '@/components/mapping-foundation/restaurant-menus/restaurant-menus-csv';
 import {
   dayOfWeekValues,
   formatEnum,
@@ -487,12 +492,37 @@ export function RestaurantMenusPageClient() {
             What each restaurant sells, from which kitchen, when, and at what price.
           </p>
         </div>
-        {canCreate ? (
-          <Button onClick={() => openForm('new')} type="button">
-            <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-            New menu item
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <CsvImportExport
+            columns={menuColumns}
+            exportRows={() =>
+              fetchAllPages((exportPage) =>
+                organizationApi.listRestaurantMenus({
+                  dayOfWeek: dayFilter || undefined,
+                  hospitalId: scopedHospitalId || undefined,
+                  isActive: activeFilterToBoolean(activeFilter),
+                  isAvailable: availabilityFilterToBoolean(availabilityFilter),
+                  limit: 100,
+                  page: exportPage,
+                  restaurantId: restaurantFilter,
+                  search,
+                  sortBy: 'displayOrder',
+                  sortOrder: 'asc',
+                }),
+              )
+            }
+            filename="restaurant-menus"
+            noun="menu items"
+            onImported={invalidateMenus}
+            startImport={canCreate ? startMenuImport : undefined}
+          />
+          {canCreate ? (
+            <Button onClick={() => openForm('new')} type="button">
+              <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+              New menu item
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {restaurantsQuery.data?.length === 0 ? (
