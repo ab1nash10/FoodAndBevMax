@@ -3,11 +3,9 @@
 import { useQuery } from '@tanstack/react-query';
 import type { UseFormReturn } from 'react-hook-form';
 import type { FoodType, ItemCategory } from '@aahar/api-client';
-import { Field, FieldError, Input, Select, Skeleton } from '@/components/ui';
+import { Field, FieldError, Input, Skeleton } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
 import { CheckboxLine } from '@/components/master-data/shared/components';
-import type { ItemTypeFilter } from '@/components/master-data/shared/types';
-import { formatEnum, itemTypeValues } from '@/components/master-data/shared/utils';
 import { lazyValue } from '@/lib/lazy-value';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -16,17 +14,17 @@ export const foodTypeValues = ['VEG', 'NON_VEG', 'EGGETARIAN'] as const;
 export type FoodTypeFilter = '' | FoodType;
 
 export interface ItemFormValues {
-  categoryId: string;
   hsnCode: string;
   isActive: boolean;
   itemCode: string;
   itemName: string;
-  itemType: ItemTypeFilter;
   preparationTimeMinutes: string;
   type: FoodTypeFilter;
 }
 
 export const similarItemError = 'Similar item already exists in this category';
+export const unmappedTwinError =
+  'An item with this name already exists and is waiting to be mapped';
 
 export function useItemCategoryOptions() {
   return useQuery<ItemCategory[]>({
@@ -46,12 +44,10 @@ export function useItemCategoryOptions() {
 
 export function emptyItemFormValues(): ItemFormValues {
   return {
-    categoryId: '',
     hsnCode: '',
     isActive: true,
     itemCode: '',
     itemName: '',
-    itemType: '',
     preparationTimeMinutes: '',
     type: '',
   };
@@ -63,13 +59,7 @@ export const foodTypeFormLabels: Record<(typeof foodTypeValues)[number], string>
   VEG: 'Veg',
 };
 
-export function ItemFormFields({
-  categories,
-  form,
-}: Readonly<{
-  categories: ItemCategory[] | undefined;
-  form: UseFormReturn<ItemFormValues>;
-}>) {
+export function ItemFormFields({ form }: Readonly<{ form: UseFormReturn<ItemFormValues> }>) {
   // At most two columns, so the same fields fit the create page and the side panel.
   return (
     <>
@@ -86,36 +76,10 @@ export function ItemFormFields({
           />
         </Field>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          error={form.formState.errors.categoryId?.message}
-          label="Category"
-          name="item-category"
-        >
-          <Select id="item-category" {...form.register('categoryId')}>
-            <option value="">Select category</option>
-            {categories?.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.categoryName}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field
-          error={form.formState.errors.itemType?.message}
-          label="Item type"
-          name="item-item-type"
-        >
-          <Select id="item-item-type" {...form.register('itemType')}>
-            <option value="">Select item type</option>
-            {itemTypeValues.map((itemType) => (
-              <option key={itemType} value={itemType}>
-                {formatEnum(itemType)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
+      <p className="rounded-md border border-ds-border bg-ds-subtle px-3 py-2 text-[13px] text-ds-muted">
+        Category and item type are set when the item is mapped: to a store (Store Items) it becomes
+        MRP, to a kitchen (Kitchen Items) Readymade.
+      </p>
       <fieldset className="space-y-2">
         <legend className="text-[13px] font-semibold leading-none text-ds-text-2">Food type</legend>
         <div className="grid grid-cols-3 gap-2 pt-2">

@@ -52,6 +52,7 @@ import {
   useInvalidateMappingQueries,
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
+import { useItemCategoryOptions } from '@/components/master-data/items/shared';
 import { queryKeys } from '@/lib/query-keys';
 import { SetupNotice, useLocationName } from '@/components/location-empty-states';
 
@@ -91,7 +92,8 @@ export function StoreItemsPageClient() {
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const storesQuery = useStoreOptions(hospitalFilter);
-  const itemsQuery = useItemOptions('MRP');
+  const itemsQuery = useItemOptions('MRP', { includeUnmapped: true });
+  const categoriesQuery = useItemCategoryOptions();
   const invalidateStoreItems = useInvalidateMappingQueries('store-items', 'store-options');
   const { showToast } = useToast();
 
@@ -186,6 +188,7 @@ export function StoreItemsPageClient() {
     }
 
     saveMappingMutation.mutate({
+      categoryId: parsed.data.categoryId || undefined,
       isActive: parsed.data.isActive,
       itemId: parsed.data.itemId,
       storeId: parsed.data.parentId,
@@ -212,6 +215,7 @@ export function StoreItemsPageClient() {
   function startEditingMapping(mapping: StoreItem) {
     setEditingMapping(mapping);
     form.reset({
+      categoryId: mapping.item.category?.id ?? '',
       isActive: mapping.isActive,
       itemId: mapping.itemId,
       parentId: mapping.storeId,
@@ -250,7 +254,10 @@ export function StoreItemsPageClient() {
           <h2 className="text-lg font-semibold tracking-normal text-ds-text">
             {editingMapping ? 'Edit Store Item' : 'Create Store Item'}
           </h2>
-          <p className="text-sm text-ds-muted">Only MRP items are available for store mapping.</p>
+          <p className="text-sm text-ds-muted">
+            Pick an item not mapped yet, or an MRP item: mapping it here makes it MRP and sets its
+            category. A Readymade item cannot be mapped to a store.
+          </p>
         </div>
         <form
           className="grid gap-4"
@@ -266,12 +273,14 @@ export function StoreItemsPageClient() {
           ) : null}
           {itemsQuery.data?.length === 0 ? (
             <SetupNotice href="/masters/items/new" linkLabel="Create an item">
-              There are no active MRP items to map yet.
+              There are no items to map yet.
             </SetupNotice>
           ) : null}
           <MappingFormFields
+            categories={categoriesQuery.data}
             form={form}
-            itemLabel="MRP Item"
+            itemLabel="Item"
+            typeLabel="MRP"
             items={itemsQuery.data}
             parentLabel="Store"
             parents={stores}

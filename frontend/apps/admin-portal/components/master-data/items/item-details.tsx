@@ -17,9 +17,9 @@ export function ItemDetails({ item }: Readonly<{ item: Item }>) {
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3.5 gap-y-2.5 text-[13px]">
       {[
         ['Item code', item.itemCode],
-        ['Category', item.category.categoryName],
+        ['Category', item.category?.categoryName ?? 'Not mapped yet'],
         ['Food type', foodTypeFormLabels[item.type]],
-        ['Item type', itemTypeLongLabels[item.itemType]],
+        ['Item type', item.itemType ? itemTypeLongLabels[item.itemType] : 'Not mapped yet'],
         ['Preparation', item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '—'],
         ['HSN code', item.hsnCode || '—'],
         ['Status', item.isActive ? 'Active' : 'Inactive'],

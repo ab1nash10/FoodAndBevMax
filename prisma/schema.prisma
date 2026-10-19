@@ -731,9 +731,11 @@ model Item {
   itemCode               String    @unique @map("item_code")
   itemName               String    @map("item_name")
   normalizedName         String    @map("normalized_name")
-  categoryId             String    @map("category_id") @db.Uuid
+  /// Chosen on the Item Mapping screens (Store Items, Kitchen Items); empty until first mapped.
+  categoryId             String?   @map("category_id") @db.Uuid
   type                   FoodType
-  itemType               ItemType  @map("item_type")
+  /// Set by where the item is mapped: a store makes it MRP, a kitchen READYMADE. Empty until then.
+  itemType               ItemType? @map("item_type")
   preparationTimeMinutes Int?      @map("preparation_time_minutes")
   hsnCode                String?   @map("hsn_code")
   isActive               Boolean   @default(true) @map("is_active")
@@ -743,7 +745,7 @@ model Item {
   updatedBy              String?   @map("updated_by") @db.Uuid
   deletedAt              DateTime? @map("deleted_at")
 
-  category                     ItemCategory                  @relation(fields: [categoryId], references: [id])
+  category                     ItemCategory?                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   grnBatches                   GrnBatch[]
   grnLines                     GrnLine[]
   kitchenItems                 KitchenItem[]

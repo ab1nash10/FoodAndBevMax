@@ -52,6 +52,7 @@ import {
   useInvalidateMappingQueries,
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
+import { useItemCategoryOptions } from '@/components/master-data/items/shared';
 import { queryKeys } from '@/lib/query-keys';
 import { SetupNotice, useLocationName } from '@/components/location-empty-states';
 
@@ -91,7 +92,8 @@ export function KitchenItemsPageClient() {
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const kitchensQuery = useKitchenOptions(hospitalFilter);
-  const itemsQuery = useItemOptions('READYMADE');
+  const itemsQuery = useItemOptions('READYMADE', { includeUnmapped: true });
+  const categoriesQuery = useItemCategoryOptions();
   const invalidateKitchenItems = useInvalidateMappingQueries('kitchen-items', 'kitchen-options');
   const { showToast } = useToast();
 
@@ -188,6 +190,7 @@ export function KitchenItemsPageClient() {
     }
 
     saveMappingMutation.mutate({
+      categoryId: parsed.data.categoryId || undefined,
       isActive: parsed.data.isActive,
       itemId: parsed.data.itemId,
       kitchenId: parsed.data.parentId,
@@ -214,6 +217,7 @@ export function KitchenItemsPageClient() {
   function startEditingMapping(mapping: KitchenItem) {
     setEditingMapping(mapping);
     form.reset({
+      categoryId: mapping.item.category?.id ?? '',
       isActive: mapping.isActive,
       itemId: mapping.itemId,
       parentId: mapping.kitchenId,
@@ -253,7 +257,8 @@ export function KitchenItemsPageClient() {
             {editingMapping ? 'Edit Kitchen Item' : 'Create Kitchen Item'}
           </h2>
           <p className="text-sm text-ds-muted">
-            Only readymade items are available for kitchen mapping.
+            Pick an item not mapped yet, or a Readymade item: mapping it here makes it Readymade and
+            sets its category. An MRP item cannot be mapped to a kitchen.
           </p>
         </div>
         <form
@@ -274,8 +279,10 @@ export function KitchenItemsPageClient() {
             </SetupNotice>
           ) : null}
           <MappingFormFields
+            categories={categoriesQuery.data}
             form={form}
-            itemLabel="Readymade Item"
+            itemLabel="Item"
+            typeLabel="Readymade"
             items={itemsQuery.data}
             parentLabel="Kitchen"
             parents={kitchens}

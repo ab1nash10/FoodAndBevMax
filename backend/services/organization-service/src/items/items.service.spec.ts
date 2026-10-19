@@ -5,7 +5,12 @@ import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { ItemsRepository } from './items.repository';
 import { ItemsService } from './items.service';
 
-type StoredItem = { categoryId: string; id: string; itemName: string; normalizedName: string };
+type StoredItem = {
+  categoryId: string | null;
+  id: string;
+  itemName: string;
+  normalizedName: string;
+};
 
 // Stands in for the repository: keeps items in memory and filters like the real queries.
 function serviceWith(items: StoredItem[]) {
@@ -13,13 +18,15 @@ function serviceWith(items: StoredItem[]) {
   let sequence = 0;
   const withCategory = (item: StoredItem) => ({
     ...item,
-    category: { categoryName: item.categoryId, id: item.categoryId, isActive: true },
+    category: item.categoryId
+      ? { categoryName: item.categoryId, id: item.categoryId, isActive: true }
+      : null,
     hospitalId: null,
     isActive: true,
   });
   const repository = {
-    create: (data: StoredItem) => {
-      const item = { ...data, id: `item-${items.length + 1}` };
+    create: (data: Omit<StoredItem, 'categoryId' | 'id'>) => {
+      const item = { ...data, categoryId: null, id: `item-${items.length + 1}` };
       items.push(item);
       return withCategory(item);
     },
@@ -29,7 +36,7 @@ function serviceWith(items: StoredItem[]) {
     },
     findActiveCategory: (id: string) => ({ hospitalId: null, id, isActive: true }),
     findByCode: () => null,
-    findByNormalizedName: (normalizedName: string, categoryId: string, excludeId?: string) =>
+    findByNormalizedName: (normalizedName: string, categoryId: string | null, excludeId?: string) =>
       items.find(
         (item) =>
           item.normalizedName === normalizedName &&
@@ -58,41 +65,46 @@ function serviceWith(items: StoredItem[]) {
 }
 
 const actor = { actorId: 'user-1', ipAddress: '127.0.0.1' };
-const newItem = (itemName: string, categoryId: string) =>
-  ({ categoryId, itemName, itemType: 'MRP', type: 'VEG' }) as never;
-const isDuplicate = (error: unknown) =>
+const newItem = (itemName: string) => ({ itemName, type: 'VEG' }) as never;
+const isDuplicateInCategory = (error: unknown) =>
   error instanceof ConflictException &&
   error.message === 'Similar item already exists in this category';
+const isDuplicateUnmapped = (error: unknown) =>
+  error instanceof ConflictException &&
+  error.message === 'An item with this name already exists and is waiting to be mapped';
 
-test('the same item name may be used once in each category', async () => {
+test('a new item has no category or type until it is mapped, and is not entered twice', async () => {
   const service = serviceWith([]);
 
-  await service.create(newItem('Samosa', 'snacks'), actor);
-  await assert.doesNotReject(service.create(newItem('samosa', 'sweets'), actor));
-  await assert.rejects(service.create(newItem('SAMOSA ', 'snacks'), actor), isDuplicate);
+  const created = await service.create(newItem('Samosa'), actor);
+  assert.equal(created?.categoryId, null);
+  assert.equal(created?.category, null);
+  await assert.rejects(service.create(newItem('SAMOSA '), actor), isDuplicateUnmapped);
+  await assert.doesNotReject(service.create(newItem('Kachori'), actor));
 });
 
-test('an edit is refused only when it would repeat a name inside one category', async () => {
+test('a rename is refused only when it would repeat a name inside its category', async () => {
   const items: StoredItem[] = [
     { categoryId: 'snacks', id: 'a', itemName: 'Samosa', normalizedName: 'samosa' },
     { categoryId: 'sweets', id: 'b', itemName: 'Kachori', normalizedName: 'kachori' },
+    { categoryId: 'snacks', id: 'c', itemName: 'Vada', normalizedName: 'vada' },
   ];
   const service = serviceWith(items);
 
   // Renaming the sweet to Samosa is fine: the other Samosa is a snack.
   await assert.doesNotReject(service.update('b', { itemName: 'Samosa' }, actor));
-  // Moving it into Snacks would make two Samosas there.
-  await assert.rejects(service.update('b', { categoryId: 'snacks' }, actor), isDuplicate);
-  // Saving an item without changing its name or category never clashes with itself.
+  // Renaming the other snack to Samosa would make two Samosas in Snacks.
+  await assert.rejects(service.update('c', { itemName: 'Samosa' }, actor), isDuplicateInCategory);
+  // Saving an item without changing its name never clashes with itself.
   await assert.doesNotReject(service.update('a', { itemName: 'Samosa' }, actor));
 });
 
 test('a refused item does not use up an item code', async () => {
   const service = serviceWith([]);
 
-  const first = await service.create(newItem('Samosa', 'snacks'), actor);
-  await assert.rejects(service.create(newItem('Samosa', 'snacks'), actor), isDuplicate);
-  const next = await service.create(newItem('Kachori', 'snacks'), actor);
+  const first = await service.create(newItem('Samosa'), actor);
+  await assert.rejects(service.create(newItem('Samosa'), actor), isDuplicateUnmapped);
+  const next = await service.create(newItem('Kachori'), actor);
 
   assert.equal(first?.itemCode, 'ITM0001');
   assert.equal(next?.itemCode, 'ITM0002');

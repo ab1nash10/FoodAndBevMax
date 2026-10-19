@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { classifyItem, releaseItemTypeIfUnused } from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -81,7 +82,8 @@ export class KitchenItemsService {
     try {
       const created = await this.kitchenItems.transaction(async (tx) => {
         await this.assertValidKitchen(dto.kitchenId, tx);
-        await this.assertValidReadymadeItem(dto.itemId, tx);
+        // Mapping to a kitchen makes the item READYMADE and sets its category.
+        await classifyItem(tx, dto.itemId, ItemType.READYMADE, dto.categoryId, context.actorId);
         await this.assertUniqueMapping(dto.kitchenId, dto.itemId, undefined, tx);
 
         const mapping = await this.kitchenItems.create(
@@ -130,8 +132,12 @@ export class KitchenItemsService {
         }
 
         if (dto.itemId !== undefined) {
-          await this.assertValidReadymadeItem(dto.itemId, tx);
           data.item = { connect: { id: dto.itemId } };
+        }
+
+        // The item's type and category are set here; a new category is optional on an edit.
+        if (dto.itemId !== undefined || dto.categoryId !== undefined) {
+          await classifyItem(tx, nextItemId, ItemType.READYMADE, dto.categoryId, context.actorId);
         }
 
         if (dto.kitchenId !== undefined || dto.itemId !== undefined) {
@@ -149,6 +155,10 @@ export class KitchenItemsService {
         const mapping = Object.keys(data).length
           ? await this.kitchenItems.update(id, data, tx)
           : existing;
+
+        if (dto.itemId !== undefined && dto.itemId !== existing.itemId) {
+          await releaseItemTypeIfUnused(tx, existing.itemId, ItemType.READYMADE);
+        }
 
         await this.auditLog.record(
           {
@@ -188,6 +198,8 @@ export class KitchenItemsService {
         },
         tx,
       );
+      // A mistaken mapping is fully undone: an item never used here loses the type again.
+      await releaseItemTypeIfUnused(tx, existing.itemId, ItemType.READYMADE);
       await this.auditLog.record(
         {
           action: 'KITCHEN_ITEM_DELETE',
@@ -222,22 +234,6 @@ export class KitchenItemsService {
 
     if (!kitchen || !kitchen.isActive) {
       throw new BadRequestException('Kitchen not found or inactive');
-    }
-  }
-
-  private async assertValidReadymadeItem(itemId: string, client: KitchenItemClient): Promise<void> {
-    const item = await this.kitchenItems.findActiveItem(itemId, client);
-
-    if (!item) {
-      throw new BadRequestException('Item not found');
-    }
-
-    if (!item.isActive) {
-      throw new BadRequestException('This item is inactive and cannot be used.');
-    }
-
-    if (item.itemType !== ItemType.READYMADE) {
-      throw new BadRequestException('Only READYMADE items can be mapped to kitchens');
     }
   }
 

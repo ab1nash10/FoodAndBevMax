@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { Item, ItemInput, ItemType, SortOrder } from '@aahar/api-client';
+import type { Item, ItemInput, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
 import { EmptyState, FoodTypeMarker } from '@/components/design-system';
@@ -39,17 +39,16 @@ import {
   emptyItemFormValues,
   foodTypeValues,
   similarItemError,
-  useItemCategoryOptions,
+  unmappedTwinError,
   type FoodTypeFilter,
   type ItemFormValues,
   itemSchemaLoader,
 } from '@/components/master-data/items/shared';
 import { SubmitButton } from '@/components/master-data/shared/components';
-import type { ActiveFilter, ItemTypeFilter } from '@/components/master-data/shared/types';
+import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  itemTypeValues,
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
@@ -60,29 +59,15 @@ function plural(count: number, word: string): string {
 
 function itemToFormValues(item: Item): ItemFormValues {
   return {
-    categoryId: item.categoryId,
     hsnCode: item.hsnCode ?? '',
     isActive: item.isActive,
     itemCode: item.itemCode,
     itemName: item.itemName,
-    itemType: item.itemType,
     preparationTimeMinutes:
       item.preparationTimeMinutes === null ? '' : String(item.preparationTimeMinutes),
     type: item.type,
   };
 }
-
-const itemTypeTagClasses: Record<ItemType, string> = {
-  LIVE: 'bg-ds-tile-kitchens-bg text-ds-tile-kitchens-fg',
-  MRP: 'bg-ds-tile-items-bg text-ds-tile-items-fg',
-  READYMADE: 'bg-ds-tile-restaurants-bg text-ds-tile-restaurants-fg',
-};
-
-const itemTypeLabels: Record<ItemType, string> = {
-  LIVE: 'Live',
-  MRP: 'MRP',
-  READYMADE: 'Readymade',
-};
 
 const itemPageSizes = [25, 50, 100];
 
@@ -93,19 +78,6 @@ const itemSortOptions = [
   { label: 'Item code', value: 'itemCode:asc' },
   { label: 'Last updated', value: 'updatedAt:desc' },
 ];
-
-function ItemTypeTag({ type }: Readonly<{ type: ItemType }>) {
-  return (
-    <span
-      className={cn(
-        'inline-flex rounded-[5px] px-[7px] py-0.5 text-[11px] font-bold uppercase tracking-[0.04em]',
-        itemTypeTagClasses[type],
-      )}
-    >
-      {type}
-    </span>
-  );
-}
 
 export function ItemsPageClient() {
   const searchParams = useSearchParams();
@@ -120,16 +92,10 @@ export function ItemsPageClient() {
     'active',
     'inactive',
   ]);
-  const [categoryFilter, setCategoryFilter] = useUrlParam('category');
   const [foodTypeFilter, setFoodTypeFilter] = useUrlParam<FoodTypeFilter>(
     'food',
     '',
     foodTypeValues,
-  );
-  const [itemTypeFilter, setItemTypeFilter] = useUrlParam<ItemTypeFilter>(
-    'type',
-    '',
-    itemTypeValues,
   );
   const [sort, setSort] = useUrlParam(
     'sort',
@@ -141,7 +107,6 @@ export function ItemsPageClient() {
   const [isEditing, setIsEditing] = useState(false);
   // The open item lives in the URL (?id=), so links from the palette open its pop-up.
   const selectedItemId = searchParams.get('id');
-  const categoryOptionsQuery = useItemCategoryOptions();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -152,9 +117,7 @@ export function ItemsPageClient() {
   const itemsQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listItems({
-        categoryId: categoryFilter || undefined,
         isActive: activeFilterToBoolean(activeFilter),
-        itemType: itemTypeFilter || undefined,
         limit: pageSize,
         page,
         search,
@@ -167,9 +130,7 @@ export function ItemsPageClient() {
     },
     queryKey: queryKeys.items({
       activeFilter,
-      categoryFilter,
       foodTypeFilter,
-      itemTypeFilter,
       page,
       pageSize,
       search,
@@ -200,7 +161,7 @@ export function ItemsPageClient() {
     onError(error) {
       const message = getApiErrorMessage(error);
 
-      if (message === similarItemError) {
+      if (message === similarItemError || message === unmappedTwinError) {
         form.setError('itemName', { message });
       }
 
@@ -247,11 +208,9 @@ export function ItemsPageClient() {
     }
 
     saveItemMutation.mutate({
-      categoryId: parsed.data.categoryId,
       hsnCode: optionalValue(parsed.data.hsnCode),
       isActive: parsed.data.isActive,
       itemName: parsed.data.itemName,
-      itemType: parsed.data.itemType,
       preparationTimeMinutes: parsed.data.preparationTimeMinutes,
       type: parsed.data.type,
     });
@@ -295,15 +254,11 @@ export function ItemsPageClient() {
   function clearFilters() {
     setSearch('');
     setActiveFilter('');
-    setCategoryFilter('');
     setFoodTypeFilter('');
-    setItemTypeFilter('');
     setPage(1);
   }
 
-  const hasFilters = Boolean(
-    searchInput || activeFilter || categoryFilter || foodTypeFilter || itemTypeFilter,
-  );
+  const hasFilters = Boolean(searchInput || activeFilter || foodTypeFilter);
   const firstRow = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
   const lastRow = Math.min(meta.page * meta.limit, meta.total);
 
@@ -339,12 +294,7 @@ export function ItemsPageClient() {
               placeholder="Name or code"
               value={searchInput}
             />
-            <FiltersMenu
-              activeCount={
-                [activeFilter, foodTypeFilter, itemTypeFilter, categoryFilter].filter(Boolean)
-                  .length
-              }
-            >
+            <FiltersMenu activeCount={[activeFilter, foodTypeFilter].filter(Boolean).length}>
               <FilterField label="Status">
                 <Select
                   onChange={(event) =>
@@ -372,34 +322,6 @@ export function ItemsPageClient() {
                   value={foodTypeFilter}
                 />
               </FilterField>
-              <FilterField label="Type">
-                <Select
-                  onChange={(event) =>
-                    changeFilter(() => setItemTypeFilter(event.target.value as ItemTypeFilter))
-                  }
-                  value={itemTypeFilter}
-                >
-                  <option value="">All</option>
-                  {itemTypeValues.map((itemType) => (
-                    <option key={itemType} value={itemType}>
-                      {itemTypeLabels[itemType]}
-                    </option>
-                  ))}
-                </Select>
-              </FilterField>
-              <FilterField label="Category">
-                <Select
-                  onChange={(event) => changeFilter(() => setCategoryFilter(event.target.value))}
-                  value={categoryFilter}
-                >
-                  <option value="">All</option>
-                  {(categoryOptionsQuery.data ?? []).map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.categoryName}
-                    </option>
-                  ))}
-                </Select>
-              </FilterField>
             </FiltersMenu>
             <FilterSelect
               label="Sort"
@@ -419,18 +341,16 @@ export function ItemsPageClient() {
             <table className="w-full min-w-[620px] table-fixed text-[13px]">
               <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
                 <tr>
-                  <th className="w-[32%] px-4 py-2.5 font-semibold">Item</th>
-                  <th className="w-[22%] px-3 py-2.5 font-semibold">Category</th>
-                  <th className="w-[16%] px-3 py-2.5 font-semibold">Type</th>
-                  <th className="w-[16%] px-3 py-2.5 font-semibold">Status</th>
-                  <th className="w-[14%] px-3 py-2.5 pr-4 text-right font-semibold">Actions</th>
+                  <th className="w-[58%] px-4 py-2.5 font-semibold">Item</th>
+                  <th className="w-[24%] px-3 py-2.5 font-semibold">Status</th>
+                  <th className="w-[18%] px-3 py-2.5 pr-4 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {itemsQuery.isLoading ? (
                   Array.from({ length: 6 }, (_, index) => (
                     <tr className="border-b border-ds-divider" key={`item-skeleton-${index}`}>
-                      <td className="px-4 py-3" colSpan={5}>
+                      <td className="px-4 py-3" colSpan={3}>
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
@@ -439,14 +359,14 @@ export function ItemsPageClient() {
                   <tr>
                     <td
                       className="px-4 py-8 text-center text-sm font-medium text-ds-status-bad-fg"
-                      colSpan={5}
+                      colSpan={3}
                     >
                       {getApiErrorMessage(itemsQuery.error)}
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td className="p-4" colSpan={5}>
+                    <td className="p-4" colSpan={3}>
                       <EmptyState
                         action={
                           hasFilters ? (
@@ -481,12 +401,6 @@ export function ItemsPageClient() {
                               </span>
                             </span>
                           </span>
-                        </td>
-                        <td className="truncate px-3 py-1.5 text-[12.5px] text-ds-text-2">
-                          {item.category.categoryName}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <ItemTypeTag type={item.itemType} />
                         </td>
                         <td className="px-3 py-1.5">
                           <span className="flex items-center gap-2">
@@ -608,12 +522,7 @@ export function ItemsPageClient() {
                 void handleSubmit(event);
               }}
             >
-              <ItemFormFields categories={categoryOptionsQuery.data} form={form} />
-              {categoryOptionsQuery.isError ? (
-                <p className="text-sm font-medium text-ds-status-bad-fg">
-                  {getApiErrorMessage(categoryOptionsQuery.error)}
-                </p>
-              ) : null}
+              <ItemFormFields form={form} />
               <div className="flex justify-end gap-3 border-t border-ds-divider pt-4">
                 <Button onClick={() => setIsEditing(false)} type="button" variant="outline">
                   Cancel

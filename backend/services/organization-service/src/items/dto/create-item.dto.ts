@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FoodType, ItemType } from '@prisma/client';
+import { FoodType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -8,7 +8,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
   MaxLength,
   Min,
@@ -28,17 +27,9 @@ export class CreateItemDto {
   @MaxLength(255)
   itemName!: string;
 
-  @ApiProperty({ example: 'd2d2f99b-0d2d-4c94-8c8a-21d4f90c4f80' })
-  @IsUUID()
-  categoryId!: string;
-
   @ApiProperty({ enum: FoodType, example: FoodType.VEG })
   @IsEnum(FoodType)
   type!: FoodType;
-
-  @ApiProperty({ enum: ItemType, example: ItemType.MRP })
-  @IsEnum(ItemType)
-  itemType!: ItemType;
 
   @ApiPropertyOptional({ example: 15, minimum: 0 })
   @IsInt()

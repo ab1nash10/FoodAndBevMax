@@ -178,7 +178,7 @@ export class StockService {
         itemCode: string;
         itemId: string;
         itemName: string;
-        itemType: string;
+        itemType: string | null;
         lastUpdatedOn: Date;
         nearestExpiryDate: Date | null;
         storeCode: string | null;

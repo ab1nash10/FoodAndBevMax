@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InventoryLocationType, Prisma, StockReferenceType, TransferStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { stockItemType } from '../common/item-classification';
 import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
@@ -217,7 +218,7 @@ export class TransfersService {
             expiryDate: line.expiryDate,
             hospitalId: existing.hospitalId,
             itemId: line.itemId,
-            itemType: line.item.itemType,
+            itemType: stockItemType(line.item),
             locationId: existing.sourceId,
             locationType: existing.sourceType,
             qtyIn: 0,

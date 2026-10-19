@@ -10,6 +10,14 @@ export class CreateKitchenItemDto {
   @IsUUID()
   itemId!: string;
 
+  @ApiPropertyOptional({
+    description:
+      "The item's category: required the first time the item is mapped, optional later to change it.",
+  })
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string;
+
   @ApiPropertyOptional({ default: true })
   @IsBoolean()
   @IsOptional()

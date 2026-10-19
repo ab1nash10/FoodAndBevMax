@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ItemType, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { classifyItem, releaseItemTypeIfUnused } from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
@@ -81,7 +82,8 @@ export class StoreItemsService {
     try {
       const created = await this.storeItems.transaction(async (tx) => {
         await this.assertValidStore(dto.storeId, tx);
-        await this.assertValidMrpItem(dto.itemId, tx);
+        // Mapping to a store makes the item MRP and sets its category.
+        await classifyItem(tx, dto.itemId, ItemType.MRP, dto.categoryId, context.actorId);
         await this.assertUniqueMapping(dto.storeId, dto.itemId, undefined, tx);
 
         const mapping = await this.storeItems.create(
@@ -130,8 +132,12 @@ export class StoreItemsService {
         }
 
         if (dto.itemId !== undefined) {
-          await this.assertValidMrpItem(dto.itemId, tx);
           data.item = { connect: { id: dto.itemId } };
+        }
+
+        // The item's type and category are set here; a new category is optional on an edit.
+        if (dto.itemId !== undefined || dto.categoryId !== undefined) {
+          await classifyItem(tx, nextItemId, ItemType.MRP, dto.categoryId, context.actorId);
         }
 
         if (dto.storeId !== undefined || dto.itemId !== undefined) {
@@ -149,6 +155,10 @@ export class StoreItemsService {
         const mapping = Object.keys(data).length
           ? await this.storeItems.update(id, data, tx)
           : existing;
+
+        if (dto.itemId !== undefined && dto.itemId !== existing.itemId) {
+          await releaseItemTypeIfUnused(tx, existing.itemId, ItemType.MRP);
+        }
 
         await this.auditLog.record(
           {
@@ -188,6 +198,8 @@ export class StoreItemsService {
         },
         tx,
       );
+      // A mistaken mapping is fully undone: an item never used here loses the type again.
+      await releaseItemTypeIfUnused(tx, existing.itemId, ItemType.MRP);
       await this.auditLog.record(
         {
           action: 'STORE_ITEM_DELETE',
@@ -214,22 +226,6 @@ export class StoreItemsService {
 
     if (mapping) {
       throw new ConflictException('Store item mapping already exists');
-    }
-  }
-
-  private async assertValidMrpItem(itemId: string, client: StoreItemClient): Promise<void> {
-    const item = await this.storeItems.findActiveItem(itemId, client);
-
-    if (!item) {
-      throw new BadRequestException('Item not found');
-    }
-
-    if (!item.isActive) {
-      throw new BadRequestException('This item is inactive and cannot be used.');
-    }
-
-    if (item.itemType !== ItemType.MRP) {
-      throw new BadRequestException('Only MRP items can be mapped to stores');
     }
   }
 

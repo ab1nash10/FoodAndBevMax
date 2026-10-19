@@ -13,7 +13,7 @@ import {
   ItemFormFields,
   emptyItemFormValues,
   similarItemError,
-  useItemCategoryOptions,
+  unmappedTwinError,
   type ItemFormValues,
 } from '@/components/master-data/items/shared';
 import { itemSchema } from '@/components/master-data/items/item-schema';
@@ -24,7 +24,6 @@ export function ItemCreatePageClient() {
   const form = useForm<ItemFormValues>({
     defaultValues: emptyItemFormValues(),
   });
-  const categoryOptionsQuery = useItemCategoryOptions();
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();
@@ -34,7 +33,7 @@ export function ItemCreatePageClient() {
     onError(error) {
       const message = getApiErrorMessage(error);
 
-      if (message === similarItemError) {
+      if (message === similarItemError || message === unmappedTwinError) {
         form.setError('itemName', { message });
       }
 
@@ -58,20 +57,8 @@ export function ItemCreatePageClient() {
   });
 
   // Only the fields this reads, so typing elsewhere in the form does not re-render the page.
-  const [categoryId, itemName, itemType, type] = form.watch([
-    'categoryId',
-    'itemName',
-    'itemType',
-    'type',
-  ]);
-  const formValues = { categoryId, itemName, itemType, type };
-  const canSubmit =
-    Boolean(formValues.categoryId) &&
-    Boolean(formValues.itemName?.trim()) &&
-    Boolean(formValues.itemType) &&
-    Boolean(formValues.type) &&
-    !categoryOptionsQuery.isLoading &&
-    Boolean(categoryOptionsQuery.data?.length);
+  const [itemName, type] = form.watch(['itemName', 'type']);
+  const canSubmit = Boolean(itemName?.trim()) && Boolean(type);
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = itemSchema.safeParse(values);
@@ -82,11 +69,9 @@ export function ItemCreatePageClient() {
     }
 
     createItemMutation.mutate({
-      categoryId: parsed.data.categoryId,
       hsnCode: optionalValue(parsed.data.hsnCode),
       isActive: parsed.data.isActive,
       itemName: parsed.data.itemName,
-      itemType: parsed.data.itemType,
       preparationTimeMinutes: parsed.data.preparationTimeMinutes,
       type: parsed.data.type,
     });
@@ -105,17 +90,7 @@ export function ItemCreatePageClient() {
           void handleSubmit(event);
         }}
       >
-        <ItemFormFields categories={categoryOptionsQuery.data} form={form} />
-        {categoryOptionsQuery.isError ? (
-          <p className="text-sm font-medium text-ds-status-bad-fg">
-            {getApiErrorMessage(categoryOptionsQuery.error)}
-          </p>
-        ) : null}
-        {!categoryOptionsQuery.isLoading && !categoryOptionsQuery.data?.length ? (
-          <div className="rounded-md border border-ds-status-pending-fg/25 bg-ds-status-pending-bg px-4 py-3 text-sm font-medium text-ds-status-pending-fg">
-            Create an item category before creating an item.
-          </div>
-        ) : null}
+        <ItemFormFields form={form} />
         <div className="flex justify-end">
           <SubmitButton
             disabled={!canSubmit}

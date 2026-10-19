@@ -6,11 +6,14 @@ import { z, type ZodError } from 'zod';
 import type { ApiList, ApiResponse, Hospital, Item, ItemType, ListQuery } from '@aahar/api-client';
 import { organizationApi } from '@/lib/api';
 import type { ActiveFilter, MappingFormValues } from '@/components/mapping-foundation/shared/types';
+import { invalidateItemQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
 
 export const listLimit = 10;
 
 export const mappingSchema = z.object({
+  // Required by the server only on an item's first mapping; empty keeps the item's category.
+  categoryId: z.string(),
   isActive: z.boolean(),
   itemId: z.string().uuid('Select an item.'),
   parentId: z.string().uuid('Select a parent.'),
@@ -85,10 +88,12 @@ export function useHospitalOptions() {
   });
 }
 
-export function useItemOptions(itemType?: ItemType) {
+/** With includeUnmapped, also items not mapped yet: mapping them gives them this type. */
+export function useItemOptions(itemType?: ItemType, { includeUnmapped = false } = {}) {
   return useQuery<Item[]>({
     queryFn: async () => {
       const response = await organizationApi.listItems({
+        includeUnmapped: includeUnmapped || undefined,
         isActive: true,
         itemType,
         limit: 100,
@@ -98,12 +103,13 @@ export function useItemOptions(itemType?: ItemType) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.itemOptions(itemType ?? 'all'),
+    queryKey: queryKeys.itemOptions(itemType ?? 'all', includeUnmapped),
   });
 }
 
 export function emptyMappingFormValues(): MappingFormValues {
   return {
+    categoryId: '',
     isActive: true,
     itemId: '',
     parentId: '',
@@ -116,5 +122,7 @@ export function useInvalidateMappingQueries(entityKey: string, optionKey: string
   return () => {
     void queryClient.invalidateQueries({ queryKey: [entityKey] });
     void queryClient.invalidateQueries({ queryKey: [optionKey] });
+    // A mapping can set or clear the item's type and category (Item Mapping).
+    invalidateItemQueries(queryClient);
   };
 }

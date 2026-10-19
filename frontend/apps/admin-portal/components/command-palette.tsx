@@ -191,7 +191,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
         }),
         ...items.map((item): Command => ({
           abbr: 'IT',
-          hint: `Item · ${item.itemCode} · ${item.category.categoryName}`,
+          hint: `Item · ${item.itemCode} · ${item.category?.categoryName ?? 'not mapped yet'}`,
           href: `/masters/items?id=${item.id}`,
           label: item.itemName,
           tone: 'items',

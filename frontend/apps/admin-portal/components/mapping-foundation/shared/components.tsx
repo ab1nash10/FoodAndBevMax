@@ -2,9 +2,9 @@
 
 import { Button } from '@aahar/ui';
 import { Loader2, Plus, Search } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
-import type { Hospital, Item, SortOrder } from '@aahar/api-client';
+import type { Hospital, Item, ItemCategory, SortOrder } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
 import { Badge, Field, Input, Select } from '@/components/ui';
 import type {
@@ -181,18 +181,31 @@ export function SubmitButton({
 }
 
 export function MappingFormFields({
+  categories,
   form,
   itemLabel,
   items,
   parentLabel,
   parents,
+  typeLabel,
 }: Readonly<{
+  categories: ItemCategory[] | undefined;
   form: UseFormReturn<MappingFormValues>;
   itemLabel: string;
   items: Item[] | undefined;
   parentLabel: string;
   parents: Array<{ code: string; id: string; name: string }> | undefined;
+  /** The type mapping here gives an item, e.g. "MRP". */
+  typeLabel: string;
 }>) {
+  const itemId = form.watch('itemId');
+  const selectedItem = items?.find((item) => item.id === itemId);
+
+  // The category follows the chosen item; it can then be changed here.
+  useEffect(() => {
+    form.setValue('categoryId', selectedItem?.category?.id ?? '');
+  }, [form, selectedItem]);
+
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -211,12 +224,33 @@ export function MappingFormFields({
             <option value="">Select item</option>
             {items?.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.itemName} ({item.itemCode})
+                {item.itemName} ({item.itemCode}){item.itemType ? '' : ' - not mapped yet'}
               </option>
             ))}
           </Select>
         </Field>
       </div>
+      <Field
+        error={form.formState.errors.categoryId?.message}
+        label="Category"
+        name="mapping-category-id"
+      >
+        <Select id="mapping-category-id" {...form.register('categoryId')}>
+          <option value="">Select category</option>
+          {categories?.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.categoryName}
+            </option>
+          ))}
+        </Select>
+        {selectedItem ? (
+          <p className="mt-1.5 text-xs text-ds-muted">
+            {selectedItem.itemType
+              ? "Changing it changes this item's category everywhere."
+              : `First mapping: choose a category. The item becomes ${typeLabel}.`}
+          </p>
+        ) : null}
+      </Field>
       <CheckboxLine
         input={<input className="h-4 w-4" type="checkbox" {...form.register('isActive')} />}
       >

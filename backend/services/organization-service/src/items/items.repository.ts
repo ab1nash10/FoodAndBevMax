@@ -43,9 +43,8 @@ export class ItemsRepository {
     return client.item.findFirst({
       include: itemInclude,
       where: {
-        category: {
-          deletedAt: null,
-        },
+        // No category yet (not mapped) still counts; a deleted category does not.
+        OR: [{ categoryId: null }, { category: { deletedAt: null } }],
         deletedAt: null,
         id,
       },
@@ -86,7 +85,7 @@ export class ItemsRepository {
 
   async findByNormalizedName(
     normalizedName: string,
-    categoryId: string,
+    categoryId: string | null,
     excludeId?: string,
     client: ItemClient = this.prisma,
   ): Promise<ItemWithCategory | null> {

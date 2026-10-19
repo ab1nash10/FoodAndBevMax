@@ -24,8 +24,9 @@ export interface ItemCategoryInput {
 export type ItemCategoryListQuery = ListQuery;
 
 export interface Item {
-  category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'>;
-  categoryId: string;
+  /** Set on the Item Mapping screens; null until the item is first mapped. */
+  category: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
+  categoryId: string | null;
   createdAt: string;
   deletedAt: string | null;
   hsnCode: string | null;
@@ -33,24 +34,25 @@ export interface Item {
   isActive: boolean;
   itemCode: string;
   itemName: string;
-  itemType: ItemType;
+  /** MRP once mapped to a store, READYMADE once mapped to a kitchen; null until then. */
+  itemType: ItemType | null;
   preparationTimeMinutes: number | null;
   type: FoodType;
   updatedAt: string;
 }
 
 export interface ItemInput {
-  categoryId: string;
   hsnCode?: string;
   isActive?: boolean;
   itemName: string;
-  itemType: ItemType;
   preparationTimeMinutes?: number;
   type: FoodType;
 }
 
 export interface ItemListQuery extends ListQuery {
   categoryId?: string;
+  /** With itemType: also items not mapped yet, for the mapping screens. */
+  includeUnmapped?: boolean;
   itemType?: ItemType;
   type?: FoodType;
 }
@@ -146,7 +148,7 @@ export type ItemSummary = Pick<
   Item,
   'id' | 'isActive' | 'itemCode' | 'itemName' | 'itemType' | 'type'
 > & {
-  category?: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'>;
+  category?: Pick<ItemCategory, 'categoryName' | 'id' | 'isActive'> | null;
 };
 
 export interface StoreItem {
@@ -164,6 +166,8 @@ export interface StoreItem {
 }
 
 export interface StoreItemInput {
+  /** The item's category: required the first time the item is mapped, optional later. */
+  categoryId?: string;
   isActive?: boolean;
   itemId: string;
   storeId: string;
@@ -190,6 +194,8 @@ export interface KitchenItem {
 }
 
 export interface KitchenItemInput {
+  /** The item's category: required the first time the item is mapped, optional later. */
+  categoryId?: string;
   isActive?: boolean;
   itemId: string;
   kitchenId: string;

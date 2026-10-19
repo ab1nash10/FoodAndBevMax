@@ -9,6 +9,7 @@ import {
   TransferStatus,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { stockItemType } from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import {
@@ -372,11 +373,14 @@ export class TransferAcknowledgementsService {
       {
         actorId: context.actorId,
         batchNumber: line.transferLine.batchNumber,
-        businessDate: itemStockBusinessDate(line.transferLine.item.itemType, transfer.businessDate),
+        businessDate: itemStockBusinessDate(
+          stockItemType(line.transferLine.item),
+          transfer.businessDate,
+        ),
         expiryDate: line.transferLine.expiryDate,
         hospitalId: transfer.hospitalId,
         itemId: line.transferLine.itemId,
-        itemType: line.transferLine.item.itemType,
+        itemType: stockItemType(line.transferLine.item),
         locationId: transfer.destinationId,
         locationType: InventoryLocationType.RESTAURANT,
         quantity: line.acceptedQty,
@@ -393,7 +397,7 @@ export class TransferAcknowledgementsService {
         expiryDate: line.transferLine.expiryDate,
         hospitalId: transfer.hospitalId,
         itemId: line.transferLine.itemId,
-        itemType: line.transferLine.item.itemType,
+        itemType: stockItemType(line.transferLine.item),
         locationId: transfer.destinationId,
         locationType: InventoryLocationType.RESTAURANT,
         qtyIn: line.acceptedQty,
@@ -424,11 +428,14 @@ export class TransferAcknowledgementsService {
       {
         actorId: context.actorId,
         batchNumber: line.transferLine.batchNumber,
-        businessDate: itemStockBusinessDate(line.transferLine.item.itemType, transfer.businessDate),
+        businessDate: itemStockBusinessDate(
+          stockItemType(line.transferLine.item),
+          transfer.businessDate,
+        ),
         expiryDate: line.transferLine.expiryDate,
         hospitalId: transfer.hospitalId,
         itemId: line.transferLine.itemId,
-        itemType: line.transferLine.item.itemType,
+        itemType: stockItemType(line.transferLine.item),
         locationId: transfer.sourceId,
         locationType: transfer.sourceType,
         quantity: line.rejectedQty,
@@ -445,7 +452,7 @@ export class TransferAcknowledgementsService {
         expiryDate: line.transferLine.expiryDate,
         hospitalId: transfer.hospitalId,
         itemId: line.transferLine.itemId,
-        itemType: line.transferLine.item.itemType,
+        itemType: stockItemType(line.transferLine.item),
         locationId: transfer.sourceId,
         locationType: transfer.sourceType,
         qtyIn: line.rejectedQty,
