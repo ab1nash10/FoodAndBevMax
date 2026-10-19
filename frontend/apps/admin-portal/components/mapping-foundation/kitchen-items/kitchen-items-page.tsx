@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChefHat, Pencil } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import type {
   Kitchen,
@@ -73,7 +73,15 @@ function useKitchenOptions(hospitalId?: string) {
   });
 }
 
-export function KitchenItemsPageClient() {
+/**
+ * Inside the Item Mapping page (`embedded`) it drops its own title and shows the page's
+ * Store / Kitchen switch above the form and its tabs above the list.
+ */
+export function KitchenItemsPageClient({
+  embedded = false,
+  formSwitch,
+  listTabs,
+}: Readonly<{ embedded?: boolean; formSwitch?: ReactNode; listTabs?: ReactNode }> = {}) {
   const { scopedHospitalId } = useLocationContext();
   const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
@@ -246,13 +254,16 @@ export function KitchenItemsPageClient() {
 
   return (
     <section className="space-y-5">
-      <PageHeader
-        icon={ChefHat}
-        subtitle="Map readymade items to kitchens for future production handoff."
-        title="Kitchen Items"
-      />
+      {embedded ? null : (
+        <PageHeader
+          icon={ChefHat}
+          subtitle="Map readymade items to kitchens for future production handoff."
+          title="Kitchen Items"
+        />
+      )}
       <Panel className="p-4">
         <div className="mb-5">
+          {formSwitch ? <div className="mb-4">{formSwitch}</div> : null}
           <h2 className="text-lg font-semibold tracking-normal text-ds-text">
             {editingMapping ? 'Edit Kitchen Item' : 'Create Kitchen Item'}
           </h2>
@@ -301,6 +312,7 @@ export function KitchenItemsPageClient() {
         </form>
       </Panel>
       <Panel>
+        {listTabs ? <div className="border-b border-ds-divider px-4 pt-3">{listTabs}</div> : null}
         <ListToolbar>
           <SearchInput
             onChange={(value) => {

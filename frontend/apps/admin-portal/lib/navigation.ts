@@ -172,17 +172,12 @@ export const navigationGroups: NavGroup[] = [
   {
     icon: Link2,
     items: [
+      // Store and kitchen mappings in one page (Store / Kitchen switch and tabs).
       {
-        href: '/masters/store-items',
-        icon: Store,
-        label: 'Store Items',
-        permissions: ['STORE_ITEM_VIEW'],
-      },
-      {
-        href: '/masters/kitchen-items',
-        icon: ChefHat,
-        label: 'Kitchen Items',
-        permissions: ['KITCHEN_ITEM_VIEW'],
+        href: '/masters/item-mapping',
+        icon: Link2,
+        label: 'Item Mapping',
+        permissions: ['STORE_ITEM_VIEW', 'KITCHEN_ITEM_VIEW'],
       },
     ],
     label: 'Item Mapping',

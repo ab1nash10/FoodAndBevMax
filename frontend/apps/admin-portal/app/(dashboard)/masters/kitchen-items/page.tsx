@@ -1,5 +1,6 @@
-import { KitchenItemsPageClient } from '@/components/mapping-foundation/kitchen-items/kitchen-items-page';
+import { redirect } from 'next/navigation';
 
+// Kitchen Items is now part of Item Mapping; old links and bookmarks still land on it.
 export default function KitchenItemsPage() {
-  return <KitchenItemsPageClient />;
+  redirect('/masters/item-mapping?tab=kitchen');
 }

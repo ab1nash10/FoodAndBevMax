@@ -858,7 +858,7 @@ export function setupSteps(
 
     steps.push({
       cta: {
-        href: storeDone ? '/masters/kitchen-items' : '/masters/store-items',
+        href: `/masters/item-mapping?tab=${storeDone ? 'kitchen' : 'store'}`,
         label: 'Map items',
       },
       detail:

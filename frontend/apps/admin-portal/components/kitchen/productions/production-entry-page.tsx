@@ -831,7 +831,10 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
                 ) : itemsQuery.isLoading ? (
                   <LoadingSkeleton rows={3} />
                 ) : mappedItems.length === 0 ? (
-                  <SetupNotice href="/masters/kitchen-items" linkLabel="Map items to this kitchen">
+                  <SetupNotice
+                    href="/masters/item-mapping?tab=kitchen"
+                    linkLabel="Map items to this kitchen"
+                  >
                     No READYMADE items are mapped to this kitchen yet, so there is nothing to
                     record.
                   </SetupNotice>

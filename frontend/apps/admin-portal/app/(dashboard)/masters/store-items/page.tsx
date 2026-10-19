@@ -1,5 +1,6 @@
-import { StoreItemsPageClient } from '@/components/mapping-foundation/store-items/store-items-page';
+import { redirect } from 'next/navigation';
 
+// Store Items is now part of Item Mapping; old links and bookmarks still land on it.
 export default function StoreItemsPage() {
-  return <StoreItemsPageClient />;
+  redirect('/masters/item-mapping?tab=store');
 }

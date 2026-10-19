@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Pencil, Store as StoreIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import type {
   SortOrder,
@@ -73,7 +73,15 @@ function useStoreOptions(hospitalId?: string) {
   });
 }
 
-export function StoreItemsPageClient() {
+/**
+ * Inside the Item Mapping page (`embedded`) it drops its own title and shows the page's
+ * Store / Kitchen switch above the form and its tabs above the list.
+ */
+export function StoreItemsPageClient({
+  embedded = false,
+  formSwitch,
+  listTabs,
+}: Readonly<{ embedded?: boolean; formSwitch?: ReactNode; listTabs?: ReactNode }> = {}) {
   const { scopedHospitalId } = useLocationContext();
   const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
@@ -244,13 +252,16 @@ export function StoreItemsPageClient() {
 
   return (
     <section className="space-y-5">
-      <PageHeader
-        icon={StoreIcon}
-        subtitle="Map MRP items to stores for future sales and stock flows."
-        title="Store Items"
-      />
+      {embedded ? null : (
+        <PageHeader
+          icon={StoreIcon}
+          subtitle="Map MRP items to stores for future sales and stock flows."
+          title="Store Items"
+        />
+      )}
       <Panel className="p-4">
         <div className="mb-5">
+          {formSwitch ? <div className="mb-4">{formSwitch}</div> : null}
           <h2 className="text-lg font-semibold tracking-normal text-ds-text">
             {editingMapping ? 'Edit Store Item' : 'Create Store Item'}
           </h2>
@@ -299,6 +310,7 @@ export function StoreItemsPageClient() {
         </form>
       </Panel>
       <Panel>
+        {listTabs ? <div className="border-b border-ds-divider px-4 pt-3">{listTabs}</div> : null}
         <ListToolbar>
           <SearchInput
             onChange={(value) => {

@@ -166,6 +166,9 @@ const redirects = new Set([
   '/masters/companies/new',
   '/masters/counters',
   '/masters/counters/new',
+  // Now tabs of /masters/item-mapping.
+  '/masters/kitchen-items',
+  '/masters/store-items',
 ]);
 const known = new Set([
   ...navigationGroups.flatMap((group) => group.items.map((page) => page.href)),

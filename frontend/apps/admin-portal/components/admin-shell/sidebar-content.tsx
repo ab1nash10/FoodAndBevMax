@@ -153,7 +153,13 @@ export function SidebarContent({
           );
 
           // Overview holds only the Dashboard, a plain link.
-          const singleItem = group.label === 'Overview' ? visibleItems[0] : undefined;
+          // A section holding one page of the same name is that page: one link, not a
+          // header over a duplicate entry.
+          const singleItem =
+            group.label === 'Overview' ||
+            (visibleItems.length === 1 && visibleItems[0]?.label === group.label)
+              ? visibleItems[0]
+              : undefined;
 
           if (singleItem) {
             const isActive = singleItem.href === activeHref;

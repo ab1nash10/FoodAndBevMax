@@ -331,7 +331,7 @@ assert.deepEqual(
   ['hospitals:done', 'stores:done', 'items:done', 'mappings:doing', 'grn:todo'],
   'unseen counts are left out; the first unfinished step is the next one',
 );
-assert.equal(fresh.find((s) => s.key === 'mappings').cta.href, '/masters/kitchen-items');
+assert.equal(fresh.find((s) => s.key === 'mappings').cta.href, '/masters/item-mapping?tab=kitchen');
 assert.equal(
   fresh.find((s) => s.key === 'hospitals').cta,
   undefined,

@@ -402,7 +402,10 @@ export function CreateGrnPageClient() {
 
             {selectedStoreId && itemOptions.length === 0 && !mappedItemsQuery.isLoading ? (
               <div className="mt-4">
-                <SetupNotice href="/masters/store-items" linkLabel="Map items to this store">
+                <SetupNotice
+                  href="/masters/item-mapping?tab=store"
+                  linkLabel="Map items to this store"
+                >
                   No MRP items are mapped to this store yet, so there is nothing to receive.
                 </SetupNotice>
               </div>
