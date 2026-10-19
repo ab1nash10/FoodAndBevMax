@@ -97,15 +97,18 @@ export class RestaurantMenusRepository {
     });
   }
 
+  /** A live menu entry for the item at the restaurant under the same category. */
   async findActiveMapping(
     restaurantId: string,
     itemId: string,
+    categoryId: string | null,
     excludeId?: string,
     client: RestaurantMenuClient = this.prisma,
   ): Promise<RestaurantMenuWithRelations | null> {
     return client.restaurantMenu.findFirst({
       include: restaurantMenuInclude,
       where: {
+        categoryId,
         deletedAt: null,
         itemId,
         restaurantId,

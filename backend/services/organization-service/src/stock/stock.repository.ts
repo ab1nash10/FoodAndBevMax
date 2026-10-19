@@ -169,8 +169,22 @@ export class StockRepository {
       where: { deletedAt: null, OR: pairs },
     });
 
+    // An item may be mapped to a store under more than one category; show them all.
+    const names = new Map<string, Set<string>>();
+
+    for (const mapping of mappings) {
+      const key = `${mapping.storeId}:${mapping.itemId}`;
+      const set = names.get(key) ?? new Set<string>();
+
+      if (mapping.category) {
+        set.add(mapping.category.categoryName);
+      }
+
+      names.set(key, set);
+    }
+
     return new Map(
-      mappings.map((m) => [`${m.storeId}:${m.itemId}`, m.category?.categoryName ?? null]),
+      [...names].map(([key, set]) => [key, set.size ? [...set].sort().join(', ') : null]),
     );
   }
 

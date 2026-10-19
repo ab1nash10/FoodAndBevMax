@@ -92,7 +92,13 @@ export class StoreItemsService {
         // Mapping to a store makes the item MRP and sets its category.
         await classifyItem(tx, dto.itemId, ItemType.MRP, context.actorId);
         await assertUsableCategory(tx, dto.categoryId);
-        await this.assertUniqueMapping(dto.storeId, dto.itemId, undefined, tx);
+        await this.assertUniqueMapping(
+          dto.storeId,
+          dto.itemId,
+          dto.categoryId ?? null,
+          undefined,
+          tx,
+        );
 
         const mapping = await this.storeItems.create(
           {
@@ -154,8 +160,15 @@ export class StoreItemsService {
           data.category = { connect: { id: dto.categoryId } };
         }
 
-        if (dto.storeId !== undefined || dto.itemId !== undefined) {
-          await this.assertUniqueMapping(nextStoreId, nextItemId, id, tx);
+        // The same item may sit under several categories; only an exact repeat is refused.
+        if (dto.storeId !== undefined || dto.itemId !== undefined || dto.categoryId !== undefined) {
+          await this.assertUniqueMapping(
+            nextStoreId,
+            nextItemId,
+            dto.categoryId ?? existing.categoryId,
+            id,
+            tx,
+          );
         }
 
         if (dto.isActive !== undefined) {
@@ -233,13 +246,20 @@ export class StoreItemsService {
   private async assertUniqueMapping(
     storeId: string,
     itemId: string,
+    categoryId: string | null,
     excludeId: string | undefined,
     client: StoreItemClient,
   ): Promise<void> {
-    const mapping = await this.storeItems.findActiveMapping(storeId, itemId, excludeId, client);
+    const mapping = await this.storeItems.findActiveMapping(
+      storeId,
+      itemId,
+      categoryId,
+      excludeId,
+      client,
+    );
 
     if (mapping) {
-      throw new ConflictException('Store item mapping already exists');
+      throw new ConflictException('Store item mapping already exists for this category');
     }
   }
 

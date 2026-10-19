@@ -102,15 +102,18 @@ export class KitchenItemsRepository {
     });
   }
 
+  /** A live mapping of the item to the kitchen under the same category. */
   async findActiveMapping(
     kitchenId: string,
     itemId: string,
+    categoryId: string | null,
     excludeId?: string,
     client: KitchenItemClient = this.prisma,
   ): Promise<KitchenItemWithRelations | null> {
     return client.kitchenItem.findFirst({
       include: kitchenItemInclude,
       where: {
+        categoryId,
         deletedAt: null,
         itemId,
         kitchenId,

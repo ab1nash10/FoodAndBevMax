@@ -113,8 +113,9 @@ export function timeCell(value: string, header: string): string | null {
 }
 
 /**
- * A row with a Menu code updates that menu item, as does a row for a restaurant and item that
- * are already on a menu together; any other row adds the item to the restaurant's menu. Rows
+ * A row with a Menu code updates that menu item, as does a row for a restaurant, item and
+ * category already on a menu together (with no category, the restaurant's only entry for the
+ * item); any other row adds the item to the restaurant's menu under its category. Rows
  * refer to restaurants, items and kitchens by code, and the server checks the rest as the
  * form does (prices for where it is served, a kitchen at the restaurant's location). Category is
  * this menu item's own, by name: required to add an item, left as it is when blank on an update.
@@ -133,7 +134,12 @@ export async function startMenuImport(): Promise<CsvRowImporter> {
   );
   const itemByCode = new Map(items.map((item) => [upper(item.itemCode), item]));
   const menuByCode = new Map(menus.map((menu) => [upper(menu.menuItemCode), menu]));
-  const menuByPair = new Map(menus.map((menu) => [`${menu.restaurantId}:${menu.itemId}`, menu]));
+  // The same item can be on a restaurant's menu once per category.
+  const menuKey = (restaurantId: string, itemId: string, categoryId: string | null) =>
+    `${restaurantId}:${itemId}:${categoryId ?? ''}`;
+  const menuByKey = new Map(
+    menus.map((menu) => [menuKey(menu.restaurantId, menu.itemId, menu.categoryId), menu]),
+  );
 
   return async (cells) => {
     const menuCode = upper(cells('Menu code'));
@@ -186,11 +192,28 @@ export async function startMenuImport(): Promise<CsvRowImporter> {
       throw new Error(`No menu item has code ${menuCode}; leave Menu code empty to add one`);
     }
 
-    const match = byCode ?? menuByPair.get(`${restaurant.id}:${item.id}`);
     const category = categoryName ? categoryByName.get(upper(categoryName)) : undefined;
 
     if (categoryName && !category) {
       throw new Error(`No category is named ${categoryName}`);
+    }
+
+    let match = byCode;
+
+    if (!match && category) {
+      match = menuByKey.get(menuKey(restaurant.id, item.id, category.id));
+    } else if (!match) {
+      const entries = menus.filter(
+        (menu) => menu.restaurantId === restaurant.id && menu.itemId === item.id,
+      );
+
+      if (entries.length > 1) {
+        throw new Error(
+          'This item is on the menu under more than one category; fill in Category or Menu code',
+        );
+      }
+
+      match = entries[0];
     }
 
     if (!match && !category) {
@@ -244,8 +267,9 @@ export async function startMenuImport(): Promise<CsvRowImporter> {
 
     const { data } = await organizationApi.createRestaurantMenu(body);
 
-    // A later row for the same restaurant and item in this file updates it.
-    menuByPair.set(`${data.restaurantId}:${data.itemId}`, data);
+    // A later row for the same restaurant, item and category in this file updates it.
+    menus.push(data);
+    menuByKey.set(menuKey(data.restaurantId, data.itemId, data.categoryId), data);
     menuByCode.set(upper(data.menuItemCode), data);
 
     return 'created';

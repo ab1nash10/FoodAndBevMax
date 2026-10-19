@@ -151,7 +151,13 @@ export class RestaurantMenusService {
 
         await this.assertValidItem(dto.itemId, tx);
         await assertUsableCategory(tx, dto.categoryId);
-        await this.assertUniqueMapping(dto.restaurantId, dto.itemId, undefined, tx);
+        await this.assertUniqueMapping(
+          dto.restaurantId,
+          dto.itemId,
+          dto.categoryId ?? null,
+          undefined,
+          tx,
+        );
         assertWindow(dto);
         assertPricesFor({
           price: dto.price,
@@ -283,8 +289,19 @@ export class RestaurantMenusService {
           data.item = { connect: { id: dto.itemId } };
         }
 
-        if (dto.restaurantId !== undefined || dto.itemId !== undefined) {
-          await this.assertUniqueMapping(nextRestaurantId, nextItemId, id, tx);
+        // The same item may be on the menu under several categories; only an exact repeat is refused.
+        if (
+          dto.restaurantId !== undefined ||
+          dto.itemId !== undefined ||
+          dto.categoryId !== undefined
+        ) {
+          await this.assertUniqueMapping(
+            nextRestaurantId,
+            nextItemId,
+            dto.categoryId ?? existing.categoryId,
+            id,
+            tx,
+          );
         }
 
         if (dto.availableFrom !== undefined || dto.availableTo !== undefined) {
@@ -389,18 +406,20 @@ export class RestaurantMenusService {
   private async assertUniqueMapping(
     restaurantId: string,
     itemId: string,
+    categoryId: string | null,
     excludeId: string | undefined,
     client: RestaurantMenuClient,
   ): Promise<void> {
     const mapping = await this.restaurantMenus.findActiveMapping(
       restaurantId,
       itemId,
+      categoryId,
       excludeId,
       client,
     );
 
     if (mapping) {
-      throw new ConflictException('Restaurant menu mapping already exists');
+      throw new ConflictException('This item is already on the menu under this category');
     }
   }
 

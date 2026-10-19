@@ -89,15 +89,18 @@ export class StoreItemsRepository {
     });
   }
 
+  /** A live mapping of the item to the store under the same category. */
   async findActiveMapping(
     storeId: string,
     itemId: string,
+    categoryId: string | null,
     excludeId?: string,
     client: StoreItemClient = this.prisma,
   ): Promise<StoreItemWithRelations | null> {
     return client.storeItem.findFirst({
       include: storeItemInclude,
       where: {
+        categoryId,
         deletedAt: null,
         itemId,
         storeId,

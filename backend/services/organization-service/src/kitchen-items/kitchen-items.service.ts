@@ -92,7 +92,13 @@ export class KitchenItemsService {
         // Mapping to a kitchen makes the item READYMADE and sets its category.
         await classifyItem(tx, dto.itemId, ItemType.READYMADE, context.actorId);
         await assertUsableCategory(tx, dto.categoryId);
-        await this.assertUniqueMapping(dto.kitchenId, dto.itemId, undefined, tx);
+        await this.assertUniqueMapping(
+          dto.kitchenId,
+          dto.itemId,
+          dto.categoryId ?? null,
+          undefined,
+          tx,
+        );
 
         const mapping = await this.kitchenItems.create(
           {
@@ -154,8 +160,19 @@ export class KitchenItemsService {
           data.category = { connect: { id: dto.categoryId } };
         }
 
-        if (dto.kitchenId !== undefined || dto.itemId !== undefined) {
-          await this.assertUniqueMapping(nextKitchenId, nextItemId, id, tx);
+        // The same item may sit under several categories; only an exact repeat is refused.
+        if (
+          dto.kitchenId !== undefined ||
+          dto.itemId !== undefined ||
+          dto.categoryId !== undefined
+        ) {
+          await this.assertUniqueMapping(
+            nextKitchenId,
+            nextItemId,
+            dto.categoryId ?? existing.categoryId,
+            id,
+            tx,
+          );
         }
 
         if (dto.isActive !== undefined) {
@@ -233,13 +250,20 @@ export class KitchenItemsService {
   private async assertUniqueMapping(
     kitchenId: string,
     itemId: string,
+    categoryId: string | null,
     excludeId: string | undefined,
     client: KitchenItemClient,
   ): Promise<void> {
-    const mapping = await this.kitchenItems.findActiveMapping(kitchenId, itemId, excludeId, client);
+    const mapping = await this.kitchenItems.findActiveMapping(
+      kitchenId,
+      itemId,
+      categoryId,
+      excludeId,
+      client,
+    );
 
     if (mapping) {
-      throw new ConflictException('Kitchen item mapping already exists');
+      throw new ConflictException('Kitchen item mapping already exists for this category');
     }
   }
 
