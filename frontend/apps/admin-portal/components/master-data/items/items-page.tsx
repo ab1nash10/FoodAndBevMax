@@ -37,6 +37,7 @@ import {
   ItemFormFields,
   LoadingRows,
   emptyItemFormValues,
+  foodTypeFormLabels,
   foodTypeValues,
   similarItemError,
   unmappedTwinError,
@@ -49,6 +50,7 @@ import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
+  formatDateOnly,
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
@@ -338,19 +340,23 @@ export function ItemsPageClient() {
           </ListToolbar>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] table-fixed text-[13px]">
+            <table className="w-full min-w-[760px] table-fixed text-[13px]">
               <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
                 <tr>
-                  <th className="w-[58%] px-4 py-2.5 font-semibold">Item</th>
-                  <th className="w-[24%] px-3 py-2.5 font-semibold">Status</th>
-                  <th className="w-[18%] px-3 py-2.5 pr-4 text-right font-semibold">Actions</th>
+                  <th className="w-[28%] px-4 py-2.5 font-semibold">Item</th>
+                  <th className="w-[12%] px-3 py-2.5 font-semibold">Food type</th>
+                  <th className="w-[12%] px-3 py-2.5 font-semibold">HSN code</th>
+                  <th className="w-[11%] px-3 py-2.5 font-semibold">Prep time</th>
+                  <th className="w-[15%] px-3 py-2.5 font-semibold">Last updated</th>
+                  <th className="w-[14%] px-3 py-2.5 font-semibold">Status</th>
+                  <th className="w-[8%] px-3 py-2.5 pr-4 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {itemsQuery.isLoading ? (
                   Array.from({ length: 6 }, (_, index) => (
                     <tr className="border-b border-ds-divider" key={`item-skeleton-${index}`}>
-                      <td className="px-4 py-3" colSpan={3}>
+                      <td className="px-4 py-3" colSpan={7}>
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
@@ -359,14 +365,14 @@ export function ItemsPageClient() {
                   <tr>
                     <td
                       className="px-4 py-8 text-center text-sm font-medium text-ds-status-bad-fg"
-                      colSpan={3}
+                      colSpan={7}
                     >
                       {getApiErrorMessage(itemsQuery.error)}
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td className="p-4" colSpan={3}>
+                    <td className="p-4" colSpan={7}>
                       <EmptyState
                         action={
                           hasFilters ? (
@@ -397,10 +403,21 @@ export function ItemsPageClient() {
                               </span>
                               <span className="truncate text-[11.5px] tabular-nums text-ds-muted">
                                 {item.itemCode}
-                                {item.hsnCode ? ` · HSN ${item.hsnCode}` : ''}
                               </span>
                             </span>
                           </span>
+                        </td>
+                        <td className="truncate px-3 py-1.5 text-ds-text-2">
+                          {foodTypeFormLabels[item.type]}
+                        </td>
+                        <td className="truncate px-3 py-1.5 tabular-nums text-ds-text-2">
+                          {item.hsnCode || '—'}
+                        </td>
+                        <td className="truncate px-3 py-1.5 tabular-nums text-ds-text-2">
+                          {item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '—'}
+                        </td>
+                        <td className="truncate px-3 py-1.5 text-[12.5px] text-ds-muted">
+                          {formatDateOnly(item.updatedAt)}
                         </td>
                         <td className="px-3 py-1.5">
                           <span className="flex items-center gap-2">
