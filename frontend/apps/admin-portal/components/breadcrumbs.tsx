@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -9,21 +9,11 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import {
-  getActiveNavHref,
-  getBreadcrumbTrail,
-  getPermittedPages,
-  navigationGroups,
-  type Crumb,
-  type NavGroupLabel,
-} from '@/lib/navigation';
-import { cn } from '@/lib/utils';
+import { getBreadcrumbTrail, getPermittedPages, type Crumb } from '@/lib/navigation';
 
 type LabelMap = Record<string, string | undefined>;
 
@@ -78,149 +68,11 @@ function CrumbLabel({ crumb }: Readonly<{ crumb: Crumb }>) {
   );
 }
 
-/** The group crumb: a menu of the group's pages the user may open, as in the sidebar. */
-function GroupMenu({ compact, group }: Readonly<{ compact: boolean; group: NavGroupLabel }>) {
-  const { hasPermission } = useAuth();
-  const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const pages = getPermittedPages(hasPermission).filter((page) => page.group === group);
-  const activeHref = getActiveNavHref(pathname);
-  const GroupIcon = navigationGroups.find((candidate) => candidate.label === group)?.icon;
-  const menuId = `breadcrumb-menu-${group.toLowerCase().replace(/[^a-z]+/g, '-')}`;
-
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
-    (items.find((item) => item.getAttribute('aria-current') === 'page') ?? items[0])?.focus();
-
-    const closeOnOutside = (event: PointerEvent) => {
-      if (
-        !menuRef.current?.contains(event.target as Node) &&
-        !buttonRef.current?.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', closeOnOutside);
-
-    return () => document.removeEventListener('pointerdown', closeOnOutside);
-  }, [isOpen]);
-
-  function close(returnFocus: boolean) {
-    setIsOpen(false);
-
-    if (returnFocus) {
-      buttonRef.current?.focus();
-    }
-  }
-
-  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
-    const index = items.indexOf(document.activeElement as HTMLElement);
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close(true);
-    } else if (event.key === 'Tab') {
-      close(false);
-    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const step = event.key === 'ArrowDown' ? 1 : -1;
-      items[(index + step + items.length) % items.length]?.focus();
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      items[event.key === 'Home' ? 0 : items.length - 1]?.focus();
-    }
-  }
-
-  return (
-    <span className="relative">
-      <button
-        aria-controls={isOpen ? menuId : undefined}
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-        // ml-1 cancels the shell's -ml-1, so the pill lines up with the page title.
-        className={cn(
-          'ml-1 flex h-7 max-w-[16rem] items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
-          isOpen
-            ? 'border-ds-primary/40 bg-ds-primary-soft text-ds-link'
-            : 'border-ds-border bg-ds-surface text-ds-text-2 hover:border-ds-primary/40 hover:bg-ds-subtle hover:text-ds-text',
-        )}
-        onClick={() => setIsOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' && !isOpen) {
-            event.preventDefault();
-            setIsOpen(true);
-          }
-        }}
-        ref={buttonRef}
-        title={`${group} pages`}
-        type="button"
-      >
-        {GroupIcon ? (
-          <GroupIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-        ) : null}
-        <span className={compact && GroupIcon ? 'sr-only' : 'truncate'}>{group}</span>
-        <ChevronDown
-          aria-hidden="true"
-          className={cn('h-3 w-3 shrink-0 opacity-70 transition-transform', isOpen && 'rotate-180')}
-          strokeWidth={2.4}
-        />
-      </button>
-      {isOpen ? (
-        <div
-          aria-label={`${group} pages`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-card border border-ds-border bg-ds-surface p-1.5 shadow-xl shadow-ds-text/10"
-          id={menuId}
-          onKeyDown={onMenuKeyDown}
-          ref={menuRef}
-          role="menu"
-        >
-          {pages.length === 0 ? (
-            <p className="px-2.5 py-2 text-[13px] text-ds-muted">No pages you can open here.</p>
-          ) : (
-            pages.map((page) => {
-              const Icon = page.icon;
-              const isCurrent = page.href === activeHref;
-
-              return (
-                <Link
-                  aria-current={isCurrent ? 'page' : undefined}
-                  className={cn(
-                    'flex min-h-9 items-center gap-2.5 rounded-control px-2.5 text-[13px] outline-hidden transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary',
-                    isCurrent
-                      ? 'bg-ds-primary-soft font-bold text-ds-link'
-                      : 'font-medium text-ds-text-2 hover:bg-ds-subtle',
-                  )}
-                  href={page.href}
-                  key={page.href}
-                  onClick={() => close(false)}
-                  role="menuitem"
-                >
-                  <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-                  <span className="flex-1 truncate">{page.label}</span>
-                  {isCurrent ? (
-                    <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
-                  ) : null}
-                </Link>
-              );
-            })
-          )}
-        </div>
-      ) : null}
-    </span>
-  );
-}
-
 /**
- * Where the user is: [group menu] › [page] › [record or sub-page]. Below the `nav`
- * breakpoint it collapses to one "‹ Parent" link.
+ * Above the page title. A top-level page shows its sidebar section as a small label (none when
+ * the section has only that page, as the sidebar shows no heading for it). A deeper page shows
+ * the way back instead: its parent pages, then itself. The sidebar already lists every page, so
+ * the section is not a menu. Below the `nav` breakpoint a deeper page collapses to "‹ Parent".
  */
 export function Breadcrumbs() {
   const pathname = usePathname();
@@ -228,16 +80,26 @@ export function Breadcrumbs() {
   const { hasPermission } = useAuth();
   const { labels } = useContext(BreadcrumbLabelsContext);
   const trail = getBreadcrumbTrail(pathname, searchParams, hasPermission, labels);
-  const current = trail.at(-1);
-  const parent = [...trail.slice(0, -1)].reverse().find((crumb) => crumb.href);
-  // Four-step trails (edit pages) show the group as its sidebar icon to leave room for names.
-  const compact = trail.length >= 4;
+  const group = trail.find((crumb) => crumb.group)?.group;
+  const steps = trail.filter((crumb) => !crumb.group);
+  const parent = [...steps.slice(0, -1)].reverse().find((crumb) => crumb.href);
+
+  if (steps.length <= 1) {
+    const sectionPages = getPermittedPages(hasPermission).filter((page) => page.group === group);
+
+    return group && sectionPages.length > 1 ? (
+      // -mb-1.5 pulls the title up under its label; ml-1 undoes the shell's hover-padding offset.
+      <p className="-mb-1.5 ml-1 text-[11.5px] font-bold uppercase tracking-[0.08em] text-ds-muted">
+        {group}
+      </p>
+    ) : null;
+  }
 
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 shrink items-center text-[13px]">
-      <ol className="hidden min-w-0 items-center gap-1.5 nav:flex">
-        {trail.map((crumb, index) => (
-          <li className="flex min-w-0 items-center gap-1.5" key={`${index}-${crumb.label}`}>
+      <ol className="hidden min-w-0 items-center gap-1 nav:flex">
+        {steps.map((crumb, index) => (
+          <li className="flex min-w-0 items-center gap-1" key={`${index}-${crumb.label}`}>
             {index > 0 ? (
               <ChevronRight
                 aria-hidden="true"
@@ -245,15 +107,13 @@ export function Breadcrumbs() {
                 strokeWidth={2}
               />
             ) : null}
-            {crumb.group ? (
-              <GroupMenu compact={compact} group={crumb.group} />
-            ) : crumb.current ? (
+            {crumb.current ? (
               <span aria-current="page" className="min-w-0 px-1 font-semibold text-ds-text">
                 <CrumbLabel crumb={crumb} />
               </span>
             ) : crumb.href ? (
               <Link
-                className="min-w-0 rounded-sm px-1 py-0.5 font-medium text-ds-muted transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                className="min-w-0 rounded-sm px-1 py-0.5 font-medium text-ds-link transition hover:bg-ds-subtle hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
                 href={crumb.href}
               >
                 <CrumbLabel crumb={crumb} />
@@ -278,10 +138,6 @@ export function Breadcrumbs() {
             <span className="sr-only">Back to </span>
             <CrumbLabel crumb={parent} />
           </Link>
-        ) : current ? (
-          <span aria-current="page" className="min-w-0 font-bold text-ds-text">
-            <CrumbLabel crumb={current} />
-          </span>
         ) : null}
       </div>
     </nav>
