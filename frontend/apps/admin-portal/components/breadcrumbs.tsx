@@ -145,7 +145,13 @@ function GroupMenu({ compact, group }: Readonly<{ compact: boolean; group: NavGr
         aria-controls={isOpen ? menuId : undefined}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="flex max-w-[16rem] items-center gap-1 rounded-sm px-1 py-0.5 font-medium text-ds-muted transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+        // ml-1 cancels the shell's -ml-1, so the pill lines up with the page title.
+        className={cn(
+          'ml-1 flex h-7 max-w-[16rem] items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+          isOpen
+            ? 'border-ds-primary/40 bg-ds-primary-soft text-ds-link'
+            : 'border-ds-border bg-ds-surface text-ds-text-2 hover:border-ds-primary/40 hover:bg-ds-subtle hover:text-ds-text',
+        )}
         onClick={() => setIsOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' && !isOpen) {
@@ -157,15 +163,15 @@ function GroupMenu({ compact, group }: Readonly<{ compact: boolean; group: NavGr
         title={`${group} pages`}
         type="button"
       >
-        {compact && GroupIcon ? (
-          <>
-            <GroupIcon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-            <span className="sr-only">{group}</span>
-          </>
-        ) : (
-          <span className="truncate">{group}</span>
-        )}
-        <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" strokeWidth={2.2} />
+        {GroupIcon ? (
+          <GroupIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+        ) : null}
+        <span className={compact && GroupIcon ? 'sr-only' : 'truncate'}>{group}</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={cn('h-3 w-3 shrink-0 opacity-70 transition-transform', isOpen && 'rotate-180')}
+          strokeWidth={2.4}
+        />
       </button>
       {isOpen ? (
         <div
@@ -229,16 +235,20 @@ export function Breadcrumbs() {
 
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 shrink items-center text-[13px]">
-      <ol className="hidden min-w-0 items-center gap-1 nav:flex">
+      <ol className="hidden min-w-0 items-center gap-1.5 nav:flex">
         {trail.map((crumb, index) => (
-          <li className="flex min-w-0 items-center gap-1" key={`${index}-${crumb.label}`}>
+          <li className="flex min-w-0 items-center gap-1.5" key={`${index}-${crumb.label}`}>
             {index > 0 ? (
-              <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ds-muted" />
+              <ChevronRight
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 text-ds-muted/60"
+                strokeWidth={2}
+              />
             ) : null}
             {crumb.group ? (
               <GroupMenu compact={compact} group={crumb.group} />
             ) : crumb.current ? (
-              <span aria-current="page" className="min-w-0 font-bold text-ds-text">
+              <span aria-current="page" className="min-w-0 px-1 font-semibold text-ds-text">
                 <CrumbLabel crumb={crumb} />
               </span>
             ) : crumb.href ? (
