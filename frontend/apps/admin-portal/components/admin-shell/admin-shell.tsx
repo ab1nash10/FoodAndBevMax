@@ -13,8 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { BreadcrumbLabelsProvider, Breadcrumbs } from '@/components/breadcrumbs';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CommandPalette, type PalettePage } from '@/components/command-palette';
 import { BrandMark, EmptyState, KeyboardHint } from '@/components/design-system';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -191,205 +190,190 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const openPalette = openCommandPalette;
 
   return (
-    <BreadcrumbLabelsProvider>
-      <div className="min-h-screen bg-ds-page text-ds-text">
-        <a
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-70 focus:rounded-control focus:bg-ds-surface focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:text-ds-link focus:shadow-xl focus:outline-hidden focus:ring-2 focus:ring-ds-primary"
-          href="#main-content"
-        >
-          Skip to content
-        </a>
-        <aside
-          className={cn(
-            'fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-ds-border bg-ds-surface nav:flex',
-            isCollapsed ? 'w-rail' : 'w-sidebar',
-          )}
-        >
-          {isCollapsed ? (
-            <SidebarRail
+    <div className="min-h-screen bg-ds-page text-ds-text">
+      <a
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-70 focus:rounded-control focus:bg-ds-surface focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:text-ds-link focus:shadow-xl focus:outline-hidden focus:ring-2 focus:ring-ds-primary"
+        href="#main-content"
+      >
+        Skip to content
+      </a>
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-ds-border bg-ds-surface nav:flex',
+          isCollapsed ? 'w-rail' : 'w-sidebar',
+        )}
+      >
+        {isCollapsed ? (
+          <SidebarRail
+            counts={navCounts}
+            hasPermission={hasPermission}
+            onExpand={() => setIsCollapsed(false)}
+            onOpenPalette={openPalette}
+          />
+        ) : (
+          <>
+            <div className="flex items-center gap-2.5 pb-3.5 pl-4 pr-3.5 pt-4">
+              <Link
+                aria-label="AAHAR dashboard"
+                className="min-w-0 flex-1 rounded-control-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                href="/dashboard"
+              >
+                <BrandMark className="min-w-0" />
+              </Link>
+              <button
+                aria-expanded
+                aria-keyshortcuts="["
+                aria-label="Collapse sidebar"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-ds-border text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                onClick={() => setIsCollapsed(true)}
+                title="Collapse sidebar ( [ )"
+                type="button"
+              >
+                <PanelLeftClose aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+              </button>
+            </div>
+            <SidebarContent
               counts={navCounts}
               hasPermission={hasPermission}
-              onExpand={() => setIsCollapsed(false)}
               onOpenPalette={openPalette}
+              sections
             />
-          ) : (
-            <>
-              <div className="flex items-center gap-2.5 pb-3.5 pl-4 pr-3.5 pt-4">
-                <Link
-                  aria-label="AAHAR dashboard"
-                  className="min-w-0 flex-1 rounded-control-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-                  href="/dashboard"
-                >
-                  <BrandMark className="min-w-0" />
-                </Link>
-                <button
-                  aria-expanded
-                  aria-keyshortcuts="["
-                  aria-label="Collapse sidebar"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-ds-border text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-                  onClick={() => setIsCollapsed(true)}
-                  title="Collapse sidebar ( [ )"
-                  type="button"
-                >
-                  <PanelLeftClose aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                </button>
-              </div>
-              <SidebarContent
-                counts={navCounts}
-                hasPermission={hasPermission}
-                onOpenPalette={openPalette}
-                sections
-              />
-            </>
-          )}
-        </aside>
+          </>
+        )}
+      </aside>
 
-        {isMobileMenuOpen ? (
-          <div className="fixed inset-0 z-40 nav:hidden">
-            <button
-              aria-label="Close navigation"
-              className="absolute inset-0 bg-ds-overlay backdrop-blur-xs"
-              onClick={() => setIsMobileMenuOpen(false)}
-              type="button"
-            />
-            <aside className="relative flex h-full w-[min(17rem,86vw)] flex-col border-r border-ds-border bg-ds-surface shadow-xl">
-              <div className="flex items-center justify-between gap-3 pb-3.5 pl-4 pr-3.5 pt-4">
-                <BrandMark className="min-w-0" />
-                <Button
-                  aria-label="Close navigation"
-                  className="h-8 w-8 shrink-0 text-ds-text-3"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  size="icon"
-                  type="button"
-                  variant="outline"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <SidebarContent
-                counts={navCounts}
-                hasPermission={hasPermission}
-                onNavigate={() => setIsMobileMenuOpen(false)}
-                onOpenPalette={() => {
-                  setIsMobileMenuOpen(false);
-                  openPalette();
-                }}
-              />
-            </aside>
-          </div>
-        ) : null}
-
-        <div
-          className={cn(
-            'transition-[padding] duration-200',
-            isCollapsed ? 'nav:pl-rail' : 'nav:pl-sidebar',
-          )}
-        >
-          <header className="sticky top-0 z-30 border-b border-ds-border bg-ds-surface/95 backdrop-blur-xl">
-            <div className="flex min-h-16 items-center gap-3 px-4 py-3 nav:gap-4 nav:px-6">
+      {isMobileMenuOpen ? (
+        <div className="fixed inset-0 z-40 nav:hidden">
+          <button
+            aria-label="Close navigation"
+            className="absolute inset-0 bg-ds-overlay backdrop-blur-xs"
+            onClick={() => setIsMobileMenuOpen(false)}
+            type="button"
+          />
+          <aside className="relative flex h-full w-[min(17rem,86vw)] flex-col border-r border-ds-border bg-ds-surface shadow-xl">
+            <div className="flex items-center justify-between gap-3 pb-3.5 pl-4 pr-3.5 pt-4">
+              <BrandMark className="min-w-0" />
               <Button
-                aria-label="Open navigation"
-                className="shrink-0 nav:hidden"
-                onClick={() => setIsMobileMenuOpen(true)}
+                aria-label="Close navigation"
+                className="h-8 w-8 shrink-0 text-ds-text-3"
+                onClick={() => setIsMobileMenuOpen(false)}
                 size="icon"
                 type="button"
                 variant="outline"
               >
-                <Menu className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </Button>
-              <button
-                className="hidden h-10 max-w-[460px] min-w-28 flex-1 basis-0 items-center gap-2.5 rounded-control border border-ds-border bg-ds-subtle pl-3 pr-2 text-left text-[13px] text-ds-muted transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary md:flex"
-                onClick={openPalette}
-                type="button"
-              >
-                <Search aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-                <span className="min-w-0 flex-1 truncate">Search transfers, items, GRNs…</span>
-                <KeyboardHint keys={['Ctrl', 'K']} />
-              </button>
-              <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-                <Button
-                  aria-label="Search"
-                  className="md:hidden"
-                  onClick={openPalette}
-                  size="icon"
-                  type="button"
-                  variant="outline"
-                >
-                  <Search className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                </Button>
-                <HeaderLocationSelector />
-                {/* Phones reach the theme from Preferences. */}
-                <div className="hidden sm:block">
-                  <ThemeToggle />
-                </div>
-                <details className="relative" ref={profileMenuRef}>
-                  <summary
-                    aria-label={`Account menu: ${displayName}`}
-                    className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-full border border-ds-border bg-ds-surface pl-1 pr-2.5 transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary [&::-webkit-details-marker]:hidden"
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-xs font-extrabold text-ds-link">
-                      {initials || 'AU'}
-                    </span>
-                    <span className="hidden max-w-36 truncate text-[13px] font-bold text-ds-text xl:block">
-                      {displayName}
-                    </span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 shrink-0 text-ds-muted"
-                    />
-                  </summary>
-                  <div className="absolute right-0 mt-2 w-56 rounded-card border border-ds-border bg-ds-surface p-2 shadow-xl shadow-ds-text/10">
-                    <div className="px-3 py-2">
-                      <p className="truncate text-sm font-bold text-ds-text">{displayName}</p>
-                      <p className="text-xs text-ds-muted">{roleLabel}</p>
-                    </div>
-                    <button
-                      className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-left text-sm text-ds-text-2 hover:bg-ds-subtle"
-                      onClick={(event) => {
-                        event.currentTarget.closest('details')?.removeAttribute('open');
-                        setIsPreferencesOpen(true);
-                      }}
-                      type="button"
-                    >
-                      <Settings className="h-4 w-4" />
-                      Preferences
-                    </button>
-                    <button
-                      className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-left text-sm text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
-                      onClick={() => {
-                        void logout().then(() => router.replace('/auth/login'));
-                      }}
-                      type="button"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Log out
-                    </button>
-                  </div>
-                </details>
-              </div>
             </div>
-          </header>
-          <main
-            className="mx-auto w-full max-w-content px-4 py-5 focus:outline-hidden nav:px-6"
-            id="main-content"
-            tabIndex={-1}
-          >
-            {/* The trail sits above the page, below the top bar. useSearchParams (record crumbs)
-                needs a Suspense boundary under the layout. */}
-            <Suspense fallback={<div className="mb-3 h-5" />}>
-              {/* -ml-1 takes back the crumbs' hover padding, so the text lines up with the title. */}
-              <div className="-ml-1 mb-3">
-                <Breadcrumbs />
-              </div>
-            </Suspense>
-            {children}
-          </main>
+            <SidebarContent
+              counts={navCounts}
+              hasPermission={hasPermission}
+              onNavigate={() => setIsMobileMenuOpen(false)}
+              onOpenPalette={() => {
+                setIsMobileMenuOpen(false);
+                openPalette();
+              }}
+            />
+          </aside>
         </div>
-        <CommandPalette pages={palettePages} />
-        {isPreferencesOpen ? (
-          <PreferencesDialog onClose={() => setIsPreferencesOpen(false)} />
-        ) : null}
+      ) : null}
+
+      <div
+        className={cn(
+          'transition-[padding] duration-200',
+          isCollapsed ? 'nav:pl-rail' : 'nav:pl-sidebar',
+        )}
+      >
+        <header className="sticky top-0 z-30 border-b border-ds-border bg-ds-surface/95 backdrop-blur-xl">
+          <div className="flex min-h-16 items-center gap-3 px-4 py-3 nav:gap-4 nav:px-6">
+            <Button
+              aria-label="Open navigation"
+              className="shrink-0 nav:hidden"
+              onClick={() => setIsMobileMenuOpen(true)}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <button
+              className="hidden h-10 max-w-[460px] min-w-28 flex-1 basis-0 items-center gap-2.5 rounded-control border border-ds-border bg-ds-subtle pl-3 pr-2 text-left text-[13px] text-ds-muted transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary md:flex"
+              onClick={openPalette}
+              type="button"
+            >
+              <Search aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 truncate">Search transfers, items, GRNs…</span>
+              <KeyboardHint keys={['Ctrl', 'K']} />
+            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <Button
+                aria-label="Search"
+                className="md:hidden"
+                onClick={openPalette}
+                size="icon"
+                type="button"
+                variant="outline"
+              >
+                <Search className="h-[18px] w-[18px]" strokeWidth={1.8} />
+              </Button>
+              <HeaderLocationSelector />
+              {/* Phones reach the theme from Preferences. */}
+              <div className="hidden sm:block">
+                <ThemeToggle />
+              </div>
+              <details className="relative" ref={profileMenuRef}>
+                <summary
+                  aria-label={`Account menu: ${displayName}`}
+                  className="flex h-10 cursor-pointer list-none items-center gap-2 rounded-full border border-ds-border bg-ds-surface pl-1 pr-2.5 transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary [&::-webkit-details-marker]:hidden"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-xs font-extrabold text-ds-link">
+                    {initials || 'AU'}
+                  </span>
+                  <span className="hidden max-w-36 truncate text-[13px] font-bold text-ds-text xl:block">
+                    {displayName}
+                  </span>
+                  <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ds-muted" />
+                </summary>
+                <div className="absolute right-0 mt-2 w-56 rounded-card border border-ds-border bg-ds-surface p-2 shadow-xl shadow-ds-text/10">
+                  <div className="px-3 py-2">
+                    <p className="truncate text-sm font-bold text-ds-text">{displayName}</p>
+                    <p className="text-xs text-ds-muted">{roleLabel}</p>
+                  </div>
+                  <button
+                    className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-left text-sm text-ds-text-2 hover:bg-ds-subtle"
+                    onClick={(event) => {
+                      event.currentTarget.closest('details')?.removeAttribute('open');
+                      setIsPreferencesOpen(true);
+                    }}
+                    type="button"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Preferences
+                  </button>
+                  <button
+                    className="flex min-h-10 w-full items-center gap-2 rounded-control px-3 text-left text-sm text-ds-status-bad-fg hover:bg-ds-status-bad-bg"
+                    onClick={() => {
+                      void logout().then(() => router.replace('/auth/login'));
+                    }}
+                    type="button"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log out
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+        </header>
+        <main
+          className="mx-auto w-full max-w-content px-4 py-5 focus:outline-hidden nav:px-6"
+          id="main-content"
+          tabIndex={-1}
+        >
+          {children}
+        </main>
       </div>
-    </BreadcrumbLabelsProvider>
+      <CommandPalette pages={palettePages} />
+      {isPreferencesOpen ? <PreferencesDialog onClose={() => setIsPreferencesOpen(false)} /> : null}
+    </div>
   );
 }
