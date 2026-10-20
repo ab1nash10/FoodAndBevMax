@@ -13,7 +13,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { getBreadcrumbTrail, getPermittedPages, type Crumb } from '@/lib/navigation';
+import { getBreadcrumbTrail, type Crumb } from '@/lib/navigation';
 
 type LabelMap = Record<string, string | undefined>;
 
@@ -69,10 +69,9 @@ function CrumbLabel({ crumb }: Readonly<{ crumb: Crumb }>) {
 }
 
 /**
- * Above the page title. A top-level page shows its sidebar section as a small label (none when
- * the section has only that page, as the sidebar shows no heading for it). A deeper page shows
- * the way back instead: its parent pages, then itself. The sidebar already lists every page, so
- * the section is not a menu. Below the `nav` breakpoint a deeper page collapses to "‹ Parent".
+ * Where the user is, on every page: [section] › [page] › [record or sub-page]. The section is
+ * plain text (the sidebar already lists its pages), parent pages are links, the last crumb is the
+ * current page. Below the `nav` breakpoint it collapses to one "‹ Parent" link.
  */
 export function Breadcrumbs() {
   const pathname = usePathname();
@@ -80,25 +79,13 @@ export function Breadcrumbs() {
   const { hasPermission } = useAuth();
   const { labels } = useContext(BreadcrumbLabelsContext);
   const trail = getBreadcrumbTrail(pathname, searchParams, hasPermission, labels);
-  const group = trail.find((crumb) => crumb.group)?.group;
-  const steps = trail.filter((crumb) => !crumb.group);
-  const parent = [...steps.slice(0, -1)].reverse().find((crumb) => crumb.href);
-
-  if (steps.length <= 1) {
-    const sectionPages = getPermittedPages(hasPermission).filter((page) => page.group === group);
-
-    return group && sectionPages.length > 1 ? (
-      // -mb-1.5 pulls the title up under its label; ml-1 undoes the shell's hover-padding offset.
-      <p className="-mb-1.5 ml-1 text-[11.5px] font-bold uppercase tracking-[0.08em] text-ds-muted">
-        {group}
-      </p>
-    ) : null;
-  }
+  const current = trail.at(-1);
+  const parent = [...trail.slice(0, -1)].reverse().find((crumb) => crumb.href);
 
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 shrink items-center text-[13px]">
       <ol className="hidden min-w-0 items-center gap-1 nav:flex">
-        {steps.map((crumb, index) => (
+        {trail.map((crumb, index) => (
           <li className="flex min-w-0 items-center gap-1" key={`${index}-${crumb.label}`}>
             {index > 0 ? (
               <ChevronRight
@@ -138,6 +125,10 @@ export function Breadcrumbs() {
             <span className="sr-only">Back to </span>
             <CrumbLabel crumb={parent} />
           </Link>
+        ) : current ? (
+          <span aria-current="page" className="min-w-0 font-semibold text-ds-text">
+            <CrumbLabel crumb={current} />
+          </span>
         ) : null}
       </div>
     </nav>
