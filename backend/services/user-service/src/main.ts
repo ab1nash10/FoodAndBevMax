@@ -8,7 +8,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   const port = Number(config.get<string>('PORT') ?? 4002);
-  const host = process.env.HOST ?? '0.0.0.0';
+  // Unset = Node's default: every address, IPv6 and IPv4. Binding 0.0.0.0 alone made each new
+  // connection to localhost wait ~0.2 s on Windows while ::1 was tried first.
+  const host = process.env.HOST || undefined;
 
   configureSecurityBaseline(app, config, {
     serviceName: 'user-service',
@@ -16,7 +18,7 @@ async function bootstrap() {
     swaggerTitle: 'AAHAR User Service',
   });
 
-  await app.listen(port, host);
+  await (host ? app.listen(port, host) : app.listen(port));
 }
 
 void bootstrap();

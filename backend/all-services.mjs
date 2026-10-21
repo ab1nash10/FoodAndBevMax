@@ -28,7 +28,8 @@ const basePath = (process.env.BASE_PATH ?? '').replace(/\/+$/, '');
 const apiPrefix = `${basePath}/api/v1`;
 // 4000 matches the Dockerfile HEALTHCHECK's own fallback.
 const listenPort = Number(process.env.PORT ?? 4000);
-const listenHost = process.env.HOST ?? '0.0.0.0';
+// Unset = Node's default: every address, IPv6 and IPv4 (see the services' main.ts).
+const listenHost = process.env.HOST || undefined;
 
 // Path table from infra/helm/fandb values.yaml `apiPaths`; organization is the catch-all,
 // so it also serves ${apiPrefix}/health - like the chart, where the ALB health check does.
