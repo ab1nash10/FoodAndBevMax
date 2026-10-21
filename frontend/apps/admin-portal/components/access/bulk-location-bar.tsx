@@ -67,9 +67,9 @@ export function BulkLocationBar({
     });
 
   return (
-    <div className="space-y-3 border-b border-ds-teal-border/20 bg-ds-teal-soft/40 px-4 py-3">
+    <div className="space-y-3 border-b border-ds-primary-border bg-ds-selected px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="flex items-center gap-2 text-sm font-semibold text-ds-teal-text">
+        <span className="flex items-center gap-2 text-sm font-semibold text-ds-link">
           <MapPin className="h-4 w-4" />
           {selected.length} user(s) selected
         </span>

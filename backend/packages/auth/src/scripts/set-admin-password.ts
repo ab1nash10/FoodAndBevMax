@@ -54,7 +54,12 @@ async function main(): Promise<void> {
     }
 
     await prisma.user.update({
-      data: { passwordHash: await hashPassword(password), updatedBy: user.id },
+      // A reset is often a recovery: sign out whoever holds a session on the old password.
+      data: {
+        passwordHash: await hashPassword(password),
+        sessionVersion: { increment: 1 },
+        updatedBy: user.id,
+      },
       where: { id: user.id },
     });
 

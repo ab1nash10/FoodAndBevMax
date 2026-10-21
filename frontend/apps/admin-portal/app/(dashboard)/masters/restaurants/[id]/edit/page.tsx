@@ -1,4 +1,5 @@
 import { RestaurantEditPageClient } from '@/components/organization/restaurant-form-pages';
+import { RestaurantsPageClient } from '@/components/organization/restaurants-page';
 
 interface EditRestaurantPageProps {
   params: Promise<{
@@ -9,5 +10,11 @@ interface EditRestaurantPageProps {
 export default async function EditRestaurantPage({ params }: EditRestaurantPageProps) {
   const { id } = await params;
 
-  return <RestaurantEditPageClient restaurantId={id} />;
+  // The form opens as the side panel over the list (FormShell), as editing other records does.
+  return (
+    <>
+      <RestaurantsPageClient />
+      <RestaurantEditPageClient restaurantId={id} />
+    </>
+  );
 }

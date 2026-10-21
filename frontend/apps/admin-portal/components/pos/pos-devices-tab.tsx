@@ -7,6 +7,7 @@ import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PosDevice, PosDeviceInput } from '@aahar/api-client';
+import { RowAction, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Modal, Toggle } from '@/components/ui-controls';
@@ -32,6 +33,7 @@ import {
   useRestaurantOptions,
 } from '@/components/pos/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 import { StatusToggleCell } from '@/components/organization/shared/list-controls';
 import { useLegalEntityNames } from '@/components/organization/shared/hooks';
 import {
@@ -220,6 +222,7 @@ function PosDeviceForm({
 
   return (
     <Modal
+      side
       footer={
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button onClick={onClose} type="button" variant="outline">
@@ -246,10 +249,10 @@ function PosDeviceForm({
           void handleSubmit(event);
         }}
       >
-        <Field error={form.formState.errors.name?.message} label="Name" name="pos-name">
+        <Field error={form.formState.errors.name?.message} label="Name" name="pos-name" required>
           <Input id="pos-name" {...form.register('name')} />
         </Field>
-        <Field error={form.formState.errors.code?.message} label="Code" name="pos-code">
+        <Field error={form.formState.errors.code?.message} label="Code" name="pos-code" required>
           <Input id="pos-code" {...form.register('code')} />
         </Field>
         <ToggleField
@@ -261,6 +264,7 @@ function PosDeviceForm({
           error={form.formState.errors.hospitalId?.message}
           label="Location"
           name="pos-location"
+          required
         >
           <Select
             disabled={hospitalsQuery.isLoading || !isAllLocations}
@@ -319,7 +323,7 @@ function PosDeviceForm({
                   >
                     <input
                       checked={selectedRestaurantIds.includes(restaurant.id)}
-                      className="h-4 w-4 accent-teal-600"
+                      className="h-4 w-4 accent-ds-primary"
                       onChange={() => toggleRestaurant(restaurant.id)}
                       type="checkbox"
                     />
@@ -431,12 +435,17 @@ export function PosDevicesTab() {
     setIsFormOpen(false);
   };
 
+  const openEditForm = (device: PosDevice) => {
+    setEditingDevice(device);
+    setIsFormOpen(true);
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
         <Button onClick={openCreateForm} type="button">
           <Plus className="h-4 w-4" />
-          New Pos Device
+          New POS device
         </Button>
       </div>
       <PosDeviceForm editingDevice={editingDevice} onClose={closeForm} open={isFormOpen} />
@@ -462,36 +471,46 @@ export function PosDevicesTab() {
             setPage(1);
           }}
           search={searchInput}
+          searchLabel="Search POS devices"
+          searchPlaceholder="Code, name, hostname or restaurant"
         />
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="whitespace-nowrap bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-250 table-fixed')}>
+            <thead className={cn(tableStyles.head, 'whitespace-nowrap')}>
               <tr>
-                <th className="w-[13%] px-4 py-2.5">Name</th>
-                <th className="w-[13%] px-4 py-2.5">Location</th>
-                <th className="w-[13%] px-4 py-2.5">Restaurants</th>
-                <th className="w-[13%] px-4 py-2.5">Entity</th>
-                <th className="w-[10%] px-4 py-2.5">Hostname</th>
-                <th className="w-[12%] px-4 py-2.5">Status</th>
-                <th className="w-[9%] px-4 py-2.5">KOT Print</th>
-                <th className="w-[10%] px-4 py-2.5">Invoice Print</th>
-                <th className="w-[156px] px-4 py-2.5 min-[1340px]:w-[228px]">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[15%]')}>Name</th>
+                <th className={cn(tableStyles.th, 'w-[13%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[14%]')}>Restaurants</th>
+                <th className={cn(tableStyles.th, 'w-[13%]')}>Entity</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Hostname</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[8%]')}>KOT print</th>
+                <th className={cn(tableStyles.th, 'w-[9%]')}>Invoice print</th>
+                <th className={cn(tableStyles.th, 'w-36')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((device) => (
-                  <tr className="hover:bg-ds-subtle" key={device.id}>
+                  <tr
+                    className={tableStyles.row}
+                    key={device.id}
+                    onClick={() => openEditForm(device)}
+                  >
                     {/* The code under the name, as the Locations list shows its codes. */}
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-ds-text dark:text-white">{device.name}</p>
-                      <p className="line-clamp-1 text-xs text-ds-muted">{device.code}</p>
+                    <td className={tableStyles.td}>
+                      <p className={cn('truncate', tableStyles.title)}>{device.name}</p>
+                      <p className={cn('truncate', tableStyles.code)}>{device.code}</p>
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">{device.hospital.hospitalName}</td>
-                    <td className="px-4 py-3 text-ds-text-3">
+                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                      {device.hospital.hospitalName}
+                    </td>
+                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {formatRestaurants(device.restaurants)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td}>
                       <LegalEntityCell
                         entity={
                           device.legalEntityId
@@ -500,8 +519,17 @@ export function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">{device.hostName ?? 'Not set'}</td>
-                    <td className="px-4 py-3">
+                    <td
+                      className={cn(
+                        tableStyles.td,
+                        device.hostName && tableStyles.code,
+                        'truncate text-ds-text-2',
+                      )}
+                    >
+                      {device.hostName ?? 'Not set'}
+                    </td>
+                    {/* The switches have their own clicks: they do not open the device. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <StatusToggleCell
                         disabled={flagMutation.isPending}
                         isActive={device.isActive}
@@ -513,7 +541,7 @@ export function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <Toggle
                         ariaLabel={`KOT print for ${device.name}`}
                         checked={device.isKotPrintEnabled}
@@ -526,7 +554,7 @@ export function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <Toggle
                         ariaLabel={`Invoice print for ${device.name}`}
                         checked={device.isInvoicePrintEnabled}
@@ -539,35 +567,22 @@ export function PosDevicesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          aria-label={`Map restaurants to ${device.name}`}
-                          // Square like Edit; on wide screens it also says what it does.
-                          className="min-[1340px]:w-auto min-[1340px]:px-4"
+                    {/* The order key's confirm and pop-up must not open the device either. */}
+                    <td
+                      className={cn(tableStyles.td, 'pr-3')}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <span className="flex items-center justify-end gap-0.5">
+                        <RowAction
+                          icon={Utensils}
+                          label={`Map restaurants to ${device.name}`}
                           onClick={() => setAccessibilityDevice(device)}
-                          size="icon"
-                          title="Map restaurants to this POS device"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Utensils aria-hidden="true" className="h-4 w-4" />
-                          {/* Narrow screens keep the icon only; the title names it. */}
-                          <span className="hidden min-[1340px]:inline">Restaurants</span>
-                        </Button>
-                        <Button
-                          aria-label={`Edit ${device.name}`}
-                          onClick={() => {
-                            setEditingDevice(device);
-                            setIsFormOpen(true);
-                          }}
-                          size="icon"
-                          title="Edit"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil aria-hidden="true" className="h-4 w-4" />
-                        </Button>
+                        />
+                        <RowAction
+                          icon={Pencil}
+                          label={`Edit ${device.name}`}
+                          onClick={() => openEditForm(device)}
+                        />
                         <OrderKeyButton
                           issue={async () =>
                             (await organizationApi.issuePosDeviceKey(device.id)).data.apiKey
@@ -575,7 +590,7 @@ export function PosDevicesTab() {
                           name={device.name}
                           usage="lets this POS send orders to the kitchen screen and TV board"
                         />
-                      </div>
+                      </span>
                     </td>
                   </tr>
                 ))

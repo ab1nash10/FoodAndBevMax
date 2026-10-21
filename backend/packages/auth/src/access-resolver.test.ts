@@ -1,12 +1,13 @@
 import { strict as assert } from 'node:assert';
 import {
+  ACCESS_CACHE_MS,
   AccessResolver,
   CREDENTIAL_LOCK_MS,
   credentialsLockedUntil,
   isSessionCurrent,
   mergePermissionCodes,
 } from './access-resolver';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 
 void test('permission merging and session versions', () => {
   const inherited = ['USER_VIEW', 'USER_UPDATE'];
@@ -88,4 +89,59 @@ void test('activity is written at most once a minute per user', async () => {
   await Promise.resolve();
 
   assert.deepEqual(writes, ['a', 'b', 'a']);
+});
+
+void test('access is looked up once per user per window, and again after forget()', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 0 });
+  try {
+    let lookups = 0;
+    const prisma = {
+      $queryRaw: () => {
+        lookups++;
+        return Promise.resolve([
+          {
+            assignedHospitalIds: [],
+            hospitalId: null,
+            inheritedCodes: ['USER_VIEW'],
+            overrides: [],
+            roles: [{ locationScope: 'ALL', name: 'Super Admin' }],
+            sessionVersion: lookups,
+          },
+        ]);
+      },
+    };
+    const resolver = new AccessResolver(prisma as never);
+
+    // A page's requests arrive together: they share the one lookup in flight.
+    const burst = await Promise.all([
+      resolver.resolve('a'),
+      resolver.resolve('a'),
+      resolver.resolve('a'),
+    ]);
+    assert.equal(lookups, 1);
+    assert.deepEqual(
+      burst.map((access) => access?.sessionVersion),
+      [1, 1, 1],
+    );
+
+    await resolver.resolve('b');
+    assert.equal(lookups, 2, 'each user has their own entry');
+
+    mock.timers.tick(ACCESS_CACHE_MS - 1);
+    await resolver.resolve('a');
+    assert.equal(lookups, 2, 'still inside the window');
+
+    mock.timers.tick(1);
+    assert.equal((await resolver.resolve('a'))?.sessionVersion, 3, 'the window has passed');
+
+    resolver.forget('a');
+    await resolver.resolve('a');
+    assert.equal(lookups, 4, 'a write that changed access is seen at once');
+
+    resolver.forget();
+    await resolver.resolve('b');
+    assert.equal(lookups, 5, 'forget() with no user clears everyone');
+  } finally {
+    mock.timers.reset();
+  }
 });

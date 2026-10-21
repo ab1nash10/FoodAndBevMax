@@ -10,6 +10,8 @@ describe('pagination helpers', () => {
   test('getPageMeta rounds the page count up', () => {
     expect(getPageMeta(2, 20, 41)).toEqual({ limit: 20, page: 2, total: 41, totalPages: 3 });
     expect(getPageMeta(1, 20, 0)).toEqual({ limit: 20, page: 1, total: 0, totalPages: 0 });
+    // limit 0: a count only.
+    expect(getPageMeta(1, 0, 41)).toEqual({ limit: 0, page: 1, total: 41, totalPages: 0 });
   });
 
   test('getOrderBy sorts by the requested field, else the defaults, then by id', () => {

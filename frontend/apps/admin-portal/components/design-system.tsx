@@ -4,9 +4,21 @@ import { statusPresentation, type StatusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import type { FoodType, InventoryLocationType } from '@aahar/api-client';
 import type { LucideIcon } from 'lucide-react';
-import { Check, Inbox, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Inbox,
+  Layers,
+  X,
+} from 'lucide-react';
 import Image from 'next/image';
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import Link from 'next/link';
+import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 
 interface BrandMarkProps {
   collapsed?: boolean;
@@ -60,6 +72,8 @@ export function MaxHealthcareMark({ className }: Readonly<{ className?: string }
 
 interface AppPageHeaderProps {
   action?: ReactNode;
+  /** How many records the page lists, beside the title. */
+  count?: number;
   description?: string;
   eyebrow?: string;
   icon?: LucideIcon;
@@ -67,27 +81,416 @@ interface AppPageHeaderProps {
 }
 
 /**
- * Page title block from the UI concepts: eyebrow, title, description and actions straight on
- * the page background. `icon` is still accepted from older call sites, but the concepts show no
- * icon here, so it is not drawn.
+ * Page title block: title, description and actions straight on the page background. The
+ * breadcrumb above already names the section, so `eyebrow` is only for context it doesn't give
+ * (the restaurant an order board belongs to). `icon` is still accepted from older call sites,
+ * but not drawn.
  */
-export function AppPageHeader({ action, description, eyebrow, title }: AppPageHeaderProps) {
+export function AppPageHeader({ action, count, description, eyebrow, title }: AppPageHeaderProps) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    // No `isolate`: a dialog opened from `action` must not be trapped under the page below.
+    <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div aria-hidden="true" className="page-art" />
       <div className="min-w-0">
-        {eyebrow ? (
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-ds-teal-text">
-            {eyebrow}
-          </p>
-        ) : null}
-        <h1 className="mt-1 text-2xl font-extrabold leading-tight tracking-[-0.01em] text-ds-text">
+        {eyebrow ? <p className="text-[13px] text-ds-muted">{eyebrow}</p> : null}
+        <h1 className="mt-0.5 flex items-center gap-3 text-[28px] font-semibold leading-tight tracking-[-0.025em] text-ds-text sm:text-[32px]">
           {title}
+          {count === undefined ? null : (
+            <span className="rounded-full bg-ds-primary-soft px-2.5 py-0.5 font-mono text-[13px] font-medium tracking-normal text-ds-link">
+              {count}
+            </span>
+          )}
         </h1>
         {description ? (
           <p className="mt-1 max-w-2xl text-sm leading-5 text-ds-muted">{description}</p>
         ) : null}
       </div>
       {action ? <div className="flex shrink-0 flex-wrap items-center gap-3">{action}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * The Dashboard's welcome: a large greeting over a soft colour field that drifts slowly, its
+ * actions under it, a floating card (`aside`) over the colour on the right, and anything quick to
+ * reach below.
+ */
+export function HeroHeader({
+  action,
+  aside,
+  children,
+  description,
+  eyebrow,
+  title,
+}: Readonly<{
+  action?: ReactNode;
+  aside?: ReactNode;
+  children?: ReactNode;
+  description?: ReactNode;
+  eyebrow?: ReactNode;
+  title: string;
+}>) {
+  return (
+    <section className="relative isolate overflow-hidden rounded-[28px] border border-ds-border bg-ds-surface px-6 py-8 shadow-card sm:px-10 sm:py-10">
+      <div aria-hidden="true" className="hero-art" />
+      <div className="relative flex flex-col gap-7 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 max-w-2xl">
+          {eyebrow ? <p className="text-[13px] font-medium text-ds-muted">{eyebrow}</p> : null}
+          {/* The full title always shows: a long name wraps, it is never cut off. */}
+          <h1 className="mt-2 text-[34px] font-semibold leading-[1.08] tracking-[-0.035em] text-ds-text wrap-anywhere sm:text-[48px]">
+            {title}
+          </h1>
+          {description ? (
+            <p className="mt-3 text-[15px] leading-6 text-ds-text-3">{description}</p>
+          ) : null}
+          {action ? <div className="mt-6 flex flex-wrap items-center gap-2.5">{action}</div> : null}
+        </div>
+        {aside ? <div className="w-full shrink-0 lg:w-[380px]">{aside}</div> : null}
+      </div>
+      {children ? <div className="relative mt-8">{children}</div> : null}
+    </section>
+  );
+}
+
+export interface QuickTile {
+  detail: string;
+  href: string;
+  icon: LucideIcon;
+  title: string;
+  tone: 'blue' | 'green' | 'rose' | 'violet';
+}
+
+/** Where to go next, as pastel tiles (a hero's quick actions). Pass only tiles the user may open. */
+export function QuickTiles({ label, tiles }: Readonly<{ label: string; tiles: QuickTile[] }>) {
+  return (
+    <nav aria-label={label}>
+      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {tiles.map((tile) => {
+          const Icon = tile.icon;
+
+          return (
+            <li key={tile.href}>
+              <Link
+                className={cn(
+                  'group flex h-full min-h-[108px] flex-col justify-between gap-3 rounded-2xl p-4 text-ds-text ring-1 ring-ds-text/5 transition duration-200 hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link motion-safe:hover:-translate-y-0.5',
+                  `tile-${tile.tone}`,
+                )}
+                href={tile.href}
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-ds-surface/75 text-ds-link shadow-xs">
+                  <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.9} />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold leading-snug">{tile.title}</span>
+                  <span className="mt-0.5 flex items-center gap-1 text-xs text-ds-text-3">
+                    {tile.detail}
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="h-3 w-3 transition-transform duration-200 group-hover:translate-x-0.5"
+                    />
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+export interface Stat {
+  /** Marks the stat whose filter the list shows now. */
+  active?: boolean;
+  label: string;
+  /** Picking the stat filters the list to it. */
+  onSelect?: () => void;
+  /** Its part of the whole, 0–1: drawn as a thin bar under the number in a `rich` strip. */
+  share?: number;
+  tone?: 'bad' | 'default' | 'ok' | 'pending';
+  value: ReactNode;
+}
+
+const statDot: Record<NonNullable<Stat['tone']>, string> = {
+  bad: 'bg-ds-status-bad-fg',
+  default: 'bg-ds-link',
+  ok: 'bg-ds-status-ok-fg',
+  pending: 'bg-ds-status-pending-fg',
+};
+
+// From sm up a stat shows its tone as an icon in a tinted chip; phones keep the dot.
+const statIcon: Record<NonNullable<Stat['tone']>, LucideIcon> = {
+  bad: AlertTriangle,
+  default: Layers,
+  ok: CheckCircle2,
+  pending: Clock3,
+};
+
+const statChip: Record<NonNullable<Stat['tone']>, string> = {
+  bad: 'text-ds-status-bad-fg',
+  default: 'text-ds-link',
+  ok: 'text-ds-status-ok-fg',
+  pending: 'text-ds-status-pending-fg',
+};
+
+// The same pastel washes as the Dashboard's quick tiles, one per tone.
+const statTile: Record<NonNullable<Stat['tone']>, string> = {
+  bad: 'tile-rose',
+  default: 'tile-blue',
+  ok: 'tile-green',
+  pending: 'tile-violet',
+};
+
+/**
+ * The numbers a list is about, above it, as pastel tiles: what is in it at a glance, and a
+ * one-click filter to each part. Values load as dashes so the strip never jumps. `rich` adds a
+ * soft glow in each tile's tone and a bar for each stat's `share` (being tried on Items).
+ */
+export function StatStrip({
+  label,
+  rich = false,
+  stats,
+}: Readonly<{ label: string; rich?: boolean; stats: Stat[] }>) {
+  return (
+    // As many columns as stats from md up, so three or four cards always fill the row.
+    <div
+      aria-label={label}
+      className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(var(--stats),minmax(0,1fr))] md:gap-4"
+      role="group"
+      style={{ '--stats': stats.length } as CSSProperties}
+    >
+      {stats.map((stat) => {
+        const tone = stat.tone ?? 'default';
+        const Icon = statIcon[tone];
+        const body = (
+          <>
+            <span className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-ds-text-2 sm:gap-2.5">
+              <span
+                aria-hidden="true"
+                className={cn('h-1.5 w-1.5 shrink-0 rounded-full sm:hidden', statDot[tone])}
+              />
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'hidden h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-ds-surface/80 shadow-xs sm:grid',
+                  statChip[tone],
+                )}
+              >
+                <Icon className="h-4 w-4" strokeWidth={2} />
+              </span>
+              {stat.label}
+            </span>
+            {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø" this large. */}
+            <span className="text-[22px] font-semibold leading-none tracking-[-0.03em] text-ds-text tabular-nums sm:text-[30px]">
+              {stat.value}
+            </span>
+            {rich && stat.share !== undefined ? (
+              <span
+                aria-hidden="true"
+                className="hidden h-1 rounded-full bg-ds-surface/70 sm:block"
+              >
+                <span
+                  className={cn(
+                    'block h-full rounded-full transition-[width] duration-500',
+                    statDot[tone],
+                  )}
+                  style={{ width: `${Math.round(Math.min(Math.max(stat.share, 0), 1) * 100)}%` }}
+                />
+              </span>
+            ) : null}
+            {rich ? (
+              // A pool of the tile's tone in its corner; behind the text, never over it.
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'pointer-events-none absolute -top-10 -right-10 -z-10 h-32 w-32 rounded-full bg-current opacity-20 blur-2xl',
+                  statChip[tone],
+                )}
+              />
+            ) : null}
+          </>
+        );
+        // Phones: one short row, the number before its label, so the list starts higher up.
+        const box = cn(
+          'flex flex-row-reverse items-center justify-end gap-2.5 rounded-2xl px-3 py-2.5 text-left transition duration-200 sm:min-h-[112px] sm:flex-col sm:items-stretch sm:justify-between sm:gap-4 sm:px-[18px] sm:py-4',
+          statTile[tone],
+          rich && 'relative isolate overflow-hidden',
+          // ds-link, not ds-primary: a primary ring would vanish on the dark theme's blue tiles.
+          stat.active ? 'ring-2 ring-ds-link shadow-card-hover' : 'ring-1 ring-ds-text/5',
+        );
+
+        return stat.onSelect ? (
+          <button
+            aria-pressed={stat.active ?? false}
+            className={cn(
+              box,
+              'hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link motion-safe:hover:-translate-y-0.5',
+            )}
+            key={stat.label}
+            onClick={stat.onSelect}
+            type="button"
+          >
+            {body}
+          </button>
+        ) : (
+          <div className={box} key={stat.label}>
+            {body}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The one look of every list table: quiet sticky header, roomy rows that light up on hover,
+ * codes and numbers in mono. Use these instead of per-page class strings.
+ */
+export const tableStyles = {
+  code: 'font-mono text-[12px] text-ds-muted',
+  head: 'sticky top-0 z-10 border-b border-ds-divider bg-ds-surface text-left text-[12.5px] text-ds-muted',
+  num: 'font-mono tabular-nums',
+  /** A secondary column left out on phones, so the ones that matter fit without scrolling. */
+  phoneHidden: 'hidden sm:table-cell',
+  /** A row the whole of which opens the record. */
+  row: 'group cursor-pointer border-t border-ds-divider transition-colors hover:bg-ds-selected',
+  table: 'w-full text-[13.5px]',
+  td: 'px-4 py-3.5 align-middle',
+  th: 'px-4 py-3 font-semibold',
+  title: 'font-semibold text-ds-text',
+};
+
+const cellDateFormatter = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' });
+const cellTimeFormatter = new Intl.DateTimeFormat('en-IN', { timeStyle: 'short' });
+
+/**
+ * A table cell's date with its time under it, so neither is cut off or split mid-time
+ * ("13 Oct 2026, 6:56" / "pm") in a narrow column. `note` follows the time.
+ */
+export function DateTimeCell({
+  note,
+  title,
+  value,
+}: Readonly<{ note?: string; title?: string; value: string }>) {
+  const date = new Date(value);
+
+  return (
+    <span className="block" title={title}>
+      <span className="block whitespace-nowrap text-ds-text-2">
+        {cellDateFormatter.format(date)}
+      </span>
+      <span className="block truncate text-[12px] text-ds-muted">
+        {cellTimeFormatter.format(date)}
+        {note ? ` · ${note}` : null}
+      </span>
+    </span>
+  );
+}
+
+/** An icon action at the end of a row: quiet until the row is hovered or it has focus. */
+export function RowAction({
+  className,
+  icon: Icon,
+  label,
+  ...props
+}: Readonly<
+  Omit<ComponentPropsWithoutRef<'button'>, 'children'> & { icon: LucideIcon; label: string }
+>) {
+  return (
+    <button
+      aria-label={label}
+      className={cn(
+        'grid h-8 w-8 place-items-center rounded-lg text-ds-muted transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+        className,
+      )}
+      title={label.split(' ')[0]}
+      type="button"
+      {...props}
+    >
+      <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+    </button>
+  );
+}
+
+interface ListPagerProps {
+  limit: number;
+  /** "item" → "of 9 items"; leave out for "of 9". */
+  noun?: string;
+  onLimitChange?: (limit: number) => void;
+  onPageChange: (page: number) => void;
+  page: number;
+  pageSizes?: readonly number[];
+  total: number;
+  totalPages: number;
+}
+
+/** The one footer every list shares: "1–25 of 132", rows per page when changeable, ‹ ›. */
+export function ListPager({
+  limit,
+  noun,
+  onLimitChange,
+  onPageChange,
+  page,
+  pageSizes = [10, 25, 50, 100],
+  total,
+  totalPages,
+}: ListPagerProps) {
+  // Nothing to page through: the empty or error message above says why ("0–0 of 0" under a
+  // failed load read as "there are none").
+  if (total === 0) {
+    return null;
+  }
+
+  const first = (page - 1) * limit + 1;
+  const last = Math.min(page * limit, total);
+  const arrow =
+    'grid h-9 w-9 place-items-center rounded-full border border-ds-border bg-ds-surface text-ds-text-2 transition hover:bg-ds-subtle disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary';
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ds-divider px-4 py-2.5 text-[13px] text-ds-muted">
+      <span>
+        <span className="font-mono text-ds-text-2">
+          {first}–{last}
+        </span>{' '}
+        of <span className="font-mono text-ds-text-2">{total}</span>
+        {noun ? ` ${total === 1 ? noun : `${noun}s`}` : null}
+      </span>
+      <span className="flex items-center gap-1.5">
+        {onLimitChange ? (
+          <label className="mr-1.5 flex items-center gap-1.5">
+            Rows
+            <select
+              className="h-9 rounded-full border border-ds-border bg-ds-surface px-2.5 font-mono text-[13px] text-ds-text"
+              onChange={(event) => onLimitChange(Number(event.target.value))}
+              value={limit}
+            >
+              {pageSizes.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <button
+          aria-label="Previous page"
+          className={arrow}
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          type="button"
+        >
+          <ChevronLeft aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+        </button>
+        <button
+          aria-label="Next page"
+          className={arrow}
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          type="button"
+        >
+          <ChevronRight aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </span>
     </div>
   );
 }
@@ -169,6 +572,39 @@ export function FoodTypeMarker({ type }: Readonly<{ type: FoodType }>) {
   );
 }
 
+const avatarTiles: Record<FoodType, string> = {
+  EGGETARIAN: 'tile-amber text-ds-food-egg',
+  NON_VEG: 'tile-rose text-ds-status-bad-fg',
+  VEG: 'tile-green text-ds-status-ok-fg',
+};
+
+/** A record's picture where it has none: its initials on a pastel tile, the food mark on its corner. */
+export function RecordAvatar({ foodType, name }: Readonly<{ foodType?: FoodType; name: string }>) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]!.toUpperCase())
+    .join('');
+
+  return (
+    // Only the initials are hidden from screen readers: the food mark still reads "Veg" etc.
+    <span
+      className={cn(
+        'relative grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[13px] font-semibold ring-1 ring-ds-text/5',
+        foodType ? avatarTiles[foodType] : 'tile-blue text-ds-link',
+      )}
+    >
+      <span aria-hidden="true">{initials || '?'}</span>
+      {foodType ? (
+        <span className="absolute -right-1 -bottom-1 rounded-[5px] bg-ds-surface p-px shadow-xs">
+          <FoodTypeMarker type={foodType} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 interface EmptyStateProps {
   action?: ReactNode;
   description?: string;
@@ -178,12 +614,12 @@ interface EmptyStateProps {
 
 export function EmptyState({ action, description, icon: Icon = Inbox, title }: EmptyStateProps) {
   return (
-    <div className="grid min-h-36 place-items-center rounded-tile border border-dashed border-ds-border bg-ds-subtle p-5 text-center">
+    <div className="grid min-h-40 place-items-center rounded-card border border-dashed border-ds-border bg-ds-subtle-2 p-6 text-center">
       <div>
-        <span className="mx-auto grid h-10 w-10 place-items-center rounded-tile bg-ds-surface text-ds-teal-text ring-1 ring-ds-border">
-          <Icon className="h-5 w-5" strokeWidth={1.8} />
+        <span className="tile-blue mx-auto grid h-12 w-12 place-items-center rounded-2xl text-ds-link">
+          <Icon aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />
         </span>
-        <h3 className="mt-3 text-sm font-bold text-ds-text">{title}</h3>
+        <h3 className="mt-3.5 text-[15px] font-semibold text-ds-text">{title}</h3>
         {description ? <p className="mt-1 text-sm text-ds-muted">{description}</p> : null}
         {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
       </div>
@@ -309,6 +745,64 @@ export function TypeTag({ type }: Readonly<{ type: InventoryLocationType }>) {
 
 export type StepState = 'current' | 'done' | 'stopped' | 'todo';
 
+export interface FlowStep {
+  label: string;
+  /** Leave out for a step that can't be opened yet (one ahead of an unfinished step). */
+  onSelect?: () => void;
+  state: Exclude<StepState, 'stopped'>;
+}
+
+/**
+ * The steps of a document being written (New GRN, New transfer, New production): numbered
+ * pills joined by a line, the current one highlighted, done ones ticked and clickable to go back.
+ */
+export function FlowStepper({ label, steps }: Readonly<{ label: string; steps: FlowStep[] }>) {
+  return (
+    <ol aria-label={label} className="flex flex-wrap items-center gap-2">
+      {steps.map((step, index) => (
+        <li className="flex items-center gap-2" key={step.label}>
+          <button
+            aria-current={step.state === 'current' ? 'step' : undefined}
+            className={cn(
+              'inline-flex h-10 items-center gap-2.5 rounded-full py-0 pl-1.5 pr-3.5 text-sm font-medium transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:cursor-default',
+              step.state === 'current' && 'bg-ds-selected text-ds-link',
+              step.state === 'done' && 'text-ds-text hover:bg-ds-subtle',
+              step.state === 'todo' && 'text-ds-muted',
+            )}
+            disabled={!step.onSelect || step.state === 'current'}
+            onClick={step.onSelect}
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                'grid h-7 w-7 place-items-center rounded-full font-mono text-[13px] font-semibold',
+                step.state === 'todo' ? 'bg-ds-divider text-ds-muted' : 'bg-ds-primary text-white',
+              )}
+            >
+              {step.state === 'done' ? (
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              ) : (
+                index + 1
+              )}
+            </span>
+            {step.label}
+          </button>
+          {index < steps.length - 1 ? (
+            <span
+              aria-hidden="true"
+              className={cn(
+                'hidden h-0.5 w-8 rounded-full sm:block',
+                step.state === 'done' ? 'bg-ds-primary' : 'bg-ds-border',
+              )}
+            />
+          ) : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export interface StepItem {
   /** Second line: a time, a person or what the step does. */
   detail?: string;
@@ -324,8 +818,8 @@ const stepStateLabels: Record<StepState, string> = {
 };
 
 const stepMarkClasses: Record<StepState, string> = {
-  current: 'border-ds-status-info-fg bg-ds-status-info-bg text-ds-status-info-fg',
-  done: 'border-ds-teal bg-ds-teal text-white',
+  current: 'border-ds-primary bg-ds-primary text-white ring-4 ring-ds-primary-soft',
+  done: 'border-ds-status-ok-fg bg-ds-status-ok-fg text-white ring-4 ring-ds-status-ok-bg',
   stopped: 'border-ds-status-bad-fg bg-ds-status-bad-bg text-ds-status-bad-fg',
   todo: 'border-ds-input bg-ds-surface text-ds-muted',
 };
@@ -333,20 +827,18 @@ const stepMarkClasses: Record<StepState, string> = {
 /** Horizontal progress, for example a GRN going Draft, Under verification, Accepted, Posted. */
 export function Stepper({ label, steps }: Readonly<{ label: string; steps: StepItem[] }>) {
   return (
-    <ol
-      aria-label={label}
-      className="flex flex-wrap items-center gap-2 rounded-card border border-ds-border bg-ds-surface px-4 py-3 shadow-card"
-    >
+    // Bare: it sits inside a record's header card.
+    <ol aria-label={label} className="flex flex-wrap items-center gap-x-3 gap-y-4">
       {steps.map((step, index) => (
         <li
           aria-current={step.state === 'current' ? 'step' : undefined}
-          className="flex min-w-[150px] flex-1 items-center gap-2"
+          className="flex min-w-[150px] flex-1 items-center gap-2.5"
           key={step.label}
         >
           <span
             aria-hidden="true"
             className={cn(
-              'grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 text-xs font-extrabold',
+              'grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full border-2 text-xs font-extrabold',
               stepMarkClasses[step.state],
             )}
           >
@@ -377,7 +869,7 @@ export function Stepper({ label, steps }: Readonly<{ label: string; steps: StepI
               aria-hidden="true"
               className={cn(
                 'h-0.5 min-w-4 flex-1 rounded-full',
-                step.state === 'done' ? 'bg-ds-teal' : 'bg-ds-divider',
+                step.state === 'done' ? 'bg-ds-status-ok-fg' : 'bg-ds-divider',
               )}
             />
           ) : null}
@@ -389,7 +881,7 @@ export function Stepper({ label, steps }: Readonly<{ label: string; steps: StepI
 
 const timelineDotClasses: Record<StepState, string> = {
   current: 'border-ds-stage-preparing bg-ds-stage-preparing',
-  done: 'border-ds-teal bg-ds-teal',
+  done: 'border-ds-primary bg-ds-primary',
   stopped: 'border-ds-status-bad-fg bg-ds-status-bad-fg',
   todo: 'border-ds-input bg-ds-surface',
 };

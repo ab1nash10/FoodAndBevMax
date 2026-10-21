@@ -15,8 +15,8 @@
   --breakpoint-xl: 1280px;
   --breakpoint-2xl: 1536px;
 
-  --radius-card: 16px;
-  --radius-control: 10px;
+  --radius-card: 20px;
+  --radius-control: 11px;
   --radius-control-lg: 12px;
   --radius-tile: 14px;
 
@@ -29,7 +29,7 @@
   --color-brand-danger: #b4233f;
   --color-brand-emerald: #0f7b63;
   --color-brand-info: #0b57a4;
-  --color-brand-mint: #e7f6f1;
+  --color-brand-mint: #f0f6fd;
   --color-brand-navy: #0f172a;
   --color-brand-teal: #0f7b63;
   --color-brand-warning: #f59e0b;
@@ -65,7 +65,8 @@
   --color-ds-page: rgb(var(--ds-page));
 
   --color-ds-primary: #0b57a4;
-  --color-ds-primary-hover: #094a8c;
+  --color-ds-primary-hover: #0a4886;
+  --color-ds-primary-border: rgb(var(--ds-primary-border));
   --color-ds-primary-soft: rgb(var(--ds-primary-soft));
 
   --color-ds-ring: rgb(var(--ds-ring));
@@ -134,8 +135,17 @@
 
   /* Subtle in light, none in dark (see --ds-card-shadow). */
   --shadow-card: var(--ds-card-shadow);
+  --shadow-card-hover: var(--ds-card-shadow-hover);
 
-  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+  /* Codes, quantities and prices, so they line up in columns (GRN000002, 150.000). */
+  --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', monospace;
+  /* Geist is variable: each weight a notch lighter than Tailwind's, so the bold labels across the
+     portal read calm rather than loud. */
+  --font-weight-semibold: 550;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 650;
+  --font-weight-black: 700;
 
   /* Tailwind 3's fixed line heights. v4's are ratios, so text that inherits one at another size
      (a 12.5px table header under text-xs) grows a pixel. */
@@ -166,6 +176,17 @@
   color utility to any element that depends on these defaults.
 */
 @layer base {
+  /* No up/down arrows on number boxes: quantities and prices are typed. */
+  input[type='number'] {
+    appearance: textfield;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
   *,
   ::after,
   ::before,
@@ -198,13 +219,14 @@
   }
 }
 
-/* Plus Jakarta Sans, self-hosted (OFL-1.1) so neither the build nor the browser needs Google. */
+/* Geist and Geist Mono (variable, OFL-1.1, from @fontsource-variable 5.3.0), self-hosted so
+   neither the build nor the browser needs Google. */
 @font-face {
   font-display: swap;
-  font-family: 'Plus Jakarta Sans';
+  font-family: 'Geist';
   font-style: normal;
-  font-weight: 200 800;
-  src: url('./fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  src: url('./fonts/geist-latin.woff2') format('woff2');
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -212,10 +234,33 @@
 
 @font-face {
   font-display: swap;
-  font-family: 'Plus Jakarta Sans';
+  font-family: 'Geist';
   font-style: normal;
-  font-weight: 200 800;
-  src: url('./fonts/plus-jakarta-sans-latin-ext.woff2') format('woff2');
+  font-weight: 100 900;
+  src: url('./fonts/geist-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url('./fonts/geist-mono-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url('./fonts/geist-mono-latin-ext.woff2') format('woff2');
   unicode-range:
     U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
     U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
@@ -224,56 +269,62 @@
 
 :root {
   /* Design tokens (UI concepts). RGB channels, used through the ds-* Tailwind colours. */
-  --ds-page: 243 245 248;
+  /* Blue and white: Max blue (#0B57A4, primary) graded 50–900, greys leaning slightly blue.
+     Blue means brand, action and "you are here"; green only ever means done/ready or veg. */
+  /* An airy near-white page with white cards on soft borders (Riotters reference). */
+  --ds-page: 247 248 250;
   --ds-surface: 255 255 255;
-  --ds-subtle: 248 250 252;
+  --ds-subtle: 245 247 250;
   --ds-subtle-2: 250 251 252;
-  --ds-border: 227 232 239;
-  --ds-divider: 238 241 245;
-  --ds-input: 213 220 229;
-  --ds-text: 15 23 42;
-  --ds-text-2: 51 65 85;
-  --ds-text-3: 71 85 105;
-  --ds-muted: 91 101 119;
-  --ds-link: 11 87 164;
-  --ds-primary-soft: 232 240 250;
-  --ds-selected: 241 246 253;
+  --ds-border: 232 235 240;
+  --ds-divider: 241 243 246;
+  --ds-input: 203 213 227;
+  --ds-text: 14 26 43;
+  --ds-text-2: 51 65 87;
+  --ds-text-3: 74 87 108;
+  --ds-muted: 91 104 128;
+  --ds-link: 10 72 134;
+  --ds-primary-soft: 232 241 252;
+  --ds-primary-border: 205 224 247;
+  --ds-selected: 244 248 254;
   /* Dialog backdrop, alpha included: lighter veil in light mode, deeper in dark. */
-  --ds-overlay: 15 23 42 / 0.42;
-  /* Sign-in brand panel: primary blue in light mode, a plain surface in dark. */
-  --ds-brand-panel: 11 87 164;
-  --ds-brand-panel-border: 11 87 164;
-  /* Accent on the brand panel (eyebrow, feature icons): light green, readable on both panels. */
-  --ds-brand-panel-accent: 110 231 183;
-  --ds-teal-soft: 231 246 241;
-  --ds-teal-border: 205 235 223;
-  --ds-teal-text: 15 107 85;
+  --ds-overlay: 14 26 43 / 0.4;
+  /* Sign-in brand panel: deep blue (900) in light mode, a plain surface in dark. */
+  --ds-brand-panel: 12 46 84;
+  --ds-brand-panel-border: 12 46 84;
+  /* Accent on the brand panel (eyebrow, feature icons): light blue, readable on both panels. */
+  --ds-brand-panel-accent: 188 213 243;
+  /* Done and ready (order board, stock in, full acceptance): the one place green belongs. */
+  --ds-teal-soft: 227 244 238;
+  --ds-teal-border: 191 230 216;
+  --ds-teal-text: 11 107 79;
   /* Status chips, icon tiles and food marks: one variable per theme, so components never
      need a dark: override. */
-  --ds-status-pending-bg: 254 243 199;
+  --ds-status-pending-bg: 253 241 220;
   --ds-status-pending-fg: 146 64 14;
-  --ds-status-info-bg: 232 240 250;
-  --ds-status-info-fg: 11 87 164;
-  --ds-status-ok-bg: 227 245 238;
-  --ds-status-ok-fg: 15 107 85;
+  --ds-status-info-bg: 240 246 253;
+  --ds-status-info-fg: 10 72 134;
+  --ds-status-ok-bg: 227 244 238;
+  --ds-status-ok-fg: 11 107 79;
   /* Order board: the "Now ready" banner, white text on it. */
   --ds-ready-banner: 15 123 99;
-  --ds-status-bad-bg: 253 236 239;
-  --ds-status-bad-fg: 180 35 63;
-  --ds-status-neutral-bg: 238 242 246;
-  --ds-status-neutral-fg: 71 85 105;
-  --ds-tile-locations-bg: 231 246 241;
-  --ds-tile-locations-fg: 15 123 99;
-  --ds-tile-stores-bg: 227 245 238;
-  --ds-tile-stores-fg: 21 128 61;
-  --ds-tile-kitchens-bg: 255 244 230;
-  --ds-tile-kitchens-fg: 194 87 12;
-  --ds-tile-restaurants-bg: 243 238 255;
-  --ds-tile-restaurants-fg: 109 63 209;
-  --ds-tile-items-bg: 234 241 253;
-  --ds-tile-items-fg: 29 95 201;
-  --ds-tile-employees-bg: 253 236 239;
-  --ds-tile-employees-fg: 192 38 75;
+  --ds-status-bad-bg: 252 232 236;
+  --ds-status-bad-fg: 180 35 57;
+  --ds-status-neutral-bg: 238 242 248;
+  --ds-status-neutral-fg: 51 65 87;
+  /* Setup tiles: one blue family, not a rainbow. */
+  --ds-tile-locations-bg: 240 246 253;
+  --ds-tile-locations-fg: 10 72 134;
+  --ds-tile-stores-bg: 240 246 253;
+  --ds-tile-stores-fg: 10 72 134;
+  --ds-tile-kitchens-bg: 240 246 253;
+  --ds-tile-kitchens-fg: 10 72 134;
+  --ds-tile-restaurants-bg: 240 246 253;
+  --ds-tile-restaurants-fg: 10 72 134;
+  --ds-tile-items-bg: 240 246 253;
+  --ds-tile-items-fg: 10 72 134;
+  --ds-tile-employees-bg: 240 246 253;
+  --ds-tile-employees-fg: 10 72 134;
   /* Charts: transfer outcomes (full / partial / rejected / pending), the main series, kitchen
      wastage and the empty-step ring. Fills use an opacity modifier (e.g. /10). */
   --ds-chart-full: 15 123 99;
@@ -287,15 +338,17 @@
   --ds-food-non-veg: 154 52 18;
   --ds-food-egg: 180 83 9;
   --ds-food-egg-dot: 245 158 11;
-  --ds-card-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+  --ds-card-shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px -14px rgb(16 24 40 / 0.1);
+  --ds-card-shadow-hover:
+    0 18px 36px -12px rgb(16 24 40 / 0.2), 0 4px 10px -4px rgb(16 24 40 / 0.08);
   /* Brand logos sit on white in both themes. */
   --ds-logo-chip: 255 255 255;
 
   /* The same tokens, as the HSL variables the older classes read. */
-  --background: 216 26% 96%;
-  --border: 214 27% 91%;
+  --background: 220 20% 97.5%;
+  --border: 217 22% 93%;
   --foreground: 222 47% 11%;
-  --muted: 160 46% 94%;
+  --muted: 213 76% 97%;
   --muted-foreground: 219 13% 41%;
   --primary: 210 87% 34%;
   --primary-foreground: 0 0% 100%;
@@ -306,7 +359,7 @@
   --brand-navy: 222 47% 11%;
   --brand-teal: 167 78% 27%;
   --brand-emerald: 167 78% 27%;
-  --brand-mint: 160 46% 94%;
+  --brand-mint: 213 76% 97%;
   --brand-warning: 38 92% 50%;
   --brand-danger: 348 67% 42%;
   --brand-info: 210 87% 34%;
@@ -317,76 +370,81 @@
 .dark {
   /* Native controls (checkboxes, select menus, scrollbars) follow the theme. */
   color-scheme: dark;
-  /* Dark values come from the portal's existing dark palette. */
-  --ds-page: 9 14 26;
-  --ds-surface: 14 21 37;
-  --ds-subtle: 22 31 44;
-  --ds-subtle-2: 22 31 44;
-  --ds-border: 31 42 61;
-  --ds-divider: 30 41 59;
-  --ds-input: 51 65 85;
-  --ds-text: 248 250 252;
-  --ds-text-2: 203 213 225;
-  --ds-text-3: 148 163 184;
-  --ds-muted: 148 163 184;
-  --ds-link: 73 158 244;
-  --ds-primary-soft: 8 47 73;
-  --ds-selected: 12 34 56;
-  --ds-overlay: 2 6 23 / 0.72;
-  --ds-brand-panel: 14 21 37;
-  --ds-brand-panel-border: 31 42 61;
-  --ds-brand-panel-accent: 110 231 183;
+  /* Charcoal greys with the logo blue as the one accent (where the reference used orange). */
+  --ds-page: 25 27 31;
+  --ds-surface: 34 36 41;
+  --ds-subtle: 42 45 51;
+  --ds-subtle-2: 39 42 47;
+  --ds-border: 52 55 62;
+  --ds-divider: 45 48 54;
+  --ds-input: 70 74 83;
+  --ds-text: 244 245 247;
+  --ds-text-2: 204 207 213;
+  --ds-text-3: 158 163 172;
+  --ds-muted: 148 153 163;
+  --ds-link: 110 168 238;
+  --ds-primary-soft: 27 46 72;
+  --ds-primary-border: 34 70 116;
+  --ds-selected: 37 44 56;
+  --ds-overlay: 6 7 9 / 0.72;
+  --ds-brand-panel: 34 36 41;
+  --ds-brand-panel-border: 52 55 62;
+  --ds-brand-panel-accent: 138 182 232;
   --ds-teal-soft: 4 47 46;
   --ds-teal-border: 19 78 74;
   --ds-teal-text: 94 234 212;
   --ds-status-pending-bg: 66 32 6;
   --ds-status-pending-fg: 252 211 77;
-  --ds-status-info-bg: 8 47 73;
-  --ds-status-info-fg: 125 211 252;
+  --ds-status-info-bg: 27 46 72;
+  --ds-status-info-fg: 147 190 240;
   --ds-status-ok-bg: 4 47 46;
   --ds-status-ok-fg: 94 234 212;
   --ds-ready-banner: 15 118 110;
   --ds-status-bad-bg: 76 5 25;
   --ds-status-bad-fg: 253 164 175;
-  --ds-status-neutral-bg: 30 41 59;
-  --ds-status-neutral-fg: 203 213 225;
-  --ds-tile-locations-bg: 4 47 46;
-  --ds-tile-locations-fg: 94 234 212;
-  --ds-tile-stores-bg: 5 46 22;
-  --ds-tile-stores-fg: 134 239 172;
-  --ds-tile-kitchens-bg: 67 20 7;
-  --ds-tile-kitchens-fg: 253 186 116;
-  --ds-tile-restaurants-bg: 46 16 101;
-  --ds-tile-restaurants-fg: 196 181 253;
-  --ds-tile-items-bg: 23 37 84;
-  --ds-tile-items-fg: 147 197 253;
-  --ds-tile-employees-bg: 76 5 25;
-  --ds-tile-employees-fg: 253 164 175;
+  --ds-status-neutral-bg: 45 48 54;
+  --ds-status-neutral-fg: 204 207 213;
+  --ds-tile-locations-bg: 27 46 72;
+  --ds-tile-locations-fg: 147 190 240;
+  --ds-tile-stores-bg: 27 46 72;
+  --ds-tile-stores-fg: 147 190 240;
+  --ds-tile-kitchens-bg: 27 46 72;
+  --ds-tile-kitchens-fg: 147 190 240;
+  --ds-tile-restaurants-bg: 27 46 72;
+  --ds-tile-restaurants-fg: 147 190 240;
+  --ds-tile-items-bg: 27 46 72;
+  --ds-tile-items-fg: 147 190 240;
+  --ds-tile-employees-bg: 27 46 72;
+  --ds-tile-employees-fg: 147 190 240;
   --ds-chart-full: 20 184 166;
   --ds-chart-partial: 245 158 11;
   --ds-chart-rejected: 251 113 133;
-  --ds-chart-pending: 71 85 105;
+  --ds-chart-pending: 74 78 87;
   --ds-chart-series: 73 158 244;
   --ds-chart-wastage: 253 186 116;
-  --ds-ring: 51 65 85;
+  --ds-ring: 70 74 83;
   --ds-food-veg: 74 222 128;
   --ds-food-non-veg: 251 146 60;
   --ds-food-egg: 251 191 36;
   --ds-food-egg-dot: 251 191 36;
   --ds-card-shadow: none;
+  --ds-card-shadow-hover: 0 12px 28px -10px rgb(0 0 0 / 0.6);
   --ds-logo-chip: 255 255 255;
-  --scrollbar-thumb: 215 19% 35% / 0.6;
-  --scrollbar-thumb-hover: 215 16% 47% / 0.85;
-  --background: 222 47% 7%;
-  --border: 217 33% 18%;
-  --foreground: 210 40% 98%;
-  --muted: 217 33% 15%;
-  --muted-foreground: 215 20% 65%;
+  --scrollbar-thumb: 220 6% 36% / 0.6;
+  --scrollbar-thumb-hover: 220 6% 50% / 0.85;
+  --background: 220 11% 11%;
+  --border: 222 9% 22%;
+  --foreground: 220 14% 96%;
+  --muted: 220 10% 18%;
+  --muted-foreground: 220 7% 61%;
   --primary: 210 88% 62%;
-  --primary-foreground: 222 47% 7%;
-  --surface: 222 47% 10%;
-  --surface-muted: 217 33% 13%;
+  --primary-foreground: 220 11% 11%;
+  --surface: 223 9% 15%;
+  --surface-muted: 220 10% 18%;
   --ring: 210 88% 62%;
+  /* The accent: logo blue, lifted a little at the top-left. */
+  --ds-primary-gradient: linear-gradient(135deg, rgb(36 119 207), rgb(11 87 164));
+  --ds-primary-gradient-hover: linear-gradient(135deg, rgb(52 136 224), rgb(16 99 184));
 }
 
 /* The portal's own element and override styles. Tailwind 4 puts utilities in a cascade layer, so
@@ -395,7 +453,7 @@
   body {
     background: rgb(var(--ds-page));
     color: rgb(var(--ds-text));
-    font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--font-sans);
     min-height: 100vh;
   }
 
@@ -459,11 +517,11 @@
     background-color: rgb(var(--ds-subtle));
   }
 
-  /* Table headers as in the concepts: sentence case, muted, semibold. Applies to every table. */
+  /* Table headers: small, grey, sentence case, so the data reads first. Applies to every table. */
   thead th {
     color: rgb(var(--ds-muted));
     font-size: 12.5px;
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: 0;
     text-transform: none;
   }
@@ -510,7 +568,9 @@
     outline-color: hsl(var(--ring));
   }
 
-  .dark .bg-white {
+  /* Except where white has to stay white, as in light: a switch's knob (role="switch", or the
+     knob after a peer checkbox). */
+  .dark .bg-white:not([role='switch'] *, .peer ~ *) {
     background-color: hsl(var(--surface));
   }
 
@@ -522,22 +582,31 @@
 
   .dark .text-slate-950,
   .dark .text-slate-900 {
-    color: rgb(248 250 252);
+    color: rgb(var(--ds-text));
   }
 
   .dark .text-slate-700,
   .dark .text-slate-600 {
-    color: rgb(203 213 225);
+    color: rgb(var(--ds-text-2));
   }
 
   .dark .text-slate-500 {
-    color: rgb(148 163 184);
+    color: rgb(var(--ds-text-3));
   }
 
   .dark .border-slate-200,
   .dark .divide-slate-200 > :not(:last-child),
   .dark .divide-slate-100 > :not(:last-child) {
-    border-color: rgb(30 41 59);
+    border-color: rgb(var(--ds-border));
+  }
+
+  /* Dark: blue fills (buttons, active pills, toggles, bars) carry the logo-blue gradient. */
+  .dark .bg-ds-primary {
+    background-image: var(--ds-primary-gradient);
+  }
+
+  .dark .hover\:bg-ds-primary-hover:hover {
+    background-image: var(--ds-primary-gradient-hover);
   }
 }
 
@@ -580,4 +649,329 @@
     outline: 8px solid rgb(var(--ds-teal-border));
     outline-offset: 6px;
   }
+}
+
+/* Screen changes (admin-shell.tsx): the old screen leaves fast (90ms) and the new one fades in at
+   once (150ms, no delay) and rises 8px, so loaded content is never held back. Only the content
+   area takes part; the rest of the page swaps without animation, so the header stays still. */
+::view-transition {
+  /* Clicks during the animation reach the page instead of the overlay. */
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(.screen-exit) {
+  animation: 90ms ease-in both screen-fade reverse;
+}
+
+::view-transition-new(.screen-enter) {
+  animation:
+    150ms cubic-bezier(0.2, 0, 0, 1) both screen-fade,
+    240ms cubic-bezier(0.2, 0, 0, 1) both screen-rise;
+}
+
+@keyframes screen-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes screen-rise {
+  from {
+    translate: 0 8px;
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Pop-ups, menus and toasts arrive the same way screens do: the backdrop fades in, the panel
+   fades in, rises a little and settles from just under full size. Every dialog in the portal uses
+   bg-ds-overlay for its backdrop and role="dialog" for its panel (filter menus and the command
+   palette too). */
+.bg-ds-overlay,
+.side-overlay {
+  animation: overlay-in 160ms ease-out both;
+}
+
+[role='dialog']:not(.bg-ds-overlay) {
+  animation: dialog-in 170ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* Side panels (Modal side) slide in from the right edge instead. */
+[role='dialog'][data-side] {
+  animation-name: side-in;
+  animation-duration: 210ms;
+}
+
+.toast-enter {
+  animation: toast-in 190ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+    scale: 0.985;
+  }
+}
+
+@keyframes side-in {
+  from {
+    opacity: 0;
+    translate: 24px 0;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    translate: 16px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-ds-overlay,
+  .side-overlay,
+  [role='dialog'],
+  .toast-enter {
+    animation: none;
+  }
+}
+
+/* Forms in a side panel (Modal side) are narrower than the screen their md:/sm: grid columns
+   were sized for: two columns at most, one on phones as before. */
+@media (min-width: 640px) {
+  [data-side] .sm\:grid-cols-3,
+  [data-side] .md\:grid-cols-3,
+  [data-side] .md\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A side panel's form keeps its last row (Save / Create) pinned at the panel's foot, so it never
+   has to be scrolled to. -1.25rem and -1.5rem undo the scroll area's py-5 / px-6 (Modal side). */
+[data-side] form > :last-child:has(button[type='submit']) {
+  position: sticky;
+  bottom: -1.25rem;
+  z-index: 2;
+  margin: 0.25rem -1.5rem -1.25rem;
+  padding: 0.875rem 1.5rem;
+  border-top: 1px solid rgb(var(--ds-divider));
+  background: rgb(var(--ds-surface) / 0.92);
+  backdrop-filter: blur(8px);
+}
+
+/* The sidebar: a light panel on the page in both themes, set apart by its border; blue marks
+   only the logo, the page you are on and actions. */
+.nav-scope {
+  background-color: rgb(var(--ds-surface));
+}
+
+/* A table wider than its panel (phones, narrow windows) shades the edge that has more columns
+   past it. The surface-coloured covers scroll with the table and hide a shade once that edge is
+   reached; phones show no scrollbar, so without this nothing says the table goes on. */
+.overflow-x-auto:has(> table) {
+  --edge-shade: rgb(15 23 42 / 0.14);
+  background:
+    linear-gradient(to right, rgb(var(--ds-surface)) 40%, transparent) left / 32px 100% no-repeat
+      local,
+    linear-gradient(to left, rgb(var(--ds-surface)) 40%, transparent) right / 32px 100% no-repeat
+      local,
+    radial-gradient(farthest-side at 0 50%, var(--edge-shade), transparent) left / 12px 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--edge-shade), transparent) right / 12px 100%
+      no-repeat scroll;
+}
+
+.dark .overflow-x-auto:has(> table) {
+  --edge-shade: rgb(0 0 0 / 0.55);
+}
+
+/* Loading placeholders: a soft highlight sweeps across instead of the whole block blinking. */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--ds-divider)) 0%,
+    rgb(var(--ds-subtle-2)) 50%,
+    rgb(var(--ds-divider)) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* The sticky header's height, for panels that stick below it: the phone bar (64 + border), and on
+   desktop the top bar and the module tabs (64 + 44 + two borders). */
+:root {
+  --app-header-h: 65px;
+}
+
+@media (width >= 900px) {
+  :root {
+    --app-header-h: 110px;
+  }
+}
+
+/* The hero's colour field: soft blue, sky, violet and peach light pooled on the right, fading
+   out before the text, drifting slowly (transform only, so it never costs a repaint). */
+.hero-art {
+  position: absolute;
+  inset: -30% -12% -30% 30%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 36% 46%, rgb(11 87 164 / 0.62), transparent),
+    radial-gradient(closest-side at 68% 22%, rgb(56 189 248 / 0.6), transparent),
+    radial-gradient(closest-side at 74% 74%, rgb(251 146 60 / 0.5), transparent),
+    radial-gradient(closest-side at 50% 84%, rgb(167 139 250 / 0.55), transparent);
+  filter: blur(18px);
+  mask-image: linear-gradient(to right, transparent, black 30%);
+  animation: hero-drift 18s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes hero-drift {
+  to {
+    transform: translate3d(-5%, 4%, 0) scale(1.1) rotate(8deg);
+  }
+}
+
+/* Dark: blues only, no peach. */
+.dark .hero-art {
+  opacity: 0.55;
+  background:
+    radial-gradient(closest-side at 36% 46%, rgb(11 87 164 / 0.7), transparent),
+    radial-gradient(closest-side at 68% 22%, rgb(56 189 248 / 0.45), transparent),
+    radial-gradient(closest-side at 74% 74%, rgb(36 119 207 / 0.55), transparent),
+    radial-gradient(closest-side at 50% 84%, rgb(99 102 241 / 0.35), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-art {
+    animation: none;
+  }
+}
+
+/* Quick-action tiles: a pastel wash per tone, light in light mode and deep in dark. */
+.tile-blue {
+  background: linear-gradient(135deg, rgb(235 244 255), rgb(214 231 252));
+}
+
+.tile-violet {
+  background: linear-gradient(135deg, rgb(243 239 255), rgb(226 218 252));
+}
+
+.tile-rose {
+  background: linear-gradient(135deg, rgb(255 239 244), rgb(252 219 230));
+}
+
+.tile-green {
+  background: linear-gradient(135deg, rgb(236 250 243), rgb(209 240 225));
+}
+
+/* Dark: quiet tints of the same hues; every stat strip uses them, so none may shout. */
+.dark .tile-blue {
+  background: linear-gradient(135deg, rgb(19 36 60), rgb(23 45 76));
+}
+
+.dark .tile-violet {
+  background: linear-gradient(135deg, rgb(33 28 56), rgb(41 34 70));
+}
+
+.dark .tile-rose {
+  background: linear-gradient(135deg, rgb(52 23 34), rgb(62 27 41));
+}
+
+.dark .tile-green {
+  background: linear-gradient(135deg, rgb(14 40 35), rgb(16 50 43));
+}
+
+/* Sections fade up as they scroll into view, tied to the scroll itself (no timers, off the main
+   thread). What is on screen when a page opens is already past the range, so it shows at once. */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 30%;
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
+}
+
+/* Every module page's title glow: a quieter, still cousin of the hero's colour field, pooled on
+   the right behind the actions. right: 0 keeps it inside the page, so it never widens it. */
+.page-art {
+  position: absolute;
+  inset: -36px 0 -20px 30%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 58% 58%, rgb(56 189 248 / 0.22), transparent),
+    radial-gradient(closest-side at 80% 34%, rgb(167 139 250 / 0.24), transparent),
+    radial-gradient(closest-side at 92% 78%, rgb(251 146 60 / 0.14), transparent);
+  mask-image: linear-gradient(to right, transparent, black 40%);
+}
+
+/* Phones stack the title over its button, so the glow would sit behind the button as a smudge. */
+@media (max-width: 639.98px) {
+  .page-art {
+    display: none;
+  }
+}
+
+/* Dark: blues only, no peach. */
+.dark .page-art {
+  opacity: 0.6;
+  background:
+    radial-gradient(closest-side at 58% 58%, rgb(56 189 248 / 0.2), transparent),
+    radial-gradient(closest-side at 80% 34%, rgb(36 119 207 / 0.3), transparent),
+    radial-gradient(closest-side at 92% 78%, rgb(11 87 164 / 0.3), transparent);
 }

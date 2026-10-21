@@ -25,7 +25,8 @@ export class AuthController {
 
   @Public()
   @Post('send-otp')
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  // Every OTP is a paid SMS: tighter per address than the other sign-in calls.
+  @Throttle({ address: { limit: 300, ttl: 60_000 }, default: { limit: 5, ttl: 60_000 } })
   @ApiBody({ type: SendOtpDto })
   @ApiOperation({ summary: 'Send OTP' })
   @ApiOkResponse({ description: 'OTP sent successfully.' })

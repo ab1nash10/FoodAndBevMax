@@ -15,13 +15,14 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import { RowAction, StatStrip, tableStyles } from '@/components/design-system';
 import {
   ActiveFilterSelect,
-  PageHeader,
   PaginationControls,
   QueryState,
   SearchInput,
 } from '@/components/master-data/shared/components';
+import { PageHeader } from '@/components/organization/shared/list-controls';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
 import { activeFilterToBoolean, listLimit } from '@/components/master-data/shared/utils';
 import { CheckboxLine } from '@/components/organization/shared/form-controls';
@@ -32,6 +33,7 @@ import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { invalidateLegalEntityQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { cn } from '@/lib/utils';
 
 /** GSTIN: state code, PAN, entity number, the letter Z, check character. The server checks too. */
 const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -77,6 +79,19 @@ export function LegalEntitiesPageClient() {
     queryFn: async () => (await organizationApi.listLegalEntities(query)).data,
     queryKey: queryKeys.legalEntities(query),
   });
+
+  // Under the list's own key, so whatever refreshes the list refreshes these counts too.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (isActive?: boolean) =>
+        (await organizationApi.listLegalEntities({ isActive, limit: 0 })).data.meta.total;
+      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
+
+      return { active, all, inactive };
+    },
+    queryKey: queryKeys.legalEntities('stats'),
+  });
+  const stats = statsQuery.data;
 
   const saveMutation = useMutation({
     mutationFn: (body: LegalEntityInput) =>
@@ -130,6 +145,11 @@ export function LegalEntitiesPageClient() {
     setPage(1);
   }
 
+  function showStatus(status: ActiveFilter) {
+    setActiveFilter(status);
+    setPage(1);
+  }
+
   function openDialog(entity: LegalEntity | 'new') {
     setDialog(entity);
     form.reset(
@@ -167,21 +187,47 @@ export function LegalEntitiesPageClient() {
   return (
     <section className="space-y-5">
       <PageHeader
+        count={stats?.all}
         action={
           canCreate ? (
             <Button onClick={() => openDialog('new')} type="button">
               <Plus className="h-4 w-4" />
-              Add entity
+              New entity
             </Button>
           ) : undefined
         }
-        eyebrow="Organization"
         icon={Landmark}
         subtitle="The legal entities locations and restaurants bill under: registered name, address and GST number."
         title="Entities"
       />
+      <StatStrip
+        label="Entities at a glance"
+        stats={[
+          {
+            active: !activeFilter,
+            label: 'All entities',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: activeFilter === 'active',
+            label: 'Active',
+            onSelect: () => showStatus('active'),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive',
+            onSelect: () => showStatus('inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
 
       <Modal
+        side
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button onClick={closeDialog} type="button" variant="outline">
@@ -204,7 +250,12 @@ export function LegalEntitiesPageClient() {
             void handleSubmit(event);
           }}
         >
-          <Field error={errors.locationName?.message} label="Location name" name="entity-location">
+          <Field
+            error={errors.locationName?.message}
+            label="Location name"
+            name="entity-location"
+            required
+          >
             <Input
               id="entity-location"
               placeholder="e.g. MSSH SKT"
@@ -213,7 +264,7 @@ export function LegalEntitiesPageClient() {
               })}
             />
           </Field>
-          <Field error={errors.entityName?.message} label="Entity name" name="entity-name">
+          <Field error={errors.entityName?.message} label="Entity name" name="entity-name" required>
             <Input
               id="entity-name"
               {...form.register('entityName', {
@@ -221,7 +272,12 @@ export function LegalEntitiesPageClient() {
               })}
             />
           </Field>
-          <Field error={errors.entityAddress?.message} label="Entity address" name="entity-address">
+          <Field
+            error={errors.entityAddress?.message}
+            label="Entity address"
+            name="entity-address"
+            required
+          >
             <Input
               id="entity-address"
               {...form.register('entityAddress', {
@@ -229,7 +285,7 @@ export function LegalEntitiesPageClient() {
               })}
             />
           </Field>
-          <Field error={errors.gstNumber?.message} label="GST number" name="entity-gst">
+          <Field error={errors.gstNumber?.message} label="GST number" name="entity-gst" required>
             <Input
               className="uppercase"
               id="entity-gst"
@@ -252,6 +308,8 @@ export function LegalEntitiesPageClient() {
       <Panel>
         <ListToolbar>
           <SearchInput
+            label="Search entities"
+            placeholder="Entity name, GST no. or location"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -291,50 +349,71 @@ export function LegalEntitiesPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-[760px] w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-190 table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[13%] px-4 py-2.5">Location</th>
-                <th className="w-[24%] px-4 py-2.5">Entity name</th>
-                <th className="w-[29%] px-4 py-2.5">Entity address</th>
-                <th className="w-[14%] px-4 py-2.5">GST no.</th>
-                <th className="w-[10%] px-4 py-2.5">Active</th>
-                <th className="w-[10%] px-4 py-2.5">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[14%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[24%]')}>Entity name</th>
+                <th className={cn(tableStyles.th, 'w-[29%]')}>Entity address</th>
+                <th className={cn(tableStyles.th, 'w-[16%]')}>GST no.</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-14')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((entity) => (
-                  <tr className="hover:bg-ds-subtle" key={entity.id}>
-                    <td className="px-4 py-3 font-semibold text-ds-text">
+                  <tr
+                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    key={entity.id}
+                    onClick={canEdit ? () => openDialog(entity) : undefined}
+                  >
+                    <td className={cn(tableStyles.td, tableStyles.title)}>
                       {entity.locationName ?? '—'}
                     </td>
-                    <td className="px-4 py-3 font-medium text-ds-text">{entity.entityName}</td>
-                    <td className="px-4 py-3 text-ds-text-3">{entity.entityAddress}</td>
-                    <td className="px-4 py-3 font-mono text-[13px] text-ds-text">
+                    <td className={cn(tableStyles.td, 'font-medium text-ds-text')}>
+                      {entity.entityName}
+                    </td>
+                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>{entity.entityAddress}</td>
+                    <td
+                      className={cn(tableStyles.td, tableStyles.num, 'text-[12.5px] text-ds-text')}
+                    >
                       {entity.gstNumber}
                     </td>
-                    <td className="px-4 py-3">
-                      <Toggle
-                        ariaLabel={`${entity.entityName} active`}
-                        checked={entity.isActive}
-                        disabled={!canEdit || toggleMutation.isPending}
-                        onChange={() => toggleMutation.mutate(entity)}
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      {canEdit ? (
-                        <Button
-                          aria-label={`Edit ${entity.locationName ?? entity.entityName}`}
-                          onClick={() => openDialog(entity)}
-                          size="icon"
-                          title="Edit"
-                          type="button"
-                          variant="outline"
+                    {/* Its own click: switching the status does not open the entity. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <span className="flex items-center gap-2">
+                        <Toggle
+                          ariaLabel={`${entity.entityName} active`}
+                          checked={entity.isActive}
+                          disabled={!canEdit || toggleMutation.isPending}
+                          onChange={() => toggleMutation.mutate(entity)}
+                        />
+                        <span
+                          className={cn(
+                            'text-xs font-bold',
+                            entity.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                          )}
                         >
-                          <Pencil aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                      ) : null}
+                          {entity.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </span>
+                    </td>
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      <span className="flex justify-end">
+                        {canEdit ? (
+                          <RowAction
+                            icon={Pencil}
+                            label={`Edit ${entity.locationName ?? entity.entityName}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openDialog(entity);
+                            }}
+                          />
+                        ) : null}
+                      </span>
                     </td>
                   </tr>
                 ))

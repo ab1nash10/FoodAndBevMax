@@ -56,6 +56,7 @@ export const queryKeys = {
   restaurantBoardLink: key('restaurant-board-link'),
   restaurantOrders: key('restaurant-orders'),
   restaurants: key('restaurants'),
+  staffDiscounts: key('staff-discounts'),
   storeOptions: key('store-options'),
   stores: key('stores'),
 
@@ -71,6 +72,13 @@ export const queryKeys = {
   restaurantMenus: key('restaurant-menus'),
 
   // POS
+  counterStock: key('counter-stock'),
+  posBill: key('pos-bill'),
+  posBills: key('pos-bills'),
+  posCounters: key('pos-counters'),
+  posEmployee: key('pos-employee'),
+  posMenu: key('pos-menu'),
+  posSummary: key('pos-summary'),
   paymentMachinePosDeviceOptions: key('payment-machine-pos-device-options'),
   paymentMachines: key('payment-machines'),
   posDevices: key('pos-devices'),

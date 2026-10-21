@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MenuServeAt, Prisma, Restaurant } from '@prisma/client';
+import { MenuServeAt, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { assertUsableCategory } from '../common/item-classification';
 import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
@@ -20,6 +20,7 @@ import { UpdateRestaurantMenuDto } from './dto/update-restaurant-menu.dto';
 import {
   RestaurantMenusRepository,
   RestaurantMenuWithRelations,
+  type MenuSource,
 } from './restaurant-menus.repository';
 import { toNumber } from '../common/values';
 
@@ -151,6 +152,16 @@ export class RestaurantMenusService {
 
         await this.assertValidItem(dto.itemId, tx);
         await assertUsableCategory(tx, dto.categoryId);
+        await this.assertFromMapping(
+          {
+            categoryId: dto.categoryId ?? null,
+            hospitalId: restaurant.hospitalId,
+            itemId: dto.itemId,
+            kitchenId: dto.kitchenId ?? null,
+            storeId: dto.storeId ?? null,
+          },
+          tx,
+        );
         await this.assertUniqueMapping(
           dto.restaurantId,
           dto.itemId,
@@ -164,10 +175,6 @@ export class RestaurantMenusService {
           roomPrice: dto.roomPrice,
           serveAt: dto.serveAt ?? MenuServeAt.BOTH,
         });
-
-        if (dto.kitchenId) {
-          await this.assertRestaurantKitchen(restaurant, dto.kitchenId, tx);
-        }
 
         const displayOrder = await this.resolveDisplayOrder(
           {
@@ -198,6 +205,7 @@ export class RestaurantMenusService {
             itemId: dto.itemId,
             kitchenId: dto.kitchenId ?? null,
             restaurantId: dto.restaurantId,
+            storeId: dto.storeId ?? null,
             updatedBy: context.actorId,
           },
           tx,
@@ -253,17 +261,41 @@ export class RestaurantMenusService {
         }
 
         const nextKitchenId = dto.kitchenId === undefined ? existing.kitchenId : dto.kitchenId;
+        const nextStoreId = dto.storeId === undefined ? existing.storeId : dto.storeId;
 
-        if (nextKitchenId && (dto.kitchenId || dto.restaurantId !== undefined)) {
-          await this.assertRestaurantKitchen(
-            await this.assertValidRestaurant(nextRestaurantId, tx),
-            nextKitchenId,
+        const nextCategoryId =
+          dto.categoryId === undefined ? existing.categoryId : (dto.categoryId ?? null);
+
+        // Item, kitchen and category come from one mapping; checked whenever any of them, or
+        // the restaurant, changes. An older entry saved unchanged still works.
+        if (
+          nextItemId !== existing.itemId ||
+          nextKitchenId !== existing.kitchenId ||
+          nextStoreId !== existing.storeId ||
+          nextCategoryId !== existing.categoryId ||
+          nextRestaurantId !== existing.restaurantId
+        ) {
+          await this.assertFromMapping(
+            {
+              categoryId: nextCategoryId,
+              hospitalId:
+                nextRestaurantId === existing.restaurantId
+                  ? existing.hospitalId
+                  : (await this.assertValidRestaurant(nextRestaurantId, tx)).hospitalId,
+              itemId: nextItemId,
+              kitchenId: nextKitchenId,
+              storeId: nextStoreId,
+            },
             tx,
           );
         }
 
         if (dto.kitchenId !== undefined) {
           data.kitchen = dto.kitchenId ? { connect: { id: dto.kitchenId } } : { disconnect: true };
+        }
+
+        if (dto.storeId !== undefined) {
+          data.store = dto.storeId ? { connect: { id: dto.storeId } } : { disconnect: true };
         }
 
         if (dto.serveAt !== undefined || dto.price !== undefined || dto.roomPrice !== undefined) {
@@ -423,6 +455,24 @@ export class RestaurantMenusService {
     }
   }
 
+  /**
+   * A menu item sells one of the location's mappings: the item, under its category, from the
+   * kitchen that makes it or the store that stocks it (exactly one of the two).
+   */
+  private async assertFromMapping(menu: MenuSource, client: RestaurantMenuClient): Promise<void> {
+    if (Boolean(menu.kitchenId) === Boolean(menu.storeId)) {
+      throw new BadRequestException(
+        'Choose where it comes from: the kitchen that makes it or the store that stocks it.',
+      );
+    }
+
+    if (!(await this.restaurantMenus.matchesMapping(menu, client))) {
+      throw new BadRequestException(
+        `This item isn't mapped to that ${menu.kitchenId ? 'kitchen' : 'store'} under this category at this restaurant's location. Pick it from Item Mapping.`,
+      );
+    }
+  }
+
   private async assertValidItem(itemId: string, client: RestaurantMenuClient): Promise<void> {
     const item = await this.restaurantMenus.findActiveItem(itemId, client);
 
@@ -432,16 +482,6 @@ export class RestaurantMenusService {
 
     if (!item.isActive) {
       throw new BadRequestException('This item is inactive and cannot be used.');
-    }
-  }
-
-  private async assertRestaurantKitchen(
-    restaurant: Restaurant,
-    kitchenId: string,
-    client: RestaurantMenuClient,
-  ): Promise<void> {
-    if (!(await this.restaurantMenus.isRestaurantKitchen(restaurant, kitchenId, client))) {
-      throw new BadRequestException('Choose an active kitchen at this restaurant’s location');
     }
   }
 
@@ -551,6 +591,8 @@ export class RestaurantMenusService {
       itemId: mapping.itemId,
       kitchen: mapping.kitchen,
       kitchenId: mapping.kitchenId,
+      store: mapping.store,
+      storeId: mapping.storeId,
       preparationTimeMinutes: mapping.preparationTimeMinutes,
       price: mapping.price === null ? null : toNumber(mapping.price),
       restaurant: mapping.restaurant,

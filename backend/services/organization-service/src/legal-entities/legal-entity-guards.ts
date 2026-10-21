@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
 /** GSTIN: state code, PAN, entity number, the letter Z, check character. */
-const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+export const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 /** The GST number as stored: no spaces, capital letters; refused unless it is a valid GSTIN. */
 export function normalizeGstNumber(value: string): string {

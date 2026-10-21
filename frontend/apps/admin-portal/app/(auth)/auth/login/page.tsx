@@ -15,18 +15,16 @@ import {
   Utensils,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { z } from 'zod';
-import { getStartPageOptions } from '@/lib/navigation';
 import { useAuth } from '@/components/auth-provider';
+import { useGoHomeWhenSignedIn } from '@/components/auth/use-go-home';
 import { useToast } from '@/components/toast-provider';
 import { Input } from '@/components/ui';
 import { SegmentedControl } from '@/components/ui-controls';
-import { authApi, getApiErrorMessage, userApi } from '@/lib/api';
+import { authApi, getApiErrorMessage } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
-import { sessionUserFromAccessToken } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import {
   applyValidationErrors,
@@ -69,36 +67,9 @@ function enterFullscreen() {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
-
-  // After sign-in, open the user's chosen start page if it is one they may open. Anything
-  // unexpected - no preference, a slow or failed request, a since-revoked permission - means
-  // the dashboard, exactly as before Preferences existed.
-  const goToStartPage = async (accessToken: string) => {
-    let destination = '/dashboard';
-
-    try {
-      const preferences = await Promise.race([
-        userApi.getMyPreferences().then((response) => response.data),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
-      const permissions = sessionUserFromAccessToken(accessToken)?.permissions ?? [];
-      const hasPermission = (permission: string | string[]) =>
-        (Array.isArray(permission) ? permission : [permission]).some((code) =>
-          permissions.includes(code),
-        );
-      const startPage = preferences?.startPage;
-
-      if (startPage && getStartPageOptions(hasPermission).some((page) => page.href === startPage)) {
-        destination = startPage;
-      }
-    } catch {
-      // The dashboard it is.
-    }
-
-    router.replace(destination);
-  };
-  const { isAuthenticated, isReady, signIn } = useAuth();
+  // Signing in here (or arriving already signed in) opens the user's start page.
+  useGoHomeWhenSignedIn();
+  const { signIn } = useAuth();
   const { showToast } = useToast();
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [isOtpStep, setIsOtpStep] = useState(false);
@@ -120,12 +91,6 @@ export default function LoginPage() {
   const activeSchema =
     loginMethod === 'email' ? emailPasswordSchema : isOtpStep ? verifyOtpSchema : sendOtpSchema;
   const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
-
-  useEffect(() => {
-    if (isReady && isAuthenticated) {
-      router.replace('/dashboard');
-    }
-  }, [isAuthenticated, isReady, router]);
 
   useEffect(() => {
     const reason =
@@ -212,7 +177,6 @@ export default function LoginPage() {
         title: 'Signed in',
         variant: 'success',
       });
-      void goToStartPage(response.data.accessToken);
     },
   });
 
@@ -232,7 +196,6 @@ export default function LoginPage() {
         title: 'Signed in',
         variant: 'success',
       });
-      void goToStartPage(response.data.accessToken);
     },
   });
 
@@ -402,7 +365,7 @@ export default function LoginPage() {
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-ds-teal-text">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-ds-link">
                   Welcome back
                 </p>
                 <h2 className="text-[26px] font-extrabold tracking-[-0.01em]">Sign in to AAHAR</h2>

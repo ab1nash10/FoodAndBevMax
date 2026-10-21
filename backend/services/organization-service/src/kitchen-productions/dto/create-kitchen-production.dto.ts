@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
@@ -8,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -40,6 +42,7 @@ export class CreateKitchenProductionLineDto {
   @ApiPropertyOptional({ example: 'Morning batch' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 }
 
@@ -68,9 +71,11 @@ export class CreateKitchenProductionDto {
   @ApiPropertyOptional({ example: 'Breakfast production' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 
   @ApiProperty({ isArray: true, type: CreateKitchenProductionLineDto })
+  @ArrayMaxSize(200)
   @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })

@@ -31,7 +31,7 @@ export class TransfersController {
   constructor(private readonly transfers: TransfersService) {}
 
   @Get()
-  @Permissions('TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW')
+  @Permissions('TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW', 'COUNTER_STOCK_RECEIVE')
   @ApiOperation({ summary: 'Get transfers' })
   @ApiOkResponse({ description: 'Transfers returned successfully.' })
   async list(@Query() query: ListTransfersQueryDto) {
@@ -39,7 +39,7 @@ export class TransfersController {
   }
 
   @Get(':id')
-  @Permissions('TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW')
+  @Permissions('TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW', 'COUNTER_STOCK_RECEIVE')
   @ApiOperation({ summary: 'Get transfer by ID' })
   @ApiParam({ name: 'id' })
   @ApiOkResponse({ description: 'Transfer returned successfully.' })

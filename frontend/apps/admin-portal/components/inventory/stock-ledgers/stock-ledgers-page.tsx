@@ -17,8 +17,9 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import { DateTimeCell, StatStrip, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
-import { Badge, Input, Panel, Select } from '@/components/ui';
+import { Input, Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
 import { organizationApi } from '@/lib/api';
@@ -31,7 +32,6 @@ import {
   SearchInput,
 } from '@/components/inventory/shared/components';
 import {
-  formatDate,
   formatDateOnly,
   formatEnum,
   listLimit,
@@ -42,14 +42,21 @@ import {
   useStores,
 } from '@/components/inventory/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 
-const stockLedgerLocationTypes: InventoryLocationType[] = ['STORE', 'KITCHEN', 'RESTAURANT'];
+const stockLedgerLocationTypes: InventoryLocationType[] = [
+  'STORE',
+  'KITCHEN',
+  'RESTAURANT',
+  'COUNTER',
+];
 
 const stockReferenceTypes: StockReferenceType[] = [
   'GRN',
   'KITCHEN_PRODUCTION',
   'TRANSFER',
   'TRANSFER_ACKNOWLEDGEMENT',
+  'ORDER',
 ];
 
 const stockTransactionTypes: StockTransactionType[] = [
@@ -60,7 +67,66 @@ const stockTransactionTypes: StockTransactionType[] = [
   'RESTAURANT_RECEIVE_IN',
   'STORE_TO_RESTAURANT_OUT',
   'TRANSFER_REJECTED_RETURN_IN',
+  'COUNTER_RECEIVE_IN',
+  'SALE_OUT',
+  'SALE_CANCEL_IN',
 ];
+
+// The filter's names, which have to tell every type apart.
+const transactionLabels: Partial<Record<StockTransactionType, string>> = {
+  COUNTER_RECEIVE_IN: 'Counter receipt',
+  GRN_IN: 'GRN receipt',
+  KITCHEN_PRODUCTION_IN: 'Kitchen production',
+  KITCHEN_TRANSFER_OUT: 'Kitchen transfer out',
+  RESTAURANT_RECEIVE_IN: 'Restaurant receipt',
+  RESTAURANT_TRANSFER_IN: 'Restaurant transfer in',
+  SALE_CANCEL_IN: 'Sale cancelled',
+  SALE_OUT: 'Sale',
+  STORE_TO_RESTAURANT_OUT: 'Store transfer out',
+  TRANSFER_REJECTED_RETURN_IN: 'Rejected transfer return',
+};
+
+// The table's names, one line each: the Location column already says store, kitchen or restaurant.
+const shortTransactionLabels: Partial<Record<StockTransactionType, string>> = {
+  COUNTER_RECEIVE_IN: 'Received',
+  KITCHEN_PRODUCTION_IN: 'Production',
+  KITCHEN_TRANSFER_OUT: 'Transfer out',
+  RESTAURANT_RECEIVE_IN: 'Received',
+  RESTAURANT_TRANSFER_IN: 'Transfer in',
+  STORE_TO_RESTAURANT_OUT: 'Transfer out',
+  TRANSFER_REJECTED_RETURN_IN: 'Returned',
+};
+
+const referenceLabels: Partial<Record<StockReferenceType, string>> = {
+  GRN: 'GRN',
+  KITCHEN_PRODUCTION: 'Production',
+  ORDER: 'Bill',
+  TRANSFER: 'Transfer',
+  TRANSFER_ACKNOWLEDGEMENT: 'Acknowledged',
+};
+
+// The page that opens a row's document (an acknowledgement comes as its transfer, a sale as
+// its bill).
+const referencePages: Record<NonNullable<StockLedger['referenceDocument']>['type'], string> = {
+  GRN: '/inventory/grns',
+  KITCHEN_PRODUCTION: '/kitchen/productions',
+  ORDER: '/pos/history',
+  TRANSFER: '/inventory/transfers',
+};
+
+function transactionLabel(type: StockTransactionType): string {
+  return transactionLabels[type] ?? formatEnum(type);
+}
+
+function referenceLabel(type: StockReferenceType): string {
+  return referenceLabels[type] ?? formatEnum(type);
+}
+
+function referenceHref(ledger: StockLedger): string | null {
+  const document = ledger.referenceDocument;
+
+  return document ? recordHref(referencePages[document.type], { id: document.id }) : null;
+}
 
 export function StockLedgersPageClient() {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
@@ -153,6 +219,29 @@ export function StockLedgersPageClient() {
     ),
   });
 
+  // The strip's numbers: every entry at the location, then the documents that move stock most.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (referenceType?: StockReferenceType) =>
+        (
+          await organizationApi.listStockLedgers({
+            hospitalId: hospitalFilter,
+            limit: 0,
+            referenceType,
+          })
+        ).data.meta.total;
+      const [all, grns, dispatched, acknowledged] = await Promise.all([
+        count(),
+        count('GRN'),
+        count('TRANSFER'),
+        count('TRANSFER_ACKNOWLEDGEMENT'),
+      ]);
+
+      return { acknowledged, all, dispatched, grns };
+    },
+    queryKey: queryKeys.stockLedgers('stats', hospitalFilter),
+  });
+  const stats = statsQuery.data;
   const ledgers = ledgersQuery.data?.items ?? [];
   const meta = ledgersQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
@@ -182,15 +271,56 @@ export function StockLedgersPageClient() {
     setPage(1);
   }
 
+  /** A stat's reference type alone; picking the one in force goes back to every entry. */
+  function showReference(referenceType: '' | StockReferenceType) {
+    setReferenceTypeFilter((current) => (current === referenceType ? '' : referenceType));
+    setPage(1);
+  }
+
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <PageHeader
-        subtitle="Read-only movement history across store, kitchen, and restaurant stock."
+        count={stats?.all}
+        subtitle="Read-only movement history across store, kitchen, restaurant and counter stock."
         title="Stock Ledgers"
       />
-      <Panel>
+      <StatStrip
+        label="Stock movements at a glance"
+        stats={[
+          {
+            active: !referenceTypeFilter,
+            label: 'All entries',
+            onSelect: () => showReference(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: referenceTypeFilter === 'GRN',
+            label: 'GRN receipts · in',
+            onSelect: () => showReference('GRN'),
+            tone: 'ok',
+            value: stats?.grns ?? '–',
+          },
+          {
+            active: referenceTypeFilter === 'TRANSFER',
+            label: 'Transfers dispatched · out',
+            onSelect: () => showReference('TRANSFER'),
+            tone: 'pending',
+            value: stats?.dispatched ?? '–',
+          },
+          {
+            active: referenceTypeFilter === 'TRANSFER_ACKNOWLEDGEMENT',
+            label: 'Transfers acknowledged · in',
+            onSelect: () => showReference('TRANSFER_ACKNOWLEDGEMENT'),
+            tone: 'ok',
+            value: stats?.acknowledged ?? '–',
+          },
+        ]}
+      />
+      <Panel aria-label="Stock ledger" className="overflow-hidden" role="region">
         <ListToolbar>
           <SearchInput
+            label="Search stock ledgers"
+            placeholder="Item name or code, batch or location"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -285,7 +415,7 @@ export function StockLedgersPageClient() {
                 <option value="">All transaction types</option>
                 {stockTransactionTypes.map((transactionType) => (
                   <option key={transactionType} value={transactionType}>
-                    {formatEnum(transactionType)}
+                    {transactionLabel(transactionType)}
                   </option>
                 ))}
               </Select>
@@ -301,7 +431,7 @@ export function StockLedgersPageClient() {
                 <option value="">All reference types</option>
                 {stockReferenceTypes.map((referenceType) => (
                   <option key={referenceType} value={referenceType}>
-                    {formatEnum(referenceType)}
+                    {referenceLabel(referenceType)}
                   </option>
                 ))}
               </Select>
@@ -358,28 +488,30 @@ export function StockLedgersPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-[1040px] table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[16%] px-4 py-2.5">Location</th>
-                <th className="w-[16%] px-4 py-2.5">Item</th>
-                <th className="w-[11%] px-4 py-2.5">Transaction</th>
-                <th className="w-[11%] px-4 py-2.5">Reference</th>
-                <th className="w-[10%] px-4 py-2.5">Qty In</th>
-                <th className="w-[10%] px-4 py-2.5">Qty Out</th>
-                <th className="w-[10%] px-4 py-2.5">Balance</th>
-                <th className="w-[12%] px-4 py-2.5">Batch</th>
-                <th className="w-[12%] px-4 py-2.5">Business Date</th>
-                <th className="w-[15%] px-4 py-2.5">Transaction Date</th>
+                <th className={cn(tableStyles.th, 'w-[16%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[16%]')}>Item</th>
+                <th className={cn(tableStyles.th, 'w-[13%]')}>Transaction</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Reference</th>
+                <th className={cn(tableStyles.th, 'w-[8%] text-right')}>Qty in</th>
+                <th className={cn(tableStyles.th, 'w-[8%] text-right')}>Qty out</th>
+                <th className={cn(tableStyles.th, 'w-[8%] text-right')}>Balance</th>
+                <th className={cn(tableStyles.th, 'w-[8%]')}>Batch</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {ledgers.length > 0 ? (
                 ledgers.map((ledger: StockLedger) => (
-                  <tr className="hover:bg-ds-subtle" key={ledger.id}>
-                    <td className="px-4 py-3">
+                  <tr
+                    className="border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                    key={ledger.id}
+                  >
+                    <td className={tableStyles.td}>
                       <RecordLink
-                        className="block font-medium text-ds-text"
+                        className={cn('block truncate', tableStyles.title)}
                         href={locationHref(
                           ledger.locationType,
                           ledger.location.code || ledger.location.name,
@@ -387,42 +519,90 @@ export function StockLedgersPageClient() {
                       >
                         {ledger.location.name}
                       </RecordLink>
-                      <p className="text-xs text-ds-muted">
-                        {formatEnum(ledger.locationType)} - {ledger.location.code ?? '-'}
+                      <p className="truncate text-[12px] text-ds-muted">
+                        {formatEnum(ledger.locationType)} ·{' '}
+                        <span className="font-mono">{ledger.location.code ?? '—'}</span>
                       </p>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td}>
                       <RecordLink
-                        className="block font-medium text-ds-text"
+                        className={cn('block truncate', tableStyles.title)}
                         href={recordHref('/masters/items', { id: ledger.item.id })}
                       >
                         {ledger.item.itemName}
                       </RecordLink>
-                      <p className="text-xs text-ds-muted">{ledger.item.itemCode}</p>
+                      <p className={cn('truncate', tableStyles.code)}>{ledger.item.itemCode}</p>
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge className="border-ds-status-info-fg/25 bg-ds-status-info-bg text-ds-status-info-fg">
-                        {formatEnum(ledger.transactionType)}
-                      </Badge>
+                    <td className={tableStyles.td}>
+                      <span
+                        className="inline-flex min-h-6 max-w-full items-center rounded-full bg-ds-status-info-bg px-2.5 py-0.5 text-xs font-medium text-ds-status-info-fg"
+                        title={transactionLabel(ledger.transactionType)}
+                      >
+                        <span className="truncate">
+                          {shortTransactionLabels[ledger.transactionType] ??
+                            transactionLabel(ledger.transactionType)}
+                        </span>
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {ledger.referenceType ? formatEnum(ledger.referenceType) : '-'}
+                    <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
+                      {/* The document's number (GRN000002); its kind when the record is gone. */}
+                      {ledger.referenceDocument ? (
+                        <RecordLink
+                          className="font-mono text-[12.5px] text-ds-link"
+                          href={referenceHref(ledger)}
+                        >
+                          {ledger.referenceDocument.number}
+                        </RecordLink>
+                      ) : ledger.referenceType ? (
+                        referenceLabel(ledger.referenceType)
+                      ) : (
+                        '—'
+                      )}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-ds-teal-text">
+                    <td
+                      className={cn(
+                        tableStyles.td,
+                        tableStyles.num,
+                        'text-right',
+                        ledger.qtyIn > 0 ? 'font-semibold text-ds-status-ok-fg' : 'text-ds-muted',
+                      )}
+                    >
                       {ledger.qtyIn.toFixed(3)}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-ds-status-bad-fg">
+                    <td
+                      className={cn(
+                        tableStyles.td,
+                        tableStyles.num,
+                        'text-right',
+                        ledger.qtyOut > 0 ? 'font-semibold text-ds-status-bad-fg' : 'text-ds-muted',
+                      )}
+                    >
                       {ledger.qtyOut.toFixed(3)}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-ds-text">
+                    <td
+                      className={cn(
+                        tableStyles.td,
+                        tableStyles.num,
+                        'text-right font-semibold text-ds-text',
+                      )}
+                    >
                       {ledger.balanceAfter.toFixed(3)}
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">{ledger.batchNumber ?? '-'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
-                      {formatDateOnly(ledger.businessDate)}
+                    <td className={cn(tableStyles.td, tableStyles.code, 'truncate')}>
+                      {ledger.batchNumber ?? '—'}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
-                      {formatDate(ledger.transactionDateTime)}
+                    <td className={tableStyles.td}>
+                      <DateTimeCell
+                        // Only when it is not the transaction's own day, e.g. a backdated entry.
+                        note={
+                          formatDateOnly(ledger.businessDate) !==
+                          formatDateOnly(ledger.transactionDateTime)
+                            ? `business date ${formatDateOnly(ledger.businessDate)}`
+                            : undefined
+                        }
+                        title={`Business date ${formatDateOnly(ledger.businessDate)}`}
+                        value={ledger.transactionDateTime}
+                      />
                     </td>
                   </tr>
                 ))

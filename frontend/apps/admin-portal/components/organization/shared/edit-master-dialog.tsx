@@ -50,6 +50,7 @@ export function EditMasterDialog({
 
   return (
     <Modal
+      side
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button onClick={onClose} type="button" variant="outline">
@@ -76,6 +77,7 @@ export function EditMasterDialog({
           error={form.formState.errors.name?.message}
           label={nameLabel}
           name={`${formId}-name`}
+          required
         >
           <Input
             id={`${formId}-name`}

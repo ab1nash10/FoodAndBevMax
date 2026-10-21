@@ -24,7 +24,7 @@ export function RecordLink({
   return (
     <Link
       className={cn(
-        'rounded-xs underline-offset-2 hover:text-ds-teal-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+        'rounded-xs underline-offset-2 hover:text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
         className,
       )}
       href={href}

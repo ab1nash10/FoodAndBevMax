@@ -13,6 +13,13 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 
 export const transferInclude = {
+  // The latest receipt, for when the transfer was acknowledged.
+  acknowledgements: {
+    orderBy: { acknowledgementDate: 'desc' },
+    select: { acknowledgementDate: true },
+    take: 1,
+    where: { deletedAt: null },
+  },
   hospital: {
     select: {
       hospitalCode: true,
@@ -76,6 +83,13 @@ export class TransfersRepository {
     client: TransferClient,
   ): Promise<void> {
     await client.transferLine.create({ data });
+  }
+
+  async findUserNames(ids: string[]): Promise<Array<{ id: string; name: string }>> {
+    return this.prisma.user.findMany({
+      select: { id: true, name: true },
+      where: { id: { in: ids } },
+    });
   }
 
   async createStockLedger(
@@ -150,6 +164,22 @@ export class TransfersRepository {
           isActive: true,
         },
         id,
+      },
+    });
+  }
+
+  /** A counter that can receive stock: its restaurant and location are live too. */
+  async findActiveCounter(
+    id: string,
+    client: TransferClient,
+  ): Promise<{ hospitalId: string; isActive: boolean } | null> {
+    return client.counter.findFirst({
+      select: { hospitalId: true, isActive: true },
+      where: {
+        deletedAt: null,
+        hospital: { deletedAt: null, isActive: true },
+        id,
+        restaurant: { deletedAt: null, isActive: true },
       },
     });
   }

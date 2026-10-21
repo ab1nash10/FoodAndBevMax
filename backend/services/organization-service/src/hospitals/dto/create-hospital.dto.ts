@@ -10,6 +10,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 
 export class CreateHospitalDto {
   @ApiPropertyOptional({
@@ -28,24 +29,28 @@ export class CreateHospitalDto {
   @IsOptional()
   @IsString()
   @MaxLength(50)
+  @CodeCase()
   locationCode?: string;
 
   @ApiPropertyOptional({ example: 'MAX LUCKNOW' })
   @IsOptional()
   @IsString()
   @MaxLength(255)
+  @DisplayName()
   displayName?: string;
 
   @ApiPropertyOptional({ example: 'Max Healthcare' })
   @IsOptional()
   @IsString()
   @MaxLength(255)
+  @DisplayName()
   hospitalName?: string;
 
   @ApiPropertyOptional({ example: 'MAX' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
+  @CodeCase()
   hospitalCode?: string;
 
   @ApiPropertyOptional({ example: 'Gomti Nagar, Lucknow' })

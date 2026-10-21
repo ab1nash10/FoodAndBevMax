@@ -1,18 +1,16 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Skeleton } from '@/components/ui';
+import { Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import type { HospitalInput } from '@aahar/api-client';
-import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, MapPin } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { PageHeader, StatusBadge } from '@/components/organization/shared/list-controls';
-import { SubmitButton } from '@/components/organization/shared/form-controls';
+import { StatusBadge } from '@/components/organization/shared/list-controls';
+import { FormShell, SubmitButton } from '@/components/organization/shared/form-controls';
 import { LocationMasterFormFields } from '@/components/organization/shared/location-form-fields';
 import { applyValidationErrors, organizationSchemas } from '@/components/organization/shared/utils';
 import {
@@ -25,6 +23,7 @@ import { queryKeys } from '@/lib/query-keys';
 
 export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalId: string }>) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { showToast } = useToast();
 
   const locationMasterForm = useForm<HospitalFormValues>({
@@ -68,6 +67,8 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
         title: 'Location updated',
         variant: 'success',
       });
+      // Saved: back to the list, as every record panel closes on save.
+      router.push('/masters/locations');
     },
   });
 
@@ -88,61 +89,42 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
   });
 
   return (
-    <section className="space-y-5">
-      <Button asChild variant="ghost">
-        <Link href="/masters/locations">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Locations
-        </Link>
-      </Button>
-      <PageHeader
-        eyebrow="Location Master"
-        icon={MapPin}
-        subtitle="View and update operating location details."
-        title={hospital ? getLocationTitle(hospital) : 'Location'}
-      />
-
-      <Panel className="p-4" id="details">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold tracking-normal text-ds-text">
-              Add/Update Location
-            </h2>
-            <p className="text-sm text-ds-muted">
-              Creating a Location will auto-create Main Store and Main Kitchen.
-            </p>
-          </div>
-          {hospital ? <StatusBadge isActive={hospital.isActive} /> : null}
+    <FormShell
+      backHref="/masters/locations"
+      subtitle="Creating a Location will auto-create Main Store and Main Kitchen."
+      title={hospital ? `Edit ${getLocationTitle(hospital)}` : 'Edit location'}
+    >
+      {hospitalQuery.isLoading ? (
+        <div className="grid gap-3">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-64" />
         </div>
-        {hospitalQuery.isLoading ? (
-          <div className="grid gap-3">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-64" />
+      ) : hospitalQuery.isError ? (
+        <p className="text-sm font-medium text-ds-status-bad-fg">
+          {getApiErrorMessage(hospitalQuery.error)}
+        </p>
+      ) : hospital ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            void handleLocationMasterSubmit(event);
+          }}
+        >
+          <div className="flex justify-end">
+            <StatusBadge isActive={hospital.isActive} />
           </div>
-        ) : hospitalQuery.isError ? (
-          <p className="text-sm font-medium text-ds-status-bad-fg">
-            {getApiErrorMessage(hospitalQuery.error)}
-          </p>
-        ) : hospital ? (
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              void handleLocationMasterSubmit(event);
-            }}
-          >
-            <LocationMasterFormFields
-              disabled={updateLocationMasterMutation.isPending}
-              form={locationMasterForm}
+          <LocationMasterFormFields
+            disabled={updateLocationMasterMutation.isPending}
+            form={locationMasterForm}
+          />
+          <div className="flex justify-end">
+            <SubmitButton
+              isPending={updateLocationMasterMutation.isPending}
+              label="Update Location"
             />
-            <div className="flex justify-end">
-              <SubmitButton
-                isPending={updateLocationMasterMutation.isPending}
-                label="Update Location"
-              />
-            </div>
-          </form>
-        ) : null}
-      </Panel>
-    </section>
+          </div>
+        </form>
+      ) : null}
+    </FormShell>
   );
 }

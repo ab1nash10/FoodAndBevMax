@@ -1,6 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/auth-provider';
+import { RowAction, StatStrip, tableStyles } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import {
   FilterField,
@@ -16,6 +19,7 @@ import { Toggle } from '@/components/ui-controls';
 import { IfCanOpen } from '@/components/record-link';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
+import { canOpenPath } from '@/lib/navigation';
 import {
   useOnScopeChange,
   useUrlNumberParam,
@@ -26,7 +30,7 @@ import type { Restaurant, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Pencil, Plus, QrCode, Utensils } from 'lucide-react';
+import { Activity, BadgePercent, Pencil, Plus, QrCode, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import {
   ActiveFilterSelect,
@@ -49,6 +53,7 @@ import {
   allowsOnlineOrdering,
   isRestaurantOpen,
 } from '@/components/organization/shared/restaurants';
+import { StaffDiscountPanel } from '@/components/organization/staff-discount-panel';
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 import { prefetchOnIntent, restaurantDetailQuery } from '@/lib/detail-queries';
@@ -75,6 +80,8 @@ function RestaurantThumbnail({ restaurant }: Readonly<{ restaurant: Restaurant }
 }
 
 export function RestaurantsPageClient() {
+  const router = useRouter();
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
@@ -88,6 +95,7 @@ export function RestaurantsPageClient() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [onlineUpdatingId, setOnlineUpdatingId] = useState<string | null>(null);
+  const [staffDiscountRestaurant, setStaffDiscountRestaurant] = useState<Restaurant | null>(null);
 
   const restaurantsQuery = useQuery({
     queryFn: async () => {
@@ -112,6 +120,25 @@ export function RestaurantsPageClient() {
       sortOrder,
     }),
   });
+
+  // Under the list's own key, so whatever refreshes the list refreshes these counts too.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (isActive?: boolean) =>
+        (
+          await organizationApi.listRestaurants({
+            hospitalId: scopedHospitalId,
+            isActive,
+            limit: 0,
+          })
+        ).data.meta.total;
+      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
+
+      return { active, all, inactive };
+    },
+    queryKey: queryKeys.restaurants('stats', scopedHospitalId ?? 'all'),
+  });
+  const stats = statsQuery.data;
 
   useOnScopeChange(scopedHospitalId, isLoadingLocations, () => {
     setPage(1);
@@ -169,6 +196,11 @@ export function RestaurantsPageClient() {
     setPage(1);
   }
 
+  function showStatus(status: ActiveFilter) {
+    setActiveFilter(status);
+    setPage(1);
+  }
+
   function toggleRestaurantStatus(restaurant: Restaurant) {
     const nextIsActive = !restaurant.isActive;
 
@@ -204,24 +236,51 @@ export function RestaurantsPageClient() {
   return (
     <section className="space-y-5">
       <PageHeader
+        count={stats?.all}
         action={
           <IfCanOpen href="/masters/restaurants/new">
             <Button asChild>
               <Link href="/masters/restaurants/new">
                 <Plus className="h-4 w-4" />
-                Create
+                New restaurant
               </Link>
             </Button>
           </IfCanOpen>
         }
-        eyebrow="Organization"
         icon={Utensils}
         subtitle="Manage restaurant profiles and ordering availability."
         title="Restaurants"
       />
+      <StatStrip
+        label="Restaurants at a glance"
+        stats={[
+          {
+            active: !activeFilter,
+            label: 'All restaurants',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: activeFilter === 'active',
+            label: 'Active',
+            onSelect: () => showStatus('active'),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive · offline',
+            onSelect: () => showStatus('inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
       <Panel>
         <ListToolbar>
           <SearchInput
+            label="Search restaurants"
+            placeholder="Name, code, mobile, GST or FSSAI no."
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -256,44 +315,59 @@ export function RestaurantsPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-215 table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[30%] px-3 py-2.5">Restaurant</th>
-                <th className="w-[14%] whitespace-nowrap px-3 py-2.5">Online Ordering</th>
-                <th className="w-[17%] whitespace-nowrap px-3 py-2.5">Restaurant Availability</th>
-                <th className="w-[19%] px-3 py-2.5">Restaurant Status</th>
-                <th className="w-[168px] px-3 py-2.5 min-[1320px]:w-[300px]">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[34%]')}>Restaurant</th>
+                <th className={cn(tableStyles.th, 'w-[15%] whitespace-nowrap')}>Online ordering</th>
+                <th className={cn(tableStyles.th, 'w-[16%] whitespace-nowrap')}>Availability</th>
+                <th className={cn(tableStyles.th, 'w-[21%]')}>Restaurant status</th>
+                <th className={cn(tableStyles.th, 'w-40')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((restaurant) => {
                   const isOpen = isRestaurantOpen(restaurant);
                   const isOnline = allowsOnlineOrdering(restaurant);
                   const statusBadges = getRestaurantStatusBadges(restaurant);
                   const isOnlineUpdating = onlineUpdatingId === restaurant.id;
+                  const editHref = `/masters/restaurants/${restaurant.id}/edit`;
+                  const ordersHref = `/masters/restaurants/${restaurant.id}/orders`;
+                  const canEdit = canOpenPath(editHref, hasPermission);
+                  const prefetchDetail = prefetchOnIntent(() =>
+                    queryClient.prefetchQuery(restaurantDetailQuery(restaurant.id)),
+                  );
 
                   return (
-                    <tr className="hover:bg-ds-subtle" key={restaurant.id}>
-                      <td className="px-3 py-3">
-                        <div className="flex min-w-0 items-center gap-4">
+                    <tr
+                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      key={restaurant.id}
+                      onClick={canEdit ? () => router.push(editHref) : undefined}
+                      onMouseEnter={canEdit ? prefetchDetail.onMouseEnter : undefined}
+                    >
+                      <td className={tableStyles.td}>
+                        <div className="flex min-w-0 items-center gap-3">
                           <RestaurantThumbnail restaurant={restaurant} />
                           <div className="min-w-0">
-                            <p className="truncate text-base font-semibold text-ds-text">
+                            <p className={cn('truncate', tableStyles.title)}>
                               {restaurant.restaurantName}
                             </p>
-                            <p className="mt-1 line-clamp-2 text-sm text-ds-muted">
+                            <p className="mt-0.5 line-clamp-1 text-[13px] text-ds-muted">
                               {formatRestaurantLocationDisplay(restaurant.hospital)}
                             </p>
-                            <p className="mt-1 text-xs font-medium text-ds-muted">
-                              {restaurant.restaurantCode} · Updated{' '}
+                            <p className="mt-0.5 truncate text-xs text-ds-muted">
+                              <span className={tableStyles.code}>{restaurant.restaurantCode}</span>
+                              {' · Updated '}
                               {formatDate(restaurant.updatedAt)}
                             </p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      {/* Its own click: switching online ordering does not open the restaurant. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                         {/* Both switches read the same way: the switch, then its state. */}
                         <div
                           className="flex items-center gap-2"
@@ -318,7 +392,7 @@ export function RestaurantsPageClient() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           <Toggle
                             ariaLabel={`${restaurant.restaurantName} restaurant availability`}
@@ -336,9 +410,9 @@ export function RestaurantsPageClient() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className={tableStyles.td}>
                         {statusBadges.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1.5">
                             {statusBadges.map((badge) => (
                               <Badge key={badge.label} variant={badge.variant}>
                                 {badge.label}
@@ -349,59 +423,51 @@ export function RestaurantsPageClient() {
                           <span className="text-xs text-ds-muted">None set</span>
                         )}
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2 whitespace-nowrap">
-                          <IfCanOpen href={`/masters/restaurants/${restaurant.id}/edit`}>
-                            <Button asChild size="icon" variant="outline">
-                              <Link
-                                aria-label={`Edit ${restaurant.restaurantName}`}
-                                href={`/masters/restaurants/${restaurant.id}/edit`}
-                                title="Edit"
-                                {...prefetchOnIntent(() =>
-                                  queryClient.prefetchQuery(restaurantDetailQuery(restaurant.id)),
-                                )}
-                              >
-                                <Pencil aria-hidden="true" className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                          </IfCanOpen>
-                          {/* Square like Edit on narrower screens, where the labels would push
-                              the row past the window; the title names them there. */}
-                          <Button
-                            aria-label={`Print QR for ${restaurant.restaurantName}`}
-                            className="min-[1320px]:w-auto min-[1320px]:px-4"
-                            onClick={() =>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end gap-0.5">
+                          {canEdit ? (
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${restaurant.restaurantName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                router.push(editHref);
+                              }}
+                              {...prefetchDetail}
+                            />
+                          ) : null}
+                          <RowAction
+                            icon={QrCode}
+                            label={`Print QR for ${restaurant.restaurantName}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
                               showToast({
                                 title: 'QR printing will be available in QR module.',
                                 variant: 'info',
-                              })
-                            }
-                            size="icon"
-                            title="Print QR"
-                            type="button"
-                            variant="outline"
-                          >
-                            <QrCode aria-hidden="true" className="h-4 w-4" />
-                            <span className="hidden min-[1320px]:inline">Print QR</span>
-                          </Button>
-                          <IfCanOpen href={`/masters/restaurants/${restaurant.id}/orders`}>
-                            <Button
-                              asChild
-                              className="min-[1320px]:w-auto min-[1320px]:px-4"
-                              size="icon"
-                              variant="outline"
-                            >
-                              <Link
-                                aria-label={`Orders for ${restaurant.restaurantName}`}
-                                href={`/masters/restaurants/${restaurant.id}/orders`}
-                                title="Activity: live orders and the TV board"
-                              >
-                                <Activity aria-hidden="true" className="h-4 w-4" />
-                                <span className="hidden min-[1320px]:inline">Activity</span>
-                              </Link>
-                            </Button>
-                          </IfCanOpen>
-                        </div>
+                              });
+                            }}
+                          />
+                          <RowAction
+                            icon={BadgePercent}
+                            label={`Staff discount for ${restaurant.restaurantName}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setStaffDiscountRestaurant(restaurant);
+                            }}
+                            title="Staff discount"
+                          />
+                          {canOpenPath(ordersHref, hasPermission) ? (
+                            // Activity: the restaurant's live orders and its TV board.
+                            <RowAction
+                              icon={Activity}
+                              label={`Activity for ${restaurant.restaurantName}: orders and TV board`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                router.push(ordersHref);
+                              }}
+                            />
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -426,6 +492,10 @@ export function RestaurantsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      <StaffDiscountPanel
+        onClose={() => setStaffDiscountRestaurant(null)}
+        restaurant={staffDiscountRestaurant}
+      />
     </section>
   );
 }

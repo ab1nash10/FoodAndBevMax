@@ -278,15 +278,15 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
     <section className="space-y-4">
       <div className="flex flex-col gap-1.5">
         <Link
-          className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[12.5px] font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+          className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[12.5px] font-medium text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
           href={backHref}
         >
           <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
           Transfers
         </Link>
         <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text">
-            Acknowledge {transfer.transferNumber}
+          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ds-text">
+            Acknowledge <span className="font-mono tracking-normal">{transfer.transferNumber}</span>
           </h1>
           <StatusChip
             label={
@@ -326,10 +326,8 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
             className="flex min-w-0 flex-col gap-[3px] bg-ds-surface px-4 py-3"
             key={entry.label}
           >
-            <dt className="text-[11px] font-bold uppercase tracking-[0.06em] text-ds-muted">
-              {entry.label}
-            </dt>
-            <dd className="truncate text-[13.5px] font-bold text-ds-text" title={entry.value}>
+            <dt className="text-[12px] font-medium text-ds-muted">{entry.label}</dt>
+            <dd className="truncate text-[13.5px] font-semibold text-ds-text" title={entry.value}>
               <RecordLink href={entry.href}>{entry.value}</RecordLink>
             </dd>
           </div>
@@ -344,7 +342,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
             role="region"
           >
             <div className="flex flex-wrap items-center justify-between gap-2.5 px-[18px] py-3.5">
-              <h2 className="text-[15px] font-extrabold text-ds-text" id="ack-lines">
+              <h2 className="text-[15px] font-semibold text-ds-text" id="ack-lines">
                 Received lines · {transfer.lines.length}
               </h2>
               <div className="flex gap-2">
@@ -370,13 +368,13 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px] table-fixed text-[13px]">
-                <thead className="border-y border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
+                <thead className="border-y border-ds-divider bg-ds-subtle text-left text-[12px] text-ds-muted">
                   <tr>
-                    <th className="py-2 pl-[18px] font-semibold">Item · batch</th>
-                    <th className="w-[76px] px-2 py-2 text-right font-semibold">Sent</th>
-                    <th className="w-[160px] px-2 py-2 font-semibold">Accepted</th>
-                    <th className="w-[84px] px-2 py-2 text-right font-semibold">Rejected</th>
-                    <th className="w-[30%] py-2 pl-2 pr-[18px] font-semibold">Reason</th>
+                    <th className="py-2.5 pl-[18px] font-medium">Item · batch</th>
+                    <th className="w-[76px] px-2 py-2.5 text-right font-medium">Sent</th>
+                    <th className="w-[160px] px-2 py-2.5 font-medium">Accepted</th>
+                    <th className="w-[84px] px-2 py-2.5 text-right font-medium">Rejected</th>
+                    <th className="w-[30%] py-2.5 pl-2 pr-[18px] font-medium">Reason</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -405,23 +403,24 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                                 <icon.icon aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
                               </span>
                               <span className="flex min-w-0 flex-col">
-                                <span className="truncate text-[13.5px] font-bold text-ds-text">
+                                <span className="truncate text-[13.5px] font-semibold text-ds-text">
                                   {row.line.item.itemName}
                                 </span>
-                                <span className="truncate text-[11.5px] text-ds-muted">
-                                  {[
-                                    row.line.batchNumber,
-                                    row.line.expiryDate
-                                      ? `exp ${formatDateOnly(row.line.expiryDate)}`
-                                      : null,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' · ') || row.line.item.itemCode}
+                                <span className="truncate text-[12px] text-ds-muted">
+                                  {row.line.batchNumber || !row.line.expiryDate ? (
+                                    <span className="font-mono">
+                                      {row.line.batchNumber || row.line.item.itemCode}
+                                    </span>
+                                  ) : null}
+                                  {row.line.batchNumber && row.line.expiryDate ? ' · ' : null}
+                                  {row.line.expiryDate
+                                    ? `exp ${formatDateOnly(row.line.expiryDate)}`
+                                    : null}
                                 </span>
                               </span>
                             </span>
                           </td>
-                          <td className="px-2 py-2.5 text-right text-[13.5px] font-bold tabular-nums text-ds-text">
+                          <td className="px-2 py-2.5 text-right font-mono text-[13.5px] font-semibold tabular-nums text-ds-text">
                             {formatQuantity(row.line.sentQty)}
                           </td>
                           <td className="px-2 py-2.5">
@@ -438,9 +437,9 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                           </td>
                           <td
                             className={cn(
-                              'px-2 py-2.5 text-right text-[13.5px] tabular-nums',
+                              'px-2 py-2.5 text-right font-mono text-[13.5px] tabular-nums',
                               row.rejectedQty > 0
-                                ? 'font-extrabold text-ds-status-bad-fg'
+                                ? 'font-semibold text-ds-status-bad-fg'
                                 : 'font-medium text-ds-muted',
                             )}
                           >
@@ -509,12 +508,12 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
             aria-label="Acknowledgement outcome"
             className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5 rounded-card border border-ds-border bg-ds-surface p-[18px] shadow-card nav:sticky nav:top-20"
           >
-            <h2 className="text-[15px] font-extrabold text-ds-text">Outcome</h2>
+            <h2 className="text-[15px] font-semibold text-ds-text">Outcome</h2>
             <div
               aria-live="polite"
               className={cn('flex flex-col gap-1.5 rounded-xl p-3.5', copy.box)}
             >
-              <span className="text-[15px] font-extrabold">{copy.title}</span>
+              <span className="text-[15px] font-semibold">{copy.title}</span>
               <span className="text-[12.5px] text-ds-text-2">
                 {copy.text(sourceLabel, destinationLabel, rows.length)}
               </span>
@@ -529,18 +528,21 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                   className="flex flex-col gap-0.5 rounded-control border border-ds-border px-1.5 py-2.5"
                   key={count.label}
                 >
-                  <span className={cn('text-lg font-extrabold tabular-nums', count.className)}>
+                  <span
+                    className={cn('font-mono text-lg font-medium tabular-nums', count.className)}
+                  >
                     {count.value}
                   </span>
                   <span className="text-[11.5px] text-ds-muted">{count.label}</span>
                 </div>
               ))}
             </div>
-            <label className="flex flex-col gap-1.5 text-[12.5px] font-bold text-ds-text-2">
+            <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-ds-text-2">
               Remarks for the store
               <Textarea
+                maxLength={500}
                 onChange={(event) => setRemarks(event.target.value)}
-                placeholder="Add details on shortages or damage"
+                placeholder="Add details on shortages or damage (optional)"
                 rows={3}
                 value={remarks}
               />

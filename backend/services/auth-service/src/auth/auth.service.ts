@@ -168,10 +168,12 @@ export class AuthService {
     const payload = await this.tokens.verifyRefreshToken(dto.refreshToken);
 
     await this.tokens.revokeRefreshToken(payload.jti);
-    // Signed out: an admin may change their credentials straight away. Raw SQL keeps
-    // updated_at as it is.
-    await this.prisma
-      .$executeRaw`UPDATE users SET last_active_at = NULL WHERE id = ${payload.sub}::uuid`;
+    // Signing out ends every session the user has, on every device: the new session version
+    // makes the auth layer refuse their access and refresh tokens at once. Signed out, an admin
+    // may also change their credentials straight away. Raw SQL keeps updated_at as it is.
+    await this.prisma.$executeRaw`
+      UPDATE users SET last_active_at = NULL, session_version = session_version + 1
+      WHERE id = ${payload.sub}::uuid`;
     await this.auditLog.record({
       action: 'AUTH_LOGOUT',
       entityId: payload.sub,

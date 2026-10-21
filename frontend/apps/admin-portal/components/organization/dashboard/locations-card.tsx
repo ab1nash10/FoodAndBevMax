@@ -221,7 +221,7 @@ export function LocationsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
 
   if (!can.transfers) {
     return hasQuickCreate || hasMasters ? (
-      <div className="flex flex-col gap-5 min-[1100px]:flex-row *:min-w-0 *:flex-1">
+      <div className="flex flex-col gap-4 min-[1100px]:flex-row *:min-w-0 *:flex-1">
         <QuickCreateCard />
         <MasterDataCard stats={stats} />
       </div>
@@ -229,12 +229,12 @@ export function LocationsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   }
 
   return (
-    <div className="flex flex-wrap items-stretch gap-5">
+    <div className="flex flex-wrap items-stretch gap-4">
       <div className="flex min-w-0 flex-[2_1_560px] flex-col">
         <LocationsCard stats={stats} />
       </div>
       {hasQuickCreate || hasMasters ? (
-        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
+        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
           <QuickCreateCard />
           <MasterDataCard stats={stats} />
         </div>

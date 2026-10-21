@@ -17,11 +17,3 @@ export interface PageHeaderProps {
   subtitle: string;
   title: string;
 }
-
-export interface PaginationControlsProps {
-  limit: number;
-  onPageChange: (page: number) => void;
-  page: number;
-  total: number;
-  totalPages: number;
-}

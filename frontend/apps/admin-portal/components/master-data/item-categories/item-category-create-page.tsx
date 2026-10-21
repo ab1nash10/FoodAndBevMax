@@ -18,6 +18,8 @@ import {
 import { FormShell, SubmitButton } from '@/components/master-data/shared/components';
 import { applyValidationErrors } from '@/components/master-data/shared/utils';
 
+const requiredFields = categorySchema.pick({ categoryName: true });
+
 export function ItemCategoryCreatePageClient() {
   const form = useForm<ItemCategoryFormValues>({
     defaultValues: {
@@ -86,7 +88,10 @@ export function ItemCategoryCreatePageClient() {
         <CategoryFormFields form={form} />
         <div className="flex justify-end">
           <SubmitButton
-            disabled={!form.watch('categoryName')?.trim()}
+            disabledReason={
+              requiredFields.safeParse({ categoryName: form.watch('categoryName') }).error
+                ?.issues[0]?.message
+            }
             isPending={createCategoryMutation.isPending}
             label="Create Category"
           />

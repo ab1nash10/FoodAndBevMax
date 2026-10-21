@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PaymentMachine, PaymentMachineInput, PrimaryUpiProvider } from '@aahar/api-client';
+import { RowAction, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Modal, PasswordInput, Toggle } from '@/components/ui-controls';
@@ -30,6 +31,7 @@ import {
   useHospitalOptions,
 } from '@/components/pos/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 import { StatusToggleCell } from '@/components/organization/shared/list-controls';
 import { SetupNotice } from '@/components/location-empty-states';
 
@@ -206,18 +208,21 @@ function PaymentMachineForm({
       return;
     }
 
+    // An edit sends a blank optional field as empty (or null), which clears the saved value.
+    const clearable = (value: string) => (editingMachine ? value.trim() : optionalValue(value));
     const body: PaymentMachineInput = {
       hospitalId: parsed.data.hospitalId,
       isActive: parsed.data.isActive,
       isDefault: parsed.data.isDefault,
       name: parsed.data.name,
-      pinelabImei: optionalValue(parsed.data.pinelabImei),
-      pinelabMerchantId: optionalValue(parsed.data.pinelabMerchantId),
-      pinelabMerchantStorePosCode: optionalValue(parsed.data.pinelabMerchantStorePosCode),
+      pinelabImei: clearable(parsed.data.pinelabImei),
+      pinelabMerchantId: clearable(parsed.data.pinelabMerchantId),
+      pinelabMerchantStorePosCode: clearable(parsed.data.pinelabMerchantStorePosCode),
+      // Blank keeps the saved token: it is never sent back to be shown.
       pinelabSecurityToken: optionalValue(parsed.data.pinelabSecurityToken),
       posDeviceId: parsed.data.posDeviceId,
-      primaryUpi: parsed.data.primaryUpi || undefined,
-      serialNumber: optionalValue(parsed.data.serialNumber),
+      primaryUpi: parsed.data.primaryUpi || (editingMachine ? null : undefined),
+      serialNumber: clearable(parsed.data.serialNumber),
     };
 
     mutation.mutate(body);
@@ -225,6 +230,7 @@ function PaymentMachineForm({
 
   return (
     <Modal
+      side
       footer={
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button onClick={onClose} type="button" variant="outline">
@@ -255,6 +261,7 @@ function PaymentMachineForm({
           error={form.formState.errors.hospitalId?.message}
           label="Location"
           name="payment-location"
+          required
         >
           <Select
             disabled={hospitalsQuery.isLoading || !isAllLocations}
@@ -273,6 +280,7 @@ function PaymentMachineForm({
           error={form.formState.errors.posDeviceId?.message}
           label="POS Device"
           name="payment-pos-device"
+          required
         >
           <Select
             disabled={!selectedHospitalId || posDevicesQuery.isLoading}
@@ -297,7 +305,12 @@ function PaymentMachineForm({
           onChange={(checked) => form.setValue('isActive', checked)}
           value={isActive}
         />
-        <Field error={form.formState.errors.name?.message} label="Name" name="payment-name">
+        <Field
+          error={form.formState.errors.name?.message}
+          label="Name"
+          name="payment-name"
+          required
+        >
           <Input id="payment-name" {...form.register('name')} />
         </Field>
         <Field
@@ -441,12 +454,23 @@ export function PaymentMachinesTab() {
     setIsFormOpen(false);
   };
 
+  const openEditForm = (machine: PaymentMachine) => {
+    setEditingMachine(machine);
+    setIsFormOpen(true);
+  };
+
+  const numberCell = (value: string | null) => (
+    <td className={cn(tableStyles.td, value && tableStyles.num, 'truncate text-ds-text-2')}>
+      {value ?? 'Not set'}
+    </td>
+  );
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
         <Button onClick={openCreateForm} type="button">
           <Plus className="h-4 w-4" />
-          New Payment Machine
+          New payment machine
         </Button>
       </div>
       <PaymentMachineForm editingMachine={editingMachine} onClose={closeForm} open={isFormOpen} />
@@ -468,30 +492,39 @@ export function PaymentMachinesTab() {
             setPage(1);
           }}
           search={searchInput}
+          searchLabel="Search payment machines"
+          searchPlaceholder="Name, serial no., merchant ID or IMEI"
         />
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="whitespace-nowrap bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-240 table-fixed')}>
+            <thead className={cn(tableStyles.head, 'whitespace-nowrap')}>
               <tr>
-                <th className="w-[14%] px-4 py-2.5">Name</th>
-                <th className="w-[12%] px-4 py-2.5">Status</th>
-                <th className="w-[8%] px-4 py-2.5">Primary</th>
-                <th className="w-[12%] px-4 py-2.5">Serial Number</th>
-                <th className="w-[11%] px-4 py-2.5">Merchant ID</th>
-                <th className="w-[12%] px-4 py-2.5">Store POS Code</th>
-                <th className="w-[14%] px-4 py-2.5">POS Device</th>
-                <th className="w-[11%] px-4 py-2.5">Primary UPI</th>
-                <th className="w-20 px-2 py-2.5">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[15%]')}>Name</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[8%]')}>Primary</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Serial number</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Merchant ID</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Store POS code</th>
+                <th className={cn(tableStyles.th, 'w-[15%]')}>POS device</th>
+                <th className={cn(tableStyles.th, 'w-[10%]')}>Primary UPI</th>
+                <th className={cn(tableStyles.th, 'w-14')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((machine) => (
-                  <tr className="hover:bg-ds-subtle" key={machine.id}>
-                    <td className="px-4 py-3 font-medium text-ds-text dark:text-white">
+                  <tr
+                    className={tableStyles.row}
+                    key={machine.id}
+                    onClick={() => openEditForm(machine)}
+                  >
+                    <td className={cn(tableStyles.td, tableStyles.title, 'truncate')}>
                       {machine.name}
                     </td>
-                    <td className="px-4 py-3">
+                    {/* The switches have their own clicks: they do not open the machine. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <StatusToggleCell
                         disabled={flagMutation.isPending}
                         isActive={machine.isActive}
@@ -503,7 +536,7 @@ export function PaymentMachinesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <Toggle
                         ariaLabel={`Primary machine: ${machine.name}`}
                         checked={machine.isDefault}
@@ -513,35 +546,27 @@ export function PaymentMachinesTab() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {machine.serialNumber ?? 'Not set'}
+                    {numberCell(machine.serialNumber)}
+                    {numberCell(machine.pinelabMerchantId)}
+                    {numberCell(machine.pinelabMerchantStorePosCode)}
+                    <td className={tableStyles.td}>
+                      <p className="truncate text-ds-text-2">{machine.posDevice.name}</p>
+                      <p className={cn('truncate', tableStyles.code)}>{machine.posDevice.code}</p>
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {machine.pinelabMerchantId ?? 'Not set'}
-                    </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {machine.pinelabMerchantStorePosCode ?? 'Not set'}
-                    </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {machine.posDevice.name} ({machine.posDevice.code})
-                    </td>
-                    <td className="px-4 py-3 text-ds-text-3">
+                    <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
                       {formatUpiProvider(machine.primaryUpi)}
                     </td>
-                    <td className="px-2 py-3">
-                      <Button
-                        aria-label={`Edit ${machine.name}`}
-                        onClick={() => {
-                          setEditingMachine(machine);
-                          setIsFormOpen(true);
-                        }}
-                        size="icon"
-                        title="Edit"
-                        type="button"
-                        variant="outline"
-                      >
-                        <Pencil aria-hidden="true" className="h-4 w-4" />
-                      </Button>
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      <span className="flex justify-end">
+                        <RowAction
+                          icon={Pencil}
+                          label={`Edit ${machine.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEditForm(machine);
+                          }}
+                        />
+                      </span>
                     </td>
                   </tr>
                 ))

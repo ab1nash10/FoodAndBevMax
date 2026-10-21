@@ -42,7 +42,9 @@ export interface RestaurantMenuFormValues {
   isDiscountable: boolean;
   isGstInclusive: boolean;
   itemId: string;
+  /** Where it comes from: one of these is set, from the chosen mapping. */
   kitchenId: string;
+  storeId: string;
   positionType: RestaurantMenuPositionType | '';
   preparationTimeMinutes: string;
   price: string;

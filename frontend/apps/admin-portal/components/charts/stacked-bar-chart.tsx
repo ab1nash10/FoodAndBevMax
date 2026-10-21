@@ -13,6 +13,7 @@
 
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
+import { axisMax } from './geometry';
 
 export interface StackSegment {
   className: string;
@@ -44,7 +45,7 @@ export function StackedBarChart({
   const totals = bars.map((bar) =>
     segments.reduce((total, segment) => total + (bar.values[segment.key] ?? 0), 0),
   );
-  const yMax = Math.max(5, Math.ceil(Math.max(0, ...totals) / 5) * 5);
+  const yMax = axisMax(totals);
   const shown = active !== null && active < bars.length ? active : bars.length - 1;
   const current = bars[shown];
   const isEmpty = totals.every((total) => total === 0);
@@ -113,7 +114,7 @@ export function StackedBarChart({
           {yMax}
         </span>
         <span className="absolute left-0 top-[calc(50%-7px)] text-[11px] tabular-nums text-ds-muted">
-          {Math.round(yMax / 2)}
+          {yMax / 2}
         </span>
         <div
           className={cn('relative flex h-full items-end border-b border-ds-border', gap)}

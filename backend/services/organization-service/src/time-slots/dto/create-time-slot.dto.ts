@@ -9,6 +9,7 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -17,6 +18,7 @@ export class CreateTimeSlotDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
+  @DisplayName()
   slotName!: string;
 
   @ApiPropertyOptional({ example: '07:00' })

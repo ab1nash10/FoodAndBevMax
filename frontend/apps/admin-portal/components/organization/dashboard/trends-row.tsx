@@ -41,7 +41,7 @@ export function TrendsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
     );
 
   return (
-    <div className="flex flex-col gap-5 min-[1100px]:flex-row *:min-w-0 *:flex-1">
+    <div className="flex flex-col gap-4 min-[1100px]:flex-row *:min-w-0 *:flex-1">
       {can.productions ? (
         wastage ? (
           <DashboardCard

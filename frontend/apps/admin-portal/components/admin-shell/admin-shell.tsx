@@ -1,33 +1,25 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import {
-  AlertTriangle,
-  ChevronDown,
-  LogOut,
-  Menu,
-  PanelLeftClose,
-  Search,
-  Settings,
-  X,
-} from 'lucide-react';
+import { AlertTriangle, ChevronDown, LogOut, Menu, Search, Settings, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, ViewTransition, type ReactNode } from 'react';
+import { MobileTabBar } from '@/components/admin-shell/mobile-tab-bar';
+import { AccountMenu, SidebarActions } from '@/components/admin-shell/sidebar-actions';
 import { CommandPalette, type PalettePage } from '@/components/command-palette';
-import { BrandMark, EmptyState, KeyboardHint } from '@/components/design-system';
+import { BrandMark, EmptyState } from '@/components/design-system';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
 import { PreferencesDialog } from '@/components/preferences/preferences-dialog';
-import { SidebarRail } from '@/components/sidebar-rail';
 import { useApplyThemePreference } from '@/components/preferences/use-preferences';
 import { Skeleton } from '@/components/ui';
 import { openCommandPalette } from '@/lib/command-palette-events';
 import { canOpenPath, getPermittedPages } from '@/lib/navigation';
-import { cn } from '@/lib/utils';
 import { HeaderLocationSelector } from '@/components/admin-shell/header-location-selector';
 import { SidebarContent, useNavCounts } from '@/components/admin-shell/sidebar-content';
+import { ModulePills, ModuleTabs } from '@/components/admin-shell/top-nav';
 
 function LoadingShell({ onRetry }: Readonly<{ onRetry?: () => void }>) {
   return (
@@ -74,9 +66,6 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     [hasPermission, navCounts],
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  // null until the saved choice is read back, so the first render's default never overwrites it
-  // (React runs mount effects twice in development).
-  const [isCollapsed, setIsCollapsed] = useState<boolean | null>(null);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDetailsElement>(null);
 
@@ -94,46 +83,6 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     document.addEventListener('pointerdown', closeOnOutsideClick);
 
     return () => document.removeEventListener('pointerdown', closeOnOutsideClick);
-  }, []);
-
-  useEffect(() => {
-    const storedPreference = window.localStorage.getItem('aahar-sidebar-collapsed');
-
-    setIsCollapsed(storedPreference === 'true');
-  }, []);
-
-  useEffect(() => {
-    if (isCollapsed !== null) {
-      window.localStorage.setItem('aahar-sidebar-collapsed', String(isCollapsed));
-    }
-  }, [isCollapsed]);
-
-  useEffect(() => {
-    const toggleOnBracket = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing =
-        target?.isContentEditable ||
-        ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName ?? '');
-
-      if (
-        event.key !== '[' ||
-        // Keyboards that type "[" with AltGr report it as Ctrl+Alt.
-        ((event.ctrlKey || event.altKey) && !event.getModifierState('AltGraph')) ||
-        event.metaKey ||
-        event.defaultPrevented ||
-        typing ||
-        document.querySelector('[aria-modal="true"]')
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      setIsCollapsed((collapsed) => !collapsed);
-    };
-
-    document.addEventListener('keydown', toggleOnBracket);
-
-    return () => document.removeEventListener('keydown', toggleOnBracket);
   }, []);
 
   useEffect(() => {
@@ -188,6 +137,25 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     .join('');
   const roleLabel = roles[0] ?? 'Active user';
   const openPalette = openCommandPalette;
+  const account = (compact = false) => (
+    <AccountMenu
+      compact={compact}
+      displayName={displayName}
+      initials={initials}
+      onLogout={() => {
+        void logout().then(() => router.replace('/auth/login'));
+      }}
+      onPreferences={() => setIsPreferencesOpen(true)}
+      roleLabel={roleLabel}
+    />
+  );
+  // Where you are and what you can start: the location, search and "+ New", above the modules.
+  const sidebarTop = (
+    <div className="flex flex-col gap-2 px-3 pb-3">
+      <HeaderLocationSelector wide />
+      <SidebarActions onOpenPalette={openPalette} />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-ds-page text-ds-text">
@@ -197,51 +165,6 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       >
         Skip to content
       </a>
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-ds-border bg-ds-surface nav:flex',
-          isCollapsed ? 'w-rail' : 'w-sidebar',
-        )}
-      >
-        {isCollapsed ? (
-          <SidebarRail
-            counts={navCounts}
-            hasPermission={hasPermission}
-            onExpand={() => setIsCollapsed(false)}
-            onOpenPalette={openPalette}
-          />
-        ) : (
-          <>
-            <div className="flex items-center gap-2.5 pb-3.5 pl-4 pr-3.5 pt-4">
-              <Link
-                aria-label="AAHAR dashboard"
-                className="min-w-0 flex-1 rounded-control-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-                href="/dashboard"
-              >
-                <BrandMark className="min-w-0" />
-              </Link>
-              <button
-                aria-expanded
-                aria-keyshortcuts="["
-                aria-label="Collapse sidebar"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-control border border-ds-border text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-                onClick={() => setIsCollapsed(true)}
-                title="Collapse sidebar ( [ )"
-                type="button"
-              >
-                <PanelLeftClose aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-              </button>
-            </div>
-            <SidebarContent
-              counts={navCounts}
-              hasPermission={hasPermission}
-              onOpenPalette={openPalette}
-              sections
-            />
-          </>
-        )}
-      </aside>
-
       {isMobileMenuOpen ? (
         <div className="fixed inset-0 z-40 nav:hidden">
           <button
@@ -250,7 +173,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             onClick={() => setIsMobileMenuOpen(false)}
             type="button"
           />
-          <aside className="relative flex h-full w-[min(17rem,86vw)] flex-col border-r border-ds-border bg-ds-surface shadow-xl">
+          <aside className="nav-scope relative flex h-full w-[min(17rem,86vw)] flex-col bg-ds-surface text-ds-text shadow-xl">
             <div className="flex items-center justify-between gap-3 pb-3.5 pl-4 pr-3.5 pt-4">
               <BrandMark className="min-w-0" />
               <Button
@@ -264,27 +187,23 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
                 <X className="h-4 w-4" />
               </Button>
             </div>
+            {sidebarTop}
             <SidebarContent
               counts={navCounts}
+              footer={account()}
               hasPermission={hasPermission}
               onNavigate={() => setIsMobileMenuOpen(false)}
-              onOpenPalette={() => {
-                setIsMobileMenuOpen(false);
-                openPalette();
-              }}
             />
           </aside>
         </div>
       ) : null}
 
-      <div
-        className={cn(
-          'transition-[padding] duration-200',
-          isCollapsed ? 'nav:pl-rail' : 'nav:pl-sidebar',
-        )}
-      >
-        <header className="sticky top-0 z-30 border-b border-ds-border bg-ds-surface/95 backdrop-blur-xl">
-          <div className="flex min-h-16 items-center gap-3 px-4 py-3 nav:gap-4 nav:px-6">
+      <div>
+        {/* Desktop: the logo and location, the module pills and search, theme and account, with
+            the module's pages as tabs underneath. Phones: the menu button and the same tools.
+            Its height is --app-header-h (globals.css), for panels that stick below it. */}
+        <header className="sticky top-0 z-30 border-b border-ds-border bg-ds-surface/90 backdrop-blur-xl">
+          <div className="mx-auto flex min-h-16 max-w-[1440px] items-center gap-3 px-4 py-3 nav:h-16 nav:gap-4 nav:px-8 nav:py-0">
             <Button
               aria-label="Open navigation"
               className="shrink-0 nav:hidden"
@@ -295,27 +214,37 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <button
-              className="hidden h-10 max-w-[460px] min-w-28 flex-1 basis-0 items-center gap-2.5 rounded-control border border-ds-border bg-ds-subtle pl-3 pr-2 text-left text-[13px] text-ds-muted transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary md:flex"
-              onClick={openPalette}
-              type="button"
+            <Link
+              aria-label="AAHAR dashboard"
+              className="hidden shrink-0 rounded-control-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary nav:block"
+              href="/dashboard"
             >
-              <Search aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-              <span className="min-w-0 flex-1 truncate">Search transfers, items, GRNs…</span>
-              <KeyboardHint keys={['Ctrl', 'K']} />
-            </button>
-            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <BrandMark className="2xl:hidden" collapsed />
+              <BrandMark className="hidden 2xl:flex" />
+            </Link>
+            <div className="hidden shrink-0 nav:block">
+              <HeaderLocationSelector />
+            </div>
+            <ModulePills
+              className="hidden min-w-0 flex-1 justify-center overflow-x-auto [scrollbar-width:none] nav:flex"
+              counts={navCounts}
+              hasPermission={hasPermission}
+            />
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 nav:ml-0">
               <Button
+                aria-keyshortcuts="Control+K"
                 aria-label="Search"
-                className="md:hidden"
                 onClick={openPalette}
                 size="icon"
+                title="Search (Ctrl K)"
                 type="button"
                 variant="outline"
               >
                 <Search className="h-[18px] w-[18px]" strokeWidth={1.8} />
               </Button>
-              <HeaderLocationSelector />
+              <div className="nav:hidden">
+                <HeaderLocationSelector />
+              </div>
               {/* Phones reach the theme from Preferences. */}
               <div className="hidden sm:block">
                 <ThemeToggle />
@@ -363,15 +292,39 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
               </details>
             </div>
           </div>
+          <div className="hidden border-t border-ds-divider nav:block">
+            <ModuleTabs
+              className="mx-auto h-11 max-w-[1440px] px-6"
+              counts={navCounts}
+              hasPermission={hasPermission}
+            />
+          </div>
         </header>
         <main
-          className="mx-auto w-full max-w-content px-4 py-5 focus:outline-hidden nav:px-6"
+          // pb-24 below nav: room for the phone tab bar, so it never hides the last row.
+          className="mx-auto w-full max-w-[1440px] px-4 pb-24 pt-5 focus:outline-hidden nav:px-8 nav:pb-12 nav:pt-8"
           id="main-content"
           tabIndex={-1}
         >
-          {children}
+          {/* A new screen fades in and rises a little while the old one fades out; the header
+                stays still (globals.css, "Screen changes"). Keyed by path, so
+                filters and tabs within a screen don't animate. */}
+          <ViewTransition
+            default="none"
+            enter="screen-enter"
+            exit="screen-exit"
+            // A list and its /new or /:id/edit panel are one screen: only the panel moves.
+            key={pathname.replace(/\/(new|[^/]+\/edit)$/, '')}
+          >
+            <div>{children}</div>
+          </ViewTransition>
         </main>
       </div>
+      <MobileTabBar
+        onMore={() => setIsMobileMenuOpen(true)}
+        pages={palettePages}
+        pathname={pathname}
+      />
       <CommandPalette pages={palettePages} />
       {isPreferencesOpen ? <PreferencesDialog onClose={() => setIsPreferencesOpen(false)} /> : null}
     </div>

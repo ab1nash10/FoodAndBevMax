@@ -1,18 +1,11 @@
 'use client';
 
-import { Button } from '@aahar/ui';
-import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { SortOrder } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
-import { Badge, Input, Select } from '@/components/ui';
+import { Badge, Select } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { inactiveLocationMessage } from '@/components/organization/shared/locations';
-import type {
-  ActiveFilter,
-  PageHeaderProps,
-  PaginationControlsProps,
-} from '@/components/organization/shared/types';
+import type { ActiveFilter, PageHeaderProps } from '@/components/organization/shared/types';
 
 export function StatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
   return (
@@ -20,8 +13,8 @@ export function StatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
   );
 }
 
-export function PageHeader({ action, eyebrow, subtitle, title }: PageHeaderProps) {
-  return <AppPageHeader action={action} description={subtitle} eyebrow={eyebrow} title={title} />;
+export function PageHeader({ action, count, subtitle, title }: PageHeaderProps) {
+  return <AppPageHeader action={action} count={count} description={subtitle} title={title} />;
 }
 
 export function ToolbarGrid({ children }: Readonly<{ children: ReactNode }>) {
@@ -56,7 +49,7 @@ function StatusToggleButton({
       aria-label={isActive ? 'Set inactive' : 'Set active'}
       className={cn(
         'inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 disabled:cursor-not-allowed disabled:opacity-60',
-        isActive ? 'border-ds-teal bg-ds-teal' : 'border-ds-input bg-ds-divider',
+        isActive ? 'border-ds-primary bg-ds-primary' : 'border-ds-input bg-ds-divider',
       )}
       disabled={disabled}
       onClick={onToggle}
@@ -104,26 +97,7 @@ export function StatusToggleCell({
   );
 }
 
-export function SearchInput({
-  onChange,
-  value,
-}: Readonly<{
-  onChange: (value: string) => void;
-  value: string;
-}>) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-muted" />
-      <Input
-        className="pl-10"
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Search"
-        type="search"
-        value={value}
-      />
-    </div>
-  );
-}
+export { FilterSearch as SearchInput } from '@/components/ui-controls';
 
 export function ActiveFilterSelect({
   onChange,
@@ -141,62 +115,10 @@ export function ActiveFilterSelect({
   );
 }
 
-export function SortOrderSelect({
-  onChange,
-  value,
-}: Readonly<{
-  onChange: (value: SortOrder) => void;
-  value: SortOrder;
-}>) {
-  return (
-    <Select onChange={(event) => onChange(event.target.value as SortOrder)} value={value}>
-      <option value="desc">Newest first</option>
-      <option value="asc">Oldest first</option>
-    </Select>
-  );
-}
-
 export { QueryState } from '@/components/location-empty-states';
-export function PaginationControls({
-  limit,
-  onPageChange,
-  page,
-  total,
-  totalPages,
-}: PaginationControlsProps) {
-  const safeTotalPages = Math.max(totalPages, 1);
-
-  return (
-    <div className="flex flex-col gap-3 border-t border-ds-divider px-4 py-3 text-sm text-ds-text-3 sm:flex-row sm:items-center sm:justify-between">
-      <span>
-        Page {page} of {safeTotalPages} - {total} records - {limit} per page
-      </span>
-      <div className="flex gap-2">
-        <Button
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Previous
-        </Button>
-        <Button
-          disabled={page >= safeTotalPages}
-          onClick={() => onPageChange(page + 1)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Next
-        </Button>
-      </div>
-    </div>
-  );
-}
+/** The shared list footer (design-system ListPager). */
+export { ListPager as PaginationControls } from '@/components/design-system';
 
 export function SectionHeading({ title }: Readonly<{ title: string }>) {
-  return (
-    <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-ds-teal-text">{title}</h2>
-  );
+  return <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-ds-link">{title}</h2>;
 }

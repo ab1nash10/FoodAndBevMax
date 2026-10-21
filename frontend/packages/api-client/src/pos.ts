@@ -80,7 +80,8 @@ export interface PaymentMachineInput {
   pinelabMerchantStorePosCode?: string;
   pinelabSecurityToken?: string;
   posDeviceId: string;
-  primaryUpi?: PrimaryUpiProvider;
+  /** null clears it. */
+  primaryUpi?: PrimaryUpiProvider | null;
   serialNumber?: string;
 }
 

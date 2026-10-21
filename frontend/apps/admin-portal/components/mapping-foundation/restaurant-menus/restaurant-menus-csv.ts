@@ -1,23 +1,9 @@
-import type {
-  MenuServeAt,
-  RestaurantMenu,
-  RestaurantMenuDayOfWeek,
-  RestaurantMenuInput,
-} from '@aahar/api-client';
-import {
-  activeStatus,
-  fetchAllPages,
-  numberCell,
-  yesNo,
-  type CsvColumn,
-  type CsvRowImporter,
-} from '@/components/csv-import-export';
+import type { MenuServeAt, RestaurantMenu, RestaurantMenuDayOfWeek } from '@aahar/api-client';
+import { type CsvColumn } from '@/components/csv-import-export';
 import {
   dayOfWeekValues,
   formatEnum,
-  gstSlabs,
 } from '@/components/mapping-foundation/restaurant-menus/shared';
-import { organizationApi } from '@/lib/api';
 
 const serveAtText: Record<MenuServeAt, string> = {
   BOTH: 'Both',
@@ -35,6 +21,17 @@ export const menuColumns: Array<CsvColumn<RestaurantMenu>> = [
   { header: 'Item', readOnly: true, value: (menu) => menu.item.itemName },
   { header: 'Category', value: (menu) => menu.category?.categoryName },
   { header: 'Kitchen code', value: (menu) => menu.kitchen?.kitchenCode },
+  { header: 'Store code', value: (menu) => menu.store?.storeCode },
+  {
+    header: 'Store / Kitchen',
+    readOnly: true,
+    value: (menu) =>
+      menu.kitchen
+        ? `${menu.kitchen.kitchenName} (kitchen)`
+        : menu.store
+          ? `${menu.store.storeName} (store)`
+          : '',
+  },
   { header: 'Serve at', value: (menu) => serveAtText[menu.serveAt] },
   { header: 'Price', value: (menu) => menu.price },
   { header: 'In-room price', value: (menu) => menu.roomPrice },
@@ -51,24 +48,6 @@ export const menuColumns: Array<CsvColumn<RestaurantMenu>> = [
   { header: 'Available', value: (menu) => yes(menu.isAvailable) },
   { header: 'Status', value: (menu) => (menu.isActive ? 'Active' : 'Inactive') },
 ];
-
-function serveAtCell(value: string): MenuServeAt {
-  const key = value.toLowerCase().replace(/\s*only$/, '');
-
-  if (!value || key === 'both') {
-    return 'BOTH';
-  }
-
-  if (key === 'room') {
-    return 'ROOM';
-  }
-
-  if (key === 'counter') {
-    return 'COUNTER';
-  }
-
-  throw new Error('Serve at must be Both, Room only or Counter only');
-}
 
 /** "Monday, Tue" → days; blank or "Every day" is every day. */
 export function daysCell(value: string): RestaurantMenuDayOfWeek[] {
@@ -110,168 +89,4 @@ export function timeCell(value: string, header: string): string | null {
   }
 
   return `${match[1]!.padStart(2, '0')}:${match[2]}`;
-}
-
-/**
- * A row with a Menu code updates that menu item, as does a row for a restaurant, item and
- * category already on a menu together (with no category, the restaurant's only entry for the
- * item); any other row adds the item to the restaurant's menu under its category. Rows
- * refer to restaurants, items and kitchens by code, and the server checks the rest as the
- * form does (prices for where it is served, a kitchen at the restaurant's location). Category is
- * this menu item's own, by name: required to add an item, left as it is when blank on an update.
- */
-export async function startMenuImport(): Promise<CsvRowImporter> {
-  const [restaurants, items, kitchens, menus, categories] = await Promise.all([
-    fetchAllPages((page) => organizationApi.listRestaurants({ limit: 100, page })),
-    fetchAllPages((page) => organizationApi.listItems({ limit: 100, page })),
-    fetchAllPages((page) => organizationApi.listKitchens({ limit: 100, page })),
-    fetchAllPages((page) => organizationApi.listRestaurantMenus({ limit: 100, page })),
-    fetchAllPages((page) => organizationApi.listItemCategories({ limit: 100, page })),
-  ]);
-  const upper = (value: string) => value.trim().toUpperCase();
-  const categoryByName = new Map(
-    categories.map((category) => [upper(category.categoryName), category]),
-  );
-  const itemByCode = new Map(items.map((item) => [upper(item.itemCode), item]));
-  const menuByCode = new Map(menus.map((menu) => [upper(menu.menuItemCode), menu]));
-  // The same item can be on a restaurant's menu once per category.
-  const menuKey = (restaurantId: string, itemId: string, categoryId: string | null) =>
-    `${restaurantId}:${itemId}:${categoryId ?? ''}`;
-  const menuByKey = new Map(
-    menus.map((menu) => [menuKey(menu.restaurantId, menu.itemId, menu.categoryId), menu]),
-  );
-
-  return async (cells) => {
-    const menuCode = upper(cells('Menu code'));
-    const restaurantCode = upper(cells('Restaurant code'));
-    const itemCode = upper(cells('Item code'));
-    const kitchenCode = upper(cells('Kitchen code'));
-    const categoryName = cells('Category').trim();
-
-    if (!restaurantCode || !itemCode) {
-      throw new Error('Restaurant code and Item code are required');
-    }
-
-    // Codes are unique within a location, so the same code at two locations is ambiguous.
-    const restaurantMatches = restaurants.filter(
-      (restaurant) => upper(restaurant.restaurantCode) === restaurantCode,
-    );
-
-    if (restaurantMatches.length !== 1) {
-      throw new Error(
-        restaurantMatches.length
-          ? `Restaurant code ${restaurantCode} is used at more than one location`
-          : `No restaurant you can reach has code ${restaurantCode}`,
-      );
-    }
-
-    const restaurant = restaurantMatches[0]!;
-    const item = itemByCode.get(itemCode);
-
-    if (!item) {
-      throw new Error(`No item has code ${itemCode}`);
-    }
-
-    const kitchen = kitchenCode
-      ? kitchens.find(
-          (option) =>
-            option.hospitalId === restaurant.hospitalId &&
-            upper(option.kitchenCode) === kitchenCode,
-        )
-      : null;
-
-    if (kitchen === undefined) {
-      throw new Error(
-        `No kitchen at ${restaurant.restaurantName}'s location has code ${kitchenCode}`,
-      );
-    }
-
-    const byCode = menuCode ? menuByCode.get(menuCode) : undefined;
-
-    if (menuCode && !byCode) {
-      throw new Error(`No menu item has code ${menuCode}; leave Menu code empty to add one`);
-    }
-
-    const category = categoryName ? categoryByName.get(upper(categoryName)) : undefined;
-
-    if (categoryName && !category) {
-      throw new Error(`No category is named ${categoryName}`);
-    }
-
-    let match = byCode;
-
-    if (!match && category) {
-      match = menuByKey.get(menuKey(restaurant.id, item.id, category.id));
-    } else if (!match) {
-      const entries = menus.filter(
-        (menu) => menu.restaurantId === restaurant.id && menu.itemId === item.id,
-      );
-
-      if (entries.length > 1) {
-        throw new Error(
-          'This item is on the menu under more than one category; fill in Category or Menu code',
-        );
-      }
-
-      match = entries[0];
-    }
-
-    if (!match && !category) {
-      throw new Error('Category is required to add an item to a menu');
-    }
-
-    const gstPercent = numberCell(cells('GST %'), 'GST %', 2) ?? 0;
-
-    if (!(gstSlabs as readonly number[]).includes(gstPercent)) {
-      throw new Error(`GST % must be one of ${gstSlabs.join(', ')}`);
-    }
-
-    const body: RestaurantMenuInput = {
-      accompaniments: cells('Accompaniments') || null,
-      addOn: cells('Add-on') || null,
-      availableFrom: timeCell(cells('Available from'), 'Available from'),
-      availableTo: timeCell(cells('Available to'), 'Available to'),
-      ...(category ? { categoryId: category.id } : {}),
-      daysOfWeek: daysCell(cells('Days')),
-      gstPercent,
-      isActive: activeStatus(cells('Status'), match?.isActive ?? true),
-      isAvailable: yesNo(cells('Available'), match?.isAvailable ?? true, 'Available'),
-      isDiscountable: yesNo(cells('Discountable'), match?.isDiscountable ?? false, 'Discountable'),
-      isGstInclusive: yesNo(
-        cells('GST inclusive'),
-        match?.isGstInclusive ?? false,
-        'GST inclusive',
-      ),
-      itemId: item.id,
-      kitchenId: kitchen?.id ?? null,
-      preparationTimeMinutes: numberCell(cells('Prep time (min)'), 'Prep time (min)'),
-      price: numberCell(cells('Price'), 'Price', 2),
-      restaurantId: restaurant.id,
-      roomPrice: numberCell(cells('In-room price'), 'In-room price', 2),
-      serveAt: serveAtCell(cells('Serve at')),
-      serves: numberCell(cells('Serves'), 'Serves'),
-    };
-
-    // A price for a place it is not served at is cleared, as the form does.
-    if (body.serveAt === 'ROOM') {
-      body.price = null;
-    } else if (body.serveAt === 'COUNTER') {
-      body.roomPrice = null;
-    }
-
-    if (match) {
-      await organizationApi.updateRestaurantMenu(match.id, body);
-
-      return 'updated';
-    }
-
-    const { data } = await organizationApi.createRestaurantMenu(body);
-
-    // A later row for the same restaurant, item and category in this file updates it.
-    menus.push(data);
-    menuByKey.set(menuKey(data.restaurantId, data.itemId, data.categoryId), data);
-    menuByCode.set(upper(data.menuItemCode), data);
-
-    return 'created';
-  };
 }

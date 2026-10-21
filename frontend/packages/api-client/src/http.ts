@@ -20,6 +20,23 @@ export interface ApiList<TItem> {
   meta: ApiListMeta;
 }
 
+/** Spreadsheet rows for a bulk import: each cell's text under its field name. */
+export interface ImportRequest {
+  /** Checks every row and says what would happen, saving nothing. */
+  dryRun: boolean;
+  rows: Array<Record<string, string>>;
+}
+
+export interface ImportResult {
+  created: number;
+  /** False on a dry run, and when a row has errors: an import saves all its rows or none. */
+  imported: boolean;
+  /** One per row sent, in order: skip is a row with nothing to change. */
+  rows: Array<{ action: 'create' | 'skip' | 'update'; errors: string[] }>;
+  skipped: number;
+  updated: number;
+}
+
 export interface ApiErrorBody {
   errors?: unknown[];
   message?: string;

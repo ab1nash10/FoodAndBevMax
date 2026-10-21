@@ -1,7 +1,7 @@
 'use client';
 
 import type { Transfer } from '@aahar/api-client';
-import { Timeline, type StepItem } from '@/components/design-system';
+import { tableStyles, Timeline, type StepItem } from '@/components/design-system';
 import { transferOutcome } from '@/lib/dashboard-stats';
 import { RecordLink } from '@/components/record-link';
 import { recordHref } from '@/lib/navigation';
@@ -80,10 +80,10 @@ export function TransferDetails({
             className="flex min-w-0 flex-col gap-1 rounded-xl bg-ds-subtle px-3 py-2.5"
             key={end.label}
           >
-            <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ds-muted">
+            <span className="text-[12px] font-medium text-ds-muted">
               {end.label} · {end.type}
             </span>
-            <RecordLink className="truncate text-[13px] font-bold text-ds-text" href={end.href}>
+            <RecordLink className={cn('truncate', tableStyles.title)} href={end.href}>
               {end.name}
             </RecordLink>
           </div>
@@ -106,16 +106,16 @@ export function TransferDetails({
       </div>
 
       <div className="px-[18px] pb-1.5 pt-3">
-        <h3 className="mb-1.5 text-[13px] font-extrabold text-ds-text">
+        <h3 className="mb-1.5 text-[13.5px] font-semibold text-ds-text">
           Lines · {transfer.lines.length}
         </h3>
         <table className="w-full table-fixed text-[12.5px]">
           <thead>
-            <tr className="border-b border-ds-divider text-[11.5px] font-semibold text-ds-muted">
-              <th className="py-1.5 text-left font-semibold">Item · batch</th>
-              <th className="w-16 py-1.5 pl-2 text-right font-semibold">Sent</th>
-              <th className="w-rail py-1.5 pl-2 text-right font-semibold">Accepted</th>
-              <th className="w-rail py-1.5 pl-2 text-right font-semibold">Rejected</th>
+            <tr className="border-b border-ds-divider text-[12px] text-ds-muted">
+              <th className="py-1.5 text-left font-medium">Item · batch</th>
+              <th className="w-16 py-1.5 pl-2 text-right font-medium">Sent</th>
+              <th className="w-rail py-1.5 pl-2 text-right font-medium">Accepted</th>
+              <th className="w-rail py-1.5 pl-2 text-right font-medium">Rejected</th>
             </tr>
           </thead>
           <tbody>
@@ -129,7 +129,7 @@ export function TransferDetails({
                 <tr className="border-b border-ds-divider align-top" key={line.id}>
                   <td className="py-2 pr-2">
                     <RecordLink
-                      className="block truncate font-bold text-ds-text"
+                      className={cn('block truncate', tableStyles.title)}
                       href={recordHref('/masters/items', { id: line.item.id })}
                     >
                       {line.item.itemName}
@@ -141,12 +141,11 @@ export function TransferDetails({
                           expiresSoon ? 'font-semibold text-ds-status-bad-fg' : 'text-ds-muted',
                         )}
                       >
-                        {[
-                          line.batchNumber,
-                          line.expiryDate ? `exp ${formatDateOnly(line.expiryDate)}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
+                        {line.batchNumber ? (
+                          <span className="font-mono">{line.batchNumber}</span>
+                        ) : null}
+                        {line.batchNumber && line.expiryDate ? ' · ' : null}
+                        {line.expiryDate ? `exp ${formatDateOnly(line.expiryDate)}` : null}
                       </span>
                     ) : null}
                     {line.rejectedQty > 0 && line.rejectionReason ? (
@@ -155,12 +154,13 @@ export function TransferDetails({
                       </span>
                     ) : null}
                   </td>
-                  <td className="py-2 text-right font-bold text-ds-text">
+                  <td className={cn('py-2 text-right font-semibold text-ds-text', tableStyles.num)}>
                     {formatQuantity(line.sentQty)}
                   </td>
                   <td
                     className={cn(
                       'py-2 text-right',
+                      tableStyles.num,
                       isReceived ? 'text-ds-status-ok-fg' : 'text-ds-muted',
                     )}
                   >
@@ -169,8 +169,9 @@ export function TransferDetails({
                   <td
                     className={cn(
                       'py-2 text-right',
+                      tableStyles.num,
                       isReceived && line.rejectedQty > 0
-                        ? 'font-extrabold text-ds-status-bad-fg'
+                        ? 'font-semibold text-ds-status-bad-fg'
                         : 'text-ds-muted',
                     )}
                   >
@@ -184,7 +185,7 @@ export function TransferDetails({
       </div>
 
       <div className="px-[18px] pb-1 pt-3">
-        <h3 className="mb-2.5 text-[13px] font-extrabold text-ds-text">Timeline</h3>
+        <h3 className="mb-2.5 text-[13.5px] font-semibold text-ds-text">Timeline</h3>
         <Timeline label="Transfer timeline" steps={steps} />
       </div>
     </>

@@ -3,6 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation } from '@tanstack/react-query';
 import { Copy, KeyRound } from 'lucide-react';
+import { RowAction } from '@/components/design-system';
 import { useState } from 'react';
 import { useToast } from '@/components/toast-provider';
 import { Modal } from '@/components/ui-controls';
@@ -39,28 +40,39 @@ export function OrderKeyButton({
     onSuccess: setApiKey,
   });
 
+  const confirmIssue = () => {
+    if (
+      window.confirm(
+        `Issue a new order key for ${name}? Whatever sends its orders must then use the new key; any earlier key stops working.`,
+      )
+    ) {
+      mutation.mutate();
+    }
+  };
+
   return (
     <>
-      <Button
-        aria-label={`Order key for ${name}`}
-        disabled={mutation.isPending}
-        onClick={() => {
-          if (
-            window.confirm(
-              `Issue a new order key for ${name}? Whatever sends its orders must then use the new key; any earlier key stops working.`,
-            )
-          ) {
-            mutation.mutate();
-          }
-        }}
-        size={label ? 'default' : 'icon'}
-        title={`Order key: ${usage}`}
-        type="button"
-        variant="outline"
-      >
-        <KeyRound aria-hidden="true" className="h-4 w-4" />
-        {label}
-      </Button>
+      {/* In a table row (no label): the same quiet icon as the row's other actions. */}
+      {label ? (
+        <Button
+          aria-label={`Order key for ${name}`}
+          disabled={mutation.isPending}
+          onClick={confirmIssue}
+          title={`Order key: ${usage}`}
+          type="button"
+          variant="outline"
+        >
+          <KeyRound aria-hidden="true" className="h-4 w-4" />
+          {label}
+        </Button>
+      ) : (
+        <RowAction
+          disabled={mutation.isPending}
+          icon={KeyRound}
+          label={`Order key for ${name}`}
+          onClick={confirmIssue}
+        />
+      )}
       <Modal
         footer={
           <Button onClick={() => setApiKey(null)} type="button">

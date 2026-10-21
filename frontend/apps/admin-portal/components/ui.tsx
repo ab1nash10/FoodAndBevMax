@@ -1,3 +1,4 @@
+import { titleCase } from '@/lib/names';
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import {
@@ -7,20 +8,91 @@ import {
   type ReactNode,
 } from 'react';
 
+// Fields named like a name or a code but holding something technical, left exactly as typed.
+const technicalFields = new Set([
+  'hostName',
+  'pinelabMerchantStorePosCode',
+  'postalCode',
+  'userName',
+  'username',
+]);
+
+/**
+ * The naming convention for a name a person types (a field called "name" or "…Name", by its
+ * form name or else its id): Title Case, acronyms kept (lib/names.ts).
+ */
+export function isNameField(key: string | undefined): boolean {
+  return Boolean(key) && !technicalFields.has(key!) && (key === 'name' || /[a-z]Name$/.test(key!));
+}
+
+/** A code a person types (a field called "…Code"): upper case. */
+export function isCodeField(key: string | undefined): boolean {
+  return Boolean(key) && !technicalFields.has(key!) && /[a-z]Code$/.test(key!);
+}
+
+/** Rewrites what is in the box, keeping the cursor where it was (a rewrite moves it to the end). */
+function rewrite(input: HTMLInputElement, value: string): boolean {
+  if (input.value === value) {
+    return false;
+  }
+
+  const { selectionEnd, selectionStart } = input;
+
+  input.value = value;
+
+  if (document.activeElement === input) {
+    input.setSelectionRange(selectionStart, selectionEnd);
+  }
+
+  return true;
+}
+
 export const Input = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<'input'>>(
-  ({ className, type = 'text', ...props }, ref) => (
-    <input
-      className={cn(
-        'h-control w-full rounded-control border border-ds-input bg-ds-surface px-3 text-sm text-ds-text outline-hidden transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/15 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
-        className,
-      )}
-      ref={ref}
-      // Autofill/temp-mail extensions inject attributes before hydration.
-      suppressHydrationWarning
-      type={type}
-      {...props}
-    />
-  ),
+  ({ className, onBlur, onChange, type = 'text', ...props }, ref) => {
+    const key = props.name ?? props.id;
+    const isName = type === 'text' && Boolean(onChange) && isNameField(key);
+    const isCode = type === 'text' && Boolean(onChange) && isCodeField(key);
+
+    return (
+      <input
+        className={cn(
+          'h-control w-full rounded-control border border-ds-input bg-ds-surface px-3 text-sm text-ds-text outline-hidden transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/15 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
+          className,
+        )}
+        onBlur={
+          isName
+            ? (event) => {
+                // Title Case once the name is typed, so letters don't change under the cursor.
+                if (rewrite(event.target, titleCase(event.target.value))) {
+                  onChange?.(event);
+                }
+
+                onBlur?.(event);
+              }
+            : onBlur
+        }
+        onChange={
+          isName || isCode
+            ? (event) => {
+                const { value } = event.target;
+
+                // While typing: a name's first letter is a capital, a code is all capitals.
+                rewrite(
+                  event.target,
+                  isCode ? value.toUpperCase() : value.charAt(0).toUpperCase() + value.slice(1),
+                );
+                onChange?.(event);
+              }
+            : onChange
+        }
+        ref={ref}
+        // Autofill/temp-mail extensions inject attributes before hydration.
+        suppressHydrationWarning
+        type={type}
+        {...props}
+      />
+    );
+  },
 );
 
 Input.displayName = 'Input';
@@ -69,18 +141,37 @@ export function FieldError({ children }: Readonly<{ children?: ReactNode }>) {
   return <p className="text-sm font-medium text-ds-status-bad-fg">{children}</p>;
 }
 
+/** The mark after a label whose field must be filled in. */
+export function RequiredMark() {
+  return (
+    <span aria-hidden="true" className="ml-0.5 text-ds-status-bad-fg">
+      *
+    </span>
+  );
+}
+
 interface FieldProps {
   children: ReactNode;
   error?: ReactNode;
   label: string;
   name: string;
+  /** Marks the label with a red asterisk; the form's own validation still enforces it. */
+  required?: boolean;
 }
 
-export function Field({ children, error, label, name }: FieldProps) {
+export function Field({ children, error, label, name, required }: FieldProps) {
   // Not space-y-2: Tailwind 4 spaces children with a bottom margin, which the inline label ignores.
   return (
     <div className="[&>*+*]:mt-2">
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={name}>
+        {label}
+        {required ? (
+          <>
+            <RequiredMark />
+            <span className="sr-only"> (required)</span>
+          </>
+        ) : null}
+      </Label>
       {children}
       <FieldError>{error}</FieldError>
     </div>
@@ -109,15 +200,16 @@ export function Badge({ className, variant = 'neutral', ...props }: BadgeProps) 
 }
 
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div className={cn('animate-pulse rounded-control bg-ds-divider', className)} {...props} />
-  );
+  return <div className={cn('skeleton rounded-control', className)} {...props} />;
 }
 
 export function Panel({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('rounded-card border border-ds-border bg-ds-surface shadow-card', className)}
+      className={cn(
+        'reveal rounded-card border border-ds-border bg-ds-surface shadow-card',
+        className,
+      )}
       {...props}
     />
   );

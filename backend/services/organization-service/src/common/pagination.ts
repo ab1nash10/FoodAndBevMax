@@ -19,7 +19,8 @@ export function getPageMeta(page: number, limit: number, total: number): PageMet
     limit,
     page,
     total,
-    totalPages: Math.ceil(total / limit),
+    // limit 0 asks for the total only (a count), so there are no pages to number.
+    totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
   };
 }
 

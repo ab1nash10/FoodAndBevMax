@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { EmptyState } from '@/components/design-system';
+import { EmptyState, HeroHeader, QuickTiles, type QuickTile } from '@/components/design-system';
 import { useAuth } from '@/components/auth-provider';
 import { useGreeting } from '@/lib/greeting';
 import { createCommands } from '@/components/command-palette';
@@ -13,9 +13,10 @@ import { useDashboardStats, type DashboardStats } from '@/hooks/use-dashboard-st
 import type { Period } from '@/lib/dashboard-stats';
 import { useUrlParam } from '@/lib/use-url-state';
 import { Button } from '@aahar/ui';
-import { ArrowRightLeft, Plus } from 'lucide-react';
+import { ArrowRightLeft, ChefHat, ClipboardCheck, Gauge, Plus } from 'lucide-react';
+import { canOpenPath } from '@/lib/navigation';
 import { pendingHref } from '@/components/organization/dashboard/format';
-import { InsightsRow, KpiRow, NewKpiRow } from '@/components/organization/dashboard/kpi-row';
+import { AttentionCard, KpiRow, NewKpiRow } from '@/components/organization/dashboard/kpi-row';
 import { LocationsRow } from '@/components/organization/dashboard/locations-card';
 import {
   MasterDataCard,
@@ -42,18 +43,50 @@ function NewWorkspaceRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   const showQueue = can.transfers || can.grns || can.productions;
 
   return (
-    <div className="flex flex-wrap items-stretch gap-5">
-      <div className="flex min-w-0 flex-[2_1_560px] flex-col gap-5">
+    <div className="flex flex-wrap items-stretch gap-4">
+      <div className="flex min-w-0 flex-[2_1_560px] flex-col gap-4">
         <TrendsExplainer />
         {showQueue ? <WorkQueue defaultTab="activity" stats={stats} /> : null}
       </div>
-      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
+      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
         <QuickCreateCard />
         <MasterDataCard stats={stats} />
       </div>
     </div>
   );
 }
+
+// The day's usual first stops, as the hero's tiles.
+const dashboardTiles: QuickTile[] = [
+  {
+    detail: 'Waiting on restaurants',
+    href: pendingHref,
+    icon: ArrowRightLeft,
+    title: 'Transfers to acknowledge',
+    tone: 'blue',
+  },
+  {
+    detail: 'Check and post to stock',
+    href: '/inventory/grns?view=DRAFT',
+    icon: ClipboardCheck,
+    title: 'GRNs to verify',
+    tone: 'violet',
+  },
+  {
+    detail: 'Running low and expiring',
+    href: '/inventory/stock-levels',
+    icon: Gauge,
+    title: 'Stock levels',
+    tone: 'green',
+  },
+  {
+    detail: 'What the kitchens made',
+    href: '/kitchen/productions',
+    icon: ChefHat,
+    title: 'Kitchen production',
+    tone: 'rose',
+  },
+];
 
 export function DashboardOverview() {
   const greeting = useGreeting();
@@ -74,51 +107,67 @@ export function DashboardOverview() {
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-[12.5px] font-semibold text-ds-muted">
-            {headerDateFormatter.format(new Date())} · Max Healthcare ·{' '}
-            {isAllLocations ? 'All locations' : locationLabel}
-          </p>
-          {/* The full name always shows: a long one wraps, it is never cut off. */}
-          <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text wrap-anywhere">
-            {userName ? `${greeting}, ${userName}` : 'Dashboard'}
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {showOperations ? (
-            <SegmentedControl<PeriodValue>
-              className="bg-ds-surface"
-              label="Stats period"
-              onChange={setDays}
-              options={periodValues.map((value) => ({ label: `${value} days`, value }))}
-              value={days}
-            />
-          ) : null}
-          {isNew ? (
-            <IfCanOpen href="/inventory/transfers/new">
+      <HeroHeader
+        action={
+          <>
+            {showOperations ? (
+              <SegmentedControl<PeriodValue>
+                className="bg-ds-surface"
+                label="Stats period"
+                onChange={setDays}
+                options={periodValues.map((value) => ({ label: `${value} days`, value }))}
+                value={days}
+              />
+            ) : null}
+            {isNew ? (
+              <IfCanOpen href="/inventory/transfers/new">
+                <Button asChild className="px-3.5">
+                  <Link href="/inventory/transfers/new">
+                    <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                    New transfer
+                  </Link>
+                </Button>
+              </IfCanOpen>
+            ) : can.transfers ? (
               <Button asChild className="px-3.5">
-                <Link href="/inventory/transfers/new">
-                  <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                  Create first transfer of the week
+                <Link href={pendingHref}>
+                  <ArrowRightLeft aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                  Review pending
+                  {pendingTotal > 0 ? (
+                    <span className="rounded-full bg-white px-[7px] py-px text-[11.5px] font-extrabold tabular-nums text-ds-primary">
+                      {pendingTotal}
+                    </span>
+                  ) : null}
                 </Link>
               </Button>
-            </IfCanOpen>
-          ) : can.transfers ? (
-            <Button asChild className="px-3.5">
-              <Link href={pendingHref}>
-                <ArrowRightLeft aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                Review pending
-                {pendingTotal > 0 ? (
-                  <span className="rounded-full bg-white px-[7px] py-px text-[11.5px] font-extrabold tabular-nums text-ds-primary">
-                    {pendingTotal}
-                  </span>
-                ) : null}
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </div>
+            ) : null}
+          </>
+        }
+        // Only once the mode is known: before that it could still turn out a new workspace, which
+        // has no card, and the card would show its skeleton and then vanish.
+        aside={
+          showOperations && stats.isModeKnown && !isNew ? <AttentionCard stats={stats} /> : null
+        }
+        description={
+          isNew
+            ? 'Finish setting up, then your day’s work shows here.'
+            : 'What needs you today, how the last days went, and where to start.'
+        }
+        eyebrow={
+          <>
+            {headerDateFormatter.format(new Date())} · Max Healthcare ·{' '}
+            <span className="text-ds-text-2">
+              {isAllLocations ? 'All locations' : locationLabel}
+            </span>
+          </>
+        }
+        title={userName ? `${greeting}, ${userName}` : 'Dashboard'}
+      >
+        <QuickTiles
+          label="Go to"
+          tiles={dashboardTiles.filter((tile) => canOpenPath(tile.href, hasPermission))}
+        />
+      </HeroHeader>
 
       {isNew ? (
         <>
@@ -128,7 +177,6 @@ export function DashboardOverview() {
         </>
       ) : (
         <>
-          {showOperations ? <InsightsRow stats={stats} /> : null}
           <KpiRow stats={stats} />
           <OutcomeRow stats={stats} />
           <TrendsRow stats={stats} />

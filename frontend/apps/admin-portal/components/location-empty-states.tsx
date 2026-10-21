@@ -1,5 +1,7 @@
 'use client';
 
+import { Button } from '@aahar/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useLocationContext } from '@/components/location-context';
@@ -14,6 +16,33 @@ export function useLocationName(): string | null {
   const { selectedLocation } = useLocationContext();
 
   return selectedLocation ? selectedLocation.displayName || selectedLocation.hospitalName : null;
+}
+
+/**
+ * What failed to load, announced, with a retry of just the queries that failed on the page (the
+ * toolbar's refresh reloads everything).
+ */
+export function LoadError({ error }: Readonly<{ error: unknown }>) {
+  const queryClient = useQueryClient();
+
+  return (
+    <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center" role="alert">
+      <p className="text-sm font-medium text-ds-status-bad-fg">{getApiErrorMessage(error)}</p>
+      <Button
+        onClick={() =>
+          void queryClient.refetchQueries({
+            predicate: (query) => query.state.status === 'error',
+            type: 'active',
+          })
+        }
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Try again
+      </Button>
+    </div>
+  );
 }
 
 /**
@@ -43,9 +72,14 @@ export function QueryState({
   if (isLoading) {
     return (
       <>
-        {loadingRows.map((row) => (
+        {loadingRows.map((row, index) => (
           <tr key={row}>
             <td className="px-4 py-3" colSpan={colSpan}>
+              {index === 0 ? (
+                <span className="sr-only" role="status">
+                  Loading {label}…
+                </span>
+              ) : null}
               <Skeleton className="h-9 w-full" />
             </td>
           </tr>
@@ -57,11 +91,8 @@ export function QueryState({
   if (isError) {
     return (
       <tr>
-        <td
-          className="px-4 py-12 text-center text-sm font-medium text-ds-status-bad-fg"
-          colSpan={colSpan}
-        >
-          {getApiErrorMessage(error)}
+        <td className="px-4 py-12" colSpan={colSpan}>
+          <LoadError error={error} />
         </td>
       </tr>
     );

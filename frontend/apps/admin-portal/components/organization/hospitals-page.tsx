@@ -1,7 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { DateTimeCell, RowAction, StatStrip, tableStyles } from '@/components/design-system';
 import {
   FilterField,
   FiltersMenu,
@@ -15,6 +18,8 @@ import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url
 import { IfCanOpen } from '@/components/record-link';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { INDIAN_STATES, getCitiesForState } from '@/lib/india-locations';
+import { canOpenPath } from '@/lib/navigation';
+import { cn } from '@/lib/utils';
 import type { Hospital as HospitalRecord, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,7 +35,6 @@ import {
 } from '@/components/organization/shared/list-controls';
 import {
   activeFilterToBoolean,
-  formatDate,
   listLimit,
   nullableText,
 } from '@/components/organization/shared/utils';
@@ -48,6 +52,8 @@ import type { ActiveFilter, OnlinePaymentFilter } from '@/components/organizatio
 import { queryKeys } from '@/lib/query-keys';
 
 export function HospitalsPageClient() {
+  const router = useRouter();
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [page, setPage] = useUrlNumberParam('page');
@@ -99,6 +105,19 @@ export function HospitalsPageClient() {
       stateFilter,
     }),
   });
+
+  // Under the list's own key, so whatever refreshes the list refreshes these counts too.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (isActive?: boolean) =>
+        (await organizationApi.listHospitals({ isActive, limit: 0 })).data.meta.total;
+      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
+
+      return { active, all, inactive };
+    },
+    queryKey: queryKeys.hospitals('stats'),
+  });
+  const stats = statsQuery.data;
 
   const statusMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -155,27 +174,59 @@ export function HospitalsPageClient() {
     statusMutation.mutate({ id: location.id, isActive: nextIsActive });
   }
 
+  function showStatus(status: ActiveFilter) {
+    setActiveFilter(status);
+    setPage(1);
+  }
+
   return (
     <section className="space-y-5">
       <PageHeader
+        count={stats?.all}
         action={
           <IfCanOpen href="/masters/locations/new">
             <Button asChild>
               <Link href="/masters/locations/new">
                 <Plus className="h-4 w-4" />
-                Add Location
+                New location
               </Link>
             </Button>
           </IfCanOpen>
         }
-        eyebrow="Masters"
         icon={MapPin}
         subtitle="Manage operating locations for food and cafeteria services."
         title="Locations"
       />
+      <StatStrip
+        label="Locations at a glance"
+        stats={[
+          {
+            active: !activeFilter,
+            label: 'All locations',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: activeFilter === 'active',
+            label: 'Active',
+            onSelect: () => showStatus('active'),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive · services frozen',
+            onSelect: () => showStatus('inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
       <Panel>
         <ListToolbar>
           <SearchInput
+            label="Search locations"
+            placeholder="Name, code, city or bill prefix"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -267,38 +318,43 @@ export function HospitalsPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-215 table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[22%] px-4 py-2.5">Location</th>
-                <th className="w-[20%] px-4 py-2.5">Entity</th>
-                <th className="w-[21%] px-4 py-2.5">Address</th>
-                <th className="w-[10%] px-4 py-2.5">Online payment</th>
-                <th className="w-[14%] px-4 py-2.5">Status</th>
-                <th className="w-[8%] px-4 py-2.5">Updated</th>
-                <th className="w-16 px-2 py-2.5">
+                <th className={cn(tableStyles.th, 'w-[22%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[20%]')}>Entity</th>
+                <th className={cn(tableStyles.th, 'w-[21%]')}>Address</th>
+                <th className={cn(tableStyles.th, 'w-[10%]')}>Online payment</th>
+                <th className={cn(tableStyles.th, 'w-[14%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[9%]')}>Updated</th>
+                <th className={cn(tableStyles.th, 'w-14')}>
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((location) => {
                   const title = getLocationTitle(location);
                   const displayName = getLocationDisplayName(location);
                   const place = [location.city, location.state].filter(Boolean).join(', ');
+                  const editHref = `/masters/locations/${location.id}/edit`;
+                  const canOpen = canOpenPath(editHref, hasPermission);
 
                   return (
-                    <tr className="hover:bg-ds-subtle" key={location.id}>
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-ds-text">{title}</p>
-                        <p className="line-clamp-1 text-xs text-ds-muted">
-                          {[getLocationCode(location), displayName === title ? null : displayName]
-                            .filter(Boolean)
-                            .join(' · ')}
+                    <tr
+                      className={cn(tableStyles.row, !canOpen && 'cursor-default')}
+                      key={location.id}
+                      onClick={canOpen ? () => router.push(editHref) : undefined}
+                    >
+                      <td className={tableStyles.td}>
+                        <p className={cn('truncate', tableStyles.title)}>{title}</p>
+                        <p className="truncate text-xs text-ds-muted">
+                          <span className={tableStyles.code}>{getLocationCode(location)}</span>
+                          {displayName === title ? null : ` · ${displayName}`}
                         </p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={tableStyles.td}>
                         <LegalEntityCell
                           entity={
                             location.legalEntityId
@@ -307,9 +363,9 @@ export function HospitalsPageClient() {
                           }
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={tableStyles.td}>
                         <p
-                          className="line-clamp-1 text-ds-text-3"
+                          className="line-clamp-1 text-ds-text-2"
                           title={location.address ?? undefined}
                         >
                           {nullableText(location.address)}
@@ -319,8 +375,11 @@ export function HospitalsPageClient() {
                             nullableText(null)}
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-ds-text-3">{location.onlinePaymentOption}</td>
-                      <td className="px-4 py-3">
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                        {location.onlinePaymentOption}
+                      </td>
+                      {/* Its own click: switching the status does not open the location. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                         <StatusToggleCell
                           disabled={statusMutation.isPending && statusUpdatingId === location.id}
                           isActive={location.isActive}
@@ -328,19 +387,22 @@ export function HospitalsPageClient() {
                           showFrozenMessage={!location.isActive}
                         />
                       </td>
-                      <td className="px-4 py-3 text-xs text-ds-muted">
-                        {formatDate(location.updatedAt)}
+                      <td className={tableStyles.td}>
+                        <DateTimeCell value={location.updatedAt} />
                       </td>
-                      <td className="px-2 py-3">
-                        <Button asChild size="icon" variant="outline">
-                          <Link
-                            aria-label={`Edit ${title}`}
-                            href={`/masters/hospitals/${location.id}/locations#details`}
-                            title="Edit"
-                          >
-                            <Pencil aria-hidden="true" className="h-4 w-4" />
-                          </Link>
-                        </Button>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end">
+                          {canOpen ? (
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${title}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                router.push(editHref);
+                              }}
+                            />
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   );

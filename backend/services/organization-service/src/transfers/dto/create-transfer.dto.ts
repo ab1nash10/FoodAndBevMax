@@ -2,6 +2,7 @@ import { InventoryLocationType } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
@@ -40,6 +41,7 @@ export class CreateTransferLineDto {
   @ApiPropertyOptional({ example: 'Urgent cafeteria replenishment' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 }
 
@@ -76,9 +78,11 @@ export class CreateTransferDto {
   @ApiPropertyOptional({ example: 'Transfer to Main Cafeteria' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 
   @ApiProperty({ isArray: true, type: CreateTransferLineDto })
+  @ArrayMaxSize(200)
   @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })

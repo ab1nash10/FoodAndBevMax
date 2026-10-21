@@ -25,7 +25,11 @@ export const OPERATIONAL_ROLES: Array<{
     description: 'Billing, POS orders and payments at an assigned counter',
     locationScope: LocationScope.SINGLE,
     name: 'POS Cashier',
+    // Bills, receives stock at the counter and switches menu items on or off there; cancelling
+    // a bill (a refund and a stock reversal) stays with Admins.
     permissionCodes: [
+      'COUNTER_STOCK_RECEIVE',
+      'COUNTER_STOCK_VIEW',
       'COUNTER_VIEW',
       'ITEM_PRICE_VIEW',
       'ITEM_VIEW',
@@ -33,6 +37,9 @@ export const OPERATIONAL_ROLES: Array<{
       'ORDER_VIEW',
       'PAYMENT_MACHINE_VIEW',
       'POS_DEVICE_VIEW',
+      'POS_MENU_UPDATE',
+      'POS_ORDER_CREATE',
+      'POS_ORDER_VIEW',
       'RESTAURANT_MENU_VIEW',
       'RESTAURANT_STOCK_VIEW',
       'RESTAURANT_VIEW',

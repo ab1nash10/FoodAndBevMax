@@ -39,6 +39,18 @@ export async function fetchAllPages<T>(
   }
 }
 
+/**
+ * A name as the server compares it (normalizeMasterName): no accents, spaces or punctuation,
+ * any case. "Soft Drinks" and "soft-drinks" are the same category; "Samosa!" the same item.
+ */
+export function nameKey(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
+}
+
 /** "Yes" / "No" cells; blank keeps `fallback`. */
 export function yesNo(value: string, fallback: boolean, header: string): boolean {
   if (!value) {

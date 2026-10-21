@@ -14,14 +14,17 @@ export type GrnStatus =
 export type InventoryLocationType = 'COUNTER' | 'KITCHEN' | 'RESTAURANT' | 'STORE';
 
 export type StockReferenceType =
-  'GRN' | 'KITCHEN_PRODUCTION' | 'TRANSFER' | 'TRANSFER_ACKNOWLEDGEMENT';
+  'GRN' | 'KITCHEN_PRODUCTION' | 'ORDER' | 'TRANSFER' | 'TRANSFER_ACKNOWLEDGEMENT';
 
 export type StockTransactionType =
+  | 'COUNTER_RECEIVE_IN'
   | 'GRN_IN'
   | 'KITCHEN_PRODUCTION_IN'
   | 'KITCHEN_TRANSFER_OUT'
   | 'RESTAURANT_TRANSFER_IN'
   | 'RESTAURANT_RECEIVE_IN'
+  | 'SALE_CANCEL_IN'
+  | 'SALE_OUT'
   | 'STORE_TO_RESTAURANT_OUT'
   | 'TRANSFER_REJECTED_RETURN_IN';
 
@@ -113,7 +116,7 @@ export interface GrnInput {
   receivedDate: string;
   remarks?: string;
   storeId: string;
-  vendorName?: string;
+  vendorName: string;
 }
 
 export interface GrnListQuery extends ListQuery {
@@ -162,6 +165,75 @@ export interface StoreStockBatchSummary {
   stockBalanceId: string;
 }
 
+/** A store item against how fast it goes (GET /store-stock/levels). */
+export interface StoreStockLevel {
+  averageDailyIssue: number;
+  batches: Array<{
+    availableQty: number;
+    batchNumber: string | null;
+    expiryDate: string | null;
+    receivedOn: string;
+  }>;
+  /** On hand over the average daily issue; null when nothing went out in the window. */
+  coverDays: number | null;
+  hospitalId: string;
+  issuedLast28Days: number;
+  itemCode: string;
+  itemId: string;
+  itemName: string;
+  /** OUT: none on hand. LOW: under `lowCoverDays` of cover. */
+  level: 'LOW' | 'OK' | 'OUT';
+  nextExpiryDate: string | null;
+  onHand: number;
+  storeCode: string | null;
+  storeId: string;
+  storeName: string;
+}
+
+export interface StoreStockLevels {
+  items: StoreStockLevel[];
+  lowCoverDays: number;
+  windowDays: number;
+}
+
+/**
+ * A restaurant's or counter's store item against how fast it goes, by the same rule as a store's
+ * (GET /restaurant-stock/levels, /counter-stock/levels).
+ */
+export type LocationStockLevel = Omit<StoreStockLevel, 'storeCode' | 'storeId' | 'storeName'> & {
+  locationCode: string | null;
+  locationId: string;
+  locationName: string;
+};
+
+export interface LocationStockLevels {
+  items: LocationStockLevel[];
+  lowCoverDays: number;
+  windowDays: number;
+}
+
+export interface LocationStockLevelsQuery {
+  hospitalId?: string;
+  locationId?: string;
+}
+
+export interface StoreStockMovementDay {
+  /** A business date, YYYY-MM-DD, in the site's time zone. */
+  date: string;
+  qtyIn: number;
+  qtyOut: number;
+}
+
+export interface StoreStockLevelsQuery {
+  hospitalId?: string;
+  storeId?: string;
+}
+
+export interface StoreStockMovementsQuery extends StoreStockLevelsQuery {
+  days?: number;
+  itemId?: string;
+}
+
 export interface StoreStockSummary {
   batchCount: number;
   batches: StoreStockBatchSummary[];
@@ -199,6 +271,15 @@ export interface StockLedger {
   locationType: InventoryLocationType;
   qtyIn: number;
   qtyOut: number;
+  /**
+   * The record the row came from, as a person finds it: its number and the record to open. An
+   * acknowledgement is given as its transfer, a bill by its bill number.
+   */
+  referenceDocument?: {
+    id: string;
+    number: string;
+    type: 'GRN' | 'KITCHEN_PRODUCTION' | 'ORDER' | 'TRANSFER';
+  } | null;
   referenceId: string | null;
   referenceType: StockReferenceType | null;
   remarks: string | null;
@@ -251,8 +332,13 @@ export interface TransferLine {
 }
 
 export interface Transfer {
+  /** When it was received (acknowledged); null until then. */
+  acknowledgedAt: string | null;
   businessDate: string;
   createdAt: string;
+  createdBy: string | null;
+  /** Who raised (distributed) it. */
+  createdByName: string | null;
   deletedAt: string | null;
   destinationId: string;
   destinationType: InventoryLocationType;

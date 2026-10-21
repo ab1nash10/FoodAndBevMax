@@ -8,7 +8,8 @@ import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { recordHref } from '@/lib/navigation';
 import type { RestaurantInput } from '@aahar/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Utensils } from 'lucide-react';
+import { Button } from '@aahar/ui';
+import { BadgePercent, Utensils } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm, type Path } from 'react-hook-form';
@@ -20,7 +21,7 @@ import {
   ImageUploadField,
   SubmitButton,
 } from '@/components/organization/shared/form-controls';
-import { applyValidationErrors, hasRequiredText } from '@/components/organization/shared/utils';
+import { applyValidationErrors } from '@/components/organization/shared/utils';
 import { formatRestaurantLocationOption } from '@/components/organization/shared/locations';
 import {
   getRestaurantImageError,
@@ -30,12 +31,15 @@ import {
   toRestaurantInput,
   uploadRestaurantImage,
 } from '@/components/organization/shared/restaurants';
-import { restaurantSchema, isUuid } from '@/components/organization/shared/schemas';
+import { restaurantSchema } from '@/components/organization/shared/schemas';
 import { useHospitalOptions, useLegalEntityOptions } from '@/components/organization/shared/hooks';
 import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
 import type { RestaurantFormValues } from '@/components/organization/shared/types';
+import { StaffDiscountPanel } from '@/components/organization/staff-discount-panel';
 import { queryKeys } from '@/lib/query-keys';
 import { restaurantDetailQuery } from '@/lib/detail-queries';
+
+const requiredFields = restaurantSchema.pick({ hospitalId: true, restaurantName: true });
 
 function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: string }>) {
   const isEditMode = Boolean(restaurantId);
@@ -58,9 +62,12 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | undefined>();
   const [imageErrors, setImageErrors] = useState<{ cover?: string; thumbnail?: string }>({});
   const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isStaffDiscountOpen, setIsStaffDiscountOpen] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | undefined>();
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | undefined>();
-  const canSubmitRestaurant = isUuid(hospitalId) && hasRequiredText(restaurantName);
+  // The first required field still missing, in the schema's own words.
+  const disabledReason = requiredFields.safeParse({ hospitalId, restaurantName }).error?.issues[0]
+    ?.message;
 
   const restaurantQuery = useQuery({
     ...restaurantDetailQuery(restaurantId),
@@ -259,6 +266,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               error={form.formState.errors.hospitalId?.message}
               label="Location"
               name="restaurant-location"
+              required
             >
               <Select
                 disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
@@ -277,6 +285,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               error={form.formState.errors.restaurantName?.message}
               label="Name"
               name="restaurant-name"
+              required
             >
               <Input id="restaurant-name" {...form.register('restaurantName')} />
             </Field>
@@ -506,6 +515,22 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
           </div>
         </div>
 
+        {restaurantId ? (
+          // Saved on its own from the panel; this form never sends staffDiscountApplicable.
+          <div className="space-y-4 border-t border-ds-divider pt-6">
+            <SectionHeading title="Staff Discount" />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-ds-muted">
+                Whether staff get a discount here, and the % for each employee type.
+              </p>
+              <Button onClick={() => setIsStaffDiscountOpen(true)} type="button" variant="outline">
+                <BadgePercent className="h-4 w-4" />
+                Set rates
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="space-y-4 border-t border-ds-divider pt-6">
           <SectionHeading title="ERP Fields" />
           <div className="grid gap-4 sm:grid-cols-3">
@@ -538,12 +563,16 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         />
         <div className="flex justify-end">
           <SubmitButton
-            disabled={!canSubmitRestaurant}
+            disabledReason={disabledReason}
             isPending={saveRestaurantMutation.isPending || isUploadingImages}
             label={isEditMode ? 'Update Restaurant' : 'Create Restaurant'}
           />
         </div>
       </form>
+      <StaffDiscountPanel
+        onClose={() => setIsStaffDiscountOpen(false)}
+        restaurant={isStaffDiscountOpen ? (restaurantQuery.data ?? null) : null}
+      />
     </FormShell>
   );
 }

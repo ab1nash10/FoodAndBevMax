@@ -2,7 +2,7 @@
 
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
-import { Field, FieldError, Input } from '@/components/ui';
+import { Field, FieldError, Input, RequiredMark } from '@/components/ui';
 import { CheckboxLine } from '@/components/master-data/shared/components';
 import { optionalText } from '@/components/master-data/shared/schemas';
 import { MasterLocationSelect } from '@/components/master-location';
@@ -50,6 +50,7 @@ export function EmployeeFormFields({
           error={form.formState.errors.employeeCode?.message}
           label="Employee Code"
           name="employee-code"
+          required
         >
           <Input id="employee-code" {...form.register('employeeCode')} />
         </Field>
@@ -57,6 +58,7 @@ export function EmployeeFormFields({
           error={form.formState.errors.employeeName?.message}
           label="Employee Name"
           name="employee-name"
+          required
         >
           <Input id="employee-name" {...form.register('employeeName')} />
         </Field>
@@ -88,6 +90,8 @@ export function EmployeeFormFields({
       <fieldset className="[&>*+*]:mt-2">
         <legend className="text-[13px] font-semibold leading-none text-ds-text-2">
           Employment Type
+          <RequiredMark />
+          <span className="sr-only"> (required)</span>
         </legend>
         <div className="grid gap-3 pt-2 sm:grid-cols-2">
           {(

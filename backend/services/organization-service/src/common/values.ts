@@ -33,6 +33,30 @@ export function toDate(value: string): Date {
   return new Date(value);
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A from/to filter on a timestamp column. A date on its own (YYYY-MM-DD) means that whole day at
+ * the hospital (India, +05:30): "to 21 Oct" includes everything on the 21st, where comparing with
+ * its midnight dropped the day. A full timestamp is used exactly as given.
+ */
+export function timestampRange(
+  from: string | undefined,
+  to: string | undefined,
+): { gte?: Date; lt?: Date; lte?: Date } {
+  const startOf = (day: string) => new Date(`${day}T00:00:00+05:30`);
+
+  return {
+    ...(from ? { gte: dateOnlyPattern.test(from) ? startOf(from) : toDate(from) } : {}),
+    ...(to
+      ? dateOnlyPattern.test(to)
+        ? { lt: new Date(startOf(to).getTime() + DAY_MS) }
+        : { lte: toDate(to) }
+      : {}),
+  };
+}
+
 /** Trimmed text, or undefined when nothing is left. */
 export function optionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

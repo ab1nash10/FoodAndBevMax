@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   InventoryLocationType,
   ItemType,
@@ -164,7 +169,7 @@ export class TransferAcknowledgementsService {
 
   async create(dto: CreateTransferAcknowledgementDto, context: ActorContext) {
     return this.acknowledgements.transaction(async (tx) => {
-      const transfer = await this.findTransferForAcknowledgement(dto.transferId, tx);
+      const transfer = await this.findTransferForAcknowledgement(dto.transferId, tx, context);
       const existing = await this.acknowledgements.findExistingForTransfer(dto.transferId, tx);
 
       if (existing) {
@@ -264,6 +269,7 @@ export class TransferAcknowledgementsService {
   private async findTransferForAcknowledgement(
     transferId: string,
     client: AcknowledgementClient,
+    context: ActorContext,
   ): Promise<TransferForAcknowledgement> {
     const transfer = await this.acknowledgements.findActiveTransfer(transferId, client);
 
@@ -282,8 +288,19 @@ export class TransferAcknowledgementsService {
       throw new BadRequestException('Transfer source must be Store or Kitchen');
     }
 
-    if (transfer.destinationType !== InventoryLocationType.RESTAURANT) {
-      throw new BadRequestException('Transfer destination must be a restaurant');
+    if (
+      transfer.destinationType !== InventoryLocationType.RESTAURANT &&
+      transfer.destinationType !== InventoryLocationType.COUNTER
+    ) {
+      throw new BadRequestException('Transfer destination must be a restaurant or a counter');
+    }
+
+    // A cashier receives at their counter only; restaurant receipts stay with TRANSFER_ACKNOWLEDGE.
+    if (
+      !context.permissions?.includes('TRANSFER_ACKNOWLEDGE') &&
+      transfer.destinationType !== InventoryLocationType.COUNTER
+    ) {
+      throw new ForbiddenException('You can receive transfers at a counter only.');
     }
 
     return transfer;
@@ -382,7 +399,7 @@ export class TransferAcknowledgementsService {
         itemId: line.transferLine.itemId,
         itemType: stockItemType(line.transferLine.item),
         locationId: transfer.destinationId,
-        locationType: InventoryLocationType.RESTAURANT,
+        locationType: transfer.destinationType,
         quantity: line.acceptedQty,
       },
       client,
@@ -399,14 +416,17 @@ export class TransferAcknowledgementsService {
         itemId: line.transferLine.itemId,
         itemType: stockItemType(line.transferLine.item),
         locationId: transfer.destinationId,
-        locationType: InventoryLocationType.RESTAURANT,
+        locationType: transfer.destinationType,
         qtyIn: line.acceptedQty,
         qtyOut: 0,
         referenceId: acknowledgementId,
         referenceType: StockReferenceType.TRANSFER_ACKNOWLEDGEMENT,
         remarks: line.remarks,
         transactionDateTime: new Date(),
-        transactionType: StockTransactionType.RESTAURANT_TRANSFER_IN,
+        transactionType:
+          transfer.destinationType === InventoryLocationType.COUNTER
+            ? StockTransactionType.COUNTER_RECEIVE_IN
+            : StockTransactionType.RESTAURANT_TRANSFER_IN,
         updatedBy: context.actorId,
       },
       client,

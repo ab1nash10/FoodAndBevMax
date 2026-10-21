@@ -39,10 +39,12 @@ export interface Item {
 }
 
 export interface ItemInput {
-  hsnCode?: string;
+  /** Null on an update clears it. */
+  hsnCode?: string | null;
   isActive?: boolean;
   itemName: string;
-  preparationTimeMinutes?: number;
+  /** Null on an update clears it. */
+  preparationTimeMinutes?: number | null;
   type: FoodType;
 }
 
@@ -164,7 +166,7 @@ export interface StoreItem {
 
 export interface StoreItemInput {
   /** This mapping's category: required when creating; on an edit it changes only this one. */
-  categoryId?: string;
+  categoryId: string;
   isActive?: boolean;
   itemId: string;
   storeId: string;
@@ -195,7 +197,7 @@ export interface KitchenItem {
 
 export interface KitchenItemInput {
   /** This mapping's category: required when creating; on an edit it changes only this one. */
-  categoryId?: string;
+  categoryId: string;
   isActive?: boolean;
   itemId: string;
   kitchenId: string;
@@ -250,12 +252,15 @@ export interface RestaurantMenu {
   roomPrice: number | null;
   serveAt: MenuServeAt;
   serves: number | null;
+  /** Where it comes from, with kitchen: the store that stocks it (a packaged item). */
+  store: Pick<Store, 'id' | 'isActive' | 'storeCode' | 'storeName'> | null;
+  storeId: string | null;
   updatedAt: string;
 }
 
 export interface RestaurantMenuInput {
   /** This menu item's category: required when creating; on an edit it changes only this one. */
-  categoryId?: string;
+  categoryId: string;
   accompaniments?: string | null;
   addOn?: string | null;
   availableFrom?: string | null;
@@ -276,6 +281,8 @@ export interface RestaurantMenuInput {
   roomPrice?: number | null;
   serveAt?: MenuServeAt;
   serves?: number | null;
+  /** The store it comes from (packaged); set this or kitchenId. */
+  storeId?: string | null;
 }
 
 export interface RestaurantMenuListQuery extends ListQuery {

@@ -8,6 +8,7 @@ import {
   credentialsLockedUntil,
   hashPassword,
   uniqueViolationTarget,
+  verifyPassword,
   type JwtRequestUser,
 } from '@aahar/auth';
 import { LocationScope, Prisma, RecordStatus, Role, UserStatus } from '@prisma/client';
@@ -22,6 +23,7 @@ import {
 } from '../common/super-admin';
 import {
   assertCanGrantScope,
+  assertCanTakeOverSignIn,
   assertHoldsPermissions,
   assertHospitalsWithinReach,
   assertNotSelf,
@@ -111,19 +113,50 @@ function toUserSnapshot(user: UserWithRoles) {
  * mid-work. Their own change (Preferences, or their own record) is never blocked, and a Super
  * Admin may change anyone's credentials at any time.
  */
+function changesCredentials(existing: UserWithRoles, dto: UpdateUserDto): boolean {
+  return (
+    dto.password !== undefined ||
+    (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
+    (dto.mobile !== undefined && dto.mobile !== existing.mobile)
+  );
+}
+
+/**
+ * Your own password, email or mobile needs your current password, as in Preferences: a stolen
+ * session alone must not be enough to take over the account. 400, never 401: the portal treats
+ * every 401 as an expired session and signs the user out.
+ */
+export async function assertOwnCurrentPassword(
+  existing: UserWithRoles,
+  dto: UpdateUserDto,
+  context: ActorContext,
+): Promise<void> {
+  if (context.actorId !== existing.id || !changesCredentials(existing, dto)) {
+    return;
+  }
+
+  if (!existing.passwordHash) {
+    throw new BadRequestException(
+      'Your account has no password yet. Ask another administrator to change these details.',
+    );
+  }
+
+  if (!(await verifyPassword(dto.currentPassword ?? '', existing.passwordHash))) {
+    throw new BadRequestException(
+      'Enter your current password to change your password, email or mobile',
+    );
+  }
+}
+
 export function assertCredentialsUnlocked(
   existing: UserWithRoles,
   dto: UpdateUserDto,
   context: ActorContext,
 ): void {
-  const credentialsChanged =
-    dto.password !== undefined ||
-    (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
-    (dto.mobile !== undefined && dto.mobile !== existing.mobile);
   const lockedUntil = credentialsLockedUntil(existing.lastActiveAt);
 
   if (
-    !credentialsChanged ||
+    !changesCredentials(existing, dto) ||
     !lockedUntil ||
     context.actorId === existing.id ||
     context.actorRoles?.includes(SUPER_ADMIN_ROLE)
@@ -303,6 +336,19 @@ export class UsersService {
           (dto.name !== undefined && dto.name !== existing.name);
 
         assertCredentialsUnlocked(existing, dto, context);
+
+        await assertOwnCurrentPassword(existing, dto, context);
+
+        if (changesCredentials(existing, dto) && context.actorId !== id) {
+          assertCanTakeOverSignIn(
+            {
+              name: existing.name,
+              permissionCodes: await this.getEffectivePermissionCodes(existing, tx),
+              scopes: existing.roles.map(({ role }) => role.locationScope),
+            },
+            context.actor,
+          );
+        }
 
         if (detailsChanged || roleChanged || hospitalsChanged || statusChanged) {
           await this.endSessions([id], tx);
@@ -698,6 +744,25 @@ export class UsersService {
       else effectivePermissionIds.delete(permissionId);
     });
     return effectivePermissionIds;
+  }
+
+  private async getEffectivePermissionCodes(
+    user: UserWithRoles,
+    client: Prisma.TransactionClient | PrismaService,
+  ): Promise<string[]> {
+    const [inherited, overrides] = await Promise.all([
+      this.getRolePermissionIds(user, client),
+      client.userPermission.findMany({ where: { deletedAt: null, userId: user.id } }),
+    ]);
+    const permissions = await client.permission.findMany({
+      select: { code: true },
+      where: {
+        deletedAt: null,
+        id: { in: [...this.getEffectivePermissionIds(inherited, overrides)] },
+      },
+    });
+
+    return permissions.map(({ code }) => code);
   }
 
   private async getRolePermissionIds(

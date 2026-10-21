@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   optionalText,
   quantitiesMatch,
+  timestampRange,
   toDate,
   toDateOnly,
   toNumber,
@@ -50,5 +51,17 @@ describe('shared value helpers', () => {
     expect(
       [undefined, null, '', true, 'true', false, 'false', 'yes'].map(toOptionalBoolean),
     ).toEqual([undefined, undefined, undefined, true, true, false, false, 'yes']);
+  });
+
+  test('a date-only from/to range covers whole days in India; timestamps are exact', () => {
+    // 21 Oct in India runs from 20 Oct 18:30 UTC to 21 Oct 18:30 UTC.
+    expect(timestampRange('2026-10-21', '2026-10-21')).toEqual({
+      gte: new Date('2026-10-20T18:30:00.000Z'),
+      lt: new Date('2026-10-21T18:30:00.000Z'),
+    });
+    expect(timestampRange(undefined, '2026-10-21T10:00:00.000Z')).toEqual({
+      lte: new Date('2026-10-21T10:00:00.000Z'),
+    });
+    expect(timestampRange(undefined, undefined)).toEqual({});
   });
 });

@@ -24,12 +24,17 @@ const columns: Array<{
   status: OrderStatus;
   title: string;
 }> = [
-  { next: { label: 'Start preparing', status: 'PREPARING' }, status: 'PLACED', title: 'New' },
-  { next: { label: 'Ready', status: 'READY' }, status: 'PREPARING', title: 'Preparing' },
-  { next: { label: 'Collected', status: 'COLLECTED' }, status: 'READY', title: 'Ready for pickup' },
+  { next: { label: 'Send to kitchen', status: 'PREPARING' }, status: 'PLACED', title: 'Active' },
+  { next: { label: 'Ready', status: 'READY' }, status: 'PREPARING', title: 'In kitchen' },
+  {
+    next: { label: 'Collected', status: 'COLLECTED' },
+    status: 'READY',
+    title: 'Ready / delivery',
+  },
 ];
 
 const sourceLabels: Record<OrderSource, string> = {
+  COUNTER: 'Counter',
   KIOSK: 'Kiosk',
   OTHER: 'App',
   POS: 'POS',
@@ -153,11 +158,20 @@ function OrderCard({
         <span className="text-2xl font-bold tabular-nums text-ds-text">{order.orderNumber}</span>
         <span className="flex items-center gap-2 text-xs text-ds-muted">
           <span className="rounded bg-ds-subtle px-1.5 py-0.5 font-medium">
-            {sourceLabels[order.source]}
+            {order.channel === 'ROOM' ? 'Room' : sourceLabels[order.source]}
           </span>
           {minutesSince(order.placedAt, now)}
         </span>
       </div>
+      {order.roomNumber ? (
+        <p className="mt-1 text-sm font-semibold text-ds-link">
+          Room {order.roomNumber}
+          {order.bedNumber ? ` · Bed ${order.bedNumber}` : ''}
+        </p>
+      ) : null}
+      {order.billNumber ? (
+        <p className="font-mono text-[11px] text-ds-muted">{order.billNumber}</p>
+      ) : null}
       {order.items.length ? (
         <ul className="mt-2 space-y-0.5 text-sm text-ds-text">
           {order.items.map((item, index) => (
@@ -168,6 +182,11 @@ function OrderCard({
           ))}
         </ul>
       ) : null}
+      {order.instructions ? (
+        <p className="mt-2 rounded bg-ds-status-pending-bg px-2 py-1 text-xs text-ds-status-pending-fg">
+          {order.instructions}
+        </p>
+      ) : null}
       {canUpdate ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {next ? (
@@ -177,7 +196,7 @@ function OrderCard({
               size="sm"
               type="button"
             >
-              {next.label}
+              {order.channel === 'ROOM' && next.status === 'COLLECTED' ? 'Delivered' : next.label}
             </Button>
           ) : null}
           {order.status === 'READY' ? (
@@ -192,7 +211,8 @@ function OrderCard({
               <Undo2 aria-hidden="true" className="h-4 w-4" />
               Not ready
             </Button>
-          ) : (
+          ) : order.source === 'COUNTER' ? null : (
+            // A counter bill is cancelled from Bill History, with a reason and a restock.
             <Button
               disabled={isPending}
               onClick={() => {
@@ -215,18 +235,25 @@ function OrderCard({
  * A restaurant's live orders, as the kitchen works them: New -> Preparing -> Ready for pickup ->
  * Collected. Ready and preparing order numbers also show on the restaurant's TV board.
  */
-export function RestaurantOrdersPageClient({ restaurantId }: Readonly<{ restaurantId: string }>) {
+export function useRestaurantOrders(restaurantId: string | undefined) {
+  return useQuery({
+    enabled: Boolean(restaurantId),
+    queryFn: async () => (await organizationApi.listRestaurantOrders(restaurantId!)).data,
+    queryKey: queryKeys.restaurantOrders(restaurantId),
+    refetchInterval: REFRESH_MS,
+  });
+}
+
+/** The New / Preparing / Ready columns, each card moving its order on a tap. */
+export function OrderBoard({
+  orders,
+  restaurantId,
+}: Readonly<{ orders: RestaurantOrder[]; restaurantId: string }>) {
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const now = useNow();
   const canUpdate = hasPermission('ORDER_UPDATE');
-  const restaurantQuery = useQuery(restaurantDetailQuery(restaurantId));
-  const ordersQuery = useQuery({
-    queryFn: async () => (await organizationApi.listRestaurantOrders(restaurantId)).data,
-    queryKey: queryKeys.restaurantOrders(restaurantId),
-    refetchInterval: REFRESH_MS,
-  });
   const moveMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
       organizationApi.setRestaurantOrderStatus(id, status),
@@ -241,6 +268,44 @@ export function RestaurantOrdersPageClient({ restaurantId }: Readonly<{ restaura
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantOrders(restaurantId) });
     },
   });
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      {columns.map((column) => {
+        const inColumn = orders.filter((order) => order.status === column.status);
+
+        return (
+          <Panel className="flex min-h-48 flex-col p-0" key={column.status}>
+            <h2 className="flex items-center justify-between border-b border-ds-border px-4 py-2.5 text-sm font-semibold text-ds-text">
+              {column.title}
+              <span className="rounded-full bg-ds-subtle px-2 py-0.5 text-xs tabular-nums text-ds-muted">
+                {inColumn.length}
+              </span>
+            </h2>
+            <ul className="flex-1 space-y-3 p-3">
+              {inColumn.map((order) => (
+                <OrderCard
+                  canUpdate={canUpdate}
+                  isPending={moveMutation.isPending && moveMutation.variables?.id === order.id}
+                  key={order.id}
+                  next={column.next}
+                  now={now}
+                  onMove={(status) => moveMutation.mutate({ id: order.id, status })}
+                  order={order}
+                />
+              ))}
+            </ul>
+          </Panel>
+        );
+      })}
+    </div>
+  );
+}
+
+export function RestaurantOrdersPageClient({ restaurantId }: Readonly<{ restaurantId: string }>) {
+  const { hasPermission } = useAuth();
+  const restaurantQuery = useQuery(restaurantDetailQuery(restaurantId));
+  const ordersQuery = useRestaurantOrders(restaurantId);
   const orders = ordersQuery.data ?? [];
   const restaurantName = restaurantQuery.data?.restaurantName;
   // Names the record crumb: Restaurants > <name> > Orders.
@@ -283,35 +348,7 @@ export function RestaurantOrdersPageClient({ restaurantId }: Readonly<{ restaura
           />
         </Panel>
       ) : (
-        <div className="grid gap-4 md:grid-cols-3">
-          {columns.map((column) => {
-            const inColumn = orders.filter((order) => order.status === column.status);
-
-            return (
-              <Panel className="flex min-h-48 flex-col p-0" key={column.status}>
-                <h2 className="flex items-center justify-between border-b border-ds-border px-4 py-2.5 text-sm font-semibold text-ds-text">
-                  {column.title}
-                  <span className="rounded-full bg-ds-subtle px-2 py-0.5 text-xs tabular-nums text-ds-muted">
-                    {inColumn.length}
-                  </span>
-                </h2>
-                <ul className="flex-1 space-y-3 p-3">
-                  {inColumn.map((order) => (
-                    <OrderCard
-                      canUpdate={canUpdate}
-                      isPending={moveMutation.isPending && moveMutation.variables?.id === order.id}
-                      key={order.id}
-                      next={column.next}
-                      now={now}
-                      onMove={(status) => moveMutation.mutate({ id: order.id, status })}
-                      order={order}
-                    />
-                  ))}
-                </ul>
-              </Panel>
-            );
-          })}
-        </div>
+        <OrderBoard orders={orders} restaurantId={restaurantId} />
       )}
     </div>
   );

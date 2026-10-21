@@ -1,7 +1,8 @@
 import { strict as assert } from 'node:assert';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { hashPassword } from '@aahar/auth';
 import { test } from 'vitest';
-import { assertCredentialsUnlocked } from './users.service';
+import { assertCredentialsUnlocked, assertOwnCurrentPassword } from './users.service';
 
 const user = {
   email: 'asha@max.in',
@@ -38,4 +39,30 @@ test('everything else, the same values, idle users and the user themself pass', 
     admin,
   );
   assertCredentialsUnlocked({ ...user, lastActiveAt: null }, { password: 'N3w-password!' }, admin);
+});
+
+test('changing your own password, email or mobile needs your current password', async () => {
+  const self = { actorId: 'user-1' };
+  const withPassword = { ...user, passwordHash: await hashPassword('Old-pass1') };
+
+  for (const dto of [
+    { password: 'N3w-password!' },
+    { email: 'new@max.in' },
+    { mobile: '9000000000' },
+  ]) {
+    await assert.rejects(assertOwnCurrentPassword(withPassword, dto, self), BadRequestException);
+    await assert.rejects(
+      assertOwnCurrentPassword(withPassword, { ...dto, currentPassword: 'wrong-1' }, self),
+      BadRequestException,
+    );
+    await assertOwnCurrentPassword(withPassword, { ...dto, currentPassword: 'Old-pass1' }, self);
+  }
+
+  // Not a credential change, or someone else's record (the other rules cover that).
+  await assertOwnCurrentPassword(withPassword, { name: 'Asha K', email: 'asha@max.in' }, self);
+  await assertOwnCurrentPassword(withPassword, { password: 'N3w-password!' }, admin);
+  await assert.rejects(
+    assertOwnCurrentPassword({ ...user, passwordHash: null }, { mobile: '9000000000' }, self),
+    BadRequestException,
+  );
 });

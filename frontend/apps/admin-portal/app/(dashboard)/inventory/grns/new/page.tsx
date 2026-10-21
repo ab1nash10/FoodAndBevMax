@@ -1,5 +1,5 @@
-import { CreateGrnPageClient } from '@/components/inventory/grns/create-grn-page';
+import { ReceiveDeliveryPageClient } from '@/components/inventory/grns/receive-delivery-page';
 
-export default function CreateGrnPage() {
-  return <CreateGrnPageClient />;
+export default function ReceiveDeliveryPage() {
+  return <ReceiveDeliveryPageClient />;
 }

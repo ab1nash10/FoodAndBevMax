@@ -1,17 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class CreateLegalEntityDto {
   @ApiProperty({ description: 'The site the entity bills for', example: 'MSSH SKT' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
+  @DisplayName()
   locationName!: string;
 
   @ApiProperty({ example: 'MAX HEALTHCARE INSTITUTE LIMITED' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(255)
+  @DisplayName()
   entityName!: string;
 
   @ApiProperty({ example: 'N 110, Panchsheel Park, New Delhi- 110017' })

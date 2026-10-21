@@ -2,11 +2,13 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus, UsersRound } from 'lucide-react';
+import { Loader2, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { Employee, EmployeeInput, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { ImportButton } from '@/components/import/import-dialog';
+import { employeeImport } from '@/components/import/import-definitions';
 import {
   FilterField,
   FiltersMenu,
@@ -14,11 +16,19 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import {
+  AppPageHeader,
+  DateTimeCell,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Panel, Select } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { useUndoable } from '@/lib/use-undoable';
 import { invalidateEmployeeQueries } from '@/lib/query-invalidation';
 import {
   EmployeeFormFields,
@@ -28,29 +38,25 @@ import {
 } from '@/components/master-data/employees/shared';
 import {
   ActiveFilterSelect,
-  PageHeader,
   PaginationControls,
   QueryState,
   SearchInput,
-  StatusBadge,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  formatDateOnly,
   listLimit,
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 import { useLocationContext } from '@/components/location-context';
 import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
 
-type DiscountFilter = '' | 'eligible' | 'notEligible';
+const requiredFields = employeeSchema.pick({ employeeCode: true, employeeName: true });
 
-const timeOnlyFormatter = new Intl.DateTimeFormat('en-IN', {
-  timeStyle: 'short',
-});
+type DiscountFilter = '' | 'eligible' | 'notEligible';
 
 function discountFilterToBoolean(value: DiscountFilter): boolean | undefined {
   if (value === 'eligible') {
@@ -62,10 +68,6 @@ function discountFilterToBoolean(value: DiscountFilter): boolean | undefined {
   }
 
   return undefined;
-}
-
-function formatTimeOnly(value: string): string {
-  return timeOnlyFormatter.format(new Date(value));
 }
 
 function employeeToFormValues(employee: Employee): EmployeeFormValues {
@@ -133,6 +135,30 @@ export function EmployeesPageClient() {
     }),
   });
 
+  // Under the list's own key, so whatever refreshes the list refreshes these counts too.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (query: { eligibleForDiscount?: boolean; isActive?: boolean }) =>
+        (
+          await organizationApi.listEmployees({
+            ...query,
+            hospitalId: scopedHospitalId,
+            limit: 0,
+          })
+        ).data.meta.total;
+      const [all, active, eligible, inactive] = await Promise.all([
+        count({}),
+        count({ isActive: true }),
+        count({ eligibleForDiscount: true }),
+        count({ isActive: false }),
+      ]);
+
+      return { active, all, eligible, inactive };
+    },
+    queryKey: queryKeys.employees('stats', scopedHospitalId ?? 'all'),
+  });
+  const stats = statsQuery.data;
+
   const saveEmployeeMutation = useMutation({
     mutationFn: (body: EmployeeInput) =>
       editingEmployee
@@ -167,29 +193,33 @@ export function EmployeesPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateEmployeeQueries(queryClient);
-      showToast({
-        title: variables.isActive ? 'Employee activated' : 'Employee marked inactive',
-        variant: 'success',
-      });
+      // Marking inactive already had its Undo toast.
+      if (variables.isActive) showToast({ title: 'Employee activated', variant: 'success' });
     },
   });
+  const undoable = useUndoable();
 
   function toggleEmployeeStatus(employee: Employee) {
-    const nextIsActive = !employee.isActive;
+    // Switching it back on while the Undo toast runs is the same as Undo.
+    if (undoable.undo(employee.id)) return;
 
-    if (
-      !nextIsActive &&
-      !window.confirm(
-        'Turning this employee inactive will stop them from being used in new operations. Existing records will remain visible. Continue?',
-      )
-    ) {
+    if (employee.isActive) {
+      undoable.schedule({
+        commit: () => toggleEmployeeStatusMutation.mutateAsync({ employee, isActive: false }),
+        description: 'They can’t be used in new operations. Existing records stay visible.',
+        id: employee.id,
+        title: `${employee.employeeName} marked inactive`,
+      });
       return;
     }
 
-    toggleEmployeeStatusMutation.mutate({ employee, isActive: nextIsActive });
+    toggleEmployeeStatusMutation.mutate({ employee, isActive: true });
   }
 
-  const employees = employeesQuery.data?.items ?? [];
+  // An employee marked inactive shows so at once, while its Undo toast runs.
+  const employees = (employeesQuery.data?.items ?? []).map((employee) =>
+    undoable.isChanged(employee.id) ? { ...employee, isActive: false } : employee,
+  );
   const meta = employeesQuery.data?.meta ?? {
     limit: listLimit,
     page,
@@ -198,9 +228,9 @@ export function EmployeesPageClient() {
   };
   // Only the fields this reads, so typing elsewhere in the form does not re-render the page.
   const [employeeCode, employeeName] = form.watch(['employeeCode', 'employeeName']);
-  const formValues = { employeeCode, employeeName };
-  const canSave =
-    Boolean(formValues.employeeCode?.trim()) && Boolean(formValues.employeeName?.trim());
+  // The first required field still missing, in the schema's own words.
+  const disabledReason = requiredFields.safeParse({ employeeCode, employeeName }).error?.issues[0]
+    ?.message;
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = employeeSchema.safeParse(values);
@@ -210,16 +240,17 @@ export function EmployeesPageClient() {
       return;
     }
 
+    // Blank optional fields are sent as null, so an edit can clear them.
     saveEmployeeMutation.mutate({
-      department: optionalValue(parsed.data.department),
-      designation: optionalValue(parsed.data.designation),
+      department: optionalValue(parsed.data.department) ?? null,
+      designation: optionalValue(parsed.data.designation) ?? null,
       eligibleForDiscount: parsed.data.eligibleForDiscount,
       employmentType: parsed.data.employmentType || undefined,
       employeeCode: parsed.data.employeeCode,
       employeeName: parsed.data.employeeName,
       hospitalId: parsed.data.hospitalId || null,
       isActive: parsed.data.isActive,
-      mobile: optionalValue(parsed.data.mobile),
+      mobile: optionalValue(parsed.data.mobile) ?? null,
     });
   });
 
@@ -229,6 +260,13 @@ export function EmployeesPageClient() {
     setSearch('');
     setActiveFilter('');
     setDiscountFilter('');
+    setPage(1);
+  }
+
+  /** A stat's filter alone: the status or discount eligibility, the other cleared. */
+  function showOnly(status: ActiveFilter, discount: DiscountFilter) {
+    setActiveFilter(status);
+    setDiscountFilter(discount);
     setPage(1);
   }
 
@@ -251,22 +289,57 @@ export function EmployeesPageClient() {
 
   return (
     <section className="space-y-5">
-      <PageHeader
+      <AppPageHeader
         action={
-          <Button onClick={openCreate} type="button">
-            <Plus className="h-4 w-4" />
-            Create
-          </Button>
+          <>
+            <ImportButton definition={employeeImport} />
+            <Button onClick={openCreate} type="button">
+              <Plus className="h-4 w-4" />
+              New employee
+            </Button>
+          </>
         }
-        eyebrow="Master Data"
-        icon={UsersRound}
-        subtitle="Maintain employee records for future staff discount validation."
+        count={stats?.all}
+        description="Maintain employee records for future staff discount validation."
         title="Employees"
+      />
+      <StatStrip
+        label="Employees at a glance"
+        stats={[
+          {
+            active: !activeFilter && !discountFilter,
+            label: 'All employees',
+            onSelect: () => showOnly('', ''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: activeFilter === 'active' && !discountFilter,
+            label: 'Active',
+            onSelect: () => showOnly('active', ''),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: discountFilter === 'eligible' && !activeFilter,
+            label: 'Discount eligible',
+            onSelect: () => showOnly('', 'eligible'),
+            value: stats?.eligible ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive' && !discountFilter,
+            label: 'Inactive',
+            onSelect: () => showOnly('inactive', ''),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
       />
 
       <Panel className="overflow-hidden">
         <ListToolbar>
           <SearchInput
+            label="Search employees"
+            placeholder="Name, code, mobile or department"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -325,79 +398,99 @@ export function EmployeesPageClient() {
         </ListToolbar>
         <div className="overflow-x-auto">
           {/* The created date/time sits on two lines so the table stays narrow. */}
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-ds-subtle text-left">
+          <table className={cn(tableStyles.table, 'min-w-200')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="px-3 py-2.5">Employee</th>
-                <th className="px-2.5 py-2.5">Location</th>
-                <th className="px-2.5 py-2.5">Department</th>
-                <th className="px-2.5 py-2.5">Designation</th>
-                <th className="px-2.5 py-2.5">Mobile</th>
-                <th className="px-2.5 py-2.5">Discount</th>
-                <th className="px-2.5 py-2.5">Status</th>
-                <th className="px-2.5 py-2.5">Created</th>
-                <th className="px-3 py-2.5 text-right">Actions</th>
+                <th className={tableStyles.th}>Employee</th>
+                <th className={tableStyles.th}>Location</th>
+                <th className={tableStyles.th}>Department</th>
+                <th className={tableStyles.th}>Designation</th>
+                <th className={tableStyles.th}>Mobile</th>
+                <th className={tableStyles.th}>Discount</th>
+                <th className={tableStyles.th}>Status</th>
+                <th className={tableStyles.th}>Created</th>
+                <th className={cn(tableStyles.th, 'w-14')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider">
+            <tbody>
               {employees.length > 0 ? (
-                employees.map((employee) => (
-                  <tr key={employee.id}>
-                    <td className="px-3 py-3">
-                      <p className="font-semibold text-ds-text">{employee.employeeName}</p>
-                      <p className="text-xs text-ds-muted">{employee.employeeCode}</p>
-                    </td>
-                    <td className="px-2.5 py-3">
-                      <MasterLocationCell hospital={employee.hospital} />
-                    </td>
-                    <td className="px-2.5 py-3 text-ds-text-3">
-                      {employee.department || 'Not set'}
-                    </td>
-                    <td className="px-2.5 py-3 text-ds-text-3">
-                      {employee.designation || 'Not set'}
-                    </td>
-                    <td className="whitespace-nowrap px-2.5 py-3 text-ds-text-3">
-                      {employee.mobile || 'Not set'}
-                    </td>
-                    <td className="px-2.5 py-3">
-                      <Badge variant={employee.eligibleForDiscount ? 'success' : 'neutral'}>
-                        {employee.eligibleForDiscount ? 'Eligible' : 'Not eligible'}
-                      </Badge>
-                    </td>
-                    <td className="px-2.5 py-3">
-                      <span className="flex items-center gap-2">
-                        <StatusBadge isActive={employee.isActive} />
-                        <Toggle
-                          ariaLabel={`${employee.employeeName} active`}
-                          checked={employee.isActive}
-                          disabled={toggleEmployeeStatusMutation.isPending || !canEdit(employee)}
-                          onChange={() => toggleEmployeeStatus(employee)}
-                        />
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-2.5 py-3">
-                      <p className="text-ds-text-3">{formatDateOnly(employee.createdAt)}</p>
-                      <p className="text-xs text-ds-muted">{formatTimeOnly(employee.createdAt)}</p>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex justify-end gap-2">
-                        {canEdit(employee) ? (
-                          <Button
-                            aria-label={`Edit ${employee.employeeName}`}
-                            className="h-9 w-9"
-                            onClick={() => openEdit(employee)}
-                            size="icon"
-                            title="Edit"
-                            type="button"
-                            variant="outline"
+                employees.map((employee) => {
+                  const editable = canEdit(employee);
+
+                  return (
+                    <tr
+                      className={cn(tableStyles.row, !editable && 'cursor-default')}
+                      key={employee.id}
+                      onClick={editable ? () => openEdit(employee) : undefined}
+                    >
+                      <td className={tableStyles.td}>
+                        <p className={tableStyles.title}>{employee.employeeName}</p>
+                        <p className={tableStyles.code}>{employee.employeeCode}</p>
+                      </td>
+                      <td className={tableStyles.td}>
+                        <MasterLocationCell hospital={employee.hospital} />
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                        {employee.department || 'Not set'}
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                        {employee.designation || 'Not set'}
+                      </td>
+                      <td
+                        className={cn(
+                          tableStyles.td,
+                          employee.mobile && tableStyles.num,
+                          'whitespace-nowrap text-ds-text-2',
+                        )}
+                      >
+                        {employee.mobile || 'Not set'}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <Badge variant={employee.eligibleForDiscount ? 'success' : 'neutral'}>
+                          {employee.eligibleForDiscount ? 'Eligible' : 'Not eligible'}
+                        </Badge>
+                      </td>
+                      {/* Its own click: switching the status does not open the employee. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <span className="flex items-center gap-2">
+                          <Toggle
+                            ariaLabel={`${employee.employeeName} active`}
+                            checked={employee.isActive}
+                            disabled={toggleEmployeeStatusMutation.isPending || !editable}
+                            onChange={() => toggleEmployeeStatus(employee)}
+                          />
+                          <span
+                            className={cn(
+                              'text-xs font-bold',
+                              employee.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                            )}
                           >
-                            <Pencil aria-hidden="true" className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                            {employee.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </span>
+                      </td>
+                      <td className={tableStyles.td}>
+                        <DateTimeCell value={employee.createdAt} />
+                      </td>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end">
+                          {editable ? (
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${employee.employeeName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openEdit(employee);
+                              }}
+                            />
+                          ) : null}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <QueryState
                   colSpan={9}
@@ -420,13 +513,15 @@ export function EmployeesPageClient() {
       </Panel>
 
       <Modal
+        side
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button onClick={closeDialog} type="button" variant="outline">
               Cancel
             </Button>
             <Button
-              disabled={!canSave || saveEmployeeMutation.isPending}
+              aria-describedby={disabledReason ? 'employee-form-reason' : undefined}
+              disabled={Boolean(disabledReason) || saveEmployeeMutation.isPending}
               form="employee-form"
               type="submit"
             >
@@ -437,6 +532,15 @@ export function EmployeesPageClient() {
               ) : null}
               {dialog?.mode === 'create' ? 'Create employee' : 'Save changes'}
             </Button>
+            {/* Above the buttons on a phone, left of them on a wider screen. */}
+            {disabledReason ? (
+              <p
+                className="text-sm text-ds-muted sm:order-first sm:self-center"
+                id="employee-form-reason"
+              >
+                {disabledReason}
+              </p>
+            ) : null}
           </div>
         }
         onClose={closeDialog}

@@ -50,16 +50,9 @@ export type RestaurantFormValues = z.infer<typeof restaurantSchema>;
 
 export interface PageHeaderProps {
   action?: ReactNode;
-  eyebrow: string;
+  /** How many records the page lists, beside the title. */
+  count?: number;
   icon: LucideIcon;
   subtitle?: string;
   title: string;
-}
-
-export interface PaginationControlsProps {
-  limit: number;
-  onPageChange: (page: number) => void;
-  page: number;
-  total: number;
-  totalPages: number;
 }

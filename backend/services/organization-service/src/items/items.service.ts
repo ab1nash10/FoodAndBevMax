@@ -17,7 +17,7 @@ import { ItemsRepository, ItemWithCategory } from './items.repository';
 
 type ItemClient = Prisma.TransactionClient;
 
-function toItemResponse(item: ItemWithCategory) {
+export function toItemResponse(item: ItemWithCategory) {
   return {
     createdAt: item.createdAt,
     deletedAt: item.deletedAt,
@@ -274,7 +274,7 @@ export class ItemsService {
       const target = uniqueViolationTarget(error.meta);
 
       if (/normalized_name/.test(target)) {
-        throw new ConflictException('Similar item already exists in this category');
+        throw new ConflictException('An item with this name already exists');
       }
 
       if (/item_?code/i.test(target)) {

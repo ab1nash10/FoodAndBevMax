@@ -1,17 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class CreateGrnBatchDto {
   @ApiProperty({ example: 'BATCH-A' })
@@ -28,9 +32,9 @@ export class CreateGrnBatchDto {
   @IsDateString()
   expiryDate!: string;
 
-  @ApiProperty({ example: 40, minimum: 0 })
+  @ApiProperty({ example: 40, minimum: 0.001 })
   @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
+  @Min(0.001, { message: 'receivedQty must be greater than zero' })
   @Type(() => Number)
   receivedQty!: number;
 
@@ -46,9 +50,13 @@ export class CreateGrnBatchDto {
   @Type(() => Number)
   rejectedQty!: number;
 
-  @ApiPropertyOptional({ example: 'Damaged packaging' })
+  @ApiPropertyOptional({
+    description: 'Required when rejectedQty > 0, unless the line gives one.',
+    example: 'Damaged packaging',
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   rejectionReason?: string;
 }
 
@@ -82,17 +90,23 @@ export class CreateGrnLineDto {
   @Type(() => Number)
   rejectedQty!: number;
 
-  @ApiPropertyOptional({ example: 'Expired batch' })
+  @ApiPropertyOptional({
+    description: 'Used for any rejected batch that gives no reason of its own.',
+    example: 'Expired batch',
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   rejectionReason?: string;
 
   @ApiPropertyOptional({ example: 'Partial receiving' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 
   @ApiProperty({ isArray: true, type: CreateGrnBatchDto })
+  @ArrayMaxSize(200)
   @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })
@@ -115,30 +129,38 @@ export class CreateGrnDto {
 
   @ApiProperty({ example: 'Store Receiver' })
   @IsString()
+  @Matches(/\S/, { message: 'receivedBy is required' })
   @MaxLength(255)
   receivedBy!: string;
 
-  @ApiPropertyOptional({ example: 'ABC Beverages' })
-  @IsOptional()
+  // Required: the vendor-wise GRN report groups by it, and a goods receipt names its supplier.
+  @ApiProperty({ example: 'ABC Beverages' })
+  @IsNotEmpty({ message: 'vendorName is required' })
   @IsString()
-  vendorName?: string;
+  @MaxLength(500)
+  @DisplayName()
+  vendorName!: string;
 
   @ApiPropertyOptional({ example: 'PO-2026-0001' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   poNumber?: string;
 
   @ApiPropertyOptional({ example: 'INV-2026-0001' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   invoiceNumber?: string;
 
   @ApiPropertyOptional({ example: 'Received beverage stock' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 
   @ApiProperty({ isArray: true, type: CreateGrnLineDto })
+  @ArrayMaxSize(200)
   @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })

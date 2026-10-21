@@ -51,6 +51,8 @@ export const HOSPITAL_SCOPED_MODELS = new Set([
  */
 const RELATION_SCOPED_MODELS: Record<string, string> = {
   KitchenItem: 'kitchen',
+  RestaurantOrderLine: 'order',
+  RestaurantStaffDiscount: 'restaurant',
   StoreItem: 'store',
 };
 

@@ -8,8 +8,8 @@ import { useState } from 'react';
 import { LocationPickerDialog } from '@/components/access/location-picker-dialog';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/components/toast-provider';
-import { Field, Input, Panel, Select } from '@/components/ui';
-import { PasswordInput } from '@/components/ui-controls';
+import { Field, Input, RequiredMark, Select } from '@/components/ui';
+import { Modal, PasswordInput } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -17,6 +17,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
 
 interface FormValues {
+  currentPassword: string;
   designation: string;
   email: string;
   employeeCode: string;
@@ -29,6 +30,7 @@ interface FormValues {
 
 function toFormValues(user: AccessUser | null): FormValues {
   return {
+    currentPassword: '',
     designation: user?.designation ?? '',
     email: user?.email ?? '',
     employeeCode: user?.employeeCode ?? '',
@@ -89,6 +91,14 @@ export function UserDialog({
   const [pickerOpen, setPickerOpen] = useState(false);
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+
+  // Your own email, mobile or password: the server asks for your current password first.
+  const needsCurrentPassword =
+    Boolean(user) &&
+    currentUser?.id === user?.id &&
+    (Boolean(values.password) ||
+      values.email.trim().toLowerCase() !== (user?.email ?? '') ||
+      values.mobile !== user?.mobile);
 
   const selectedRole = roles.find((role) => role.id === values.roleId);
   const scope = selectedRole?.locationScope;
@@ -191,11 +201,21 @@ export function UserDialog({
       });
       return;
     }
+    if (needsCurrentPassword && !values.currentPassword) {
+      showToast({
+        description: 'Enter your current password to change your email, mobile or password.',
+        title: 'Current password required',
+        variant: 'error',
+      });
+      return;
+    }
 
     // No avatarUrl: the field was removed from this dialog, and leaving it out means an edit
     // keeps whatever avatar a user already has.
     const payload: AccessUserInput = {
-      designation: values.designation.trim() || undefined,
+      currentPassword: needsCurrentPassword ? values.currentPassword : undefined,
+      // Blank on an edit clears it (null); on create it is simply left out.
+      designation: values.designation.trim() || (user ? null : undefined),
       email: values.email.trim().toLowerCase(),
       employeeCode: values.employeeCode.trim(),
       hospitalIds,
@@ -217,215 +237,9 @@ export function UserDialog({
 
   return (
     <>
-      <div
-        aria-label={user ? 'Edit user' : 'Add user'}
-        aria-modal="true"
-        className="fixed inset-0 z-40 flex items-center justify-center bg-ds-overlay p-4"
-        role="dialog"
-      >
-        <Panel className="flex max-h-[88vh] w-full max-w-lg flex-col p-0">
-          <div className="flex items-center justify-between border-b border-ds-border px-5 py-3">
-            <h2 className="text-base font-semibold text-ds-text">Add/Edit User</h2>
-            <Button aria-label="Close" onClick={onClose} size="icon" type="button" variant="ghost">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-            {credentialsLockedUntil ? (
-              <p
-                className="flex items-start gap-2 rounded-md border border-ds-border bg-ds-subtle px-3 py-2 text-sm text-ds-muted"
-                role="note"
-              >
-                <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  {user?.name} is signed in. Their email, mobile and password can be changed after{' '}
-                  {credentialsLockedUntil.toLocaleString('en-IN', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                  , or once they sign out.
-                </span>
-              </p>
-            ) : null}
-
-            <Field label="Name" name="name">
-              <Input
-                id="name"
-                onChange={(event) => update('name', event.target.value)}
-                placeholder="Name"
-                value={values.name}
-              />
-            </Field>
-
-            <Field label="Email" name="email">
-              <Input
-                disabled={Boolean(credentialsLockedUntil)}
-                id="email"
-                onChange={(event) => update('email', event.target.value)}
-                placeholder="Email"
-                type="email"
-                value={values.email}
-              />
-            </Field>
-
-            <Field label="Employee Code" name="employeeCode">
-              <Input
-                disabled={Boolean(user)}
-                id="employeeCode"
-                onChange={(event) => update('employeeCode', event.target.value)}
-                placeholder="Employee Code"
-                value={values.employeeCode}
-              />
-            </Field>
-
-            <Field label="Mobile" name="mobile">
-              <div className="flex">
-                <span className="inline-flex items-center rounded-l-md border border-r-0 border-ds-border bg-ds-subtle px-3 text-sm text-ds-muted">
-                  +91
-                </span>
-                <Input
-                  className="rounded-l-none"
-                  disabled={Boolean(credentialsLockedUntil)}
-                  id="mobile"
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={(event) => update('mobile', event.target.value.replace(/\D/g, ''))}
-                  value={values.mobile}
-                />
-              </div>
-            </Field>
-
-            <Field label="Designation" name="designation">
-              <Input
-                id="designation"
-                onChange={(event) => update('designation', event.target.value)}
-                value={values.designation}
-              />
-            </Field>
-
-            <Field label="Role" name="roleId">
-              <Select
-                id="roleId"
-                onChange={(event) => {
-                  update('roleId', event.target.value);
-                  const next = roles.find((role) => role.id === event.target.value);
-                  // Switching to a single-location role trims the set back to the home location.
-                  if (next?.locationScope === 'SINGLE') setAccessIds(homeId ? [homeId] : []);
-                }}
-                value={values.roleId}
-              >
-                <option value="">Select a role</option>
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label={user ? 'Password (leave blank to keep)' : 'Password'} name="password">
-              {/*
-                Browsers autofill saved credentials into any password box, which on an edit would
-                silently replace that user's password. They skip read-only fields, so the field
-                opens read-only and unlocks on focus.
-              */}
-              <PasswordInput
-                autoComplete="new-password"
-                disabled={Boolean(credentialsLockedUntil)}
-                id="password"
-                onChange={(event) => update('password', event.target.value)}
-                onFocus={(event) => {
-                  event.target.readOnly = false;
-                }}
-                placeholder="Min 8 chars, 1 letter and 1 number"
-                readOnly
-                value={values.password}
-              />
-            </Field>
-
-            <Field label="Default location" name="location">
-              <Select
-                id="location"
-                onChange={(event) => chooseHome(event.target.value)}
-                value={homeId}
-              >
-                <option value="">Select default location</option>
-                {hospitals.map((hospital) => (
-                  <option key={hospital.id} value={hospital.id}>
-                    {hospital.hospitalCode} - {hospital.hospitalName}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Toggle
-              checked={values.isActive}
-              label="Active"
-              onChange={(value) => update('isActive', value)}
-            />
-
-            <div>
-              <p className="mb-2 text-sm font-medium text-ds-text-2">Location(s) Access</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={!canPickLocations}
-                  onClick={() => setPickerOpen(true)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <MapPin className="h-4 w-4" />
-                  Add Location(s)
-                </Button>
-                <Button
-                  disabled={accessIds.length === 0}
-                  onClick={() => {
-                    setAccessIds([]);
-                    setHomeId('');
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Clear All
-                </Button>
-              </div>
-
-              {scope === 'ALL' ? (
-                <p className="mt-2 text-xs text-ds-muted">
-                  {selectedRole?.name} reaches every location, so only the default location is
-                  needed.
-                </p>
-              ) : accessIds.length === 0 ? (
-                <p className="mt-2 text-xs text-ds-muted">No locations added yet.</p>
-              ) : (
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {accessIds.map((id) => (
-                    <li
-                      className="flex items-center gap-1 rounded-full bg-ds-teal-soft px-3 py-1 text-xs font-medium text-ds-teal-text"
-                      key={id}
-                    >
-                      {nameOf(id)}
-                      {id === homeId ? <span className="opacity-70">(default)</span> : null}
-                      <button
-                        aria-label={`Remove ${nameOf(id)}`}
-                        onClick={() => {
-                          setAccessIds((current) => current.filter((value) => value !== id));
-                          if (id === homeId) setHomeId('');
-                        }}
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 border-t border-ds-border px-5 py-3">
+      <Modal
+        footer={
+          <div className="flex justify-end gap-2">
             <Button
               disabled={saveMutation.isPending}
               onClick={onClose}
@@ -439,8 +253,233 @@ export function UserDialog({
               Submit
             </Button>
           </div>
-        </Panel>
-      </div>
+        }
+        // While the location picker is open over it, Esc and outside clicks close only the picker.
+        onClose={() => {
+          if (!pickerOpen) onClose();
+        }}
+        open
+        side
+        title={user ? 'Edit user' : 'Add user'}
+      >
+        <div className="space-y-4">
+          {credentialsLockedUntil ? (
+            <p
+              className="flex items-start gap-2 rounded-md border border-ds-border bg-ds-subtle px-3 py-2 text-sm text-ds-muted"
+              role="note"
+            >
+              <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                {user?.name} is signed in. Their email, mobile and password can be changed after{' '}
+                {credentialsLockedUntil.toLocaleString('en-IN', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}
+                , or once they sign out.
+              </span>
+            </p>
+          ) : null}
+
+          <Field label="Name" name="name" required>
+            <Input
+              id="name"
+              onChange={(event) => update('name', event.target.value)}
+              placeholder="Name"
+              value={values.name}
+            />
+          </Field>
+
+          <Field label="Email" name="email" required>
+            <Input
+              disabled={Boolean(credentialsLockedUntil)}
+              id="email"
+              onChange={(event) => update('email', event.target.value)}
+              placeholder="Email"
+              type="email"
+              value={values.email}
+            />
+          </Field>
+
+          <Field label="Employee Code" name="employeeCode" required={!user}>
+            <Input
+              disabled={Boolean(user)}
+              id="employeeCode"
+              onChange={(event) => update('employeeCode', event.target.value)}
+              placeholder="Employee Code"
+              value={values.employeeCode}
+            />
+          </Field>
+
+          <Field label="Mobile" name="mobile" required>
+            <div className="flex">
+              <span className="inline-flex items-center rounded-l-md border border-r-0 border-ds-border bg-ds-subtle px-3 text-sm text-ds-muted">
+                +91
+              </span>
+              <Input
+                className="rounded-l-none"
+                disabled={Boolean(credentialsLockedUntil)}
+                id="mobile"
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(event) => update('mobile', event.target.value.replace(/\D/g, ''))}
+                value={values.mobile}
+              />
+            </div>
+          </Field>
+
+          <Field label="Designation" name="designation">
+            <Input
+              id="designation"
+              onChange={(event) => update('designation', event.target.value)}
+              value={values.designation}
+            />
+          </Field>
+
+          <Field label="Role" name="roleId" required>
+            <Select
+              id="roleId"
+              onChange={(event) => {
+                update('roleId', event.target.value);
+                const next = roles.find((role) => role.id === event.target.value);
+                // Switching to a single-location role trims the set back to the home location.
+                if (next?.locationScope === 'SINGLE') setAccessIds(homeId ? [homeId] : []);
+              }}
+              value={values.roleId}
+            >
+              <option value="">Select a role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label={user ? 'Password (leave blank to keep)' : 'Password'}
+            name="password"
+            required={!user}
+          >
+            {/*
+                Browsers autofill saved credentials into any password box, which on an edit would
+                silently replace that user's password. They skip read-only fields, so the field
+                opens read-only and unlocks on focus.
+              */}
+            <PasswordInput
+              autoComplete="new-password"
+              disabled={Boolean(credentialsLockedUntil)}
+              id="password"
+              onChange={(event) => update('password', event.target.value)}
+              onFocus={(event) => {
+                event.target.readOnly = false;
+              }}
+              placeholder="Min 8 chars, 1 letter and 1 number"
+              readOnly
+              value={values.password}
+            />
+          </Field>
+
+          {needsCurrentPassword ? (
+            <Field label="Your current password" name="currentPassword" required>
+              <PasswordInput
+                autoComplete="current-password"
+                id="currentPassword"
+                onChange={(event) => update('currentPassword', event.target.value)}
+                placeholder="Needed to change your own email, mobile or password"
+                value={values.currentPassword}
+              />
+            </Field>
+          ) : null}
+
+          {/* Required for an all-locations role; otherwise the first assigned location is the default. */}
+          <Field label="Default location" name="location" required={scope === 'ALL'}>
+            <Select
+              id="location"
+              onChange={(event) => chooseHome(event.target.value)}
+              value={homeId}
+            >
+              <option value="">Select default location</option>
+              {hospitals.map((hospital) => (
+                <option key={hospital.id} value={hospital.id}>
+                  {hospital.hospitalCode} - {hospital.hospitalName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Toggle
+            checked={values.isActive}
+            label="Active"
+            onChange={(value) => update('isActive', value)}
+          />
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-ds-text-2">
+              Location(s) Access
+              {isSingle || scope === 'MULTI' ? (
+                <>
+                  <RequiredMark />
+                  <span className="sr-only"> (required)</span>
+                </>
+              ) : null}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={!canPickLocations}
+                onClick={() => setPickerOpen(true)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <MapPin className="h-4 w-4" />
+                Add Location(s)
+              </Button>
+              <Button
+                disabled={accessIds.length === 0}
+                onClick={() => {
+                  setAccessIds([]);
+                  setHomeId('');
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Clear All
+              </Button>
+            </div>
+
+            {scope === 'ALL' ? (
+              <p className="mt-2 text-xs text-ds-muted">
+                {selectedRole?.name} reaches every location, so only the default location is needed.
+              </p>
+            ) : accessIds.length === 0 ? (
+              <p className="mt-2 text-xs text-ds-muted">No locations added yet.</p>
+            ) : (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {accessIds.map((id) => (
+                  <li
+                    className="flex items-center gap-1 rounded-full bg-ds-selected px-3 py-1 text-xs font-medium text-ds-link"
+                    key={id}
+                  >
+                    {nameOf(id)}
+                    {id === homeId ? <span className="opacity-70">(default)</span> : null}
+                    <button
+                      aria-label={`Remove ${nameOf(id)}`}
+                      onClick={() => {
+                        setAccessIds((current) => current.filter((value) => value !== id));
+                        if (id === homeId) setHomeId('');
+                      }}
+                      type="button"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {pickerOpen ? (
         <LocationPickerDialog

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
@@ -56,11 +57,13 @@ export class CreateTransferAcknowledgementLineDto {
   @ApiPropertyOptional({ example: 'Damaged during transfer' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   rejectionReason?: string;
 
   @ApiPropertyOptional({ example: 'Two bottles damaged' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 }
 
@@ -72,9 +75,11 @@ export class CreateTransferAcknowledgementDto {
   @ApiPropertyOptional({ example: 'Received with two rejected items' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 
   @ApiProperty({ isArray: true, type: CreateTransferAcknowledgementLineDto })
+  @ArrayMaxSize(200)
   @ArrayMinSize(1)
   @IsArray()
   @ValidateNested({ each: true })

@@ -1,5 +1,7 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import type { UseFormReturn } from 'react-hook-form';
 import type {
   Item,
@@ -17,7 +19,8 @@ import {
   serveAtOptions,
   type RestaurantMenuFormValues,
 } from '@/components/mapping-foundation/restaurant-menus/shared';
-import { useKitchens } from '@/components/inventory/shared/utils';
+import { fetchAllPages } from '@/components/csv-import-export';
+import { organizationApi } from '@/lib/api';
 import { Textarea } from '@/components/organization/shared/form-controls';
 import { MultiSelectDropdown, Toggle } from '@/components/ui-controls';
 
@@ -33,6 +36,102 @@ function formatPositionType(value: RestaurantMenuPositionType): string {
   }
 
   return formatEnum(value);
+}
+
+/** One way a restaurant can sell an item: a store or kitchen mapping at its location. */
+interface MenuSource {
+  categoryId: string;
+  categoryName: string;
+  itemCode: string;
+  itemId: string;
+  itemName: string;
+  key: string;
+  /** The kitchen that makes it (prepared) or the store that stocks it (packaged). */
+  kitchenId: string | null;
+  storeId: string | null;
+  /** The kitchen's or the store's name. */
+  sourceName: string;
+}
+
+const sourceKey = (
+  itemId: string,
+  kitchenId: string | null,
+  storeId: string | null,
+  categoryId: string,
+) => `${itemId}|${kitchenId ? `k:${kitchenId}` : `s:${storeId ?? ''}`}|${categoryId}`;
+
+/** Sorted by item, then category, then store or kitchen. */
+function distinct(sources: MenuSource[]): MenuSource[] {
+  return [...new Map(sources.map((source) => [source.key, source])).values()].sort(
+    (left, right) =>
+      left.itemName.localeCompare(right.itemName) ||
+      left.categoryName.localeCompare(right.categoryName) ||
+      left.sourceName.localeCompare(right.sourceName),
+  );
+}
+
+/**
+ * What a restaurant can sell, straight from Item Mapping: every active store mapping
+ * (packaged) and kitchen mapping (prepared) at its location, each with its own category and
+ * kitchen. Under the mapping pages' cache keys, so a new mapping shows up as soon as it's saved.
+ */
+function useMenuSources(hospitalId: string | undefined) {
+  const query = (page: number) => ({ hospitalId, isActive: true, limit: 100, page });
+  const stores = useQuery({
+    enabled: Boolean(hospitalId),
+    queryFn: async () =>
+      (await fetchAllPages((page) => organizationApi.listStoreItems(query(page)))).flatMap(
+        (mapping): MenuSource[] =>
+          mapping.category
+            ? [
+                {
+                  categoryId: mapping.category.id,
+                  categoryName: mapping.category.categoryName,
+                  itemCode: mapping.item.itemCode,
+                  itemId: mapping.itemId,
+                  itemName: mapping.item.itemName,
+                  key: sourceKey(mapping.itemId, null, mapping.storeId, mapping.category.id),
+                  kitchenId: null,
+                  sourceName: mapping.store.storeName,
+                  storeId: mapping.storeId,
+                },
+              ]
+            : [],
+      ),
+    queryKey: ['store-items', 'menu-source', hospitalId],
+  });
+  const kitchens = useQuery({
+    enabled: Boolean(hospitalId),
+    queryFn: async () =>
+      (await fetchAllPages((page) => organizationApi.listKitchenItems(query(page)))).flatMap(
+        (mapping): MenuSource[] =>
+          mapping.category
+            ? [
+                {
+                  categoryId: mapping.category.id,
+                  categoryName: mapping.category.categoryName,
+                  itemCode: mapping.item.itemCode,
+                  itemId: mapping.itemId,
+                  itemName: mapping.item.itemName,
+                  key: sourceKey(mapping.itemId, mapping.kitchenId, null, mapping.category.id),
+                  kitchenId: mapping.kitchenId,
+                  sourceName: mapping.kitchen.kitchenName,
+                  storeId: null,
+                },
+              ]
+            : [],
+      ),
+    queryKey: ['kitchen-items', 'menu-source', hospitalId],
+  });
+  const packaged = distinct(stores.data ?? []);
+  const prepared = distinct(kitchens.data ?? []);
+
+  return {
+    all: [...prepared, ...packaged],
+    isLoading: stores.isLoading || kitchens.isLoading,
+    packaged,
+    prepared,
+  };
 }
 
 function SectionDivider({ children }: Readonly<{ children: string }>) {
@@ -67,11 +166,32 @@ export function RestaurantMenuFormFields({
   const values = form.watch();
   const shouldShowReferenceMenu =
     values.positionType === 'BEFORE_ITEM' || values.positionType === 'AFTER_ITEM';
-  // Any active kitchen at the restaurant's location can prepare its menu.
-  const kitchensQuery = useKitchens(
-    restaurants?.find((restaurant) => restaurant.id === values.restaurantId)?.hospitalId,
+  const hospitalId = restaurants?.find(
+    (restaurant) => restaurant.id === values.restaurantId,
+  )?.hospitalId;
+  const sources = useMenuSources(hospitalId);
+  const currentKey =
+    values.itemId && values.categoryId
+      ? sourceKey(
+          values.itemId,
+          values.kitchenId || null,
+          values.storeId || null,
+          values.categoryId,
+        )
+      : '';
+  const current = sources.all.find((source) => source.key === currentKey);
+  // An older menu entry whose item, kitchen or category no longer matches a mapping here stays
+  // shown as it is, so opening it to change a price doesn't lose it.
+  const keepsLegacy = Boolean(currentKey) && !sources.isLoading && !current;
+  // The restaurant may list an item once per category (the page passes its other entries).
+  const onMenu = new Set(
+    (referenceMenus ?? [])
+      .filter((menu) => menu.restaurantId === values.restaurantId)
+      .map((menu) => `${menu.itemId}|${menu.categoryId ?? ''}`),
   );
-  const kitchens = kitchensQuery.data ?? [];
+  const categoryName = categories?.find(
+    (category) => category.id === values.categoryId,
+  )?.categoryName;
 
   function set<TName extends keyof RestaurantMenuFormValues>(
     name: TName,
@@ -94,12 +214,16 @@ export function RestaurantMenuFormFields({
 
   return (
     <div className="grid gap-4">
-      <Field error={errors.restaurantId?.message} label="Restaurant" name="restaurant-id">
+      <Field error={errors.restaurantId?.message} label="Restaurant" name="restaurant-id" required>
         <Select
           id="restaurant-id"
           onChange={(event) => {
             set('restaurantId', event.target.value);
+            // Another restaurant may be at another location, with other mapped items.
+            set('itemId', '');
             set('kitchenId', '');
+            set('storeId', '');
+            set('categoryId', '');
             set('referenceMenuId', '');
           }}
           value={values.restaurantId}
@@ -113,61 +237,118 @@ export function RestaurantMenuFormFields({
           ))}
         </Select>
       </Field>
-      <Field error={errors.kitchenId?.message} label="Kitchen" name="kitchen-id">
-        <Select disabled={!values.restaurantId} id="kitchen-id" {...form.register('kitchenId')}>
-          <option value="">
-            {!values.restaurantId
-              ? 'Choose a restaurant first'
-              : kitchensQuery.isLoading
-                ? 'Loading kitchens…'
-                : kitchens.length
-                  ? 'Select kitchen'
-                  : 'This location has no kitchen'}
-          </option>
-          {kitchens.map((kitchen) => (
-            <option key={kitchen.id} value={kitchen.id}>
-              {kitchen.kitchenName}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field error={errors.categoryId?.message} label="Food Category" name="category-id">
+      <Field
+        error={errors.itemId?.message ?? errors.categoryId?.message ?? errors.kitchenId?.message}
+        label="Food Item"
+        name="menu-item-id"
+        required
+      >
         <Select
-          id="category-id"
-          onChange={(event) => set('categoryId', event.target.value)}
-          value={values.categoryId}
-        >
-          <option value="">Select category</option>
-          {categories?.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.categoryName}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field error={errors.itemId?.message} label="Food Item" name="menu-item-id">
-        <Select
+          disabled={!values.restaurantId}
           id="menu-item-id"
           onChange={(event) => {
-            const item = items?.find((option) => option.id === event.target.value);
+            const source = sources.all.find((option) => option.key === event.target.value);
+            const item = items?.find((option) => option.id === source?.itemId);
 
-            set('itemId', event.target.value);
+            // The mapping decides the item, where it comes from and its category together.
+            set('itemId', source?.itemId ?? '');
+            set('kitchenId', source?.kitchenId ?? '');
+            set('storeId', source?.storeId ?? '');
+            set('categoryId', source?.categoryId ?? '');
 
             // Start from the item's own preparation time; the menu can change it.
             if (item?.preparationTimeMinutes != null && !values.preparationTimeMinutes) {
               set('preparationTimeMinutes', String(item.preparationTimeMinutes));
             }
           }}
-          value={values.itemId}
+          value={currentKey}
         >
-          <option value="">Select item</option>
-          {(items ?? []).map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.itemName} ({item.itemCode})
+          <option value="">
+            {!values.restaurantId
+              ? 'Choose a restaurant first'
+              : sources.isLoading
+                ? 'Loading mapped items…'
+                : sources.all.length
+                  ? 'Select a mapped item'
+                  : 'No items mapped at this location'}
+          </option>
+          {keepsLegacy ? (
+            <option value={currentKey}>
+              {items?.find((item) => item.id === values.itemId)?.itemName ?? 'Current item'} -{' '}
+              {categoryName ?? 'no category'} (not mapped like this here)
             </option>
-          ))}
+          ) : null}
+          {(
+            [
+              ['Prepared (from a kitchen)', sources.prepared],
+              ['Packaged (from a store)', sources.packaged],
+            ] as const
+          ).map(([label, group]) =>
+            group.length ? (
+              <optgroup key={label} label={label}>
+                {group.map((source) => {
+                  const taken =
+                    source.key !== currentKey &&
+                    onMenu.has(`${source.itemId}|${source.categoryId}`);
+
+                  return (
+                    <option disabled={taken} key={source.key} value={source.key}>
+                      {source.itemName} - {source.categoryName} · {source.sourceName}
+                      {taken ? ' (already on menu)' : ''}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            ) : null,
+          )}
         </Select>
+        {values.restaurantId && !sources.isLoading && sources.all.length === 0 ? (
+          <p className="mt-1.5 text-xs text-ds-muted">
+            Only items mapped to a store or kitchen at this restaurant&apos;s location can go on its
+            menu.{' '}
+            <Link
+              className="font-semibold text-ds-link hover:underline"
+              href="/masters/item-mapping"
+            >
+              Map items
+            </Link>
+          </p>
+        ) : null}
       </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Store / Kitchen" name="source-id">
+          <Input
+            disabled
+            id="source-id"
+            readOnly
+            value={
+              !values.itemId
+                ? 'From the mapping'
+                : current
+                  ? `${current.sourceName} (${current.kitchenId ? 'kitchen' : 'store'})`
+                  : values.kitchenId || values.storeId
+                    ? 'As saved before'
+                    : 'Not set'
+            }
+          />
+        </Field>
+        <Field label="Food Category" name="category-id">
+          <Input
+            disabled
+            id="category-id"
+            readOnly
+            value={values.itemId ? (categoryName ?? '—') : 'From the mapping'}
+          />
+        </Field>
+      </div>
+      <p className="-mt-2 text-xs text-ds-muted">
+        Store or kitchen and category come from the item&apos;s mapping. To change them, pick
+        another mapping above or change it in{' '}
+        <Link className="font-semibold text-ds-link hover:underline" href="/masters/item-mapping">
+          Item Mapping
+        </Link>
+        .
+      </p>
       <Field label="Menu item code" name="menu-item-code">
         <Input
           disabled
@@ -257,6 +438,7 @@ export function RestaurantMenuFormFields({
           error={errors.referenceMenuId?.message}
           label="Reference Item"
           name="reference-menu-id"
+          required
         >
           <Select id="reference-menu-id" {...form.register('referenceMenuId')}>
             <option value="">Select menu item</option>
@@ -301,7 +483,7 @@ export function RestaurantMenuFormFields({
         </div>
       </fieldset>
       {values.serveAt !== 'ROOM' ? (
-        <Field error={errors.price?.message} label="Price" name="price">
+        <Field error={errors.price?.message} label="Price" name="price" required>
           <Input
             id="price"
             inputMode="decimal"
@@ -313,7 +495,7 @@ export function RestaurantMenuFormFields({
         </Field>
       ) : null}
       {values.serveAt !== 'COUNTER' ? (
-        <Field error={errors.roomPrice?.message} label="In-Room Price" name="room-price">
+        <Field error={errors.roomPrice?.message} label="In-Room Price" name="room-price" required>
           <Input
             id="room-price"
             inputMode="decimal"

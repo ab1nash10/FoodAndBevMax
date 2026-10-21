@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { UserThrottlerGuard } from './user-throttler.guard';
+import { ADDRESS_THROTTLER, UserThrottlerGuard, addressThrottler } from './user-throttler.guard';
 
 // getTracker reads only the request, so the guard's own dependencies are not needed here.
 const guard = Object.create(UserThrottlerGuard.prototype) as UserThrottlerGuard & {
@@ -20,4 +20,30 @@ void test('two signed-in users on one address are counted apart', async () => {
 void test('a request without a signed-in user is counted by address', async () => {
   assert.equal(await tracker({ ip: '203.0.113.7' }), '203.0.113.7');
   assert.equal(await tracker({ ip: '203.0.113.7', user: { id: '' } }), '203.0.113.7');
+});
+
+void test('signed-out sign-in requests are counted per identity, not per hospital address', async () => {
+  const at = (body: Record<string, unknown>) => tracker({ body, ip: '203.0.113.7' });
+
+  assert.equal(await at({ mobile: ' 9876543210 ', otp: '123456' }), 'mobile:9876543210');
+  assert.equal(await at({ email: 'Ravi@Max.in', password: 'x' }), 'email:ravi@max.in');
+  // Two people renewing from the same address are counted apart, by session.
+  const first = await at({ refreshToken: 'token-one' });
+  const second = await at({ refreshToken: 'token-two' });
+  assert.match(first, /^session:[0-9a-f]{32}$/);
+  assert.notEqual(first, second);
+  assert.equal(await at({ refreshToken: 'token-one' }), first);
+  // Nothing to key on: by address, as before.
+  assert.equal(await at({}), '203.0.113.7');
+});
+
+void test('the address ceiling counts by address and skips signed-in requests', () => {
+  const options = addressThrottler(3_000);
+  const context = (request: Record<string, unknown>) =>
+    ({ switchToHttp: () => ({ getRequest: () => request }) }) as never;
+
+  assert.equal(options.name, ADDRESS_THROTTLER);
+  assert.equal(options.limit, 3_000);
+  assert.equal(options.skipIf?.(context({ user: { id: 'user-a' } })), true);
+  assert.equal(options.skipIf?.(context({})), false);
 });

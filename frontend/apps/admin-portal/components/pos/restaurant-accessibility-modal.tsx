@@ -91,7 +91,7 @@ export function RestaurantAccessibilityModal({
           >
             <input
               checked={selectedIds.includes(restaurant.id)}
-              className="h-4 w-4 accent-teal-600"
+              className="h-4 w-4 accent-ds-primary"
               onChange={() => toggleRestaurant(restaurant.id)}
               type="checkbox"
             />

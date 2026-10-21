@@ -177,11 +177,6 @@ exports[`stock and money paths (integration) > GRN: draft, post to stock per acc
   "hospitalId": "string",
   "id": "string",
   "item": {
-    "category": {
-      "categoryName": "string",
-      "id": "string",
-      "isActive": "boolean",
-    },
     "id": "string",
     "isActive": "boolean",
     "itemCode": "string",
@@ -201,6 +196,11 @@ exports[`stock and money paths (integration) > GRN: draft, post to stock per acc
   "locationType": "string",
   "qtyIn": "number",
   "qtyOut": "number",
+  "referenceDocument": {
+    "id": "string",
+    "number": "string",
+    "type": "string",
+  },
   "referenceId": "string",
   "referenceType": "string",
   "remarks": null,
@@ -287,11 +287,6 @@ exports[`stock and money paths (integration) > stock views: balances list and th
         "hospitalId": "string",
         "id": "string",
         "item": {
-          "category": {
-            "categoryName": "string",
-            "id": "string",
-            "isActive": "boolean",
-          },
           "id": "string",
           "isActive": "boolean",
           "itemCode": "string",
@@ -433,8 +428,10 @@ exports[`stock and money paths (integration) > store transfer: nothing moves on 
 exports[`stock and money paths (integration) > store transfer: nothing moves on create, dispatch deducts, ACCEPTED_FULL credits the restaurant > transfer created 1`] = `
 {
   "data": {
+    "acknowledgedAt": null,
     "businessDate": "string",
     "createdAt": "string",
+    "createdBy": "string",
     "deletedAt": null,
     "destinationId": "string",
     "destinationType": "string",
@@ -486,8 +483,10 @@ exports[`stock and money paths (integration) > store transfer: nothing moves on 
 exports[`stock and money paths (integration) > store transfer: nothing moves on create, dispatch deducts, ACCEPTED_FULL credits the restaurant > transfer dispatched 1`] = `
 {
   "data": {
+    "acknowledgedAt": null,
     "businessDate": "string",
     "createdAt": "string",
+    "createdBy": "string",
     "deletedAt": null,
     "destinationId": "string",
     "destinationType": "string",

@@ -90,30 +90,33 @@ export function toHospitalFormDefaults(hospital?: HospitalRecord): HospitalFormV
 }
 
 export function toHospitalInput(values: HospitalFormValues): HospitalInput {
-  const invoicePrefix = optionalValue(values.invoicePrefix);
+  // A blank optional field is sent as null, so an update clears it.
+  const clearable = (value: string) => optionalValue(value) ?? null;
+  const invoicePrefix = clearable(values.invoicePrefix);
   const locationCode = values.locationCode.trim();
   const title = values.title.trim();
 
   return {
-    address: values.address.trim(),
-    area: optionalValue(values.area),
+    address: clearable(values.address),
+    area: clearable(values.area),
     billPrefix: invoicePrefix,
     city: values.city.trim(),
-    displayName: values.displayName.trim(),
+    // Left blank, the display name is the title.
+    displayName: optionalValue(values.displayName) ?? title,
     hospitalCode: locationCode,
     hospitalName: title,
     invoicePrefix,
-    ipAddress: optionalValue(values.ipAddress),
+    ipAddress: clearable(values.ipAddress),
     isActive: values.isActive,
-    latitude: optionalValue(values.latitude),
+    latitude: clearable(values.latitude),
     legalEntityId: values.legalEntityId || null,
     locationCode,
-    longitude: optionalValue(values.longitude),
+    longitude: clearable(values.longitude),
     onlinePaymentOption: values.onlinePaymentOption,
-    postalCode: optionalValue(values.postalCode),
+    postalCode: clearable(values.postalCode),
     state: values.state.trim(),
     title,
-    visitingCardAddress: optionalValue(values.visitingCardAddress),
+    visitingCardAddress: clearable(values.visitingCardAddress),
   };
 }
 

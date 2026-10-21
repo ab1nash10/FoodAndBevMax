@@ -186,10 +186,11 @@ test('setup: counts what each list totals, here or everywhere as the dashboard d
   });
   assert.deepEqual(result.firstGrn, { grnNumber: 'GRN-1' });
   assert.equal(result.firstTransfer, null);
-  // Same queries as before (page size 1); locations and items are not limited to the location.
-  assert.deepEqual(calls.stores, { hospitalId: 'h1', limit: 1, page: 1, sortOrder: 'desc' });
-  assert.deepEqual(calls.hospitals, { limit: 1, page: 1, sortOrder: 'desc' });
-  assert.deepEqual(calls.items, { limit: 1, page: 1, sortOrder: 'desc' });
+  // Totals are counts only (limit 0: no rows loaded); locations and items are not limited to the
+  // location. The first GRN and transfer still read one row.
+  assert.deepEqual(calls.stores, { hospitalId: 'h1', limit: 0, page: 1, sortOrder: 'desc' });
+  assert.deepEqual(calls.hospitals, { limit: 0, page: 1, sortOrder: 'desc' });
+  assert.deepEqual(calls.items, { limit: 0, page: 1, sortOrder: 'desc' });
   assert.deepEqual(calls.grns, {
     hospitalId: 'h1',
     limit: 1,

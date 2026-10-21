@@ -136,7 +136,7 @@ export function MasterDataCard({ stats }: Readonly<{ stats: DashboardStats }>) {
               {card.query.isLoading ? (
                 <Skeleton className="h-5 w-8" />
               ) : (
-                <span className="text-base font-extrabold tabular-nums text-ds-text">
+                <span className="font-mono text-base font-medium text-ds-text">
                   {card.valueOverride ?? card.query.data ?? 0}
                 </span>
               )}

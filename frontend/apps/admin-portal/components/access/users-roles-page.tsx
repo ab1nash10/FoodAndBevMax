@@ -2,21 +2,38 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AccessUser } from '@aahar/api-client';
-import { Loader2, Pencil, Plus, ShieldCheck, X } from 'lucide-react';
+import type { AccessUser, UserStatus } from '@aahar/api-client';
+import { Loader2, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { AppPageHeader } from '@/components/design-system';
+import {
+  AppPageHeader,
+  EmptyState,
+  ListPager,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { BulkLocationBar } from '@/components/access/bulk-location-bar';
 import { UserDialog } from '@/components/access/user-dialog';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import { ListToolbar, RefreshButton } from '@/components/list-toolbar';
+import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Badge, Input, Panel, Skeleton } from '@/components/ui';
-import { useUrlSearchParam } from '@/lib/use-url-state';
+import { Badge, Panel, Select, Skeleton } from '@/components/ui';
+import { FilterSearch, Modal } from '@/components/ui-controls';
+import {
+  useOnScopeChange,
+  useUrlNumberParam,
+  useUrlParam,
+  useUrlSearchParam,
+} from '@/lib/use-url-state';
 import { getApiErrorMessage, userApi } from '@/lib/api';
+import { LoadError } from '@/components/location-empty-states';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
+
+const userPageSize = 50;
 
 /** Mirrors the server guard: only a Super Admin may change Super Admin access. */
 const SUPER_ADMIN_ROLE = 'Super Admin';
@@ -67,81 +84,9 @@ function PermissionsDialog({ user, onClose }: Readonly<{ onClose: () => void; us
     });
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-ds-overlay p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Edit permissions for ${user.name}`}
-    >
-      <Panel className="flex max-h-[85vh] w-full max-w-3xl flex-col p-6">
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-ds-text">Edit Permissions — {user.name}</h2>
-            <p className="mt-1 text-sm text-ds-muted">
-              Saved selections override the permissions inherited from the user’s role.
-            </p>
-          </div>
-          <Button
-            aria-label="Close"
-            disabled={saveMutation.isPending}
-            onClick={onClose}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          {permissionsQuery.isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((row) => (
-                <Skeleton className="h-16 w-full" key={row} />
-              ))}
-            </div>
-          ) : null}
-          {permissionsQuery.isError ? (
-            <p className="rounded-md border border-ds-status-bad-fg/25 bg-ds-status-bad-bg p-4 text-sm text-ds-status-bad-fg">
-              {getApiErrorMessage(permissionsQuery.error)}
-            </p>
-          ) : null}
-          {!permissionsQuery.isLoading &&
-          !permissionsQuery.isError &&
-          Object.keys(groups).length === 0 ? (
-            <p className="py-8 text-center text-sm text-ds-muted">No permissions are available.</p>
-          ) : null}
-          <div className="grid gap-4 md:grid-cols-2">
-            {Object.entries(groups).map(([module, permissions]) => (
-              <section className="rounded-lg border border-ds-border p-4" key={module}>
-                <h3 className="mb-3 text-sm font-semibold text-ds-text">
-                  {module.replaceAll('_', ' ')}
-                </h3>
-                <div className="space-y-2">
-                  {permissions.map((permission) => (
-                    <label
-                      className="flex cursor-pointer items-start gap-3 text-sm text-ds-text-2"
-                      key={permission.id}
-                    >
-                      <input
-                        checked={selected.has(permission.id)}
-                        className="mt-0.5 h-4 w-4 rounded-sm border-ds-input text-ds-link focus:ring-ds-primary"
-                        onChange={() => toggle(permission.id)}
-                        type="checkbox"
-                      />
-                      <span>
-                        <span className="font-medium">
-                          {permission.description ?? permission.code}
-                        </span>
-                        <span className="ml-2 text-xs text-ds-muted">{permission.code}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
+    <Modal
+      footer={
+        <div className="flex justify-end gap-2">
           <Button
             disabled={saveMutation.isPending}
             onClick={onClose}
@@ -161,8 +106,67 @@ function PermissionsDialog({ user, onClose }: Readonly<{ onClose: () => void; us
             Permissions
           </Button>
         </div>
-      </Panel>
-    </div>
+      }
+      onClose={() => {
+        if (!saveMutation.isPending) onClose();
+      }}
+      open
+      side
+      title={`Permissions — ${user.name}`}
+    >
+      <p className="mb-4 text-sm text-ds-muted">
+        Saved selections override the permissions inherited from the user’s role.
+      </p>
+      <div>
+        {permissionsQuery.isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((row) => (
+              <Skeleton className="h-16 w-full" key={row} />
+            ))}
+          </div>
+        ) : null}
+        {permissionsQuery.isError ? (
+          <div className="rounded-md border border-ds-status-bad-fg/25 bg-ds-status-bad-bg p-4">
+            <LoadError error={permissionsQuery.error} />
+          </div>
+        ) : null}
+        {!permissionsQuery.isLoading &&
+        !permissionsQuery.isError &&
+        Object.keys(groups).length === 0 ? (
+          <p className="py-8 text-center text-sm text-ds-muted">No permissions are available.</p>
+        ) : null}
+        <div className="grid gap-4 md:grid-cols-2">
+          {Object.entries(groups).map(([module, permissions]) => (
+            <section className="rounded-lg border border-ds-border p-4" key={module}>
+              <h3 className="mb-3 text-sm font-semibold text-ds-text">
+                {module.replaceAll('_', ' ')}
+              </h3>
+              <div className="space-y-2">
+                {permissions.map((permission) => (
+                  <label
+                    className="flex cursor-pointer items-start gap-3 text-sm text-ds-text-2"
+                    key={permission.id}
+                  >
+                    <input
+                      checked={selected.has(permission.id)}
+                      className="mt-0.5 h-4 w-4 rounded-sm border-ds-input text-ds-link focus:ring-ds-primary"
+                      onChange={() => toggle(permission.id)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <span className="font-medium">
+                        {permission.description ?? permission.code}
+                      </span>
+                      <span className="ml-2 text-xs text-ds-muted">{permission.code}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -171,20 +175,67 @@ export function UsersRolesPageClient() {
   const isSuperAdmin = actorRoles.includes(SUPER_ADMIN_ROLE);
   const [editingUser, setEditingUser] = useState<AccessUser | null | undefined>(undefined);
   const [permissionUser, setPermissionUser] = useState<AccessUser | null>(null);
-  // Queries and the URL wait for a pause in typing; the box updates at once.
+  // Search, status, role and page live in the URL; the search box updates at once and the
+  // query waits for a pause in typing.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
-  // The users working at the location chosen in the header ("All Locations": everyone reachable).
-  const { scopedHospitalId } = useLocationContext();
+  const [statusFilter, setStatusFilter] = useUrlParam<'' | UserStatus>('status', '', [
+    'ACTIVE',
+    'DISABLED',
+  ]);
+  const [roleFilter, setRoleFilter] = useUrlParam('role');
+  const [page, setPage] = useUrlNumberParam('page');
+  // The users working at the location chosen in the sidebar ("All Locations": everyone reachable).
+  const { isLoadingLocations, scopedHospitalId } = useLocationContext();
+  const hospitalScope = scopedHospitalId ?? 'all';
+
+  useOnScopeChange(scopedHospitalId, isLoadingLocations, () => setPage(1));
+
   const usersQuery = useQuery({
-    queryKey: queryKeys.accessUsers(search, scopedHospitalId ?? 'all'),
+    queryKey: queryKeys.accessUsers(search, hospitalScope, statusFilter, roleFilter, page),
     queryFn: async () =>
-      (await userApi.listUsers({ hospitalId: scopedHospitalId, limit: 50, page: 1, search })).data,
+      (
+        await userApi.listUsers({
+          hospitalId: scopedHospitalId,
+          limit: userPageSize,
+          page,
+          roleId: roleFilter || undefined,
+          search,
+          status: statusFilter || undefined,
+        })
+      ).data,
   });
   const rolesQuery = useQuery({
     queryKey: queryKeys.accessRoles(),
     queryFn: async () => (await userApi.listRoles({ limit: 100, page: 1 })).data,
   });
+  const roles = rolesQuery.data?.items ?? [];
+  const superAdminRoleId = roles.find((role) => role.name === SUPER_ADMIN_ROLE)?.id;
+  // Totals at the chosen location; Super Admins once the roles say which role that is.
+  const statsQuery = useQuery({
+    enabled: !rolesQuery.isLoading,
+    queryFn: async () => {
+      const count = async (query: { roleId?: string; status?: UserStatus }) =>
+        (await userApi.listUsers({ ...query, hospitalId: scopedHospitalId, limit: 1, page: 1 }))
+          .data.meta.total;
+      const [all, active, disabled, superAdmins] = await Promise.all([
+        count({}),
+        count({ status: 'ACTIVE' }),
+        count({ status: 'DISABLED' }),
+        superAdminRoleId ? count({ roleId: superAdminRoleId }) : null,
+      ]);
+
+      return { active, all, disabled, superAdmins };
+    },
+    queryKey: queryKeys.accessUsers('stats', hospitalScope, superAdminRoleId ?? 'none'),
+  });
+  const stats = statsQuery.data;
   const users = usersQuery.data?.items ?? [];
+  const meta = usersQuery.data?.meta ?? {
+    limit: userPageSize,
+    page,
+    total: 0,
+    totalPages: 1,
+  };
   const isLocked = (user: AccessUser) =>
     !isSuperAdmin && user.roles.some((role) => role.name === SUPER_ADMIN_ROLE);
   const lockedReason = 'Only a Super Admin can change Super Admin access';
@@ -199,40 +250,125 @@ export function UsersRolesPageClient() {
       else next.add(id);
       return next;
     });
-  const hasFilters = Boolean(searchInput);
-  const clearFilters = () => setSearch('');
+  const hasFilters = Boolean(searchInput || statusFilter || roleFilter);
+
+  function changeFilter(apply: () => void) {
+    apply();
+    setPage(1);
+  }
+
+  function clearFilters() {
+    changeFilter(() => {
+      setSearch('');
+      setStatusFilter('');
+      setRoleFilter('');
+    });
+  }
+
+  /** A stat's filter alone: the status or the role, the other cleared. */
+  function showOnly(status: '' | UserStatus, roleId: string) {
+    changeFilter(() => {
+      setStatusFilter(status);
+      setRoleFilter(roleId);
+    });
+  }
+
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <AppPageHeader
         action={
-          <Button className="h-cta px-5" onClick={() => setEditingUser(null)} type="button">
-            <Plus className="h-[18px] w-[18px]" />
-            Create user
+          <Button onClick={() => setEditingUser(null)} type="button">
+            <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+            New user
           </Button>
         }
+        count={stats?.all}
         description="Create users, assign roles, and manage individual permission overrides."
-        eyebrow="Access"
         title="Users / Roles"
       />
-      <Panel>
+      <StatStrip
+        label="Users at a glance"
+        stats={[
+          {
+            active: !statusFilter && !roleFilter,
+            label: 'Users',
+            onSelect: () => showOnly('', ''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: statusFilter === 'ACTIVE' && !roleFilter,
+            label: 'Active',
+            onSelect: () => showOnly('ACTIVE', ''),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: statusFilter === 'DISABLED' && !roleFilter,
+            label: 'Disabled',
+            onSelect: () => showOnly('DISABLED', ''),
+            tone: 'bad',
+            value: stats?.disabled ?? '–',
+          },
+          {
+            active: Boolean(superAdminRoleId) && roleFilter === superAdminRoleId && !statusFilter,
+            label: 'Super Admins',
+            onSelect: superAdminRoleId ? () => showOnly('', superAdminRoleId) : undefined,
+            tone: 'pending',
+            value: stats?.superAdmins ?? '–',
+          },
+        ]}
+      />
+      <Panel className="overflow-hidden">
         <ListToolbar>
-          <Input
-            aria-label="Search users"
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search users"
+          <FilterSearch
+            label="Search users"
+            onChange={(value) => changeFilter(() => setSearch(value))}
+            placeholder="Name, email, mobile or code"
             value={searchInput}
           />
-          <RefreshButton onClick={() => void usersQuery.refetch()} />
+          <FiltersMenu activeCount={[statusFilter, roleFilter].filter(Boolean).length}>
+            <FilterField label="Status">
+              <Select
+                onChange={(event) =>
+                  changeFilter(() => setStatusFilter(event.target.value as '' | UserStatus))
+                }
+                value={statusFilter}
+              >
+                <option value="">All</option>
+                <option value="ACTIVE">Active</option>
+                <option value="DISABLED">Disabled</option>
+              </Select>
+            </FilterField>
+            <FilterField label="Role">
+              <Select
+                onChange={(event) => changeFilter(() => setRoleFilter(event.target.value))}
+                value={roleFilter}
+              >
+                <option value="">All roles</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FiltersMenu>
+          <RefreshButton
+            onClick={() => {
+              void usersQuery.refetch();
+              void statsQuery.refetch();
+            }}
+          />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         {selectedUsers.length > 0 ? (
           <BulkLocationBar onDone={() => setSelectedIds(new Set())} selected={selectedUsers} />
         ) : null}
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-[900px]')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="px-4 py-2.5">
+                <th className={cn(tableStyles.th, 'w-10 pr-0')}>
                   <input
                     aria-label="Select all users"
                     checked={allSelected}
@@ -247,101 +383,146 @@ export function UsersRolesPageClient() {
                     type="checkbox"
                   />
                 </th>
-                <th className="px-4 py-2.5">User</th>
-                <th className="px-4 py-2.5">Employee Code</th>
-                <th className="px-4 py-2.5">Role</th>
-                <th className="px-4 py-2.5">Locations</th>
-                <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5">Actions</th>
+                <th className={tableStyles.th}>User</th>
+                <th className={tableStyles.th}>Employee code</th>
+                <th className={tableStyles.th}>Role</th>
+                <th className={tableStyles.th}>Locations</th>
+                <th className={tableStyles.th}>Status</th>
+                <th className={cn(tableStyles.th, 'w-24')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider">
-              {usersQuery.isLoading ? (
-                <tr>
-                  <td colSpan={7} className="p-4">
-                    <Skeleton className="h-10 w-full" />
-                  </td>
-                </tr>
-              ) : null}
-              {users.map((user) => (
-                <tr className="hover:bg-ds-subtle" key={user.id}>
-                  <td className="px-4 py-3">
-                    <input
-                      aria-label={`Select ${user.name}`}
-                      checked={selectedIds.has(user.id)}
-                      disabled={isLocked(user)}
-                      onChange={() => toggleOne(user.id)}
-                      title={isLocked(user) ? lockedReason : undefined}
-                      type="checkbox"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ds-text">{user.name}</p>
-                    <p className="text-ds-muted">{user.email ?? user.mobile}</p>
-                  </td>
-                  <td className="px-4 py-3 text-ds-text-3">{user.employeeCode}</td>
-                  <td className="px-4 py-3 text-ds-text-3">
-                    {user.roles.map((role) => role.name).join(', ') || 'Unassigned'}
-                  </td>
-                  <td className="px-4 py-3 text-ds-text-3">
-                    {user.locationScope === 'ALL' ? (
-                      <Badge variant="info">All locations</Badge>
-                    ) : user.hospitals.length === 0 ? (
-                      <Badge variant="warning">None assigned</Badge>
-                    ) : (
-                      user.hospitals.map((hospital) => hospital.name).join(', ')
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={user.status === 'ACTIVE' ? 'success' : 'danger'}>
-                      {user.status.toLowerCase()}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        disabled={isLocked(user)}
-                        onClick={() => setEditingUser(user)}
-                        size="sm"
-                        title={isLocked(user) ? lockedReason : undefined}
-                        type="button"
-                        variant="outline"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </Button>
-                      <Button
-                        disabled={isLocked(user)}
-                        onClick={() => setPermissionUser(user)}
-                        size="sm"
-                        title={isLocked(user) ? lockedReason : undefined}
-                        type="button"
-                        variant="outline"
-                      >
-                        <ShieldCheck className="h-4 w-4" />
-                        Permissions
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+            <tbody>
+              {usersQuery.isLoading
+                ? Array.from({ length: 6 }, (_, index) => (
+                    <tr className="border-t border-ds-divider" key={`user-skeleton-${index}`}>
+                      <td className="px-4 py-3" colSpan={7}>
+                        <Skeleton className="h-8 w-full" />
+                      </td>
+                    </tr>
+                  ))
+                : null}
+              {users.map((user) => {
+                const locked = isLocked(user);
+
+                return (
+                  <tr
+                    className={cn(tableStyles.row, locked && 'cursor-default')}
+                    key={user.id}
+                    onClick={locked ? undefined : () => setEditingUser(user)}
+                    title={locked ? lockedReason : undefined}
+                  >
+                    {/* Its own click: ticking a user does not open them. */}
+                    <td
+                      className={cn(tableStyles.td, 'pr-0')}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        aria-label={`Select ${user.name}`}
+                        checked={selectedIds.has(user.id)}
+                        disabled={locked}
+                        onChange={() => toggleOne(user.id)}
+                        title={locked ? lockedReason : undefined}
+                        type="checkbox"
+                      />
+                    </td>
+                    <td className={tableStyles.td}>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className={cn('truncate', tableStyles.title)}>{user.name}</span>
+                        <span className="truncate text-[12.5px] text-ds-muted">
+                          {user.email ?? user.mobile}
+                        </span>
+                      </span>
+                    </td>
+                    <td className={cn(tableStyles.td, tableStyles.code)}>{user.employeeCode}</td>
+                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                      {user.roles.map((role) => role.name).join(', ') || 'Unassigned'}
+                    </td>
+                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                      {user.locationScope === 'ALL' ? (
+                        <Badge variant="info">All locations</Badge>
+                      ) : user.hospitals.length === 0 ? (
+                        <Badge variant="warning">None assigned</Badge>
+                      ) : (
+                        user.hospitals.map((hospital) => hospital.name).join(', ')
+                      )}
+                    </td>
+                    <td className={tableStyles.td}>
+                      <Badge variant={user.status === 'ACTIVE' ? 'success' : 'danger'}>
+                        {user.status.toLowerCase()}
+                      </Badge>
+                    </td>
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      <span className="flex justify-end gap-0.5">
+                        <RowAction
+                          disabled={locked}
+                          icon={Pencil}
+                          label={`Edit ${user.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingUser(user);
+                          }}
+                          title={locked ? lockedReason : 'Edit'}
+                        />
+                        <RowAction
+                          disabled={locked}
+                          icon={ShieldCheck}
+                          label={`Permissions for ${user.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPermissionUser(user);
+                          }}
+                          title={locked ? lockedReason : 'Permissions'}
+                        />
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
               {!usersQuery.isLoading && users.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-ds-muted" colSpan={7}>
-                    {usersQuery.isError ? getApiErrorMessage(usersQuery.error) : 'No users found.'}
+                  <td className="p-4" colSpan={7}>
+                    {usersQuery.isError ? (
+                      <div className="py-6">
+                        <LoadError error={usersQuery.error} />
+                      </div>
+                    ) : (
+                      <EmptyState
+                        action={
+                          hasFilters ? (
+                            <Button onClick={clearFilters} type="button" variant="outline">
+                              Clear filters
+                            </Button>
+                          ) : undefined
+                        }
+                        description={
+                          hasFilters
+                            ? 'Try another name or clear the filters.'
+                            : 'Create the first user to give someone access.'
+                        }
+                        title={hasFilters ? 'No users match' : 'No users found'}
+                      />
+                    )}
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
+        <ListPager
+          limit={meta.limit}
+          noun="user"
+          onPageChange={setPage}
+          page={meta.page}
+          total={meta.total}
+          totalPages={meta.totalPages}
+        />
       </Panel>
       {editingUser !== undefined ? (
         <UserDialog
           onClose={() => setEditingUser(undefined)}
-          roles={(rolesQuery.data?.items ?? []).filter(
-            (role) => isSuperAdmin || role.name !== SUPER_ADMIN_ROLE,
-          )}
+          roles={roles.filter((role) => isSuperAdmin || role.name !== SUPER_ADMIN_ROLE)}
           user={editingUser}
         />
       ) : null}

@@ -10,16 +10,7 @@ export type ItemTypeFilter = '' | ItemType;
 
 export interface PageHeaderProps {
   action?: ReactNode;
-  eyebrow: string;
   icon: LucideIcon;
   subtitle?: string;
   title: string;
-}
-
-export interface PaginationControlsProps {
-  limit: number;
-  onPageChange: (page: number) => void;
-  page: number;
-  total: number;
-  totalPages: number;
 }

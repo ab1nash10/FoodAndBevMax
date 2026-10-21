@@ -49,7 +49,7 @@ export function OutcomeRow({ stats }: Readonly<{ stats: DashboardStats }>) {
 
   if (!transfers) {
     return (
-      <div aria-hidden="true" className="flex flex-wrap items-stretch gap-5">
+      <div aria-hidden="true" className="flex flex-wrap items-stretch gap-4">
         <Skeleton className="h-[364px] min-w-0 flex-[2_1_560px] rounded-card" />
         <Skeleton className="h-[364px] min-w-0 flex-[1_1_300px] rounded-card" />
       </div>
@@ -61,7 +61,7 @@ export function OutcomeRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   const share = (count: number) => (acked ? `${Math.round((count / acked) * 100)}%` : '—');
 
   return (
-    <div className="flex flex-wrap items-stretch gap-5">
+    <div className="flex flex-wrap items-stretch gap-4">
       <DashboardCard
         className="flex-[2_1_560px]"
         id="dashboard-outcomes"

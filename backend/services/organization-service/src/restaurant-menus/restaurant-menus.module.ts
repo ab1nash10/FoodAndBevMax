@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CommonModule } from '../common/common.module';
+import { RestaurantMenusImportService } from './restaurant-menus-import.service';
 import { RestaurantMenusController } from './restaurant-menus.controller';
 import { RestaurantMenusRepository } from './restaurant-menus.repository';
 import { RestaurantMenusService } from './restaurant-menus.service';
@@ -8,6 +9,6 @@ import { RestaurantMenusService } from './restaurant-menus.service';
   controllers: [RestaurantMenusController],
   exports: [RestaurantMenusService],
   imports: [CommonModule],
-  providers: [RestaurantMenusRepository, RestaurantMenusService],
+  providers: [RestaurantMenusImportService, RestaurantMenusRepository, RestaurantMenusService],
 })
 export class RestaurantMenusModule {}

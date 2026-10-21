@@ -9,6 +9,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 // BA spec: name and code are alphanumeric. Spaces and the separators already used by
 // live device codes (6th_Floor_Counter, MAX-LKO-POS-01) are allowed alongside letters and digits.
@@ -31,6 +32,7 @@ export class CreatePosDeviceDto {
   @IsString()
   @Matches(alphanumericPattern, { message: alphanumericMessage })
   @MaxLength(150)
+  @DisplayName()
   name!: string;
 
   @ApiProperty({ example: 'POS001' })

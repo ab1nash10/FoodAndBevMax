@@ -31,13 +31,19 @@ export function LocationMasterFormFields({
     <div className="grid gap-6">
       <SectionHeading title="Add/Update Location" />
       <div className="grid gap-4 md:grid-cols-2">
-        <Field error={form.formState.errors.title?.message} label="Title" name="location-title">
+        <Field
+          error={form.formState.errors.title?.message}
+          label="Title"
+          name="location-title"
+          required
+        >
           <Input disabled={disabled} id="location-title" {...form.register('title')} />
         </Field>
         <Field
           error={form.formState.errors.locationCode?.message}
           label="Location Code"
           name="location-code"
+          required
         >
           <Input
             disabled={disabled}
@@ -72,7 +78,12 @@ export function LocationMasterFormFields({
         <Textarea disabled={disabled} id="location-address" {...form.register('address')} />
       </Field>
       <div className="grid gap-4 md:grid-cols-3">
-        <Field error={form.formState.errors.state?.message} label="State" name="location-state">
+        <Field
+          error={form.formState.errors.state?.message}
+          label="State"
+          name="location-state"
+          required
+        >
           <Select disabled={disabled} id="location-state" {...form.register('state')}>
             <option value="">Select state</option>
             {INDIAN_STATES.map((state) => (
@@ -82,7 +93,12 @@ export function LocationMasterFormFields({
             ))}
           </Select>
         </Field>
-        <Field error={form.formState.errors.city?.message} label="City" name="location-city">
+        <Field
+          error={form.formState.errors.city?.message}
+          label="City"
+          name="location-city"
+          required
+        >
           <Select
             disabled={disabled || !selectedState}
             id="location-city"

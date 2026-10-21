@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { getRequestId, type CorrelatedRequest } from './correlation-id.middleware';
+import { loggedPath } from './request-logging.middleware';
 
 interface ErrorResponseBody {
   error?: string;
@@ -84,7 +85,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         event: 'http_exception',
         message: exception instanceof Error ? exception.message : message,
         method: request.method,
-        path: request.originalUrl || request.url,
+        path: loggedPath(request),
         requestId,
         statusCode,
       }),

@@ -6,6 +6,7 @@ export {
   isSessionCurrent,
 } from './access-resolver';
 export type { ResolvedAccess } from './access-resolver';
+export { ForgetAccessOnWriteInterceptor } from './forget-access-on-write.interceptor';
 export { AuditLoggerService } from './audit-logger.service';
 export type { AuditLogEvent } from './audit-logger.service';
 export {
@@ -30,7 +31,7 @@ export { HealthCheckService } from './health-check.service';
 export type { ServiceHealthDetails } from './health-check.service';
 export { JwtAuthGuard } from './jwt-auth.guard';
 export { JwtStrategy } from './jwt.strategy';
-export { UserThrottlerGuard } from './user-throttler.guard';
+export { ADDRESS_THROTTLER, UserThrottlerGuard, addressThrottler } from './user-throttler.guard';
 export { RbacGuard } from './rbac.guard';
 export { requestLoggingMiddleware } from './request-logging.middleware';
 export { countPrismaQueries, prismaQueryLogOptions } from './query-log';

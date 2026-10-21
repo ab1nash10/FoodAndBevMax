@@ -23,6 +23,11 @@ export interface ResolvedAccess {
  */
 const ACTIVITY_WRITE_INTERVAL_MS = 60_000;
 
+/** How long a user's resolved access is reused (see AccessResolver.resolve). */
+export const ACCESS_CACHE_MS = 5_000;
+/** Users kept in the cache per process; the least recently looked up go first. */
+const ACCESS_CACHE_MAX = 10_000;
+
 /** How long after a user's last activity an admin must wait to change their credentials. */
 export const CREDENTIAL_LOCK_MS = 8 * 60 * 60 * 1000;
 
@@ -80,7 +85,9 @@ export function mergePermissionCodes(
  *
  * Access tokens also carry a permissions array, but it is frozen at issue time, so a revoked
  * right stayed usable for the remainder of the token's life. Reading the live values here means
- * a permission change, a role change, a disable or a delete takes effect on the next request.
+ * a permission change, a role change, a disable, a delete or a sign-out takes effect on the next
+ * request in the service that made it (ForgetAccessOnWriteInterceptor), and within
+ * ACCESS_CACHE_MS everywhere else.
  */
 @Injectable()
 export class AccessResolver {
@@ -107,11 +114,48 @@ export class AccessResolver {
     );
   }
 
-  // ponytail: one query per authenticated request. Redis is already in the stack — cache per
-  // user and drop the key on any role/permission write if request volume makes this show up.
-  async resolve(userId: string): Promise<ResolvedAccess | null> {
+  private readonly cache = new Map<
+    string,
+    { access: Promise<ResolvedAccess | null>; at: number }
+  >();
+
+  /**
+   * The user's access, looked up at most once per ACCESS_CACHE_MS per process. A page sends its
+   * requests together (10-18 of them), so they now share one lookup instead of each running the
+   * query; concurrent requests share the one in flight. A write in this process that changes
+   * access calls forget() at once; one made in another service shows here within the window.
+   */
+  resolve(userId: string): Promise<ResolvedAccess | null> {
+    const now = Date.now();
+    const hit = this.cache.get(userId);
+
+    if (hit && now - hit.at < ACCESS_CACHE_MS) {
+      return hit.access;
+    }
+
+    const access = this.load(userId);
+
+    // Re-inserted so the map stays in least-recently-looked-up order for the size cap.
+    this.cache.delete(userId);
+    this.cache.set(userId, { access, at: now });
+    if (this.cache.size > ACCESS_CACHE_MAX) {
+      this.cache.delete(this.cache.keys().next().value as string);
+    }
+    access.catch(() => this.cache.delete(userId));
+
+    return access;
+  }
+
+  /** Drops cached access: one user's, or everyone's after a change that may touch many. */
+  forget(userId?: string): void {
+    if (userId) this.cache.delete(userId);
+    else this.cache.clear();
+  }
+
+  private async load(userId: string): Promise<ResolvedAccess | null> {
     // One round trip instead of one per relation (eight with Prisma's include). Only live rows
-    // count: the link, the role, the role's grant and the permission must all be undeleted.
+    // count: the link, the role, the role's grant and the permission must all be undeleted, and
+    // the role active (making a role inactive revokes it from everyone who holds it).
     const [user] = await this.prisma.$queryRaw<AccessRow[]>`
       SELECT
         u.session_version AS "sessionVersion",
@@ -121,6 +165,7 @@ export class AccessResolver {
           FROM user_roles ur
           JOIN roles r ON r.id = ur.role_id
           WHERE ur.user_id = u.id AND ur.deleted_at IS NULL AND r.deleted_at IS NULL
+            AND r.status = 'ACTIVE'
         ), '[]'::json) AS "roles",
         COALESCE((
           SELECT json_agg(p.code)
@@ -129,6 +174,7 @@ export class AccessResolver {
           JOIN role_permissions rp ON rp.role_id = r.id
           JOIN permissions p ON p.id = rp.permission_id
           WHERE ur.user_id = u.id AND ur.deleted_at IS NULL AND r.deleted_at IS NULL
+            AND r.status = 'ACTIVE'
             AND rp.deleted_at IS NULL AND p.deleted_at IS NULL
         ), '[]'::json) AS "inheritedCodes",
         COALESCE((

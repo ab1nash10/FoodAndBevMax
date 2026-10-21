@@ -1,4 +1,15 @@
-// Shared SVG maths for the line charts (Sparkline, TrendLine): values to points, points to a path.
+// Shared chart maths: values to points and points to a path for the line charts (Sparkline,
+// TrendLine), and the bar chart's axis top.
+
+/**
+ * The top of a count axis with a labelled midline: 4 for small counts, else the next multiple
+ * of 10, so the midline is a whole number that sits where it says (a top of 5 put "3" on 2.5).
+ */
+export function axisMax(values: number[]): number {
+  const max = Math.max(0, ...values);
+
+  return max <= 4 ? 4 : Math.ceil(max / 10) * 10;
+}
 
 export interface Point {
   x: number;

@@ -12,6 +12,7 @@ import {
 import { invalidateKitchenQueries } from '@/lib/query-invalidation';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
+import { DateTimeCell, RowAction, StatStrip, tableStyles } from '@/components/design-system';
 import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -36,11 +37,7 @@ import {
   SearchInput,
   StatusToggleCell,
 } from '@/components/organization/shared/list-controls';
-import {
-  activeFilterToBoolean,
-  formatDate,
-  listLimit,
-} from '@/components/organization/shared/utils';
+import { activeFilterToBoolean, listLimit } from '@/components/organization/shared/utils';
 import {
   formatLocationOption,
   freezeServicesMessage,
@@ -50,6 +47,7 @@ import {
 import { useHospitalOptions } from '@/components/organization/shared/hooks';
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 
 export function KitchensPageClient() {
   const queryClient = useQueryClient();
@@ -95,6 +93,25 @@ export function KitchensPageClient() {
     },
     queryKey: queryKeys.kitchens({ activeFilter, hospitalFilter, page, search, sortBy, sortOrder }),
   });
+
+  // Under the list's own key, so whatever refreshes the list refreshes these counts too.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (isActive?: boolean) =>
+        (
+          await organizationApi.listKitchens({
+            hospitalId: scopedHospitalId ?? undefined,
+            isActive,
+            limit: 0,
+          })
+        ).data.meta.total;
+      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
+
+      return { active, all, inactive };
+    },
+    queryKey: queryKeys.kitchens('stats', scopedHospitalId ?? 'all'),
+  });
+  const stats = statsQuery.data;
 
   const editMutation = useMutation({
     mutationFn: ({ id, isActive, name }: { id: string; isActive: boolean; name: string }) =>
@@ -174,27 +191,59 @@ export function KitchensPageClient() {
     statusMutation.mutate({ id: kitchen.id, isActive: nextIsActive });
   }
 
+  function showStatus(status: ActiveFilter) {
+    setActiveFilter(status);
+    setPage(1);
+  }
+
   return (
     <section className="space-y-5">
       <PageHeader
+        count={stats?.all}
         action={
           <IfCanOpen href="/masters/kitchens/new">
             <Button asChild>
               <Link href="/masters/kitchens/new">
                 <Plus className="h-4 w-4" />
-                Create
+                New kitchen
               </Link>
             </Button>
           </IfCanOpen>
         }
-        eyebrow="Organization"
         icon={ChefHat}
         subtitle="Manage production kitchens for location food service."
         title="Kitchens"
       />
+      <StatStrip
+        label="Kitchens at a glance"
+        stats={[
+          {
+            active: !activeFilter,
+            label: 'All kitchens',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: activeFilter === 'active',
+            label: 'Active',
+            onSelect: () => showStatus('active'),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive',
+            onSelect: () => showStatus('inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
       <Panel>
         <ListToolbar>
           <SearchInput
+            label="Search kitchens"
+            placeholder="Kitchen name, code or location"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -254,32 +303,35 @@ export function KitchensPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-160 table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[30%] px-4 py-2.5">Kitchen</th>
-                <th className="w-[26%] px-4 py-2.5">Location</th>
-                <th className="w-[22%] px-4 py-2.5">Status</th>
-                <th className="w-[16%] px-4 py-2.5">Updated</th>
-                <th className="w-16 px-2 py-2.5">
+                <th className={cn(tableStyles.th, 'w-[32%]')}>Kitchen</th>
+                <th className={cn(tableStyles.th, 'w-[28%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[22%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[14%]')}>Updated</th>
+                <th className={cn(tableStyles.th, 'w-14')}>
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((kitchen) => (
-                  <tr className="hover:bg-ds-subtle" key={kitchen.id}>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-ds-text">{kitchen.kitchenName}</p>
-                        <p className="text-xs text-ds-muted">{kitchen.kitchenCode}</p>
-                      </div>
+                  <tr
+                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    key={kitchen.id}
+                    onClick={canEdit ? () => setEditingKitchen(kitchen) : undefined}
+                  >
+                    <td className={tableStyles.td}>
+                      <p className={cn('truncate', tableStyles.title)}>{kitchen.kitchenName}</p>
+                      <p className={cn('truncate', tableStyles.code)}>{kitchen.kitchenCode}</p>
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">
+                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {getLocationDisplayName(kitchen.hospital)}
                     </td>
-                    <td className="px-4 py-3">
+                    {/* Its own click: switching the status does not open the kitchen. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <StatusToggleCell
                         disabled={statusMutation.isPending && statusUpdatingId === kitchen.id}
                         isActive={kitchen.isActive}
@@ -287,22 +339,22 @@ export function KitchensPageClient() {
                         showFrozenMessage={!kitchen.hospital.isActive}
                       />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-muted">
-                      {formatDate(kitchen.updatedAt)}
+                    <td className={tableStyles.td}>
+                      <DateTimeCell value={kitchen.updatedAt} />
                     </td>
-                    <td className="px-2 py-3">
-                      {canEdit ? (
-                        <Button
-                          aria-label={`Edit ${kitchen.kitchenName}`}
-                          onClick={() => setEditingKitchen(kitchen)}
-                          size="icon"
-                          title="Edit"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                      ) : null}
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      <span className="flex justify-end">
+                        {canEdit ? (
+                          <RowAction
+                            icon={Pencil}
+                            label={`Edit ${kitchen.kitchenName}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setEditingKitchen(kitchen);
+                            }}
+                          />
+                        ) : null}
+                      </span>
                     </td>
                   </tr>
                 ))

@@ -1,4 +1,4 @@
-import { HospitalLocationsPageClient } from '@/components/organization/hospital-locations-page';
+import { redirect } from 'next/navigation';
 
 interface HospitalLocationsPageProps {
   params: Promise<{
@@ -6,8 +6,9 @@ interface HospitalLocationsPageProps {
   }>;
 }
 
+/** Older links: a location is edited in the side panel over the Locations list. */
 export default async function HospitalLocationsPage({ params }: HospitalLocationsPageProps) {
   const { id } = await params;
 
-  return <HospitalLocationsPageClient hospitalId={id} />;
+  redirect(`/masters/locations/${id}/edit`);
 }

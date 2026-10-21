@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChefHat, Loader2, Pencil } from 'lucide-react';
+import { ChefHat, Loader2, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import type {
@@ -23,28 +23,31 @@ import {
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { Modal, Toggle } from '@/components/ui-controls';
+import { Modal } from '@/components/ui-controls';
+import { useAuth } from '@/components/auth-provider';
+import { DateTimeCell, RowAction, tableStyles } from '@/components/design-system';
+import { cn } from '@/lib/utils';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { useUndoable } from '@/lib/use-undoable';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
 import {
   ActiveFilterSelect,
   HospitalFilterSelect,
+  keepLinkClicks,
   MappingFormFields,
   PageHeader,
   PaginationControls,
   QueryState,
+  RowSwitch,
   SearchInput,
-  StatusBadge,
-  SubmitButton,
 } from '@/components/mapping-foundation/shared/components';
 import type { ActiveFilter, MappingFormValues } from '@/components/mapping-foundation/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
   emptyMappingFormValues,
-  formatDate,
   listLimit,
   mappingSchema,
   useEntityList,
@@ -75,13 +78,20 @@ function useKitchenOptions(hospitalId?: string) {
 
 /**
  * Inside the Item Mapping page (`embedded`) it drops its own title and shows the page's
- * Store / Kitchen switch above the form and its tabs above the list.
+ * Store / Kitchen tabs above the list; Create and Edit open in pop-ups.
  */
+/** This kitchen's mappings of an item, for greying out the categories it already has. */
+const existingKitchenMappings = {
+  key: 'kitchen-items',
+  load: async (parentId: string, itemId: string) =>
+    (await organizationApi.listKitchenItems({ kitchenId: parentId, itemId, limit: 100 })).data
+      .items,
+};
+
 export function KitchenItemsPageClient({
   embedded = false,
-  formSwitch,
   listTabs,
-}: Readonly<{ embedded?: boolean; formSwitch?: ReactNode; listTabs?: ReactNode }> = {}) {
+}: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
   const { scopedHospitalId } = useLocationContext();
   const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
@@ -97,15 +107,19 @@ export function KitchenItemsPageClient({
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<KitchenItem | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   // Edit has its own form in a pop-up, so the Create form above keeps what was typed in it.
   const editForm = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const kitchensQuery = useKitchenOptions(hospitalFilter);
-  const itemsQuery = useItemOptions('READYMADE', { includeUnmapped: true });
+  // The whole catalogue; the form greys out items already mapped the other way.
+  const itemsQuery = useItemOptions();
   const categoriesQuery = useItemCategoryOptions();
   const invalidateKitchenItems = useInvalidateMappingQueries('kitchen-items', 'kitchen-options');
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('KITCHEN_ITEM_UPDATE');
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
@@ -151,6 +165,7 @@ export function KitchenItemsPageClient({
         setEditingMapping(null);
       } else {
         form.reset(emptyMappingFormValues());
+        setIsCreating(false);
       }
     },
   });
@@ -167,14 +182,13 @@ export function KitchenItemsPageClient({
     },
     onSuccess(_response, variables) {
       invalidateKitchenItems();
-      showToast({
-        title: variables.isActive
-          ? 'Kitchen item mapping activated'
-          : 'Kitchen item mapping inactive',
-        variant: 'success',
-      });
+      // Marking inactive already had its Undo toast.
+      if (variables.isActive) {
+        showToast({ title: 'Kitchen item mapping activated', variant: 'success' });
+      }
     },
   });
+  const undoable = useUndoable();
 
   const kitchens =
     kitchensQuery.data?.map((kitchen) => ({
@@ -182,7 +196,10 @@ export function KitchenItemsPageClient({
       id: kitchen.id,
       name: kitchen.kitchenName,
     })) ?? [];
-  const mappings = mappingsQuery.data?.items ?? [];
+  // A mapping marked inactive shows so at once, while its Undo toast runs.
+  const mappings = (mappingsQuery.data?.items ?? []).map((mapping) =>
+    undoable.isChanged(mapping.id) ? { ...mapping, isActive: false } : mapping,
+  );
   const meta = mappingsQuery.data?.meta ?? {
     limit: listLimit,
     page,
@@ -202,7 +219,7 @@ export function KitchenItemsPageClient({
 
       saveMappingMutation.mutate({
         body: {
-          categoryId: parsed.data.categoryId || undefined,
+          categoryId: parsed.data.categoryId,
           isActive: parsed.data.isActive,
           itemId: parsed.data.itemId,
           kitchenId: parsed.data.parentId,
@@ -243,18 +260,21 @@ export function KitchenItemsPageClient({
   }
 
   function toggleMappingStatus(mapping: KitchenItem) {
-    const nextIsActive = !mapping.isActive;
+    // Switching it back on while the Undo toast runs is the same as Undo.
+    if (undoable.undo(mapping.id)) return;
 
-    if (
-      !nextIsActive &&
-      !window.confirm(
-        'Turning this mapping inactive will prevent this item from being used in new kitchen production. Existing stock and history will remain visible. Continue?',
-      )
-    ) {
+    if (mapping.isActive) {
+      undoable.schedule({
+        commit: () => toggleMappingStatusMutation.mutateAsync({ isActive: false, mapping }),
+        description:
+          'It can’t be used in new kitchen production. Existing stock and history stay visible.',
+        id: mapping.id,
+        title: `${mapping.item.itemName} in ${mapping.kitchen.kitchenName} marked inactive`,
+      });
       return;
     }
 
-    toggleMappingStatusMutation.mutate({ isActive: nextIsActive, mapping });
+    toggleMappingStatusMutation.mutate({ isActive: true, mapping });
   }
 
   return (
@@ -266,23 +286,38 @@ export function KitchenItemsPageClient({
           title="Kitchen Items"
         />
       )}
-      <Panel className="p-4">
-        <div className="mb-5">
-          {formSwitch ? <div className="mb-4">{formSwitch}</div> : null}
-          <h2 className="text-lg font-semibold tracking-normal text-ds-text">
-            Create Kitchen Item
-          </h2>
-          <p className="text-sm text-ds-muted">
-            Pick an item not mapped yet, or a Readymade item: mapping it here makes it Readymade and
-            sets its category. An MRP item cannot be mapped to a kitchen.
-          </p>
-        </div>
+      <Modal
+        side
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button onClick={() => setIsCreating(false)} type="button" variant="outline">
+              Cancel
+            </Button>
+            <Button
+              disabled={saveMappingMutation.isPending}
+              form="create-kitchen-item"
+              type="submit"
+            >
+              {saveMappingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Create Kitchen Item
+            </Button>
+          </div>
+        }
+        onClose={() => setIsCreating(false)}
+        open={isCreating}
+        title="Map Item to Kitchen"
+      >
         <form
           className="grid gap-4"
+          id="create-kitchen-item"
           onSubmit={(event) => {
             void submitMapping(form)(event);
           }}
         >
+          <p className="text-sm text-ds-muted">
+            Pick an item not mapped yet, or a Readymade item: mapping it here makes it Readymade and
+            sets its category. An MRP item cannot be mapped to a kitchen.
+          </p>
           {kitchensQuery.data?.length === 0 ? (
             <SetupNotice href="/masters/kitchens/new" linkLabel="Create a kitchen">
               {locationName ? `${locationName} has no kitchen yet` : 'There is no kitchen yet'}, so
@@ -296,19 +331,19 @@ export function KitchenItemsPageClient({
           ) : null}
           <MappingFormFields
             categories={categoriesQuery.data}
+            existingMappings={existingKitchenMappings}
             form={form}
             itemLabel="Item"
+            mapsAs="READYMADE"
             typeLabel="Readymade"
             items={itemsQuery.data}
             parentLabel="Kitchen"
             parents={kitchens}
           />
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <SubmitButton isPending={saveMappingMutation.isPending} label="Create Kitchen Item" />
-          </div>
         </form>
-      </Panel>
+      </Modal>
       <Modal
+        side
         footer={
           <div className="flex justify-end gap-3">
             <Button onClick={cancelEditingMapping} type="button" variant="outline">
@@ -335,8 +370,11 @@ export function KitchenItemsPageClient({
         >
           <MappingFormFields
             categories={categoriesQuery.data}
+            editingId={editingMapping?.id}
+            existingMappings={existingKitchenMappings}
             form={editForm}
             itemLabel="Item"
+            mapsAs="READYMADE"
             typeLabel="Readymade"
             items={itemsQuery.data}
             parentLabel="Kitchen"
@@ -344,10 +382,18 @@ export function KitchenItemsPageClient({
           />
         </form>
       </Modal>
-      <Panel>
-        {listTabs ? <div className="border-b border-ds-divider px-4 pt-3">{listTabs}</div> : null}
+      <Panel className="overflow-hidden">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ds-divider px-4 pt-3">
+          {listTabs ?? <span />}
+          <Button className="mb-2" onClick={() => setIsCreating(true)} type="button">
+            <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+            Map item
+          </Button>
+        </div>
         <ListToolbar>
           <SearchInput
+            label="Search kitchen items"
+            placeholder="Item name or code, category or kitchen"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -410,11 +456,13 @@ export function KitchenItemsPageClient({
                 value={itemFilter}
               >
                 <option value="">All readymade items</option>
-                {itemsQuery.data?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.itemName}
-                  </option>
-                ))}
+                {itemsQuery.data
+                  ?.filter((item) => item.itemType === 'READYMADE')
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.itemName}
+                    </option>
+                  ))}
               </Select>
             </FilterField>
           </FiltersMenu>
@@ -439,92 +487,103 @@ export function KitchenItemsPageClient({
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-[900px] table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[15%] px-4 py-2.5">Location</th>
-                <th className="w-[15%] px-4 py-2.5">Kitchen</th>
-                <th className="w-[16%] px-4 py-2.5">Item</th>
-                <th className="w-[12%] px-4 py-2.5">Category</th>
-                <th className="w-[10%] px-4 py-2.5">Status</th>
-                <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
-                <th className="w-[15%] px-4 py-2.5">Created Date Time</th>
-                <th className="w-[15%] px-4 py-2.5">Updated Date Time</th>
-                <th className="w-[18%] px-4 py-2.5">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[22%]')}>Item</th>
+                <th className={cn(tableStyles.th, 'w-[19%]')}>Kitchen</th>
+                <th className={cn(tableStyles.th, 'w-[17%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[13%]')}>Category</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Updated</th>
+                <th className={cn(tableStyles.th, 'w-[13%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[5%]')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {mappings.length > 0 ? (
                 mappings.map((mapping) => (
-                  <tr className="hover:bg-ds-subtle" key={mapping.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-ds-text">
-                        {mapping.kitchen.hospital.hospitalName}
-                      </p>
-                      <p className="text-xs text-ds-muted">
-                        {mapping.kitchen.hospital.hospitalCode}
-                      </p>
+                  <tr
+                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    key={mapping.id}
+                    onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
+                  >
+                    <td className={tableStyles.td} onClick={keepLinkClicks}>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <RecordLink
+                          className={cn('truncate', tableStyles.title)}
+                          href={recordHref('/masters/items', { id: mapping.item.id })}
+                        >
+                          {mapping.item.itemName}
+                        </RecordLink>
+                        <span className={cn('truncate', tableStyles.code)}>
+                          {mapping.item.itemCode}
+                        </span>
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <RecordLink
-                        className="block font-medium text-ds-text"
-                        href={locationHref(
-                          'KITCHEN',
-                          mapping.kitchen.kitchenCode || mapping.kitchen.kitchenName,
-                        )}
-                      >
-                        {mapping.kitchen.kitchenName}
-                      </RecordLink>
-                      <p className="text-xs text-ds-muted">{mapping.kitchen.kitchenCode}</p>
+                    <td className={tableStyles.td} onClick={keepLinkClicks}>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <RecordLink
+                          className="truncate font-medium text-ds-text-2"
+                          href={locationHref(
+                            'KITCHEN',
+                            mapping.kitchen.kitchenCode || mapping.kitchen.kitchenName,
+                          )}
+                        >
+                          {mapping.kitchen.kitchenName}
+                        </RecordLink>
+                        <span className={cn('truncate', tableStyles.code)}>
+                          {mapping.kitchen.kitchenCode}
+                        </span>
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <RecordLink
-                        className="block font-medium text-ds-text"
-                        href={recordHref('/masters/items', { id: mapping.item.id })}
-                      >
-                        {mapping.item.itemName}
-                      </RecordLink>
-                      <p className="text-xs text-ds-muted">{mapping.item.itemCode}</p>
+                    <td className={tableStyles.td}>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate text-ds-text-2">
+                          {mapping.kitchen.hospital.hospitalName}
+                        </span>
+                        <span className={cn('truncate', tableStyles.code)}>
+                          {mapping.kitchen.hospital.hospitalCode}
+                        </span>
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      {mapping.category?.categoryName ?? '-'}
+                    <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
+                      {mapping.category?.categoryName ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge isActive={mapping.isActive} />
+                    <td className={tableStyles.td}>
+                      <DateTimeCell value={mapping.updatedAt} />
                     </td>
-                    <td className="px-4 py-3">
-                      <Toggle
+                    {/* Its own click: switching the status does not open the mapping. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <RowSwitch
                         ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
                         checked={mapping.isActive}
                         disabled={toggleMappingStatusMutation.isPending}
+                        offLabel="Inactive"
                         onChange={() => toggleMappingStatus(mapping)}
+                        onLabel="Active"
                       />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
-                      {formatDate(mapping.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
-                      {formatDate(mapping.updatedAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          aria-label={`Edit ${mapping.item.itemName} in ${mapping.kitchen.kitchenName}`}
-                          onClick={() => startEditingMapping(mapping)}
-                          size="icon"
-                          title="Edit"
-                          type="button"
-                          variant="outline"
-                        >
-                          <Pencil aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                      </div>
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      <span className="flex justify-end">
+                        {canEdit ? (
+                          <RowAction
+                            icon={Pencil}
+                            label={`Edit ${mapping.item.itemName} in ${mapping.kitchen.kitchenName}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              startEditingMapping(mapping);
+                            }}
+                          />
+                        ) : null}
+                      </span>
                     </td>
                   </tr>
                 ))
               ) : (
                 <QueryState
-                  colSpan={9}
+                  colSpan={7}
                   error={mappingsQuery.error}
                   isError={mappingsQuery.isError}
                   isLoading={mappingsQuery.isLoading}

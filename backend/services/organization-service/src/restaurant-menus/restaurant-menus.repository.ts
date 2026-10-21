@@ -19,6 +19,14 @@ export const restaurantMenuInclude = {
       kitchenName: true,
     },
   },
+  store: {
+    select: {
+      id: true,
+      isActive: true,
+      storeCode: true,
+      storeName: true,
+    },
+  },
   item: {
     select: {
       id: true,
@@ -53,6 +61,15 @@ export type RestaurantMenuWithRelations = Prisma.RestaurantMenuGetPayload<{
 
 type RestaurantMenuClient = Prisma.TransactionClient | PrismaService;
 
+/** What a menu item sells: an item, under a category, from a kitchen or a store. */
+export interface MenuSource {
+  categoryId: string | null;
+  hospitalId: string;
+  itemId: string;
+  kitchenId: string | null;
+  storeId: string | null;
+}
+
 @Injectable()
 export class RestaurantMenusRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -86,6 +103,31 @@ export class RestaurantMenusRepository {
         id,
       },
     });
+  }
+
+  /**
+   * Whether a live, active mapping at the location gives exactly this: the item in that kitchen,
+   * or in that store, under that category.
+   */
+  async matchesMapping(
+    { categoryId, hospitalId, itemId, kitchenId, storeId }: MenuSource,
+    client: RestaurantMenuClient,
+  ): Promise<boolean> {
+    const live = { deletedAt: null, hospitalId, isActive: true };
+    const where = { categoryId, deletedAt: null, isActive: true, itemId };
+    const mapping = kitchenId
+      ? await client.kitchenItem.findFirst({
+          select: { id: true },
+          where: { ...where, kitchen: { ...live, id: kitchenId } },
+        })
+      : storeId
+        ? await client.storeItem.findFirst({
+            select: { id: true },
+            where: { ...where, store: { ...live, id: storeId } },
+          })
+        : null;
+
+    return Boolean(mapping);
   }
 
   async findActiveItem(id: string, client: RestaurantMenuClient): Promise<Item | null> {
@@ -130,19 +172,6 @@ export class RestaurantMenusRepository {
         restaurantId,
       },
     });
-  }
-
-  /** Whether an active kitchen sits at the restaurant's location. */
-  async isRestaurantKitchen(
-    restaurant: Restaurant,
-    kitchenId: string,
-    client: RestaurantMenuClient,
-  ): Promise<boolean> {
-    const kitchen = await client.kitchen.findFirst({
-      where: { deletedAt: null, hospitalId: restaurant.hospitalId, id: kitchenId, isActive: true },
-    });
-
-    return Boolean(kitchen);
   }
 
   async findActiveRestaurant(id: string, client: RestaurantMenuClient): Promise<Restaurant | null> {

@@ -11,9 +11,16 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { StatusChip } from '@/components/design-system';
+import {
+  AppPageHeader,
+  DateTimeCell,
+  StatStrip,
+  StatusChip,
+  tableStyles,
+} from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { Input, Panel, Select } from '@/components/ui';
+import { FilterSearch } from '@/components/ui-controls';
 import { organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
 import {
@@ -26,9 +33,7 @@ import { locationHref, recordHref } from '@/lib/navigation';
 import {
   HospitalSelect,
   KitchenSelect,
-  PageHeader,
   PaginationControls,
-  SearchInput,
 } from '@/components/kitchen/shared/components';
 import {
   formatDate,
@@ -38,6 +43,8 @@ import {
 } from '@/components/kitchen/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { QueryState } from '@/components/location-empty-states';
+import { useIsPhone } from '@/lib/use-is-phone';
+import { cn } from '@/lib/utils';
 
 const kitchenStockStatuses: StockBalanceStatus[] = ['AVAILABLE', 'LOW_STOCK', 'OUT_OF_STOCK'];
 
@@ -77,6 +84,8 @@ function useItems(itemType?: ItemType) {
 
 export function KitchenStockPageClient() {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
+  // Phones show three of the seven columns; a row that spans them all has to say so.
+  const columns = useIsPhone() ? 3 : 7;
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -137,6 +146,31 @@ export function KitchenStockPageClient() {
     ),
   });
 
+  // Every status's total at the chosen location and kitchen, whatever the list shows now.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (status?: StockBalanceStatus) =>
+        (
+          await organizationApi.listKitchenStock({
+            hospitalId: hospitalFilter,
+            itemType: 'READYMADE',
+            limit: 0,
+            locationId: kitchenFilter,
+            status,
+          })
+        ).data.meta.total;
+      const [all, available, low, out] = await Promise.all([
+        count(),
+        count('AVAILABLE'),
+        count('LOW_STOCK'),
+        count('OUT_OF_STOCK'),
+      ]);
+
+      return { all, AVAILABLE: available, LOW_STOCK: low, OUT_OF_STOCK: out };
+    },
+    queryKey: queryKeys.kitchenStock('stats', hospitalFilter, kitchenFilter),
+  });
+  const stats = statsQuery.data;
   const items = stockQuery.data?.items ?? [];
   const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
@@ -158,19 +192,59 @@ export function KitchenStockPageClient() {
     setPage(1);
   }
 
+  function showStatus(status: '' | StockBalanceStatus) {
+    setStatusFilter(status);
+    setPage(1);
+  }
+
   return (
-    <section className="space-y-5">
-      <PageHeader
-        subtitle="Current READYMADE stock posted from kitchen production entries."
+    <section className="space-y-4">
+      <AppPageHeader
+        count={stats?.all}
+        description="Current READYMADE stock posted from kitchen production entries."
         title="Kitchen Stock"
       />
-      <Panel>
+      <StatStrip
+        label="Kitchen stock at a glance"
+        stats={[
+          {
+            active: !statusFilter,
+            label: 'All stock lines',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: statusFilter === 'AVAILABLE',
+            label: 'Available',
+            onSelect: () => showStatus('AVAILABLE'),
+            tone: 'ok',
+            value: stats?.AVAILABLE ?? '–',
+          },
+          {
+            active: statusFilter === 'LOW_STOCK',
+            label: 'Low stock',
+            onSelect: () => showStatus('LOW_STOCK'),
+            tone: 'pending',
+            value: stats?.LOW_STOCK ?? '–',
+          },
+          {
+            active: statusFilter === 'OUT_OF_STOCK',
+            label: 'Out of stock',
+            onSelect: () => showStatus('OUT_OF_STOCK'),
+            tone: 'bad',
+            value: stats?.OUT_OF_STOCK ?? '–',
+          },
+        ]}
+      />
+      <Panel className="overflow-hidden">
         <ListToolbar>
-          <SearchInput
+          <FilterSearch
+            label="Search kitchen stock"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
             }}
+            placeholder="Item name or code, batch or location"
             value={searchInput}
           />
           <FiltersMenu
@@ -266,29 +340,43 @@ export function KitchenStockPageClient() {
             order={sortOrder}
             sortBy={sortBy}
           />
-          <RefreshButton onClick={() => void stockQuery.refetch()} />
+          <RefreshButton
+            onClick={() => {
+              void stockQuery.refetch();
+              void statsQuery.refetch();
+            }}
+          />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'table-fixed sm:min-w-[880px]')}>
+            <thead className={tableStyles.head}>
+              {/* Phones: only item, available and status; the item names its day and kitchen. */}
               <tr>
-                <th className="w-[20%] px-4 py-2.5">Kitchen</th>
-                <th className="w-[22%] px-4 py-2.5">Item</th>
-                <th className="w-[14%] px-4 py-2.5">Available Qty</th>
-                <th className="w-[14%] px-4 py-2.5">Reserved Qty</th>
-                <th className="w-[14%] px-4 py-2.5">Business Date</th>
-                <th className="w-[12%] px-4 py-2.5">Status</th>
-                <th className="w-[16%] px-4 py-2.5">Created / Updated</th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[18%]')}>Kitchen</th>
+                <th className={cn(tableStyles.th, 'sm:w-[20%]')}>Item</th>
+                <th className={cn(tableStyles.th, 'w-24 text-right sm:w-[12%]')}>Available qty</th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[11%] text-right')}>
+                  Reserved qty
+                </th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[13%]')}>
+                  Business date
+                </th>
+                <th className={cn(tableStyles.th, 'w-[120px] sm:w-[12%]')}>Status</th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[14%]')}>Updated</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((stock) => (
-                  <tr className="hover:bg-ds-subtle" key={stock.id}>
-                    <td className="px-4 py-3">
+                  // A stock line has no panel of its own: its kitchen and item link to theirs.
+                  <tr
+                    className="border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                    key={stock.id}
+                  >
+                    <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
                       <RecordLink
-                        className="block font-medium text-ds-text"
+                        className={cn('block truncate', tableStyles.title)}
                         href={locationHref(
                           stock.location.type,
                           stock.location.code || stock.location.name,
@@ -296,36 +384,56 @@ export function KitchenStockPageClient() {
                       >
                         {stock.location.name}
                       </RecordLink>
-                      <p className="text-xs text-ds-muted">{stock.location.code}</p>
+                      <p className={cn('truncate', tableStyles.code)}>{stock.location.code}</p>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td}>
                       <RecordLink
-                        className="block font-medium text-ds-text"
+                        className={cn('block break-words sm:truncate', tableStyles.title)}
                         href={recordHref('/masters/items', { id: stock.item.id })}
                       >
                         {stock.item.itemName}
                       </RecordLink>
-                      <p className="text-xs text-ds-muted">{stock.item.itemCode}</p>
+                      <p className={cn('truncate', tableStyles.code)}>{stock.item.itemCode}</p>
+                      <p className="truncate text-[12px] text-ds-muted sm:hidden">
+                        {formatDateOnly(stock.businessDate)} · {stock.location.name}
+                      </p>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-ds-text">
+                    <td className={cn(tableStyles.td, tableStyles.num, 'text-right text-ds-text')}>
                       {stock.availableQty.toFixed(3)}
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">{stock.reservedQty.toFixed(3)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
+                    <td
+                      className={cn(
+                        tableStyles.td,
+                        tableStyles.num,
+                        tableStyles.phoneHidden,
+                        'text-right text-ds-text-3',
+                      )}
+                    >
+                      {stock.reservedQty.toFixed(3)}
+                    </td>
+                    <td
+                      className={cn(
+                        tableStyles.td,
+                        tableStyles.phoneHidden,
+                        'whitespace-nowrap text-ds-text-3',
+                      )}
+                    >
                       {formatDateOnly(stock.businessDate)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={tableStyles.td}>
                       <StatusChip status={stock.status} />
                     </td>
-                    <td className="px-4 py-3 text-ds-text-3">
-                      <p>{formatDate(stock.createdAt)}</p>
-                      <p className="text-xs text-ds-muted">{formatDate(stock.updatedAt)}</p>
+                    <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
+                      <DateTimeCell
+                        title={`Created ${formatDate(stock.createdAt)}`}
+                        value={stock.updatedAt}
+                      />
                     </td>
                   </tr>
                 ))
               ) : (
                 <QueryState
-                  colSpan={7}
+                  colSpan={columns}
                   error={stockQuery.error}
                   isError={stockQuery.isError}
                   isLoading={stockQuery.isLoading}
@@ -338,6 +446,7 @@ export function KitchenStockPageClient() {
         </div>
         <PaginationControls
           limit={meta.limit}
+          noun="stock line"
           onPageChange={setPage}
           page={meta.page}
           total={meta.total}

@@ -13,11 +13,16 @@ export class PaginationQueryDto {
   @Type(() => Number)
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 20, maximum: 100, minimum: 1 })
+  @ApiPropertyOptional({
+    default: 20,
+    description: '0 returns only meta.total: one count, no rows or their related records.',
+    maximum: 100,
+    minimum: 0,
+  })
   @IsInt()
   @IsOptional()
   @Max(100)
-  @Min(1)
+  @Min(0)
   @Type(() => Number)
   limit?: number = 20;
 

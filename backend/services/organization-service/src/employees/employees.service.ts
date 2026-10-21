@@ -16,7 +16,7 @@ import { EmployeesRepository, type EmployeeWithHospital } from './employees.repo
 
 type EmployeeClient = Prisma.TransactionClient;
 
-function toEmployeeResponse(employee: EmployeeWithHospital) {
+export function toEmployeeResponse(employee: EmployeeWithHospital) {
   return {
     createdAt: employee.createdAt,
     deletedAt: employee.deletedAt,

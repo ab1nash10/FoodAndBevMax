@@ -16,7 +16,14 @@ import { CreateGrnDto, CreateGrnLineDto } from './dto/create-grn.dto';
 import { ListGrnsQueryDto } from './dto/list-grns-query.dto';
 import { UpdateGrnDto } from './dto/update-grn.dto';
 import { GrnsRepository, GrnWithRelations } from './grns.repository';
-import { optionalText, quantitiesMatch, toDate, toDateOnly, toNumber } from '../common/values';
+import {
+  optionalText,
+  quantitiesMatch,
+  timestampRange,
+  toDate,
+  toDateOnly,
+  toNumber,
+} from '../common/values';
 import { isExpiredForAcceptance, sum, toGrnResponse, type PreparedGrnLine } from './grns.helpers';
 
 type GrnClient = Prisma.TransactionClient;
@@ -37,10 +44,7 @@ export class GrnsService {
       ...(query.storeId ? { storeId: query.storeId } : {}),
       ...(query.fromDate || query.toDate
         ? {
-            receivedDate: {
-              ...(query.fromDate ? { gte: toDate(query.fromDate) } : {}),
-              ...(query.toDate ? { lte: toDate(query.toDate) } : {}),
-            },
+            receivedDate: timestampRange(query.fromDate, query.toDate),
           }
         : {}),
       ...(query.search
@@ -521,6 +525,14 @@ export class GrnsService {
 
         if (acceptedQty > 0 && isExpiredForAcceptance(expiryDate)) {
           throw new BadRequestException(`${batchLabel}: expired batch cannot be accepted`);
+        }
+
+        // A rejected quantity needs a reason: the batch's own, or the line's.
+        if (
+          rejectedQty > 0 &&
+          !(optionalText(batch.rejectionReason) ?? optionalText(line.rejectionReason))
+        ) {
+          throw new BadRequestException(`${batchLabel}: rejection reason is required`);
         }
 
         return {

@@ -150,13 +150,14 @@ export class DashboardService {
   async setup(query: DashboardSetupQueryDto, permissions: readonly string[]) {
     const can = (...any: string[]) => any.some((permission) => permissions.includes(permission));
     const { hospitalId } = query;
-    const one = { limit: 1, page: 1 };
+    // limit 0: each total is one count, without loading a row and its related records.
+    const one = { limit: 0, page: 1 };
     const here = { ...one, hospitalId };
     const total = async (
       allowed: boolean,
       list: () => Promise<{ meta: { total: number } }>,
     ): Promise<number | undefined> => (allowed ? (await list()).meta.total : undefined);
-    const first = { ...here, sortBy: 'createdAt', sortOrder: 'asc' };
+    const first = { hospitalId, limit: 1, page: 1, sortBy: 'createdAt', sortOrder: 'asc' };
 
     const [
       employees,

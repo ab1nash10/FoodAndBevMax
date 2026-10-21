@@ -114,12 +114,22 @@ export class CreateRestaurantMenuDto {
   )
   referenceMenuId?: string;
   @ApiPropertyOptional({
-    description: "An active kitchen at the restaurant's location.",
+    description:
+      "The kitchen that makes it (a prepared item), one it is mapped to at the restaurant's location. Set this or storeId.",
     nullable: true,
   })
   @IsOptional()
   @IsUUID()
   kitchenId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      "The store that stocks it (a packaged item), one it is mapped to at the restaurant's location. Set this or kitchenId.",
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  storeId?: string | null;
 
   @ApiPropertyOptional({ example: 'Extra butter', nullable: true })
   @IsOptional()

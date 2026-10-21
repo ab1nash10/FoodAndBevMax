@@ -9,7 +9,7 @@ import { KeyboardHint } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { organizationApi } from '@/lib/api';
 import { OPEN_COMMAND_PALETTE_EVENT } from '@/lib/command-palette-events';
-import { findSubRoute, getActiveNavHref } from '@/lib/navigation';
+import { canOpenPath, findSubRoute, getActiveNavHref } from '@/lib/navigation';
 import { statusPresentation } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import { queryKeys } from '@/lib/query-keys';
@@ -120,7 +120,10 @@ function readRecent(): Command[] {
 
 function saveRecent(command: Command): void {
   try {
-    const next = [command, ...readRecent().filter((item) => item.href !== command.href)];
+    const next = [
+      command,
+      ...readRecent().filter((item) => item.href !== command.href || item.label !== command.label),
+    ];
 
     window.localStorage.setItem(recentStorageKey, JSON.stringify(next.slice(0, recentLimit)));
   } catch {
@@ -131,42 +134,74 @@ function saveRecent(command: Command): void {
 const noRecords: Command[] = [];
 const dateFormatter = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' });
 
-/** Transfers, GRNs and items whose number, code or name contains the search text. */
+// Only lists the user may view are asked; one failing list (no access, network) leaves the
+// other results in place.
+function listIf<T>(
+  canSee: boolean,
+  request: () => Promise<{ data: { items: T[] } }>,
+): Promise<T[]> {
+  return canSee
+    ? request().then(
+        (response) => response.data.items,
+        () => [],
+      )
+    : Promise.resolve([]);
+}
+
+/**
+ * Bills, transfers, GRNs, items, employees, stores, kitchens and restaurants whose number,
+ * code or name contains the search text.
+ */
 function useRecordSearch(term: string): { isFetching: boolean; records: Command[] } {
   const { hasPermission } = useAuth();
   const { scopedHospitalId } = useLocationContext();
   const canSee = {
+    bills: hasPermission('POS_ORDER_VIEW'),
+    employees: hasPermission('EMPLOYEE_VIEW'),
     grns: hasPermission('GRN_VIEW'),
     items: hasPermission('ITEM_VIEW'),
+    kitchens: hasPermission('KITCHEN_VIEW'),
+    restaurants: hasPermission('RESTAURANT_VIEW'),
+    stores: hasPermission('STORE_VIEW'),
     transfers: hasPermission(['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW']),
   };
   const query = useQuery({
     enabled: term.length >= 2,
     queryFn: async () => {
       const base = { hospitalId: scopedHospitalId, limit: 3, search: term };
-      // One failing list (no access, network) leaves the other results in place.
-      const [transfers, grns, items] = await Promise.all([
-        canSee.transfers
-          ? organizationApi.listTransfers(base).then(
-              (response) => response.data.items,
-              () => [],
-            )
-          : [],
-        canSee.grns
-          ? organizationApi.listGrns(base).then(
-              (response) => response.data.items,
-              () => [],
-            )
-          : [],
-        canSee.items
-          ? organizationApi.listItems({ limit: 3, search: term }).then(
-              (response) => response.data.items,
-              () => [],
-            )
-          : [],
-      ]);
+      // Masters are looked up by name more than worked through, so fewer of each.
+      const masters = { ...base, limit: 2 };
+      const [bills, transfers, grns, items, employees, stores, kitchens, restaurants] =
+        await Promise.all([
+          // The bill list also matches order no., mobile, employee code and room.
+          listIf(canSee.bills, () =>
+            organizationApi.listPosBills({ ...base, sortBy: 'placedAt', sortOrder: 'desc' }),
+          ),
+          listIf(canSee.transfers, () => organizationApi.listTransfers(base)),
+          listIf(canSee.grns, () => organizationApi.listGrns(base)),
+          listIf(canSee.items, () => organizationApi.listItems({ limit: 3, search: term })),
+          listIf(canSee.employees, () => organizationApi.listEmployees(masters)),
+          listIf(canSee.stores, () => organizationApi.listStores(masters)),
+          listIf(canSee.kitchens, () => organizationApi.listKitchens(masters)),
+          listIf(canSee.restaurants, () => organizationApi.listRestaurants(masters)),
+        ]);
+
+      // Records named like the search come first ("veg": the item Veg Thali before a transfer
+      // that only has it on a line); otherwise in the order listed.
+      const named = (command: Command) => command.label.toLowerCase().includes(term.toLowerCase());
 
       return [
+        ...bills.map((bill): Command => {
+          const status = statusPresentation(bill.status);
+
+          return {
+            abbr: 'BL',
+            hint: `${status.label} · Order ${bill.orderNumber} · ${bill.restaurant.restaurantName}`,
+            href: `/pos/history?id=${bill.id}`,
+            label: bill.billNumber,
+            tone: status.tone,
+          };
+        }),
         ...transfers.map((transfer): Command => {
           const status = statusPresentation(transfer.status);
 
@@ -196,7 +231,40 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
           label: item.itemName,
           tone: 'items',
         })),
-      ];
+        // Employees, stores and kitchens open in a dialog from their list, so they link there.
+        ...employees.map((employee): Command => ({
+          abbr: 'EM',
+          hint: `Employee · ${employee.employeeCode}`,
+          href: '/masters/employees',
+          label: employee.employeeName,
+          tone: 'neutral',
+        })),
+        ...stores.map((store): Command => ({
+          abbr: 'ST',
+          hint: `Store · ${store.storeCode}`,
+          href: '/masters/stores',
+          label: store.storeName,
+          tone: 'stores',
+        })),
+        ...kitchens.map((kitchen): Command => ({
+          abbr: 'KI',
+          hint: `Kitchen · ${kitchen.kitchenCode}`,
+          href: '/masters/kitchens',
+          label: kitchen.kitchenName,
+          tone: 'kitchens',
+        })),
+        ...restaurants.map((restaurant): Command => {
+          const editHref = `/masters/restaurants/${restaurant.id}/edit`;
+
+          return {
+            abbr: 'RE',
+            hint: `Restaurant · ${restaurant.restaurantCode}`,
+            href: canOpenPath(editHref, hasPermission) ? editHref : '/masters/restaurants',
+            label: restaurant.restaurantName,
+            tone: 'neutral',
+          };
+        }),
+      ].sort((a, b) => Number(named(b)) - Number(named(a)));
     },
     queryKey: queryKeys.commandPaletteSearch(term, scopedHospitalId ?? 'all', canSee),
     staleTime: 30_000,
@@ -465,7 +533,7 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
               className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-ds-text outline-hidden placeholder:text-ds-muted focus-visible:outline-hidden"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={onInputKeyDown}
-              placeholder="Search transfers, GRNs, items, or type a command…"
+              placeholder="Search bills, transfers, GRNs, items, people, or type a command…"
               role="combobox"
               spellCheck={false}
               type="text"
@@ -514,7 +582,8 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
                       isActive && 'bg-ds-selected',
                     )}
                     id={optionId(itemIndex)}
-                    key={`${group.label}-${item.href}`}
+                    // Employees, stores and kitchens share their list's href, so the label too.
+                    key={`${group.label}-${item.href}-${item.label}`}
                     onClick={() => run(item)}
                     // Keep focus in the search box when an option is clicked.
                     onMouseDown={(event) => event.preventDefault()}

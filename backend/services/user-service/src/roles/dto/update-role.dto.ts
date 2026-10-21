@@ -4,18 +4,22 @@ import {
   ArrayUnique,
   IsArray,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class UpdateRoleDto {
   @ApiPropertyOptional({ example: 'Admin' })
   @IsOptional()
+  @IsNotEmpty()
   @IsString()
   @MaxLength(80)
+  @DisplayName()
   name?: string;
 
   @ApiPropertyOptional({ example: 'System Administrator' })

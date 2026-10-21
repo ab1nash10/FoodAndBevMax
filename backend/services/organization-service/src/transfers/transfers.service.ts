@@ -82,13 +82,29 @@ export class TransfersService {
     ]);
 
     return {
-      items: items.map(toTransferResponse),
+      items: await this.withCreatorNames(items.map(toTransferResponse)),
       meta: getPageMeta(page, limit, total),
     };
   }
 
   async getById(id: string) {
-    return toTransferResponse(await this.findActiveTransfer(id));
+    const [transfer] = await this.withCreatorNames([
+      toTransferResponse(await this.findActiveTransfer(id)),
+    ]);
+
+    return transfer;
+  }
+
+  /** Adds who raised each transfer (its distributor), by name. */
+  private async withCreatorNames<T extends { createdBy: string | null }>(transfers: T[]) {
+    const ids = [...new Set(transfers.flatMap((transfer) => transfer.createdBy ?? []))];
+    const users = ids.length ? await this.transfers.findUserNames(ids) : [];
+    const names = new Map(users.map((user) => [user.id, user.name]));
+
+    return transfers.map((transfer) => ({
+      ...transfer,
+      createdByName: transfer.createdBy ? (names.get(transfer.createdBy) ?? null) : null,
+    }));
   }
 
   async create(dto: CreateTransferDto, context: ActorContext) {
@@ -316,8 +332,10 @@ export class TransfersService {
   ) {
     assertSupportedSource(transfer.sourceType);
 
-    if (transfer.destinationType !== InventoryLocationType.RESTAURANT) {
-      throw new BadRequestException('Destination must be a restaurant');
+    const toCounter = transfer.destinationType === InventoryLocationType.COUNTER;
+
+    if (!toCounter && transfer.destinationType !== InventoryLocationType.RESTAURANT) {
+      throw new BadRequestException('Destination must be a restaurant or a counter');
     }
 
     const [hospital, source, restaurant] = await Promise.all([
@@ -325,7 +343,9 @@ export class TransfersService {
       transfer.sourceType === InventoryLocationType.KITCHEN
         ? this.transfers.findActiveKitchen(transfer.sourceId, client)
         : this.transfers.findActiveStore(transfer.sourceId, client),
-      this.transfers.findActiveRestaurant(transfer.destinationId, client),
+      toCounter
+        ? this.transfers.findActiveCounter(transfer.destinationId, client)
+        : this.transfers.findActiveRestaurant(transfer.destinationId, client),
     ]);
 
     if (!hospital || !hospital.isActive) {
@@ -338,8 +358,10 @@ export class TransfersService {
       );
     }
 
+    const destinationName = toCounter ? 'Counter' : 'Restaurant';
+
     if (!restaurant || !restaurant.isActive) {
-      throw new BadRequestException('Restaurant not found or inactive');
+      throw new BadRequestException(`${destinationName} not found or inactive`);
     }
 
     if (source.hospitalId !== transfer.hospitalId) {
@@ -349,7 +371,7 @@ export class TransfersService {
     }
 
     if (restaurant.hospitalId !== transfer.hospitalId) {
-      throw new BadRequestException('Restaurant does not belong to selected location');
+      throw new BadRequestException(`${destinationName} does not belong to selected location`);
     }
   }
 

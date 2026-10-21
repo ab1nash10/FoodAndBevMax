@@ -1,6 +1,7 @@
 import {
   AUTH_PRISMA,
   AccessResolver,
+  addressThrottler,
   AuditLoggerService,
   createThrottlerStorage,
   HealthCheckService,
@@ -39,6 +40,7 @@ import { KitchensModule } from './kitchens/kitchens.module';
 import { LocationsModule } from './locations/locations.module';
 import { PaymentMachinesModule } from './payment-machines/payment-machines.module';
 import { PosDevicesModule } from './pos-devices/pos-devices.module';
+import { PosModule } from './pos/pos.module';
 import { RestaurantMenusModule } from './restaurant-menus/restaurant-menus.module';
 import { RestaurantOrdersModule } from './restaurant-orders/restaurant-orders.module';
 import { RestaurantsModule } from './restaurants/restaurants.module';
@@ -74,6 +76,8 @@ import { TransfersModule } from './transfers/transfers.module';
             limit: config.get<number>('THROTTLE_LIMIT') ?? 100,
             ttl: config.get<number>('THROTTLE_TTL') ?? 60000,
           },
+          // Signed-out traffic per network address; signed-in requests never count here.
+          addressThrottler(),
         ],
       }),
     }),
@@ -92,6 +96,7 @@ import { TransfersModule } from './transfers/transfers.module';
     LocationsModule,
     PaymentMachinesModule,
     PosDevicesModule,
+    PosModule,
     RestaurantMenusModule,
     RestaurantOrdersModule,
     RestaurantsModule,

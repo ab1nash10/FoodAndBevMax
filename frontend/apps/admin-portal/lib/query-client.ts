@@ -1,6 +1,44 @@
 import { ApiClientError } from '@aahar/api-client';
-import { QueryClient } from '@tanstack/react-query';
-import { liveQueueKeys, masterDataKeys } from '@/lib/query-keys';
+import { keepPreviousData, QueryClient } from '@tanstack/react-query';
+import { liveQueueKeys, masterDataKeys, queryKeys } from '@/lib/query-keys';
+
+// The lists behind the busiest pages: while a filter, search or page change loads, the current
+// rows stay on screen instead of skeletons.
+export const listKeys = [
+  queryKeys.accessUsers(),
+  queryKeys.employees(),
+  queryKeys.grns(),
+  queryKeys.hospitals(),
+  queryKeys.items(),
+  queryKeys.kitchenProductions(),
+  queryKeys.kitchenStock(),
+  queryKeys.kitchens(),
+  queryKeys.legalEntities(),
+  queryKeys.paymentMachines(),
+  queryKeys.posBills(),
+  queryKeys.posDevices(),
+  queryKeys.restaurantMenus(),
+  queryKeys.restaurantStock(),
+  queryKeys.restaurants(),
+  queryKeys.stockBalances(),
+  queryKeys.stockLedgers(),
+  queryKeys.stores(),
+  queryKeys.transfers(),
+];
+
+// Under those prefixes but about one record (or one store, item or kitchen): another id must
+// never show the previous one's data.
+export const recordKeys = [
+  queryKeys.grns('detail'),
+  queryKeys.grns('vendor-history'),
+  queryKeys.grns('vendors'),
+  queryKeys.items('detail'),
+  queryKeys.kitchenProductions('detail'),
+  queryKeys.kitchenProductionsToday(),
+  queryKeys.stockLedgers('movements'),
+  queryKeys.transfers('detail'),
+  queryKeys.transfersRecentToRestaurant(),
+];
 
 // A service that is starting (a restart or a deploy) refuses the connection or answers 502-504.
 // A timeout also has status 0 but no payload: each try has already waited its full timeout.
@@ -47,6 +85,13 @@ export function createQueryClient(): QueryClient {
     client.setQueryDefaults(queryKey, { staleTime: 5 * 60_000 }),
   );
   liveQueueKeys.forEach((queryKey) => client.setQueryDefaults(queryKey, { staleTime: 15_000 }));
+  // Every matching prefix applies in this order, so the record keys undo the list default.
+  listKeys.forEach((queryKey) =>
+    client.setQueryDefaults(queryKey, { placeholderData: keepPreviousData }),
+  );
+  recordKeys.forEach((queryKey) =>
+    client.setQueryDefaults(queryKey, { placeholderData: undefined }),
+  );
 
   return client;
 }

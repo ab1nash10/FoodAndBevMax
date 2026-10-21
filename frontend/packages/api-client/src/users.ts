@@ -42,8 +42,12 @@ export interface AccessUser {
 
 export interface AccessUserInput {
   avatarUrl?: string;
-  designation?: string;
-  email?: string;
+  /** Required when changing your own password, email or mobile. */
+  currentPassword?: string;
+  /** Null on an update clears it. */
+  designation?: string | null;
+  /** A password signs in with the email, so every user has one. */
+  email: string;
   employeeCode: string;
   /** Locations this user may operate in; count must match the role's locationScope. */
   hospitalIds?: string[];

@@ -180,6 +180,22 @@ export function getRestaurantLocationMap(
   );
 }
 
+export function getCounterLocationMap(
+  counters: Awaited<ReturnType<StockRepository['findCountersByIds']>>,
+) {
+  return new Map(
+    counters.map((counter) => [
+      counter.id,
+      {
+        code: counter.counterCode,
+        id: counter.id,
+        name: counter.counterName,
+        type: InventoryLocationType.COUNTER,
+      },
+    ]),
+  );
+}
+
 export function getKitchenLocationMap(
   kitchens: Awaited<ReturnType<StockRepository['findKitchensByIds']>>,
 ) {
@@ -215,6 +231,18 @@ export function getRestaurantLocationIds<
     ...new Set(
       rows
         .filter((row) => row.locationType === InventoryLocationType.RESTAURANT)
+        .map((row) => row.locationId),
+    ),
+  ];
+}
+
+export function getCounterLocationIds<
+  T extends { locationId: string; locationType: InventoryLocationType },
+>(rows: T[]) {
+  return [
+    ...new Set(
+      rows
+        .filter((row) => row.locationType === InventoryLocationType.COUNTER)
         .map((row) => row.locationId),
     ),
   ];

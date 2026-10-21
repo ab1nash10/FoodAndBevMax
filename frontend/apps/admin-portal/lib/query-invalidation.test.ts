@@ -56,9 +56,20 @@ test('each write invalidates the same query keys', () => {
       ['stock-ledgers'],
       ['kitchen-stock'],
       ['restaurant-stock'],
+      ['counter-stock'],
+      ['pos-menu'],
       ['transfer-store-stock'],
       ['transfer-kitchen-stock'],
       ['dashboard'],
+    ],
+    invalidatePosBillQueries: [
+      ['pos-bills'],
+      ['pos-bill'],
+      ['pos-summary'],
+      ['pos-menu'],
+      ['counter-stock'],
+      ['restaurant-orders'],
+      ['stock-ledgers'],
     ],
   });
 });

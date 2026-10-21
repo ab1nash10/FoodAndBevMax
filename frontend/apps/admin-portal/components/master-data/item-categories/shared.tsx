@@ -6,7 +6,12 @@ import { Field, Input } from '@/components/ui';
 import { CheckboxLine } from '@/components/master-data/shared/components';
 
 export const categorySchema = z.object({
-  categoryName: z.string().trim().min(1, 'Category name is required.').max(255),
+  categoryName: z
+    .string()
+    .trim()
+    .min(1, 'Category name is required.')
+    .max(255)
+    .regex(/[A-Za-z0-9]/, 'Category name must include at least one letter or number.'),
   isActive: z.boolean(),
 });
 
@@ -23,6 +28,7 @@ export function CategoryFormFields({
         error={form.formState.errors.categoryName?.message}
         label="Category Name"
         name="category-name"
+        required
       >
         <Input id="category-name" {...form.register('categoryName')} />
       </Field>

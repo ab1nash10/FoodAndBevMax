@@ -24,16 +24,45 @@ import type {
   TimeSlotListQuery,
 } from './catalog';
 import type { DashboardRecords, DashboardRecordsQuery, DashboardSetup } from './dashboard';
-import type { BoardFeed, OrderStatus, RestaurantOrder } from './orders';
-import { createApiClient, type ApiClientOptions, type ApiList, type ApiResponse } from './http';
+import type {
+  BoardFeed,
+  OrderStatus,
+  PosBill,
+  PosBillInput,
+  PosBillListQuery,
+  PosBillSummary,
+  PosChannel,
+  PosCounter,
+  PosDaySummary,
+  PosMenu,
+  PosEmployee,
+  PosStockSummary,
+  StaffDiscountInput,
+  StaffDiscountSettings,
+  RestaurantOrder,
+} from './orders';
+import {
+  createApiClient,
+  type ApiClientOptions,
+  type ApiList,
+  type ApiResponse,
+  type ImportRequest,
+  type ImportResult,
+} from './http';
 import type {
   Grn,
   GrnInput,
   GrnListQuery,
+  LocationStockLevels,
+  LocationStockLevelsQuery,
   StockBalance,
   StockBalanceListQuery,
   StockLedger,
   StockLedgerListQuery,
+  StoreStockLevels,
+  StoreStockLevelsQuery,
+  StoreStockMovementDay,
+  StoreStockMovementsQuery,
   StoreStockSummary,
   Transfer,
   TransferAcknowledgement,
@@ -327,6 +356,61 @@ export function createOrganizationApi(options: ApiClientOptions) {
         },
       );
     },
+    /** Counters the signed-in user may bill at. */
+    listPosCounters() {
+      return client.request<ApiResponse<PosCounter[]>>('/pos/counters');
+    },
+    getPosMenu(counterId: string, channel: PosChannel) {
+      return client.request<ApiResponse<PosMenu>>('/pos/menu', { query: { channel, counterId } });
+    },
+    setPosMenuAvailability(menuId: string, isAvailable: boolean) {
+      return client.request<ApiResponse<{ id: string; isAvailable: boolean }>>(
+        `/pos/menu/${menuId}/availability`,
+        { body: { isAvailable }, method: 'PATCH' },
+      );
+    },
+    /** Bills an order; sending the same clientOrderId again returns the same bill. */
+    createPosBill(body: PosBillInput) {
+      return client.request<ApiResponse<PosBill>>('/pos/orders', { body, method: 'POST' });
+    },
+    listPosBills(query?: PosBillListQuery) {
+      return client.request<ApiResponse<ApiList<PosBillSummary>>>('/pos/orders', { query });
+    },
+    getPosBill(id: string) {
+      return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}`);
+    },
+    cancelPosBill(id: string, reason: string) {
+      return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}/cancel`, {
+        body: { reason },
+        method: 'PATCH',
+      });
+    },
+    lookupPosEmployee(counterId: string, code: string) {
+      return client.request<ApiResponse<PosEmployee>>('/pos/employee', {
+        query: { code, counterId },
+      });
+    },
+    getStaffDiscounts(restaurantId: string) {
+      return client.request<ApiResponse<StaffDiscountSettings>>(
+        `/pos/staff-discounts/${restaurantId}`,
+      );
+    },
+    setStaffDiscounts(restaurantId: string, body: StaffDiscountInput) {
+      return client.request<ApiResponse<StaffDiscountSettings>>(
+        `/pos/staff-discounts/${restaurantId}`,
+        { body, method: 'PUT' },
+      );
+    },
+    getPosStockSummary(counterId: string, date?: string) {
+      return client.request<ApiResponse<PosStockSummary>>('/pos/stock-summary', {
+        query: { counterId, date },
+      });
+    },
+    getPosDaySummary(counterId: string, date?: string) {
+      return client.request<ApiResponse<PosDaySummary>>('/pos/summary', {
+        query: { counterId, date },
+      });
+    },
     listRestaurantOrders(restaurantId: string) {
       return client.request<ApiResponse<RestaurantOrder[]>>('/restaurant-orders', {
         query: { restaurantId },
@@ -469,8 +553,31 @@ export function createOrganizationApi(options: ApiClientOptions) {
         query,
       });
     },
+    listStoreStockLevels(query?: StoreStockLevelsQuery) {
+      return client.request<ApiResponse<StoreStockLevels>>('/store-stock/levels', { query });
+    },
+    listStoreStockMovements(query?: StoreStockMovementsQuery) {
+      return client.request<ApiResponse<{ days: StoreStockMovementDay[] }>>(
+        '/store-stock/movements',
+        { query },
+      );
+    },
+    listCounterStock(query?: StockBalanceListQuery) {
+      return client.request<ApiResponse<ApiList<StockBalance>>>('/counter-stock', { query });
+    },
+    listCounterStockLedgers(query?: StockLedgerListQuery) {
+      return client.request<ApiResponse<ApiList<StockLedger>>>('/counter-stock-ledgers', { query });
+    },
+    listCounterStockLevels(query?: LocationStockLevelsQuery) {
+      return client.request<ApiResponse<LocationStockLevels>>('/counter-stock/levels', { query });
+    },
     listRestaurantStock(query?: StockBalanceListQuery) {
       return client.request<ApiResponse<ApiList<StockBalance>>>('/restaurant-stock', { query });
+    },
+    listRestaurantStockLevels(query?: LocationStockLevelsQuery) {
+      return client.request<ApiResponse<LocationStockLevels>>('/restaurant-stock/levels', {
+        query,
+      });
     },
     listRestaurantStockLedgers(query?: StockLedgerListQuery) {
       return client.request<ApiResponse<ApiList<StockLedger>>>('/restaurant-stock-ledgers', {
@@ -646,6 +753,21 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<EmployeeValidation>>(
         `/employees/validate/${encodeURIComponent(employeeCode)}`,
       );
+    },
+    importEmployees(body: ImportRequest) {
+      return client.request<ApiResponse<ImportResult>>('/employees/import', {
+        body,
+        method: 'POST',
+      });
+    },
+    importItems(body: ImportRequest) {
+      return client.request<ApiResponse<ImportResult>>('/items/import', { body, method: 'POST' });
+    },
+    importRestaurantMenus(body: ImportRequest) {
+      return client.request<ApiResponse<ImportResult>>('/restaurant-menus/import', {
+        body,
+        method: 'POST',
+      });
     },
   };
 }

@@ -1,56 +1,60 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import { ArrowLeft, Loader2, Plus, type LucideIcon } from 'lucide-react';
-import Link from 'next/link';
-import type { ChangeEvent, ReactNode, TextareaHTMLAttributes } from 'react';
-import { Panel } from '@/components/ui';
+import { Loader2, Plus, type LucideIcon } from 'lucide-react';
+import { useId, type ChangeEvent, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
-import { PageHeader } from '@/components/organization/shared/list-controls';
+import { FormPanel } from '@/components/ui-controls';
 
+/** A create/edit form: the side panel over its list (`backHref`), as every record edit opens. */
 export function FormShell({
   backHref,
   children,
-  icon,
   subtitle,
   title,
 }: Readonly<{
   backHref: string;
   children: ReactNode;
-  icon: LucideIcon;
+  /** Older call sites pass an icon; the panel shows none. */
+  icon?: LucideIcon;
   subtitle: string;
   title: string;
 }>) {
-  const Icon = icon;
-
   return (
-    <section className="mx-auto max-w-4xl space-y-6">
-      <Button asChild variant="ghost">
-        <Link href={backHref}>
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
-      </Button>
-      <PageHeader eyebrow="Organization" icon={Icon} subtitle={subtitle} title={title} />
-      <Panel className="p-4 sm:p-5">{children}</Panel>
-    </section>
+    <FormPanel backHref={backHref} subtitle={subtitle} title={title}>
+      {children}
+    </FormPanel>
   );
 }
 
 export function SubmitButton({
-  disabled = false,
+  disabledReason,
   isPending,
   label,
 }: Readonly<{
-  disabled?: boolean;
+  /** Why it can't be pressed yet, shown beside it, e.g. "Item name is required."; none: it can. */
+  disabledReason?: string;
   isPending: boolean;
   label: string;
 }>) {
+  const reasonId = useId();
+
   return (
-    <Button disabled={disabled || isPending} type="submit">
-      {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-      {label}
-    </Button>
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+      {disabledReason ? (
+        <p className="text-sm text-ds-muted" id={reasonId}>
+          {disabledReason}
+        </p>
+      ) : null}
+      <Button
+        aria-describedby={disabledReason ? reasonId : undefined}
+        disabled={Boolean(disabledReason) || isPending}
+        type="submit"
+      >
+        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+        {label}
+      </Button>
+    </div>
   );
 }
 

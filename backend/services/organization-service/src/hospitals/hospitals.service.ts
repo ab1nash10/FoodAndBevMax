@@ -235,16 +235,17 @@ export class HospitalsService {
         const existing = await this.findActiveHospital(id, tx);
         const data: Prisma.HospitalUpdateInput = {};
 
+        // A blank or null optional field clears it.
         if (dto.address !== undefined) {
-          data.address = optionalText(dto.address);
+          data.address = optionalText(dto.address) ?? null;
         }
 
         if (dto.area !== undefined) {
-          data.area = optionalText(dto.area);
+          data.area = optionalText(dto.area) ?? null;
         }
 
         if (dto.billPrefix !== undefined || dto.invoicePrefix !== undefined) {
-          data.billPrefix = optionalText(dto.invoicePrefix ?? dto.billPrefix);
+          data.billPrefix = optionalText(dto.invoicePrefix ?? dto.billPrefix) ?? null;
         }
 
         if (dto.city !== undefined) {
@@ -271,7 +272,7 @@ export class HospitalsService {
         }
 
         if (dto.ipAddress !== undefined) {
-          data.ipAddress = optionalText(dto.ipAddress);
+          data.ipAddress = optionalText(dto.ipAddress) ?? null;
         }
 
         if (dto.isActive !== undefined) {
@@ -279,11 +280,11 @@ export class HospitalsService {
         }
 
         if (dto.latitude !== undefined) {
-          data.latitude = optionalText(dto.latitude);
+          data.latitude = optionalText(dto.latitude) ?? null;
         }
 
         if (dto.longitude !== undefined) {
-          data.longitude = optionalText(dto.longitude);
+          data.longitude = optionalText(dto.longitude) ?? null;
         }
 
         if (dto.onlinePaymentOption !== undefined) {
@@ -291,7 +292,7 @@ export class HospitalsService {
         }
 
         if (dto.postalCode !== undefined) {
-          data.postalCode = optionalText(dto.postalCode);
+          data.postalCode = optionalText(dto.postalCode) ?? null;
         }
 
         if (dto.state !== undefined) {
@@ -299,7 +300,7 @@ export class HospitalsService {
         }
 
         if (dto.visitingCardAddress !== undefined) {
-          data.visitingCardAddress = optionalText(dto.visitingCardAddress);
+          data.visitingCardAddress = optionalText(dto.visitingCardAddress) ?? null;
         }
 
         if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {

@@ -19,6 +19,12 @@ import { FormShell, SubmitButton } from '@/components/master-data/shared/compone
 import { applyValidationErrors, optionalValue } from '@/components/master-data/shared/utils';
 import { useMasterEditing } from '@/components/master-location';
 
+const requiredFields = employeeSchema.pick({
+  employeeCode: true,
+  employeeName: true,
+  employmentType: true,
+});
+
 export function EmployeeCreatePageClient() {
   const { defaultHospitalId } = useMasterEditing();
   const form = useForm<EmployeeFormValues>({
@@ -50,10 +56,14 @@ export function EmployeeCreatePageClient() {
   });
 
   // Only the fields this reads, so typing elsewhere in the form does not re-render the page.
-  const [employeeCode, employeeName] = form.watch(['employeeCode', 'employeeName']);
-  const formValues = { employeeCode, employeeName };
-  const canSubmit =
-    Boolean(formValues.employeeCode?.trim()) && Boolean(formValues.employeeName?.trim());
+  const [employeeCode, employeeName, employmentType] = form.watch([
+    'employeeCode',
+    'employeeName',
+    'employmentType',
+  ]);
+  // The first required field still missing, in the schema's own words.
+  const disabledReason = requiredFields.safeParse({ employeeCode, employeeName, employmentType })
+    .error?.issues[0]?.message;
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = employeeSchema.safeParse(values);
@@ -92,7 +102,7 @@ export function EmployeeCreatePageClient() {
         <EmployeeFormFields form={form} />
         <div className="flex justify-end">
           <SubmitButton
-            disabled={!canSubmit}
+            disabledReason={disabledReason}
             isPending={createEmployeeMutation.isPending}
             label="Create Employee"
           />

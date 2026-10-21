@@ -1,27 +1,37 @@
 import {
   ArrowRightLeft,
+  BookOpenText,
   Boxes,
   Building2,
   ChefHat,
   ClipboardList,
   CookingPot,
   CreditCard,
+  Gauge,
+  Gift,
+  History,
   KeyRound,
   Landmark,
   LayoutDashboard,
   LayoutGrid,
   Link2,
   ListChecks,
+  ListOrdered,
   MapPin,
   NotebookText,
   Package,
+  PackageCheck,
   PackageOpen,
+  Receipt,
   ScrollText,
   ShieldCheck,
   Store,
+  Sun,
+  Tablet,
   Tags,
   Utensils,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,10 +48,10 @@ export type NavGroupLabel =
   | 'Access'
   | 'Inventory'
   | 'Item & Menu Setup'
-  | 'Item Mapping'
   | 'Kitchen Operations'
   | 'Organization'
-  | 'Overview';
+  | 'Overview'
+  | 'Point of Sale';
 
 export interface NavPage {
   /** Hidden pages highlight this sidebar entry instead (same screen under another URL). */
@@ -137,7 +147,7 @@ export const navigationGroups: NavGroup[] = [
         href: '/masters/pos',
         icon: CreditCard,
         label: 'POS & Payment Machines',
-        permissions: ['POS_DEVICE_VIEW', 'PAYMENT_MACHINE_VIEW'],
+        permissions: ['POS_DEVICE_VIEW', 'PAYMENT_MACHINE_VIEW', 'COUNTER_VIEW'],
       },
     ],
     label: 'Organization',
@@ -159,6 +169,13 @@ export const navigationGroups: NavGroup[] = [
         permissions: ['ITEM_VIEW'],
         record: 'id',
       },
+      // Store and kitchen mappings in one page (Store / Kitchen switch and tabs).
+      {
+        href: '/masters/item-mapping',
+        icon: Link2,
+        label: 'Item Mapping',
+        permissions: ['STORE_ITEM_VIEW', 'KITCHEN_ITEM_VIEW'],
+      },
       {
         href: '/masters/restaurant-menus',
         icon: Utensils,
@@ -170,22 +187,71 @@ export const navigationGroups: NavGroup[] = [
     section: 'Setup',
   },
   {
-    icon: Link2,
+    icon: Receipt,
     items: [
-      // Store and kitchen mappings in one page (Store / Kitchen switch and tabs).
       {
-        href: '/masters/item-mapping',
-        icon: Link2,
-        label: 'Item Mapping',
-        permissions: ['STORE_ITEM_VIEW', 'KITCHEN_ITEM_VIEW'],
+        href: '/pos/billing',
+        icon: Receipt,
+        label: 'Billing',
+        permissions: ['POS_ORDER_CREATE'],
+      },
+      {
+        href: '/pos/orders',
+        icon: ListOrdered,
+        label: 'Orders',
+        permissions: ['ORDER_VIEW'],
+      },
+      {
+        href: '/pos/history',
+        icon: History,
+        label: 'Bill History',
+        permissions: ['POS_ORDER_VIEW'],
+        record: 'id',
+      },
+      {
+        href: '/pos/complimentary',
+        icon: Gift,
+        label: 'Complimentary',
+        permissions: ['POS_ORDER_VIEW'],
+        record: 'id',
+      },
+      {
+        href: '/pos/day',
+        icon: Wallet,
+        label: 'Day Summary',
+        permissions: ['POS_ORDER_VIEW'],
+      },
+      {
+        href: '/pos/menu',
+        icon: BookOpenText,
+        label: 'Counter Menu',
+        permissions: ['POS_ORDER_VIEW'],
+      },
+      {
+        href: '/pos/stock',
+        icon: Boxes,
+        label: 'Counter Stock',
+        permissions: ['COUNTER_STOCK_VIEW'],
+      },
+      {
+        href: '/pos/receive',
+        icon: PackageCheck,
+        label: 'Receive Inventory',
+        permissions: ['COUNTER_STOCK_RECEIVE'],
       },
     ],
-    label: 'Item Mapping',
-    section: 'Setup',
+    label: 'Point of Sale',
+    section: 'Operations',
   },
   {
     icon: Package,
     items: [
+      {
+        href: '/inventory/today',
+        icon: Sun,
+        label: 'Store Today',
+        permissions: ['STOCK_VIEW'],
+      },
       {
         badge: 'grns',
         href: '/inventory/grns',
@@ -198,6 +264,12 @@ export const navigationGroups: NavGroup[] = [
         href: '/inventory/store-stock',
         icon: Boxes,
         label: 'Store Stock',
+        permissions: ['STOCK_VIEW'],
+      },
+      {
+        href: '/inventory/stock-levels',
+        icon: Gauge,
+        label: 'Stock Levels',
         permissions: ['STOCK_VIEW'],
       },
       {
@@ -234,6 +306,12 @@ export const navigationGroups: NavGroup[] = [
         label: 'Kitchen Production',
         permissions: ['KITCHEN_PRODUCTION_VIEW'],
         record: 'id',
+      },
+      {
+        href: '/kitchen/tablet',
+        icon: Tablet,
+        label: 'Kitchen Tablet',
+        permissions: ['KITCHEN_PRODUCTION_CREATE'],
       },
       {
         href: '/kitchen/stock',
@@ -293,7 +371,7 @@ export const subRoutes: SubRoute[] = [
     permissions: ['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW'],
   },
   {
-    label: 'New GRN',
+    label: 'Receive a delivery',
     parent: '/inventory/grns',
     pattern: '/inventory/grns/new',
     permissions: ['GRN_CREATE'],
@@ -320,6 +398,12 @@ export const subRoutes: SubRoute[] = [
     label: 'Locations',
     parent: '/masters/hospitals',
     pattern: '/masters/hospitals/[id]/locations',
+    permissions: ['HOSPITAL_VIEW'],
+  },
+  {
+    label: 'Edit location',
+    parent: '/masters/locations',
+    pattern: '/masters/locations/[id]/edit',
     permissions: ['HOSPITAL_VIEW'],
   },
   {
@@ -421,6 +505,38 @@ export function getStartPageOptions(
     href: page.href,
     label: page.label,
   }));
+}
+
+// The dashboard is built from transfers, GRNs and productions (hooks/use-dashboard-stats.ts);
+// a role that sees none of them gets a near-empty dashboard.
+const dashboardDataPermissions = [
+  'TRANSFER_VIEW',
+  'KITCHEN_TRANSFER_VIEW',
+  'GRN_VIEW',
+  'KITCHEN_PRODUCTION_VIEW',
+];
+
+/**
+ * Where the portal opens for this user: their saved start page if they may still open it,
+ * else the screen their permissions point to - Billing for counter staff and Store Today for
+ * store staff when the dashboard would be empty for them, otherwise the dashboard.
+ */
+export function homeHref(hasPermission: HasPermission, startPage?: string | null): string {
+  if (startPage && getStartPageOptions(hasPermission).some((page) => page.href === startPage)) {
+    return startPage;
+  }
+
+  if (!hasPermission(dashboardDataPermissions)) {
+    const workScreen = ['/pos/billing', '/inventory/today'].find((href) =>
+      canOpenPath(href, hasPermission),
+    );
+
+    if (workScreen) {
+      return workScreen;
+    }
+  }
+
+  return '/dashboard';
 }
 
 /** Whether the user may open this in-app path (an unknown path is not blocked). */

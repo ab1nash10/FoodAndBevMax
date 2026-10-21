@@ -1,3 +1,4 @@
+import { createSecretKey } from 'node:crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
@@ -36,7 +37,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       algorithms: ['HS256'],
       ignoreExpiration: false,
       jwtFromRequest: ExtractJwt.fromExtractors([extractBearerToken]),
-      secretOrKey: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      // A KeyObject, made once: given the text, jsonwebtoken first tries it as a PEM public key
+      // (which throws) on every request before making the secret key, ~5x the verify time.
+      // passport-jwt passes it through untouched; its types only list string and Buffer.
+      secretOrKey: createSecretKey(
+        Buffer.from(config.getOrThrow<string>('JWT_ACCESS_SECRET')),
+      ) as unknown as string,
     });
   }
 

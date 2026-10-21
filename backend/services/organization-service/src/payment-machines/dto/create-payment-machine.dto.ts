@@ -3,12 +3,14 @@ import { PrimaryUpiProvider } from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
 } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 // BA spec: serial number, merchant id and store POS code are numeric; the Pine Labs token and IMEI
 // are alphanumeric. Empty strings stay allowed so a saved value can be cleared.
@@ -27,8 +29,10 @@ export class CreatePaymentMachineDto {
   posDeviceId!: string;
 
   @ApiProperty({ example: 'Pine Labs Terminal 1' })
+  @IsNotEmpty()
   @IsString()
   @MaxLength(150)
+  @DisplayName()
   name!: string;
 
   @ApiPropertyOptional({ example: '1491325569' })

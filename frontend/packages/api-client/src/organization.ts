@@ -56,28 +56,32 @@ export interface LegalEntityInput {
 
 export type LegalEntityListQuery = ListQuery;
 
+/**
+ * Title (or hospitalName), location code (or hospitalCode), city and state are required on
+ * create; the display name defaults to the title. null clears an optional field.
+ */
 export interface HospitalInput {
-  address?: string;
-  area?: string;
-  billPrefix?: string;
+  address?: string | null;
+  area?: string | null;
+  billPrefix?: string | null;
   city?: string;
   displayName?: string;
   gstApplicable?: boolean;
   hospitalCode?: string;
   hospitalName?: string;
-  invoicePrefix?: string;
-  ipAddress?: string;
+  invoicePrefix?: string | null;
+  ipAddress?: string | null;
   isActive?: boolean;
-  latitude?: string;
+  latitude?: string | null;
   /** null removes the link. */
   legalEntityId?: string | null;
   locationCode?: string;
-  longitude?: string;
+  longitude?: string | null;
   onlinePaymentOption?: OnlinePaymentOption;
-  postalCode?: string;
+  postalCode?: string | null;
   state?: string;
   title?: string;
-  visitingCardAddress?: string;
+  visitingCardAddress?: string | null;
 }
 
 export type HospitalSummary = Pick<Hospital, 'hospitalCode' | 'hospitalName' | 'id' | 'isActive'> &
@@ -272,25 +276,26 @@ export interface Restaurant {
   vegOnly: boolean;
 }
 
+/** On an edit, null clears an optional text field; leaving it out keeps the saved value. */
 export interface RestaurantInput {
-  accountNumber?: string;
-  address?: string;
+  accountNumber?: string | null;
+  address?: string | null;
   atTableDining?: boolean;
   b2cQrEnabled?: boolean;
   bankBranch?: string;
   bankName?: string;
-  bankNameBranch?: string;
+  bankNameBranch?: string | null;
   closingTime?: string;
   coverImageUrl?: string;
   delivery?: boolean;
-  email?: string;
+  email?: string | null;
   fssaiNumber?: string;
-  fssaiNumbers?: string;
-  gstNumber?: string;
-  gstAddress?: string;
+  fssaiNumbers?: string | null;
+  gstNumber?: string | null;
+  gstAddress?: string | null;
   homeDelivery?: boolean;
   hospitalId: string;
-  ifscCode?: string;
+  ifscCode?: string | null;
   inCarDining?: boolean;
   inRoomDining?: boolean;
   inRoomDiningEnabled?: boolean;
@@ -314,31 +319,31 @@ export interface RestaurantInput {
   kitchenIds?: string[];
   /** null removes the link. */
   legalEntityId?: string | null;
-  legalName?: string;
+  legalName?: string | null;
   locationId?: string;
-  mobile?: string;
+  mobile?: string | null;
   normalDiscountApplicable?: boolean;
   offline?: boolean;
   onlineOrders?: boolean;
   onlineOrderingEnabled?: boolean;
   openingTime?: string;
   open24x7?: boolean;
-  panNumber?: string;
+  panNumber?: string | null;
   posOrders?: boolean;
   qrUnitName?: string;
-  unitNameForQr?: string;
+  unitNameForQr?: string | null;
   restaurantCode?: string;
   restaurantName: string;
   staffDiscountApplicable?: boolean;
   storeId?: string;
-  sodexoMid?: string;
-  sodexoTid?: string;
-  sunBu?: string;
-  sunT1?: string;
-  sunT2?: string;
+  sodexoMid?: string | null;
+  sodexoTid?: string | null;
+  sunBu?: string | null;
+  sunT1?: string | null;
+  sunT2?: string | null;
   takeaway?: boolean;
   thumbnailUrl?: string;
-  upiId?: string;
+  upiId?: string | null;
   vegOnly?: boolean;
 }
 
@@ -398,17 +403,19 @@ export interface Employee extends LocationOwned {
   updatedAt: string;
 }
 
+/** On an update, null clears an optional text field. */
 export interface EmployeeInput {
-  department?: string;
-  designation?: string;
+  department?: string | null;
+  designation?: string | null;
   eligibleForDiscount?: boolean;
   employeeCode: string;
   employeeName: string;
+  /** Required on create; older employees may still have none. */
   employmentType?: EmploymentType;
   /** The location it belongs to; null shares it with every location. */
   hospitalId?: string | null;
   isActive?: boolean;
-  mobile?: string;
+  mobile?: string | null;
 }
 
 export interface EmployeeListQuery extends ListQuery {

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -11,12 +12,15 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'John Doe' })
   @IsOptional()
+  @IsNotEmpty()
   @IsString()
   @MaxLength(120)
+  @DisplayName()
   name?: string;
 
   @ApiPropertyOptional({ example: '9999999999' })
@@ -38,6 +42,15 @@ export class UpdateUserDto {
   })
   password?: string;
 
+  @ApiPropertyOptional({
+    description: 'Required to change your own password, email or mobile.',
+    format: 'password',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  currentPassword?: string;
+
   @ApiPropertyOptional({ enum: UserStatus })
   @IsEnum(UserStatus)
   @IsOptional()
@@ -48,11 +61,11 @@ export class UpdateUserDto {
   @IsUUID()
   roleId?: string;
 
-  @ApiPropertyOptional({ example: 'Store Manager' })
+  @ApiPropertyOptional({ description: 'null clears it', example: 'Store Manager', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(120)
-  designation?: string;
+  designation?: string | null;
 
   @ApiPropertyOptional({ description: 'Path returned by the avatar upload endpoint.' })
   @IsOptional()

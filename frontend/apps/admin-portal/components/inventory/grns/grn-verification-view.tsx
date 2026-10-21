@@ -319,59 +319,125 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Link
-            className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[12.5px] font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-            href={listHref}
-          >
-            <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-            GRNs
-          </Link>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-extrabold tabular-nums tracking-[-0.01em] text-ds-text">
-              {grn.grnNumber}
-            </h1>
-            <StatusChip long status={grn.status} />
+      <Link
+        className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[13px] font-medium text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+        href={listHref}
+      >
+        <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
+        GRNs
+      </Link>
+      {/* The record's header card: number, status, who and where, its actions and its steps. */}
+      <div className="relative isolate space-y-6 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6">
+        <div aria-hidden="true" className="page-art" />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="font-mono text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ds-text">
+                {grn.grnNumber}
+              </h1>
+              <StatusChip long status={grn.status} />
+            </div>
+            <p className="text-[13.5px] text-ds-muted">
+              {[grn.vendorName, grn.store.storeName].filter(Boolean).join(' → ')} · received{' '}
+              {formatWhen(grn.receivedDate)} by {grn.receivedBy}
+            </p>
           </div>
-          <p className="text-[13.5px] text-ds-muted">
-            {[grn.vendorName, grn.store.storeName].filter(Boolean).join(' → ')} · received{' '}
-            {formatWhen(grn.receivedDate)} by {grn.receivedBy}
-          </p>
-        </div>
-        {canSave ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
-              disabled={isBusy}
-              onClick={() => setConfirming('reject')}
-              type="button"
-              variant="outline"
-            >
-              Reject GRN
-            </Button>
-            <Button disabled={isBusy} onClick={() => save(false)} type="button" variant="outline">
-              Save verification
-            </Button>
-            {canPost ? (
-              <Button disabled={isBusy} onClick={() => save(true)} type="button">
-                {saveMutation.isPending ? (
-                  <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Check aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                )}
-                {totalAccepted <= 0
-                  ? 'Post (nothing accepted)'
-                  : totalRejected > 0
-                    ? 'Accept partially & post'
-                    : 'Accept & post to stock'}
+          {canSave ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
+                disabled={isBusy}
+                onClick={() => setConfirming('reject')}
+                type="button"
+                variant="outline"
+              >
+                Reject GRN
               </Button>
-            ) : null}
-          </div>
-        ) : null}
+              <Button disabled={isBusy} onClick={() => save(false)} type="button" variant="outline">
+                Save verification
+              </Button>
+              {canPost ? (
+                <Button disabled={isBusy} onClick={() => save(true)} type="button">
+                  {saveMutation.isPending ? (
+                    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                  )}
+                  {totalAccepted <= 0
+                    ? 'Post (nothing accepted)'
+                    : totalRejected > 0
+                      ? 'Accept partially & post'
+                      : 'Accept & post to stock'}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <Stepper label="GRN progress" steps={steps} />
       </div>
 
-      <Stepper label="GRN progress" steps={steps} />
+      <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-card border border-ds-border bg-ds-surface px-[18px] py-4 shadow-card">
+          <dt className="text-[12.5px] text-ds-muted">Accepted</dt>
+          <dd className="mt-1.5 text-2xl font-semibold tracking-[-0.02em] text-ds-text tabular-nums">
+            {formatQuantity(totalAccepted)}
+            <span className="text-sm font-medium text-ds-muted">
+              {' '}
+              of {formatQuantity(totalAccepted + totalRejected)}
+            </span>
+          </dd>
+          <div
+            aria-hidden="true"
+            className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ds-status-bad-bg"
+          >
+            <div
+              className="h-full rounded-full bg-ds-status-ok-fg"
+              style={{
+                width: `${totalAccepted + totalRejected > 0 ? (totalAccepted / (totalAccepted + totalRejected)) * 100 : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+        <div className="rounded-card border border-ds-border bg-ds-surface px-[18px] py-4 shadow-card">
+          <dt className="text-[12.5px] text-ds-muted">Rejected</dt>
+          <dd
+            className={cn(
+              'mt-1.5 text-2xl font-semibold tracking-[-0.02em] tabular-nums',
+              totalRejected > 0 ? 'text-ds-status-bad-fg' : 'text-ds-text',
+            )}
+          >
+            {formatQuantity(totalRejected)}
+          </dd>
+          <p className="mt-1 text-xs text-ds-muted">
+            {lines.filter((row) => row.rejectedQty > 0).length} of {lines.length} lines
+          </p>
+        </div>
+        <div className="rounded-card border border-ds-border bg-ds-surface px-[18px] py-4 shadow-card">
+          <dt className="text-[12.5px] text-ds-muted">Outcome</dt>
+          <dd className="mt-1.5 text-[17px] font-semibold text-ds-text">{outcomeLabel}</dd>
+          <p className="mt-1 text-xs text-ds-muted">{plural(lines.length, 'line')}</p>
+        </div>
+        <div className="rounded-card border border-ds-border bg-ds-surface px-[18px] py-4 shadow-card">
+          <dt className="text-[12.5px] text-ds-muted">Received by</dt>
+          <dd className="mt-2 flex items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-xs font-bold text-ds-link"
+            >
+              {grn.receivedBy
+                .split(/\s+/)
+                .map((word) => word[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase()}
+            </span>
+            <span className="min-w-0 truncate text-[15px] font-semibold text-ds-text">
+              {grn.receivedBy}
+            </span>
+          </dd>
+        </div>
+      </dl>
 
       <div className="flex flex-wrap items-start gap-5">
         <Panel
@@ -380,24 +446,26 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
           role="region"
         >
           <div className="flex flex-wrap items-center justify-between gap-2.5 px-[18px] py-3.5">
-            <h2 className="text-[15px] font-extrabold text-ds-text" id="grn-lines">
+            <h2 className="text-[15px] font-semibold text-ds-text" id="grn-lines">
               Lines · {grn.lines.length}
             </h2>
-            <span className="text-[12.5px] text-ds-muted">
-              Enter the accepted quantity; rejected is the rest of what was received.
-            </span>
+            {canSave ? (
+              <span className="text-[12.5px] text-ds-muted">
+                Enter the accepted quantity; rejected is the rest of what was received.
+              </span>
+            ) : null}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] table-fixed text-[13px]">
-              <thead className="border-y border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
+            <table className="w-full min-w-[700px] table-fixed text-[13px]">
+              <thead className="border-y border-ds-divider bg-ds-subtle text-left text-[12px] text-ds-muted">
                 <tr>
                   <th className="w-12 py-2 pl-4" />
-                  <th className="px-2 py-2 font-semibold">Item</th>
-                  <th className="w-[76px] px-2 py-2 text-right font-semibold">Ordered</th>
-                  <th className="w-[76px] px-2 py-2 text-right font-semibold">Received</th>
-                  <th className="w-[120px] px-2 py-2 font-semibold">Accepted</th>
-                  <th className="w-[76px] px-2 py-2 text-right font-semibold">Rejected</th>
-                  <th className="w-[26%] py-2 pl-2 pr-4 font-semibold">Reason</th>
+                  <th className="px-2 py-2.5 font-medium">Item</th>
+                  <th className="w-[76px] px-2 py-2.5 text-right font-medium">Ordered</th>
+                  <th className="w-[76px] px-2 py-2.5 text-right font-medium">Received</th>
+                  <th className="w-[120px] px-2 py-2.5 font-medium">Accepted</th>
+                  <th className="w-[76px] px-2 py-2.5 text-right font-medium">Rejected</th>
+                  <th className="w-[26%] py-2.5 pl-2 pr-4 font-medium">Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -441,7 +509,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                         </td>
                         <td className="px-2 py-2">
                           <RecordLink
-                            className="block truncate text-[13.5px] font-bold text-ds-text"
+                            className="block truncate text-[13.5px] font-semibold text-ds-text"
                             href={
                               isEditable
                                 ? null
@@ -463,14 +531,15 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                               : plural(row.line.batches.length, 'batch', 'batches')}
                           </span>
                         </td>
-                        <td className="px-2 py-2 text-right tabular-nums text-ds-text-3">
+                        <td className="px-2 py-2 text-right font-mono tabular-nums text-ds-text-3">
                           {row.line.orderedQty !== null ? formatQuantity(row.line.orderedQty) : '—'}
                         </td>
-                        <td className="px-2 py-2 text-right font-bold tabular-nums text-ds-text">
+                        <td className="px-2 py-2 text-right font-mono font-semibold tabular-nums text-ds-text">
                           {formatQuantity(row.line.receivedQty)}
                         </td>
                         <td className="px-2 py-2">
-                          {single ? (
+                          {/* Read only (posted, or no GRN_UPDATE): values, not disabled boxes. */}
+                          {single && canSave ? (
                             <input
                               aria-invalid={single.error ? true : undefined}
                               aria-label={`Accepted quantity for ${row.line.item.itemName}`}
@@ -478,7 +547,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                                 acceptedInputClass,
                                 single.error ? 'border-ds-status-bad-fg' : 'border-ds-input',
                               )}
-                              disabled={!canSave || isBusy}
+                              disabled={isBusy}
                               id={`grn-accepted-${single.key}`}
                               inputMode="decimal"
                               max={single.received}
@@ -495,28 +564,30 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                             />
                           ) : (
                             <span
-                              className="block text-[13px] font-extrabold tabular-nums text-ds-text"
-                              title="Set per batch below"
+                              className="block font-mono text-[13px] font-semibold tabular-nums text-ds-text"
+                              title={single ? undefined : 'Set per batch below'}
                             >
                               {formatQuantity(row.acceptedQty)}
-                              <span className="block text-[11px] font-medium text-ds-muted">
-                                per batch
-                              </span>
+                              {single ? null : (
+                                <span className="block text-[11px] font-medium text-ds-muted">
+                                  per batch
+                                </span>
+                              )}
                             </span>
                           )}
                         </td>
                         <td
                           className={cn(
-                            'px-2 py-2 text-right tabular-nums',
+                            'px-2 py-2 text-right font-mono tabular-nums',
                             row.rejectedQty > 0
-                              ? 'font-extrabold text-ds-status-bad-fg'
+                              ? 'font-semibold text-ds-status-bad-fg'
                               : 'font-medium text-ds-muted',
                           )}
                         >
                           {formatQuantity(row.rejectedQty)}
                         </td>
                         <td className="py-2 pl-2 pr-4">
-                          {row.rejectedQty > 0 ? (
+                          {row.rejectedQty > 0 && canSave ? (
                             <select
                               aria-invalid={hasTriedSave && !row.reason ? true : undefined}
                               aria-label={`Rejection reason for ${row.line.item.itemName}`}
@@ -526,7 +597,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                                   ? 'border-ds-status-bad-fg'
                                   : 'border-ds-status-pending-fg',
                               )}
-                              disabled={!canSave || isBusy}
+                              disabled={isBusy}
                               onChange={(event) =>
                                 setReasons((current) => ({
                                   ...current,
@@ -547,6 +618,10 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                                 </option>
                               ))}
                             </select>
+                          ) : row.rejectedQty > 0 ? (
+                            <span className="block truncate text-[12.5px] font-semibold text-ds-text-2">
+                              {row.reason || '—'}
+                            </span>
                           ) : (
                             <span className="text-[12.5px] text-ds-muted">—</span>
                           )}
@@ -578,22 +653,22 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                           <td />
                           <td className="pb-3 pr-4 pt-1" colSpan={6}>
                             <table className="w-full table-fixed text-[12.5px]">
-                              <thead className="text-left text-[11.5px] text-ds-muted">
+                              <thead className="text-left text-[12px] text-ds-muted">
                                 <tr>
-                                  <th className="py-1.5 font-semibold">Batch</th>
-                                  <th className="w-[100px] py-1.5 font-semibold">Mfg date</th>
-                                  <th className="w-[150px] py-1.5 font-semibold">Expiry</th>
-                                  <th className="w-[80px] py-1.5 text-right font-semibold">
+                                  <th className="py-1.5 font-medium">Batch</th>
+                                  <th className="w-[100px] py-1.5 font-medium">Mfg date</th>
+                                  <th className="w-[150px] py-1.5 font-medium">Expiry</th>
+                                  <th className="w-[80px] py-1.5 text-right font-medium">
                                     Received
                                   </th>
-                                  <th className="w-[110px] py-1.5 pl-3 font-semibold">Accepted</th>
+                                  <th className="w-[110px] py-1.5 pl-3 font-medium">Accepted</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {row.units.map((unit) =>
                                   unit.batch ? (
                                     <tr className="border-t border-ds-divider" key={unit.key}>
-                                      <td className="py-1.5 font-bold text-ds-text">
+                                      <td className="py-1.5 font-mono text-[12px] text-ds-text">
                                         {unit.batch.batchNumber}
                                       </td>
                                       <td className="py-1.5 text-ds-text-3">
@@ -634,11 +709,11 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                                           ) : null}
                                         </span>
                                       </td>
-                                      <td className="py-1.5 text-right tabular-nums">
+                                      <td className="py-1.5 text-right font-mono tabular-nums">
                                         {formatQuantity(unit.received)}
                                       </td>
                                       <td className="py-1.5 pl-3">
-                                        {row.units.length > 1 ? (
+                                        {row.units.length > 1 && canSave ? (
                                           <input
                                             aria-invalid={unit.error ? true : undefined}
                                             aria-label={`Accepted quantity for ${row.line.item.itemName} batch ${unit.batch.batchNumber}`}
@@ -649,7 +724,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                                                 ? 'border-ds-status-bad-fg'
                                                 : 'border-ds-input',
                                             )}
-                                            disabled={!canSave || isBusy}
+                                            disabled={isBusy}
                                             id={`grn-accepted-${unit.key}`}
                                             inputMode="decimal"
                                             max={unit.received}
@@ -665,7 +740,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                                             value={unit.raw}
                                           />
                                         ) : (
-                                          <span className="font-bold tabular-nums">
+                                          <span className="font-mono font-semibold tabular-nums">
                                             {formatQuantity(unit.acceptedQty)}
                                           </span>
                                         )}
@@ -687,13 +762,13 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
           <div className="flex flex-wrap justify-end gap-6 bg-ds-subtle px-[18px] py-3 text-[12.5px] text-ds-muted">
             <span>
               Accepted{' '}
-              <strong className="tabular-nums text-ds-status-ok-fg">
+              <strong className="font-mono font-semibold tabular-nums text-ds-status-ok-fg">
                 {formatQuantity(totalAccepted)}
               </strong>
             </span>
             <span>
               Rejected{' '}
-              <strong className="tabular-nums text-ds-status-bad-fg">
+              <strong className="font-mono font-semibold tabular-nums text-ds-status-bad-fg">
                 {formatQuantity(totalRejected)}
               </strong>
             </span>
@@ -706,7 +781,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
             className="flex flex-col gap-2.5 px-[18px] py-4"
             role="region"
           >
-            <h2 className="text-[15px] font-extrabold text-ds-text" id="grn-receipt">
+            <h2 className="text-[15px] font-semibold text-ds-text" id="grn-receipt">
               Receipt details
             </h2>
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-[13px]">
@@ -724,7 +799,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
               ].map(([label, value, href]) => (
                 <Fragment key={label}>
                   <dt className="text-ds-muted">{label}</dt>
-                  <dd className="truncate font-bold text-ds-text" title={value ?? undefined}>
+                  <dd className="truncate font-semibold text-ds-text" title={value ?? undefined}>
                     <RecordLink href={href}>{value}</RecordLink>
                   </dd>
                 </Fragment>
@@ -738,7 +813,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
               className="flex flex-col gap-2 px-[18px] py-4"
               role="region"
             >
-              <h2 className="mb-1 text-[15px] font-extrabold text-ds-text" id="grn-checks">
+              <h2 className="mb-1 text-[15px] font-semibold text-ds-text" id="grn-checks">
                 Before you post
               </h2>
               {grnChecks.map((check) => (
@@ -755,7 +830,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
                     type="checkbox"
                   />
                   <span>
-                    <span className="font-bold text-ds-text">{check.label}</span>
+                    <span className="font-semibold text-ds-text">{check.label}</span>
                     <span className="block text-xs text-ds-muted">{check.hint}</span>
                   </span>
                 </label>

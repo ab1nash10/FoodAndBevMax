@@ -34,20 +34,22 @@ function toMinutes(time: string): number {
   return (hours ?? 0) * 60 + (minutes ?? 0);
 }
 
+// Built once: constructing an Intl formatter is costly, and the POS menu reads the clock for
+// every item on every request.
+const siteClockFormat = new Intl.DateTimeFormat('en-CA', {
+  day: '2-digit',
+  hour: '2-digit',
+  hourCycle: 'h23',
+  minute: '2-digit',
+  month: '2-digit',
+  timeZone: SITE_TIME_ZONE,
+  year: 'numeric',
+});
+
 /** The site's date ("YYYY-MM-DD") and minute of the day at `now`. */
-function siteClock(now: Date): { date: string; minute: number } {
+export function siteClock(now: Date): { date: string; minute: number } {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      day: '2-digit',
-      hour: '2-digit',
-      hourCycle: 'h23',
-      minute: '2-digit',
-      month: '2-digit',
-      timeZone: SITE_TIME_ZONE,
-      year: 'numeric',
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, part.value]),
+    siteClockFormat.formatToParts(now).map((part) => [part.type, part.value]),
   );
 
   return {
@@ -64,7 +66,7 @@ function siteInstant(date: string, time: string, addDays = 0): string {
 }
 
 /** Whether `minute` falls in [from, to); a window that ends before it starts runs past midnight. */
-function isWithin(from: string, to: string, minute: number): boolean {
+export function isWithin(from: string, to: string, minute: number): boolean {
   const start = toMinutes(from);
   const end = toMinutes(to);
 

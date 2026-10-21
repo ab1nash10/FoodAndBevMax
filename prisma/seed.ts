@@ -127,6 +127,13 @@ const defaultPermissions = [
   ],
   ['ORDER_VIEW', 'ORDER', 'VIEW', 'View guest orders on the kitchen screen'],
   ['ORDER_UPDATE', 'ORDER', 'UPDATE', 'Move guest orders to preparing, ready and collected'],
+  // AAHAR's own POS, at a counter.
+  ['POS_ORDER_CREATE', 'POS_ORDER', 'CREATE', 'Bill orders at a counter'],
+  ['POS_ORDER_VIEW', 'POS_ORDER', 'VIEW', 'View counter bills and their history'],
+  ['POS_MENU_UPDATE', 'POS_MENU', 'UPDATE', 'Mark menu items available or sold out at a counter'],
+  ['POS_ORDER_CANCEL', 'POS_ORDER', 'CANCEL', 'Cancel counter bills and put their stock back'],
+  ['COUNTER_STOCK_VIEW', 'COUNTER_STOCK', 'VIEW', 'View stock held at counters'],
+  ['COUNTER_STOCK_RECEIVE', 'COUNTER_STOCK', 'RECEIVE', 'Receive transfers at a counter'],
   ['AUDIT_LOG_VIEW', 'AUDIT_LOG', 'VIEW', 'View audit logs'],
 ] as const;
 

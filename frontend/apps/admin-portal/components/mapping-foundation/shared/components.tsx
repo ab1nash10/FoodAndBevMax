@@ -1,17 +1,17 @@
 'use client';
 
-import { Button } from '@aahar/ui';
-import { Loader2, Plus, Search } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, type MouseEvent, type ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
-import type { Hospital, Item, ItemCategory, SortOrder } from '@aahar/api-client';
+import type { Hospital, Item, ItemCategory, ItemType } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
-import { Badge, Field, Input, Select } from '@/components/ui';
+import { Badge, Field, Select } from '@/components/ui';
+import { Toggle } from '@/components/ui-controls';
+import { cn } from '@/lib/utils';
 import type {
   ActiveFilter,
   MappingFormValues,
   PageHeaderProps,
-  PaginationControlsProps,
 } from '@/components/mapping-foundation/shared/types';
 
 export function StatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
@@ -33,29 +33,10 @@ export function BooleanBadge({
 }
 
 export function PageHeader({ subtitle, title }: PageHeaderProps) {
-  return <AppPageHeader description={subtitle} eyebrow="Item Mapping" title={title} />;
+  return <AppPageHeader description={subtitle} title={title} />;
 }
 
-export function SearchInput({
-  onChange,
-  value,
-}: Readonly<{
-  onChange: (value: string) => void;
-  value: string;
-}>) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-muted" />
-      <Input
-        className="pl-9"
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Search"
-        type="search"
-        value={value}
-      />
-    </div>
-  );
-}
+export { FilterSearch as SearchInput } from '@/components/ui-controls';
 
 export function ActiveFilterSelect({
   onChange,
@@ -69,21 +50,6 @@ export function ActiveFilterSelect({
       <option value="">All status</option>
       <option value="active">Active</option>
       <option value="inactive">Inactive</option>
-    </Select>
-  );
-}
-
-export function SortOrderSelect({
-  onChange,
-  value,
-}: Readonly<{
-  onChange: (value: SortOrder) => void;
-  value: SortOrder;
-}>) {
-  return (
-    <Select onChange={(event) => onChange(event.target.value as SortOrder)} value={value}>
-      <option value="desc">Newest first</option>
-      <option value="asc">Oldest first</option>
     </Select>
   );
 }
@@ -111,44 +77,45 @@ export function HospitalFilterSelect({
   );
 }
 
-export { QueryState } from '@/components/location-empty-states';
-export function PaginationControls({
-  limit,
-  onPageChange,
-  page,
-  total,
-  totalPages,
-}: PaginationControlsProps) {
-  const safeTotalPages = Math.max(totalPages, 1);
-
+/**
+ * A switch in a list row with its state beside it ("Active" / "Inactive"). Its cell keeps the
+ * click to itself, so switching it does not open the row's record.
+ */
+export function RowSwitch({
+  ariaLabel,
+  checked,
+  disabled,
+  offLabel,
+  onChange,
+  onLabel,
+}: Readonly<{
+  ariaLabel: string;
+  checked: boolean;
+  disabled?: boolean;
+  offLabel: string;
+  onChange: () => void;
+  onLabel: string;
+}>) {
   return (
-    <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-ds-text-3 sm:flex-row sm:items-center sm:justify-between">
-      <span>
-        Page {page} of {safeTotalPages} - {total} records - {limit} per page
+    <span className="flex items-center gap-2">
+      <Toggle ariaLabel={ariaLabel} checked={checked} disabled={disabled} onChange={onChange} />
+      <span className={cn('text-xs font-bold', checked ? 'text-ds-status-ok-fg' : 'text-ds-muted')}>
+        {checked ? onLabel : offLabel}
       </span>
-      <div className="flex gap-2">
-        <Button
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Previous
-        </Button>
-        <Button
-          disabled={page >= safeTotalPages}
-          onClick={() => onPageChange(page + 1)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Next
-        </Button>
-      </div>
-    </div>
+    </span>
   );
 }
+
+/** For a cell holding a record link inside a row that opens on click: the link wins. */
+export function keepLinkClicks(event: MouseEvent) {
+  if (event.target instanceof Element && event.target.closest('a')) {
+    event.stopPropagation();
+  }
+}
+
+export { QueryState } from '@/components/location-empty-states';
+/** The shared list footer (design-system ListPager). */
+export { ListPager as PaginationControls } from '@/components/design-system';
 
 export function CheckboxLine({
   children,
@@ -165,34 +132,43 @@ export function CheckboxLine({
   );
 }
 
-export function SubmitButton({
-  isPending,
-  label,
-}: Readonly<{
-  isPending: boolean;
-  label: string;
-}>) {
-  return (
-    <Button disabled={isPending} type="submit">
-      {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-      {label}
-    </Button>
-  );
-}
+const usedAs: Record<ItemType, string> = {
+  LIVE: 'live item',
+  MRP: 'packaged, mapped to stores',
+  READYMADE: 'prepared, mapped to kitchens',
+};
 
 export function MappingFormFields({
   categories,
+  editingId,
+  existingMappings,
   form,
   itemLabel,
   items,
   parentLabel,
+  mapsAs,
   parents,
   typeLabel,
 }: Readonly<{
   categories: ItemCategory[] | undefined;
+  /** The mapping being edited, whose own category stays choosable. */
+  editingId?: string;
+  /**
+   * The parent's mappings of an item (live, active or not), so the categories it already has
+   * there can be greyed out; `key` starts with the mapping list's cache key.
+   */
+  existingMappings: {
+    key: string;
+    load: (
+      parentId: string,
+      itemId: string,
+    ) => Promise<Array<{ categoryId: string | null; id: string }>>;
+  };
   form: UseFormReturn<MappingFormValues>;
   itemLabel: string;
   items: Item[] | undefined;
+  /** The type mapping here gives an item; items already of another type can't be chosen. */
+  mapsAs: ItemType;
   parentLabel: string;
   parents: Array<{ code: string; id: string; name: string }> | undefined;
   /** The type mapping here gives an item, e.g. "MRP". */
@@ -200,11 +176,40 @@ export function MappingFormFields({
 }>) {
   const itemId = form.watch('itemId');
   const selectedItem = items?.find((item) => item.id === itemId);
+  // Every catalogue item is listed; one already packaged (stores) or prepared (kitchens) can
+  // only be mapped that way, so it shows greyed with the reason.
+  const usable = (items ?? []).filter((item) => !item.itemType || item.itemType === mapsAs);
+  const usedElsewhere = (items ?? []).filter((item) => item.itemType && item.itemType !== mapsAs);
+  const parentId = form.watch('parentId');
+  const categoryId = form.watch('categoryId');
+  // A parent may hold an item once per category: the ones it already has can't be picked again.
+  const existingQuery = useQuery({
+    enabled: Boolean(parentId && itemId),
+    queryFn: () => existingMappings.load(parentId, itemId),
+    queryKey: [existingMappings.key, 'taken-categories', parentId, itemId],
+  });
+  const takenCategoryIds = new Set(
+    (existingQuery.data ?? [])
+      .filter((mapping) => mapping.id !== editingId && mapping.categoryId)
+      .map((mapping) => mapping.categoryId),
+  );
+
+  // Choosing another store or item can make the picked category one it already has.
+  useEffect(() => {
+    if (categoryId && takenCategoryIds.has(categoryId)) {
+      form.setValue('categoryId', '', { shouldValidate: false });
+    }
+  });
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={form.formState.errors.parentId?.message} label={parentLabel} name="parent-id">
+        <Field
+          error={form.formState.errors.parentId?.message}
+          label={parentLabel}
+          name="parent-id"
+          required
+        >
           <Select id="parent-id" {...form.register('parentId')}>
             <option value="">Select {parentLabel.toLowerCase()}</option>
             {parents?.map((parent) => (
@@ -214,14 +219,30 @@ export function MappingFormFields({
             ))}
           </Select>
         </Field>
-        <Field error={form.formState.errors.itemId?.message} label={itemLabel} name="item-id">
+        <Field
+          error={form.formState.errors.itemId?.message}
+          label={itemLabel}
+          name="item-id"
+          required
+        >
           <Select id="item-id" {...form.register('itemId')}>
             <option value="">Select item</option>
-            {items?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.itemName} ({item.itemCode}){item.itemType ? '' : ' - not mapped yet'}
-              </option>
-            ))}
+            <optgroup label="Can be mapped here">
+              {usable.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.itemName} ({item.itemCode}){item.itemType ? '' : ' - not mapped yet'}
+                </option>
+              ))}
+            </optgroup>
+            {usedElsewhere.length ? (
+              <optgroup label="Already mapped the other way">
+                {usedElsewhere.map((item) => (
+                  <option disabled key={item.id} value={item.id}>
+                    {item.itemName} ({item.itemCode}) - {usedAs[item.itemType!]}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </Select>
         </Field>
       </div>
@@ -229,12 +250,18 @@ export function MappingFormFields({
         error={form.formState.errors.categoryId?.message}
         label="Category"
         name="mapping-category-id"
+        required
       >
         <Select id="mapping-category-id" {...form.register('categoryId')}>
           <option value="">Select category</option>
           {categories?.map((category) => (
-            <option key={category.id} value={category.id}>
+            <option
+              disabled={takenCategoryIds.has(category.id)}
+              key={category.id}
+              value={category.id}
+            >
               {category.categoryName}
+              {takenCategoryIds.has(category.id) ? ' (already mapped)' : ''}
             </option>
           ))}
         </Select>

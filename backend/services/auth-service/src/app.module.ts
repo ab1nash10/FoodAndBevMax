@@ -1,6 +1,8 @@
 import {
   AUTH_PRISMA,
   AccessResolver,
+  addressThrottler,
+  ForgetAccessOnWriteInterceptor,
   AuditLoggerService,
   createThrottlerStorage,
   HealthCheckService,
@@ -16,7 +18,7 @@ import {
 } from '@aahar/config';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -62,6 +64,8 @@ type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y
             limit: config.get<number>('THROTTLE_LIMIT') ?? 100,
             ttl: config.get<number>('THROTTLE_TTL') ?? 60000,
           },
+          // Signed-out traffic per network address; signed-in requests never count here.
+          addressThrottler(),
         ],
       }),
     }),
@@ -85,6 +89,11 @@ type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y
     {
       provide: APP_GUARD,
       useClass: RbacGuard,
+    },
+    // A write here (sign-out, roles, permissions, locations) may change someone's access.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ForgetAccessOnWriteInterceptor,
     },
   ],
 })

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class CreateLocationDto {
   @ApiProperty()
@@ -10,6 +11,7 @@ export class CreateLocationDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(255)
+  @DisplayName()
   locationName!: string;
 
   @ApiPropertyOptional({ example: 'Main Building' })

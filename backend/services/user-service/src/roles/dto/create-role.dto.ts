@@ -9,12 +9,14 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class CreateRoleDto {
   @ApiProperty({ example: 'Admin' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(80)
+  @DisplayName()
   name!: string;
 
   @ApiPropertyOptional({ example: 'System Administrator' })

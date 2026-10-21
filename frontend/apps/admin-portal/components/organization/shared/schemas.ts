@@ -21,13 +21,28 @@ export const postalCodeSchema = z
     message: 'Postal code must be 6 digits.',
   });
 
+/** GSTIN: state code, PAN, entity number, the letter Z, check character. The server checks too. */
+const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+/** Blank, or text matching the pattern; letters in either case (the server stores capitals). */
+const optionalPattern = (maxLength: number, pattern: RegExp, message: string) =>
+  optionalText(maxLength).refine((value) => !value || pattern.test(value.toUpperCase()), {
+    message,
+  });
+
+const optionalIpAddress = optionalText(100).refine(
+  (value) => !value || z.union([z.ipv4(), z.ipv6()]).safeParse(value).success,
+  { message: 'Enter a valid IP address.' },
+);
+
 export const hospitalSchema = z.object({
-  address: z.string().trim().min(1, 'Address is required.').max(500),
+  address: optionalText(500),
   area: optionalText(50),
   city: z.string().trim().min(1, 'City is required.').max(100),
-  displayName: z.string().trim().min(1, 'Display name is required.').max(255),
+  /** Blank: the title is shown. */
+  displayName: optionalText(255),
   invoicePrefix: optionalText(50),
-  ipAddress: optionalText(100),
+  ipAddress: optionalIpAddress,
   isActive: z.boolean(),
   latitude: optionalText(50),
   /** Empty: not linked to an entity. */
@@ -59,9 +74,9 @@ export const restaurantSchema = z.object({
   bankNameBranch: optionalText(255),
   email: optionalEmail,
   fssaiNumbers: optionalText(500),
-  gstNumber: optionalText(50),
+  gstNumber: optionalPattern(50, GSTIN_PATTERN, 'Enter a valid 15-character GST number.'),
   hospitalId: z.string().uuid('Select a location.'),
-  ifscCode: optionalText(50),
+  ifscCode: optionalPattern(50, /^[A-Z]{4}0[A-Z0-9]{6}$/, 'Enter a valid 11-character IFSC code.'),
   isAtTableDiningEnabled: z.boolean(),
   isDeliveryEnabled: z.boolean(),
   isHomeDeliveryEnabled: z.boolean(),
@@ -80,8 +95,8 @@ export const restaurantSchema = z.object({
   /** Empty: not linked to an entity. */
   legalEntityId: z.string(),
   legalName: optionalText(255),
-  mobile: optionalText(30),
-  panNumber: optionalText(50),
+  mobile: optionalText(30).regex(/^$|^\d{10}$/, 'Enter a valid 10 digit mobile number.'),
+  panNumber: optionalPattern(50, /^[A-Z]{5}\d{4}[A-Z]$/, 'Enter a valid 10-character PAN.'),
   restaurantName: z.string().trim().min(1, 'Restaurant name is required.').max(150),
   sodexoMid: optionalText(100),
   sodexoTid: optionalText(100),

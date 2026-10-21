@@ -2,9 +2,10 @@
 
 import type { SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Select } from '@/components/ui';
+import { FilterSelect } from '@/components/ui-controls';
+import { sortChoices } from '@/lib/sort-choices';
 
 // One short row above a list: search, a Filters button whose panel holds the filters, sort,
 // refresh and clear. Usage:
@@ -147,55 +148,49 @@ export function FilterField({
 }
 
 /** What the list is sorted by, and a button flipping the direction. */
+/**
+ * Every list's sort: one "Sort" menu of plain choices, the direction in words ("Newest first",
+ * "Name A–Z"; lib/sort-choices.ts). `options` are the fields the list can sort by.
+ */
 export function SortControl({
+  onChange,
   onOrderChange,
   onSortByChange,
   options,
   order,
   sortBy,
 }: Readonly<{
-  onOrderChange: (order: SortOrder) => void;
-  onSortByChange: (sortBy: string) => void;
+  /** Both at once, for a list that keeps them as one value; else the two callbacks below. */
+  onChange?: (sortBy: string, order: SortOrder) => void;
+  onOrderChange?: (order: SortOrder) => void;
+  onSortByChange?: (sortBy: string) => void;
   options: ReadonlyArray<{ label: string; value: string }>;
   order: SortOrder;
   sortBy: string;
 }>) {
-  const ascending = order === 'asc';
-
   return (
-    <div className="flex items-center gap-1">
-      <div className="w-52">
-        <Select
-          aria-label="Sort by"
-          onChange={(event) => onSortByChange(event.target.value)}
-          value={sortBy}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              Sort: {option.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <Button
-        aria-label={
-          ascending
-            ? 'Ascending order; switch to descending'
-            : 'Descending order; switch to ascending'
+    <FilterSelect
+      label="Sort"
+      onChange={(value) => {
+        const [field = sortBy, direction] = value.split(':');
+        const nextOrder: SortOrder = direction === 'asc' ? 'asc' : 'desc';
+
+        if (onChange) {
+          onChange(field, nextOrder);
+          return;
         }
-        onClick={() => onOrderChange(ascending ? 'desc' : 'asc')}
-        size="icon"
-        title={ascending ? 'Ascending' : 'Descending'}
-        type="button"
-        variant="outline"
-      >
-        {ascending ? (
-          <ArrowUpNarrowWide aria-hidden="true" className="h-4 w-4" />
-        ) : (
-          <ArrowDownWideNarrow aria-hidden="true" className="h-4 w-4" />
-        )}
-      </Button>
-    </div>
+
+        if (field !== sortBy) onSortByChange?.(field);
+        if (nextOrder !== order) onOrderChange?.(nextOrder);
+      }}
+      value={`${sortBy}:${order}`}
+    >
+      {sortChoices(options).map((choice) => (
+        <option key={choice.value} value={choice.value}>
+          {choice.label}
+        </option>
+      ))}
+    </FilterSelect>
   );
 }
 

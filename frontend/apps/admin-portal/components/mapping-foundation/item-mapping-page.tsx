@@ -1,11 +1,13 @@
 'use client';
 
-import { Link2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth-provider';
+import { AppPageHeader, StatStrip, type Stat } from '@/components/design-system';
 import { KitchenItemsPageClient } from '@/components/mapping-foundation/kitchen-items/kitchen-items-page';
-import { PageHeader } from '@/components/mapping-foundation/shared/components';
 import { StoreItemsPageClient } from '@/components/mapping-foundation/store-items/store-items-page';
-import { SavedViewTabs, SegmentedControl } from '@/components/ui-controls';
+import { useLocationContext } from '@/components/location-context';
+import { SavedViewTabs } from '@/components/ui-controls';
+import { organizationApi } from '@/lib/api';
 import { setUrlParams, useUrlParam } from '@/lib/use-url-state';
 
 type MappingTarget = 'kitchen' | 'store';
@@ -16,37 +18,64 @@ const targets: Array<{ label: string; permission: string; tab: string; value: Ma
 ];
 
 /**
+ * One side's counts, all and inactive, at the location picked in the top bar. Keyed under the
+ * side's list key, so every save and switch there refreshes them too.
+ */
+function useMappingCounts(target: MappingTarget, hospitalId: string | undefined, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: async () => {
+      const count = async (isActive?: boolean) => {
+        const query = { hospitalId, isActive, limit: 0 };
+        const response =
+          target === 'store'
+            ? await organizationApi.listStoreItems(query)
+            : await organizationApi.listKitchenItems(query);
+
+        return response.data.meta.total;
+      };
+      const [all, inactive] = await Promise.all([count(), count(false)]);
+
+      return { all, inactive };
+    },
+    queryKey: [target === 'store' ? 'store-items' : 'kitchen-items', 'stats', hospitalId ?? ''],
+  });
+}
+
+/**
  * Store and kitchen item mapping in one panel: the Store / Kitchen switch above the form and
  * the tabs above the list choose the same thing (?tab=store|kitchen), so editing a row always
  * opens it in the matching form. Each side works exactly as its own screen did.
  */
 export function ItemMappingPageClient() {
   const { hasPermission } = useAuth();
+  const { scopedHospitalId } = useLocationContext();
   const allowed = targets.filter((target) => hasPermission(target.permission));
   const [tab] = useUrlParam<MappingTarget>('tab', allowed[0]?.value ?? 'store', [
     'store',
     'kitchen',
   ]);
+  const [status] = useUrlParam('status');
   const mode = allowed.some((target) => target.value === tab)
     ? tab
     : (allowed[0]?.value ?? 'store');
+  const canSee = (target: MappingTarget) => allowed.some((shown) => shown.value === target);
+  const storeCounts = useMappingCounts('store', scopedHospitalId, canSee('store')).data;
+  const kitchenCounts = useMappingCounts('kitchen', scopedHospitalId, canSee('kitchen')).data;
 
   // A switch starts the other side clean: its own search, status and page.
   const choose = (next: MappingTarget) => {
     if (next !== mode) setUrlParams({ page: null, q: null, status: null, tab: next });
   };
-  const formSwitch =
-    allowed.length > 1 ? (
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-[13px] font-semibold text-ds-text-2">Map to</span>
-        <SegmentedControl<MappingTarget>
-          label="Map to"
-          onChange={choose}
-          options={allowed.map(({ label, value }) => ({ label, value }))}
-          value={mode}
-        />
-      </div>
-    ) : undefined;
+  /** A stat's side, all of it or only its inactive mappings. */
+  const show = (next: MappingTarget, inactive: boolean) => {
+    setUrlParams({
+      page: null,
+      ...(next === mode ? {} : { q: null }),
+      status: inactive ? 'inactive' : null,
+      tab: next,
+    });
+  };
   const listTabs =
     allowed.length > 1 ? (
       <SavedViewTabs<MappingTarget>
@@ -57,22 +86,63 @@ export function ItemMappingPageClient() {
       />
     ) : undefined;
 
+  const stats: Stat[] = [];
+
+  if (canSee('store')) {
+    stats.push({
+      active: mode === 'store' && status !== 'inactive',
+      label: 'Store mappings',
+      onSelect: () => show('store', false),
+      value: storeCounts?.all ?? '–',
+    });
+  }
+
+  if (canSee('kitchen')) {
+    stats.push({
+      active: mode === 'kitchen' && status !== 'inactive',
+      label: 'Kitchen mappings',
+      onSelect: () => show('kitchen', false),
+      value: kitchenCounts?.all ?? '–',
+    });
+  }
+
+  if (canSee('store')) {
+    stats.push({
+      active: mode === 'store' && status === 'inactive',
+      label: 'Inactive · stores',
+      onSelect: () => show('store', true),
+      tone: 'pending',
+      value: storeCounts?.inactive ?? '–',
+    });
+  }
+
+  if (canSee('kitchen')) {
+    stats.push({
+      active: mode === 'kitchen' && status === 'inactive',
+      label: 'Inactive · kitchens',
+      onSelect: () => show('kitchen', true),
+      tone: 'pending',
+      value: kitchenCounts?.inactive ?? '–',
+    });
+  }
+
+  const total =
+    (canSee('store') && !storeCounts) || (canSee('kitchen') && !kitchenCounts)
+      ? undefined
+      : (storeCounts?.all ?? 0) + (kitchenCounts?.all ?? 0);
+
   return (
-    <section className="space-y-5">
-      <PageHeader
-        icon={Link2}
-        subtitle="Map items to stores (they become MRP) and kitchens (they become Readymade), with their category."
+    <section className="space-y-4">
+      <AppPageHeader
+        count={total}
+        description="Map items to stores (they become MRP) and kitchens (they become Readymade), with their category."
         title="Item Mapping"
       />
+      {stats.length ? <StatStrip label="Item mappings at a glance" stats={stats} /> : null}
       {mode === 'store' ? (
-        <StoreItemsPageClient embedded formSwitch={formSwitch} key="store" listTabs={listTabs} />
+        <StoreItemsPageClient embedded key="store" listTabs={listTabs} />
       ) : (
-        <KitchenItemsPageClient
-          embedded
-          formSwitch={formSwitch}
-          key="kitchen"
-          listTabs={listTabs}
-        />
+        <KitchenItemsPageClient embedded key="kitchen" listTabs={listTabs} />
       )}
     </section>
   );

@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { UseFormReturn } from 'react-hook-form';
 import type { FoodType, ItemCategory } from '@aahar/api-client';
-import { Field, FieldError, Input, Skeleton } from '@/components/ui';
+import { Field, FieldError, Input, RequiredMark, Skeleton } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
 import { CheckboxLine } from '@/components/master-data/shared/components';
 import { lazyValue } from '@/lib/lazy-value';
@@ -22,9 +22,8 @@ export interface ItemFormValues {
   type: FoodTypeFilter;
 }
 
-export const similarItemError = 'Similar item already exists in this category';
-export const unmappedTwinError =
-  'An item with this name already exists and is waiting to be mapped';
+/** The server's answer when the name (ignoring case, spaces and punctuation) is taken. */
+export const similarItemError = 'An item with this name already exists';
 
 export function useItemCategoryOptions() {
   return useQuery<ItemCategory[]>({
@@ -64,7 +63,13 @@ export function ItemFormFields({ form }: Readonly<{ form: UseFormReturn<ItemForm
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={form.formState.errors.itemName?.message} label="Item name" name="item-name">
+        <Field
+          error={form.formState.errors.itemName?.message}
+          label="Item name"
+          name="item-name"
+          required
+        >
+          {/* A name field: the shared Input applies the naming convention (lib/names.ts). */}
           <Input id="item-name" placeholder="e.g. Veg Thali" {...form.register('itemName')} />
         </Field>
         <Field label="Item code" name="item-code">
@@ -81,7 +86,11 @@ export function ItemFormFields({ form }: Readonly<{ form: UseFormReturn<ItemForm
         MRP, to a kitchen (Kitchen Items) Readymade.
       </p>
       <fieldset className="space-y-2">
-        <legend className="text-[13px] font-semibold leading-none text-ds-text-2">Food type</legend>
+        <legend className="text-[13px] font-semibold leading-none text-ds-text-2">
+          Food type
+          <RequiredMark />
+          <span className="sr-only"> (required)</span>
+        </legend>
         <div className="grid grid-cols-3 gap-2 pt-2">
           {foodTypeValues.map((type) => (
             <label

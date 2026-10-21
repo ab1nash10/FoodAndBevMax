@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import type { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from './constants';
+import { loggedPath } from './request-logging.middleware';
 
 interface AuthorizationHeaderRequest {
   headers?: Record<string, string | string[] | undefined>;
@@ -76,7 +77,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         infoMessage: infoError?.message ?? (typeof info === 'string' ? info : undefined),
         infoName: infoError?.name,
         method: request.method,
-        path: request.originalUrl ?? request.url,
+        path: loggedPath(request),
         scheme,
         tokenLength: token?.length,
       }),

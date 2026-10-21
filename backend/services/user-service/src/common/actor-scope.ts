@@ -116,6 +116,33 @@ export function assertHoldsPermissions(codes: string[], actor: JwtRequestUser | 
   }
 }
 
+/**
+ * Setting someone else's password, email or mobile lets the actor sign in as them, so it needs
+ * the reach to grant everything they hold: their roles' location scope and every permission.
+ * Without it a location Admin could reset a wider Admin's password and inherit their rights.
+ */
+export function assertCanTakeOverSignIn(
+  target: { name: string; permissionCodes: string[]; scopes: LocationScopeName[] },
+  actor: JwtRequestUser | undefined,
+): void {
+  const current = requireActor(actor);
+
+  if (isSuperAdmin(current)) {
+    return;
+  }
+
+  const wider = target.scopes.some(
+    (scope) => SCOPE_RANK[scope] > SCOPE_RANK[current.locationScope],
+  );
+  const missing = target.permissionCodes.some((code) => !current.permissions.includes(code));
+
+  if (wider || missing) {
+    throw new ForbiddenException(
+      `${target.name} has access you do not hold, so only they or a Super Admin can change their password, email or mobile`,
+    );
+  }
+}
+
 /** Only a Super Admin may change their own role, locations, status or permissions. */
 export function assertNotSelf(
   userId: string,

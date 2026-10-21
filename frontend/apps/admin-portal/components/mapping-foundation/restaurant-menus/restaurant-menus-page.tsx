@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus } from 'lucide-react';
+import { Loader2, Pencil, Plus } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -15,22 +15,29 @@ import type {
   RestaurantMenuPositionType,
 } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
-import { FoodTypeMarker } from '@/components/design-system';
+import {
+  AppPageHeader,
+  FoodTypeMarker,
+  ListPager,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
+import { ImportButton } from '@/components/import/import-dialog';
+import { menuImport } from '@/components/import/import-definitions';
 import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { FilterSearch, Modal, Toggle } from '@/components/ui-controls';
+import { FilterSearch, Modal } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { useUndoable } from '@/lib/use-undoable';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RestaurantMenuFormFields } from '@/components/mapping-foundation/restaurant-menus/restaurant-menu-form-fields';
-import {
-  menuColumns,
-  startMenuImport,
-} from '@/components/mapping-foundation/restaurant-menus/restaurant-menus-csv';
+import { menuColumns } from '@/components/mapping-foundation/restaurant-menus/restaurant-menus-csv';
 import {
   dayOfWeekValues,
   formatEnum,
@@ -39,7 +46,7 @@ import {
   serveAtOptions,
   type RestaurantMenuFormValues,
 } from '@/components/mapping-foundation/restaurant-menus/shared';
-import { QueryState } from '@/components/mapping-foundation/shared/components';
+import { QueryState, RowSwitch } from '@/components/mapping-foundation/shared/components';
 import type { ActiveFilter } from '@/components/mapping-foundation/shared/types';
 import {
   activeFilterToBoolean,
@@ -91,6 +98,7 @@ const restaurantMenuSchema = z
     categoryId: z.string().uuid('Select a category.'),
     itemId: z.string().uuid('Select a food item.'),
     kitchenId: z.string(),
+    storeId: z.string(),
     positionType: z.custom<RestaurantMenuPositionType | ''>(
       (value) => value === '' || positionTypeValues.includes(value as RestaurantMenuPositionType),
       { message: 'Select a position.' },
@@ -151,7 +159,7 @@ type DayFilter = '' | RestaurantMenuDayOfWeek;
 /** "07:00–10:30", or "All day" when the menu has no window of its own. */
 function windowText(menu: RestaurantMenu): string {
   return menu.availableFrom && menu.availableTo
-    ? `${menu.availableFrom}–${menu.availableTo}`
+    ? `${menu.availableFrom} – ${menu.availableTo}`
     : 'All day';
 }
 
@@ -197,6 +205,7 @@ function emptyRestaurantMenuFormValues(): RestaurantMenuFormValues {
     isGstInclusive: false,
     itemId: '',
     kitchenId: '',
+    storeId: '',
     positionType: 'LAST',
     preparationTimeMinutes: '',
     price: '',
@@ -225,6 +234,7 @@ function restaurantMenuToFormValues(menu: RestaurantMenu): RestaurantMenuFormVal
     isGstInclusive: menu.isGstInclusive,
     itemId: menu.itemId,
     kitchenId: text(menu.kitchenId),
+    storeId: text(menu.storeId),
     positionType: '',
     preparationTimeMinutes: text(menu.preparationTimeMinutes),
     price: text(menu.price),
@@ -236,13 +246,24 @@ function restaurantMenuToFormValues(menu: RestaurantMenu): RestaurantMenuFormVal
   };
 }
 
-function priceLines(menu: RestaurantMenu): string[] {
+/** Each price it is sold at, labelled; null where a needed price is missing. */
+function priceLines(menu: RestaurantMenu): Array<{ label: string; value: number | null }> {
   return [
-    menu.serveAt !== 'ROOM' && menu.price !== null ? rupees.format(menu.price) : null,
-    menu.serveAt !== 'COUNTER' && menu.roomPrice !== null
-      ? `${rupees.format(menu.roomPrice)} room`
-      : null,
-  ].filter((line): line is string => line !== null);
+    ...(menu.serveAt === 'ROOM' ? [] : [{ label: 'Counter', value: menu.price }]),
+    ...(menu.serveAt === 'COUNTER' ? [] : [{ label: 'Room', value: menu.roomPrice }]),
+  ];
+}
+
+/** "Every day", or the days in week order as "Mon, Wed, Fri". */
+function daysText(menu: RestaurantMenu): string {
+  if (menu.daysOfWeek.length === 0 || menu.daysOfWeek.length === dayOfWeekValues.length) {
+    return 'Every day';
+  }
+
+  return dayOfWeekValues
+    .filter((day) => menu.daysOfWeek.includes(day))
+    .map((day) => formatEnum(day).slice(0, 3))
+    .join(', ');
 }
 
 export function RestaurantMenusPageClient() {
@@ -324,6 +345,30 @@ export function RestaurantMenusPageClient() {
     }),
   });
 
+  // The strip's counts at this location: under the list's own key, so every save refreshes them.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (query: { isActive?: boolean; isAvailable?: boolean }) =>
+        (
+          await organizationApi.listRestaurantMenus({
+            ...query,
+            hospitalId: scopedHospitalId || undefined,
+            limit: 0,
+          })
+        ).data.meta.total;
+      const [all, available, unavailable, inactive] = await Promise.all([
+        count({}),
+        count({ isAvailable: true }),
+        count({ isAvailable: false }),
+        count({ isActive: false }),
+      ]);
+
+      return { all, available, inactive, unavailable };
+    },
+    queryKey: queryKeys.restaurantMenus('stats', scopedHospitalId ?? ''),
+  });
+  const stats = statsQuery.data;
+
   function invalidateMenus() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantMenus() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantMenuReferenceOptions() });
@@ -363,19 +408,19 @@ export function RestaurantMenusPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateMenus();
-      showToast({
-        title: variables.isActive ? 'Menu item activated' : 'Menu item marked inactive',
-        variant: 'success',
-      });
+      // Marking inactive already had its Undo toast.
+      if (variables.isActive) showToast({ title: 'Menu item activated', variant: 'success' });
     },
   });
+  const undoable = useUndoable();
 
-  const menus = menusQuery.data?.items ?? [];
+  // A menu item marked inactive shows so at once, while its Undo toast runs.
+  const menus = (menusQuery.data?.items ?? []).map((menu) =>
+    undoable.isChanged(menu.id) ? { ...menu, isActive: false } : menu,
+  );
   const referenceMenus =
     referenceMenusQuery.data?.filter((menu) => menu.id !== editingMenu?.id) ?? [];
   const meta = menusQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
-  const firstRow = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
-  const lastRow = Math.min(meta.page * meta.limit, meta.total);
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = restaurantMenuSchema.safeParse(values);
@@ -401,6 +446,7 @@ export function RestaurantMenusPageClient() {
       isGstInclusive: data.isGstInclusive,
       itemId: data.itemId,
       kitchenId: data.kitchenId || null,
+      storeId: data.storeId || null,
       preparationTimeMinutes: numberOrNull(data.preparationTimeMinutes),
       // A price the item is not served at is cleared, so it can't linger unseen.
       price: data.serveAt === 'ROOM' ? null : numberOrNull(data.price),
@@ -452,18 +498,20 @@ export function RestaurantMenusPageClient() {
   });
 
   function toggleMenuStatus(menu: RestaurantMenu) {
-    const nextIsActive = !menu.isActive;
+    // Switching it back on while the Undo toast runs is the same as Undo.
+    if (undoable.undo(menu.id)) return;
 
-    if (
-      !nextIsActive &&
-      !window.confirm(
-        'Turning this menu item inactive will hide it from the restaurant menu and POS. Existing records will remain visible. Continue?',
-      )
-    ) {
+    if (menu.isActive) {
+      undoable.schedule({
+        commit: () => toggleMenuStatusMutation.mutateAsync({ isActive: false, menu }),
+        description: 'It’s hidden from the restaurant menu and POS. Existing records stay visible.',
+        id: menu.id,
+        title: `${menu.item.itemName} marked inactive`,
+      });
       return;
     }
 
-    toggleMenuStatusMutation.mutate({ isActive: nextIsActive, menu });
+    toggleMenuStatusMutation.mutate({ isActive: true, menu });
   }
 
   function changeFilter(apply: () => void) {
@@ -474,6 +522,14 @@ export function RestaurantMenusPageClient() {
   const hasFilters = Boolean(
     searchInput || restaurantFilter || dayFilter || availabilityFilter || activeFilter,
   );
+
+  /** A stat's filter alone: availability or the inactive status, the other cleared. */
+  function showOnly(availability: AvailabilityFilter, status: ActiveFilter) {
+    changeFilter(() => {
+      setAvailabilityFilter(availability);
+      setActiveFilter(status);
+    });
+  }
 
   function clearFilters() {
     setSearch('');
@@ -486,47 +542,77 @@ export function RestaurantMenusPageClient() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text">
-            Restaurant Menus
-          </h1>
-          <p className="text-[13.5px] text-ds-muted">
-            What each restaurant sells, from which kitchen, when, and at what price.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <CsvImportExport
-            columns={menuColumns}
-            exportRows={() =>
-              fetchAllPages((exportPage) =>
-                organizationApi.listRestaurantMenus({
-                  dayOfWeek: dayFilter || undefined,
-                  hospitalId: scopedHospitalId || undefined,
-                  isActive: activeFilterToBoolean(activeFilter),
-                  isAvailable: availabilityFilterToBoolean(availabilityFilter),
-                  limit: 100,
-                  page: exportPage,
-                  restaurantId: restaurantFilter,
-                  search,
-                  sortBy: 'displayOrder',
-                  sortOrder: 'asc',
-                }),
-              )
-            }
-            filename="restaurant-menus"
-            noun="menu items"
-            onImported={invalidateMenus}
-            startImport={canCreate ? startMenuImport : undefined}
-          />
-          {canCreate ? (
-            <Button onClick={() => openForm('new')} type="button">
-              <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-              New menu item
-            </Button>
-          ) : null}
-        </div>
-      </div>
+      <AppPageHeader
+        action={
+          <div className="flex flex-wrap gap-2">
+            <CsvImportExport
+              columns={menuColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listRestaurantMenus({
+                    dayOfWeek: dayFilter || undefined,
+                    hospitalId: scopedHospitalId || undefined,
+                    isActive: activeFilterToBoolean(activeFilter),
+                    isAvailable: availabilityFilterToBoolean(availabilityFilter),
+                    limit: 100,
+                    page: exportPage,
+                    restaurantId: restaurantFilter,
+                    search,
+                    sortBy: 'displayOrder',
+                    sortOrder: 'asc',
+                  }),
+                )
+              }
+              filename="restaurant-menus"
+              noun="menu items"
+              onImported={invalidateMenus}
+            />
+            <ImportButton definition={menuImport} />
+            {canCreate ? (
+              <Button onClick={() => openForm('new')} type="button">
+                <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                New menu item
+              </Button>
+            ) : null}
+          </div>
+        }
+        count={stats?.all}
+        description="What each restaurant sells, from which store or kitchen, when, and at what price."
+        title="Restaurant Menus"
+      />
+
+      <StatStrip
+        label="Menu items at a glance"
+        stats={[
+          {
+            active: !availabilityFilter && !activeFilter,
+            label: 'Menu items',
+            onSelect: () => showOnly('', ''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: availabilityFilter === 'available',
+            label: 'Available now',
+            onSelect: () => showOnly('available', ''),
+            tone: 'ok',
+            value: stats?.available ?? '–',
+          },
+          {
+            active: availabilityFilter === 'unavailable',
+            label: 'Not available',
+            onSelect: () => showOnly('unavailable', ''),
+            tone: 'bad',
+            value: stats?.unavailable ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive',
+            onSelect: () => showOnly('', 'inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
 
       {restaurantsQuery.data?.length === 0 ? (
         <SetupNotice href="/masters/restaurants/new" linkLabel="Create a restaurant">
@@ -607,16 +693,31 @@ export function RestaurantMenusPageClient() {
         </ListToolbar>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] table-fixed text-[13px]">
-            <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-[960px] table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[22%] px-4 py-2.5 font-semibold">Item</th>
-                <th className="w-[18%] px-3 py-2.5 font-semibold">Restaurant</th>
-                <th className="w-[12%] px-3 py-2.5 font-semibold">Kitchen</th>
-                <th className="w-[12%] px-3 py-2.5 font-semibold">Price</th>
-                <th className="w-[13%] px-3 py-2.5 font-semibold">Available</th>
-                <th className="w-[12%] px-3 py-2.5 font-semibold">Status</th>
-                <th className="w-[11%] px-3 py-2.5 pr-4 text-right font-semibold">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[20%]')}>Item</th>
+                <th className={cn(tableStyles.th, 'w-[16%]')}>Restaurant</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Store / Kitchen</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Serving time</th>
+                <th className={cn(tableStyles.th, 'w-[12%]')}>Price</th>
+                <th
+                  className={cn(tableStyles.th, 'w-[12%]')}
+                  title="Can it be ordered right now? Switch off when it is sold out for the day."
+                >
+                  <span className="cursor-help border-b border-dotted border-ds-muted">
+                    Available now
+                  </span>
+                </th>
+                <th
+                  className={cn(tableStyles.th, 'w-[11%]')}
+                  title="Is it on this restaurant's menu at all? Inactive items are hidden from the menu and POS."
+                >
+                  <span className="cursor-help border-b border-dotted border-ds-muted">Status</span>
+                </th>
+                <th className={cn(tableStyles.th, 'w-[5%]')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -625,105 +726,116 @@ export function RestaurantMenusPageClient() {
                   const prices = priceLines(menu);
 
                   return (
-                    <tr className="border-b border-ds-divider" key={menu.id}>
-                      <td className="px-4 py-1.5">
-                        <span className="flex min-w-0 items-center gap-2.5">
+                    <tr
+                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      key={menu.id}
+                      onClick={canEdit ? () => openForm(menu) : undefined}
+                    >
+                      <td className={tableStyles.td}>
+                        <span className="flex min-w-0 items-center gap-3">
                           <FoodTypeMarker type={menu.item.type} />
-                          <span className="flex min-w-0 flex-col">
-                            <span className="truncate text-[13.5px] font-bold text-ds-text">
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className={cn('truncate', tableStyles.title)}>
                               {menu.item.itemName}
                             </span>
-                            <span className="truncate text-[11.5px] tabular-nums text-ds-muted">
-                              {menu.menuItemCode}
-                              {menu.category ? ` · ${menu.category.categoryName}` : ''} ·{' '}
-                              {windowText(menu)}
+                            <span className="truncate text-[12px] text-ds-muted">
+                              {menu.category ? `${menu.category.categoryName} · ` : ''}
+                              <span className={tableStyles.code}>{menu.menuItemCode}</span>
                             </span>
                           </span>
                         </span>
                       </td>
-                      <td className="px-3 py-1.5">
-                        <span className="block truncate font-semibold text-ds-text-2">
+                      <td className={tableStyles.td}>
+                        <span className="block truncate font-medium text-ds-text-2">
                           {menu.restaurant.restaurantName}
                         </span>
-                        <span className="block truncate text-[11.5px] text-ds-muted">
+                        <span className="block truncate text-[12px] text-ds-muted">
                           {menu.restaurant.hospital.hospitalName}
                         </span>
                       </td>
-                      <td className="truncate px-3 py-1.5 text-[12.5px] text-ds-text-2">
-                        {menu.kitchen?.kitchenName ?? '—'}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {prices.length ? (
-                          prices.map((line) => (
-                            <span
-                              className="block truncate font-bold tabular-nums text-ds-text"
-                              key={line}
-                            >
-                              {line}
+                      <td className={tableStyles.td}>
+                        {menu.kitchen || menu.store ? (
+                          <>
+                            <span className="block truncate text-ds-text-2">
+                              {menu.kitchen?.kitchenName ?? menu.store?.storeName}
                             </span>
-                          ))
+                            <span className="block text-[12px] text-ds-muted">
+                              {menu.kitchen ? 'Kitchen' : 'Store'}
+                            </span>
+                          </>
                         ) : (
-                          <span className="text-ds-muted">—</span>
+                          <span className="text-ds-muted">Not set</span>
                         )}
-                        <span className="block truncate text-[11.5px] text-ds-muted">
-                          {serveAtLabels[menu.serveAt]}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <span
+                          className={cn(
+                            'block truncate text-[13px] text-ds-text-2',
+                            tableStyles.num,
+                          )}
+                        >
+                          {windowText(menu)}
+                        </span>
+                        <span className="block truncate text-[12px] text-ds-muted">
+                          {daysText(menu)}
                         </span>
                       </td>
-                      <td className="px-3 py-1.5">
-                        <span className="flex items-center gap-2">
-                          <Toggle
-                            ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} available`}
-                            checked={menu.isAvailable}
-                            disabled={toggleAvailabilityMutation.isPending || !canEdit}
-                            onChange={() =>
-                              toggleAvailabilityMutation.mutate({
-                                isAvailable: !menu.isAvailable,
-                                menu,
-                              })
-                            }
-                          />
+                      <td className={tableStyles.td} title={serveAtLabels[menu.serveAt]}>
+                        {prices.map((line) => (
                           <span
-                            className={cn(
-                              'text-xs font-bold',
-                              menu.isAvailable ? 'text-ds-status-ok-fg' : 'text-ds-muted',
-                            )}
+                            className="flex items-baseline justify-between gap-2"
+                            key={line.label}
                           >
-                            {menu.isAvailable ? 'Available' : 'Unavailable'}
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <span className="flex items-center gap-2">
-                          <Toggle
-                            ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
-                            checked={menu.isActive}
-                            disabled={toggleMenuStatusMutation.isPending || !canEdit}
-                            onChange={() => toggleMenuStatus(menu)}
-                          />
-                          <span
-                            className={cn(
-                              'text-xs font-bold',
-                              menu.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                            <span className="text-[12px] text-ds-muted">{line.label}</span>
+                            {line.value === null ? (
+                              <span className="text-[12px] font-semibold text-ds-status-pending-fg">
+                                Price not set
+                              </span>
+                            ) : (
+                              <span className={cn('font-medium text-ds-text', tableStyles.num)}>
+                                {rupees.format(line.value)}
+                              </span>
                             )}
-                          >
-                            {menu.isActive ? 'Active' : 'Inactive'}
                           </span>
-                        </span>
+                        ))}
                       </td>
-                      <td className="px-3 py-1.5 pr-4">
-                        <span className="flex justify-end gap-2">
+                      {/* The switches have their own clicks: they do not open the menu item. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <RowSwitch
+                          ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} available`}
+                          checked={menu.isAvailable}
+                          disabled={toggleAvailabilityMutation.isPending || !canEdit}
+                          offLabel="Unavailable"
+                          onChange={() =>
+                            toggleAvailabilityMutation.mutate({
+                              isAvailable: !menu.isAvailable,
+                              menu,
+                            })
+                          }
+                          onLabel="Available"
+                        />
+                      </td>
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <RowSwitch
+                          ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
+                          checked={menu.isActive}
+                          disabled={toggleMenuStatusMutation.isPending || !canEdit}
+                          offLabel="Inactive"
+                          onChange={() => toggleMenuStatus(menu)}
+                          onLabel="Active"
+                        />
+                      </td>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end">
                           {canEdit ? (
-                            <Button
-                              aria-label={`Edit ${menu.item.itemName}`}
-                              className="h-9 w-9"
-                              onClick={() => openForm(menu)}
-                              size="icon"
-                              title="Edit"
-                              type="button"
-                              variant="outline"
-                            >
-                              <Pencil aria-hidden="true" className="h-4 w-4" />
-                            </Button>
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${menu.item.itemName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openForm(menu);
+                              }}
+                            />
                           ) : null}
                         </span>
                       </td>
@@ -732,7 +844,7 @@ export function RestaurantMenusPageClient() {
                 })
               ) : (
                 <QueryState
-                  colSpan={7}
+                  colSpan={8}
                   error={menusQuery.error}
                   isError={menusQuery.isError}
                   isLoading={menusQuery.isLoading}
@@ -742,42 +854,18 @@ export function RestaurantMenusPageClient() {
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-[12.5px] text-ds-muted">
-          <span>
-            Showing{' '}
-            <strong className="font-bold text-ds-text">
-              {firstRow}–{lastRow}
-            </strong>{' '}
-            of {meta.total} menu {meta.total === 1 ? 'item' : 'items'}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Button
-              aria-label="Previous page"
-              className="h-[30px] w-[30px]"
-              disabled={meta.page <= 1}
-              onClick={() => setPage(meta.page - 1)}
-              size="icon"
-              type="button"
-              variant="outline"
-            >
-              <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-            </Button>
-            <Button
-              aria-label="Next page"
-              className="h-[30px] w-[30px]"
-              disabled={meta.page >= meta.totalPages}
-              onClick={() => setPage(meta.page + 1)}
-              size="icon"
-              type="button"
-              variant="outline"
-            >
-              <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-            </Button>
-          </span>
-        </div>
+        <ListPager
+          limit={meta.limit}
+          noun="menu item"
+          onPageChange={setPage}
+          page={meta.page}
+          total={meta.total}
+          totalPages={meta.totalPages}
+        />
       </Panel>
 
       <Modal
+        side
         footer={
           <div className="flex justify-end gap-3">
             <Button onClick={closeForm} type="button" variant="outline">

@@ -15,6 +15,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { CodeCase } from '../../common/display-name.decorator';
 
 export class PosOrderItemDto {
   @ApiProperty({ example: 'Masala Dosa' })
@@ -52,6 +53,7 @@ export class PushOrderDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
+  @CodeCase()
   restaurantCode?: string;
 
   @ApiPropertyOptional({
@@ -102,6 +104,7 @@ export class PushOrderDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
+  @CodeCase()
   counterCode?: string;
 
   @ApiPropertyOptional({ description: 'Estimated preparation time; the board shows "~n min".' })

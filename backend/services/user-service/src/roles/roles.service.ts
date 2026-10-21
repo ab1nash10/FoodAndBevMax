@@ -165,6 +165,11 @@ export class RolesService {
           if (dto.name !== undefined && dto.name !== existing.name) {
             throw new BadRequestException('The Super Admin role cannot be renamed');
           }
+
+          // An inactive role grants nothing, so this would sign every Super Admin out for good.
+          if (dto.status === RecordStatus.INACTIVE) {
+            throw new BadRequestException('The Super Admin role cannot be made inactive');
+          }
         }
 
         const data: Prisma.RoleUpdateInput = {};

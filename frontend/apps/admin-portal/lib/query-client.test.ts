@@ -1,4 +1,5 @@
 import { ApiClientError } from '@aahar/api-client';
+import { keepPreviousData } from '@tanstack/react-query';
 import { expect, test } from 'vitest';
 import { createQueryClient } from './query-client';
 import { queryKeys } from './query-keys';
@@ -14,6 +15,24 @@ test('master data lists stay fresh 5 minutes, live queues 15 s, everything else 
   expect(staleTimeOf(queryKeys.transfers({ page: 1 }))).toBe(30_000);
   // Not invalidated when the masters change, so not lengthened.
   expect(staleTimeOf(queryKeys.inventoryStores())).toBe(30_000);
+});
+
+test('lists keep their rows while the next page loads; records never show another record', () => {
+  const placeholderOf = (queryKey: readonly unknown[]) =>
+    createQueryClient().defaultQueryOptions({ queryKey }).placeholderData;
+
+  expect(placeholderOf(queryKeys.grns(1, '', '', '', '', 'desc'))).toBe(keepPreviousData);
+  expect(placeholderOf(queryKeys.transfers(2, 'all'))).toBe(keepPreviousData);
+  expect(placeholderOf(queryKeys.employees({ page: 1 }))).toBe(keepPreviousData);
+  expect(placeholderOf(queryKeys.grns('detail', 'grn-1'))).toBeUndefined();
+  expect(placeholderOf(queryKeys.transfers('detail', 'transfer-1'))).toBeUndefined();
+  expect(placeholderOf(queryKeys.items('detail', 'item-1'))).toBeUndefined();
+  expect(placeholderOf(queryKeys.kitchenProductions('detail', 'p-1'))).toBeUndefined();
+  expect(placeholderOf(queryKeys.stockLedgers('movements', 's-1', 'i-1', 14))).toBeUndefined();
+  expect(placeholderOf(queryKeys.posBill('bill-1'))).toBeUndefined();
+  expect(placeholderOf(queryKeys.restaurant('r-1'))).toBeUndefined();
+  // The list default does not undo the live queue's shorter staleTime.
+  expect(staleTimeOf(queryKeys.transfersViewCounts('7d'))).toBe(15_000);
 });
 
 test('retries once, never on 401, 403 or 404, and never refetches on focus', () => {

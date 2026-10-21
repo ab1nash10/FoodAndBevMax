@@ -7,7 +7,8 @@ import { organizationApi } from '@/lib/api';
 import { locationHref } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';
 
-// Every active store, kitchen and restaurant, for turning a transfer's location ids into names.
+// Every active store, kitchen, restaurant and counter, for turning a transfer's location ids
+// into names.
 // ponytail: first 100 of each, the API's page cap; page through if a group outgrows it.
 
 function useAllStores(enabled = true) {
@@ -61,6 +62,23 @@ function useAllRestaurants(enabled = true) {
   });
 }
 
+function useAllCounters(enabled = true) {
+  return useQuery({
+    enabled,
+    queryFn: async () => {
+      const response = await organizationApi.listCounters({
+        isActive: true,
+        limit: 100,
+        sortBy: 'counterName',
+        sortOrder: 'asc',
+      });
+
+      return response.data.items;
+    },
+    queryKey: queryKeys.counters('all-active'),
+  });
+}
+
 const typeLabels: Record<InventoryLocationType, string> = {
   COUNTER: 'Counter',
   KITCHEN: 'Kitchen',
@@ -69,7 +87,7 @@ const typeLabels: Record<InventoryLocationType, string> = {
 };
 
 /**
- * Name of a store, kitchen or restaurant by id. Lists the user may not view are not fetched,
+ * Name of a store, kitchen, restaurant or counter by id. Lists the user may not view are not fetched,
  * and an unknown id falls back to its type ("Store"), never a raw id.
  */
 export function useLocationNames(
@@ -78,6 +96,7 @@ export function useLocationNames(
   const stores = useAllStores(hasPermission('STORE_VIEW')).data;
   const kitchens = useAllKitchens(hasPermission('KITCHEN_VIEW')).data;
   const restaurants = useAllRestaurants(hasPermission('RESTAURANT_VIEW')).data;
+  const counters = useAllCounters(hasPermission('COUNTER_VIEW')).data;
 
   return useMemo(() => {
     const names = new Map<string, string>([
@@ -87,10 +106,14 @@ export function useLocationNames(
         restaurant.id,
         restaurant.restaurantName,
       ]),
+      ...(counters ?? []).map((counter): [string, string] => [
+        counter.id,
+        `${counter.restaurant.restaurantName} · ${counter.counterName}`,
+      ]),
     ]);
 
     return (type, id) => names.get(id) ?? typeLabels[type];
-  }, [kitchens, restaurants, stores]);
+  }, [counters, kitchens, restaurants, stores]);
 }
 
 /** A location's page by type and id (searched by its code), or null until it is known. */

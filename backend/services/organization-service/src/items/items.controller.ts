@@ -20,17 +20,22 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { ImportRowsDto } from '../common/import';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import { CreateItemDto } from './dto/create-item.dto';
 import { ListItemsQueryDto } from './dto/list-items-query.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
+import { ItemsImportService } from './items-import.service';
 import { ItemsService } from './items.service';
 
 @ApiBearerAuth('access-token')
 @ApiTags('items')
 @Controller('items')
 export class ItemsController {
-  constructor(private readonly items: ItemsService) {}
+  constructor(
+    private readonly items: ItemsService,
+    private readonly itemsImport: ItemsImportService,
+  ) {}
 
   @Get()
   @Permissions('ITEM_VIEW')
@@ -39,6 +44,29 @@ export class ItemsController {
   async list(@Query() query: ListItemsQueryDto) {
     return {
       data: await this.items.list(query),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('import')
+  @Permissions('ITEM_CREATE', 'ITEM_UPDATE')
+  @ApiBody({ type: ImportRowsDto })
+  @ApiOperation({ summary: 'Add or update items from spreadsheet rows, all or nothing' })
+  @ApiOkResponse({
+    description: 'What each row does (or why it cannot), and whether it was saved.',
+  })
+  async import(
+    @Body() body: ImportRowsDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.itemsImport.import(body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
+      }),
       message: 'Success',
       success: true,
     };

@@ -20,17 +20,22 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { ImportRowsDto } from '../common/import';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { EmployeesImportService } from './employees-import.service';
 import { EmployeesService } from './employees.service';
 
 @ApiBearerAuth('access-token')
 @ApiTags('employees')
 @Controller('employees')
 export class EmployeesController {
-  constructor(private readonly employees: EmployeesService) {}
+  constructor(
+    private readonly employees: EmployeesService,
+    private readonly employeesImport: EmployeesImportService,
+  ) {}
 
   @Get()
   @Permissions('EMPLOYEE_VIEW')
@@ -84,6 +89,29 @@ export class EmployeesController {
       data: await this.employees.create(body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('import')
+  @Permissions('EMPLOYEE_CREATE', 'EMPLOYEE_UPDATE')
+  @ApiBody({ type: ImportRowsDto })
+  @ApiOperation({ summary: 'Add or update employees from spreadsheet rows, all or nothing' })
+  @ApiOkResponse({
+    description: 'What each row does (or why it cannot), and whether it was saved.',
+  })
+  async import(
+    @Body() body: ImportRowsDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.employeesImport.import(body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
       }),
       message: 'Success',
       success: true,

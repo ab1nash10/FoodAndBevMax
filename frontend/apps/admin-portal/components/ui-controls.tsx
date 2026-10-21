@@ -4,6 +4,7 @@
 // static pieces (Panel, Field, Badge...) without being pulled into the client bundle.
 import { Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronDown, Eye, EyeOff, Minus, Plus, Search, X } from 'lucide-react';
 import {
   forwardRef,
@@ -72,7 +73,7 @@ export function Toggle({ ariaLabel, checked, disabled = false, id, label, onChan
       aria-label={label ? undefined : ariaLabel}
       className={cn(
         'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-surface disabled:cursor-not-allowed disabled:opacity-60',
-        checked ? 'border-ds-teal bg-ds-teal' : 'border-ds-input bg-ds-divider',
+        checked ? 'border-ds-primary bg-ds-primary' : 'border-ds-input bg-ds-divider',
       )}
       disabled={disabled}
       id={id}
@@ -119,7 +120,8 @@ export function FilterTabs<TValue extends string>({
   value,
 }: FilterTabsProps<TValue>) {
   return (
-    <div aria-label={label} className="-mb-1 flex gap-2 overflow-x-auto pb-1" role="group">
+    // Wraps rather than scrolls sideways, so every choice is visible on a phone.
+    <div aria-label={label} className="flex flex-wrap gap-2" role="group">
       {options.map((option) => {
         const isActive = option.value === value;
 
@@ -164,6 +166,8 @@ interface QuantityStepperProps {
   min?: number;
   onChange: (value: string) => void;
   step?: number;
+  /** 56px tall with wide buttons, for touch screens (kitchen tablet, receiving). */
+  touch?: boolean;
   value: string;
 }
 
@@ -179,6 +183,7 @@ export function QuantityStepper({
   min = 0,
   onChange,
   step = 1,
+  touch = false,
   value,
 }: QuantityStepperProps) {
   const numeric = Number(value || 0);
@@ -188,14 +193,18 @@ export function QuantityStepper({
     onChange(String(Number(held.toFixed(3))));
   };
   const buttonClass =
-    (compact ? 'grid w-9 ' : 'grid w-11 ') +
+    (compact ? 'grid w-9 ' : touch ? 'grid w-14 active:bg-ds-divider ' : 'grid w-11 ') +
     'shrink-0 place-items-center bg-ds-subtle text-ds-text-2 transition hover:bg-ds-divider focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary disabled:cursor-not-allowed disabled:opacity-40';
 
   return (
     <div
       className={cn(
         'inline-flex items-stretch overflow-hidden border border-ds-input bg-ds-surface',
-        compact ? 'h-[38px] w-full rounded-control border-[1.5px]' : 'h-12 rounded-control-lg',
+        compact
+          ? 'h-[38px] w-full rounded-control border-[1.5px]'
+          : touch
+            ? 'h-14 rounded-control-lg'
+            : 'h-12 rounded-control-lg',
       )}
     >
       <button
@@ -205,14 +214,18 @@ export function QuantityStepper({
         onClick={() => commit(numeric - step)}
         type="button"
       >
-        <Minus className="h-4 w-4" />
+        <Minus className={touch ? 'h-5 w-5' : 'h-4 w-4'} />
       </button>
       <input
         aria-label={label}
         id={id}
         className={cn(
-          'border-x border-ds-input bg-ds-surface text-center font-bold text-ds-text outline-hidden [appearance:textfield] focus:ring-2 focus:ring-inset focus:ring-ds-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-          compact ? 'w-full min-w-0 text-[13.5px] tabular-nums' : 'w-20 text-base',
+          'border-x border-ds-input bg-ds-surface text-center font-bold text-ds-text outline-hidden focus:ring-2 focus:ring-inset focus:ring-ds-primary',
+          compact
+            ? 'w-full min-w-0 text-[13.5px] tabular-nums'
+            : touch
+              ? 'w-24 text-xl tabular-nums'
+              : 'w-20 text-base',
         )}
         inputMode="decimal"
         max={max}
@@ -230,7 +243,7 @@ export function QuantityStepper({
         onClick={() => commit(numeric + step)}
         type="button"
       >
-        <Plus className="h-4 w-4" />
+        <Plus className={touch ? 'h-5 w-5' : 'h-4 w-4'} />
       </button>
     </div>
   );
@@ -238,9 +251,18 @@ export function QuantityStepper({
 
 interface ModalProps {
   children: ReactNode;
+  /** A line under the title: what this panel is for. */
+  description?: string;
   footer?: ReactNode;
   onClose: () => void;
   open: boolean;
+  /**
+   * Where focus goes on close when the dialog never saw what opened it: a panel on its own route
+   * mounts after the click, on a list that is mounted anew when it closes.
+   */
+  returnFocusTo?: { href?: string; label?: string };
+  /** Docks the pop-up on the right at full height, so the list it came from stays in view. */
+  side?: boolean;
   title: string;
 }
 
@@ -367,7 +389,19 @@ export function DetailsModal({
   );
 }
 
-export function Modal({ children, footer, onClose, open, title }: ModalProps) {
+const focusableSelector =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+export function Modal({
+  children,
+  description,
+  footer,
+  onClose,
+  open,
+  returnFocusTo,
+  side = false,
+  title,
+}: ModalProps) {
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -389,13 +423,136 @@ export function Modal({ children, footer, onClose, open, title }: ModalProps) {
     };
   }, [onClose, open]);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // What had focus when the dialog opened. A ref, so it survives React running the effect twice
+  // in development; the link or label finds it again on a list that mounted anew.
+  const openerRef = useRef<{ element: Element; href?: string; label?: string }>(null);
+  // The latest, so an edit panel whose title arrives with its record is found by that title.
+  const returnFocusRef = useRef(returnFocusTo);
+
+  useEffect(() => {
+    returnFocusRef.current = returnFocusTo;
+  });
+
+  // Focus goes into the dialog when it opens (unless a field inside already took it), Tab stays
+  // in it, and on close focus goes back to what opened it. Its own effect, keyed on `open`
+  // alone: callers pass a new onClose on every render.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+
+    if (!open || !dialog) {
+      return undefined;
+    }
+
+    if (!dialog.contains(document.activeElement)) {
+      const element = document.activeElement;
+
+      if (element && element !== document.body) {
+        openerRef.current ??= {
+          element,
+          href: element.getAttribute('href') ?? undefined,
+          label: element.getAttribute('aria-label') ?? undefined,
+        };
+      }
+
+      dialog.focus();
+    }
+
+    const trapTab = (event: KeyboardEvent) => {
+      const active = document.activeElement;
+
+      // A dialog opened inside this one keeps Tab for itself.
+      if (event.key !== 'Tab' || (active && active.closest('[role="dialog"]') !== dialog)) {
+        return;
+      }
+
+      const stops = [...dialog.querySelectorAll<HTMLElement>(focusableSelector)].filter(
+        (element) =>
+          element.closest('[role="dialog"]') === dialog && element.getClientRects().length > 0,
+      );
+      const first = stops[0];
+      const last = stops.at(-1);
+
+      if (!first || !last) {
+        event.preventDefault();
+      } else if (event.shiftKey && (active === first || active === dialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', trapTab);
+
+    return () => {
+      document.removeEventListener('keydown', trapTab);
+
+      requestAnimationFrame(() => {
+        // Still open: the effect ran again, nothing closed.
+        if (dialogRef.current?.isConnected) {
+          return;
+        }
+
+        const opener = openerRef.current ?? returnFocusRef.current;
+
+        openerRef.current = null;
+
+        // A panel on its own route (/new, /edit) closes back to a list that mounts again: the
+        // link to that route, or the control with that label, there. The first that takes
+        // focus wins (a copy in a closed menu does not).
+        const candidates = () => [
+          ...(opener && 'element' in opener && opener.element instanceof HTMLElement
+            ? [opener.element]
+            : []),
+          ...(opener?.href
+            ? document.querySelectorAll<HTMLElement>(`a[href$="${CSS.escape(opener.href)}"]`)
+            : []),
+          ...(opener?.label
+            ? document.querySelectorAll<HTMLElement>(`[aria-label="${CSS.escape(opener.label)}"]`)
+            : []),
+        ];
+
+        // The list may take a few frames to show it; give up after about half a second.
+        const giveBack = (framesLeft: number) => {
+          // Only while nothing else took focus as the dialog went (it falls to the body).
+          if (document.activeElement !== document.body && document.activeElement) {
+            return;
+          }
+
+          const focused = candidates().some((element) => {
+            element.focus();
+
+            return document.activeElement === element;
+          });
+
+          if (!focused && framesLeft > 0) {
+            requestAnimationFrame(() => giveBack(framesLeft - 1));
+          }
+        };
+
+        giveBack(30);
+      });
+    };
+  }, [open]);
+
   if (!open) {
     return null;
   }
 
   return (
     // !mt-0: a parent space-y-* would otherwise push this fixed overlay down.
-    <div className="fixed inset-0 z-50 mt-0! flex items-start justify-center overflow-y-auto bg-ds-overlay p-4 backdrop-blur-xs sm:p-6">
+    <div
+      className={cn(
+        'fixed inset-0 z-50 mt-0! flex',
+        // A side panel keeps the list behind it readable: a light veil, no blur. From sm up it
+        // floats as a rounded sheet inset from the edges; phones keep it full screen.
+        side
+          ? 'side-overlay justify-end bg-ds-text/20 sm:p-3'
+          : 'items-start justify-center overflow-y-auto bg-ds-overlay p-4 backdrop-blur-xs sm:p-6',
+      )}
+    >
       <button
         aria-label="Close dialog"
         className="fixed inset-0 h-full w-full cursor-default"
@@ -406,23 +563,57 @@ export function Modal({ children, footer, onClose, open, title }: ModalProps) {
       <div
         aria-label={title}
         aria-modal="true"
-        className="relative z-10 my-auto w-full max-w-2xl rounded-card border border-ds-border bg-ds-surface shadow-xl shadow-ds-text/10"
+        className={cn(
+          'relative z-10 w-full border-ds-border bg-ds-surface shadow-2xl shadow-ds-text/20 outline-hidden',
+          side
+            ? 'flex h-full max-w-2xl flex-col overflow-hidden border-l sm:rounded-[24px] sm:border'
+            : 'my-auto max-w-2xl rounded-[24px] border',
+        )}
+        data-side={side ? '' : undefined}
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
-        <div className="flex items-center justify-between gap-4 border-b border-ds-divider px-5 py-3">
-          <h2 className="text-[15px] font-extrabold text-ds-text">{title}</h2>
+        <div
+          className={cn(
+            'flex items-start justify-between gap-4 border-b border-ds-divider',
+            side ? 'px-6 pb-4 pt-6' : 'px-5 py-3.5',
+          )}
+        >
+          <div className="min-w-0">
+            <h2
+              className={cn(
+                'font-semibold text-ds-text',
+                side ? 'text-[21px] leading-7 tracking-[-0.02em]' : 'text-base',
+              )}
+            >
+              {title}
+            </h2>
+            {description ? <p className="mt-1 text-sm text-ds-muted">{description}</p> : null}
+          </div>
           <button
             aria-label="Close"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-control border border-ds-border text-ds-muted transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-ds-border text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
             onClick={onClose}
             type="button"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+        <div
+          className={cn('overflow-y-auto', side ? 'flex-1 px-6 py-5' : 'max-h-[70vh] px-5 py-4')}
+        >
+          {children}
+        </div>
         {footer ? (
-          <div className="border-t border-ds-divider bg-ds-subtle px-5 py-3">{footer}</div>
+          <div
+            className={cn(
+              'border-t border-ds-divider',
+              side ? 'bg-ds-subtle-2 px-6 py-4' : 'bg-ds-subtle-2 px-5 py-3',
+            )}
+          >
+            {footer}
+          </div>
         ) : null}
       </div>
     </div>
@@ -438,6 +629,35 @@ interface SegmentedOption<TValue extends string> {
 }
 
 /** Two-to-four way switch (Store | Kitchen, Veg | Non-veg | Egg, Today | 7 days). */
+/**
+ * A create or edit form opened from a list (its own route, e.g. /masters/items/new): the side
+ * panel over that list, closing back to it, so records are created and edited the same way.
+ */
+export function FormPanel({
+  backHref,
+  children,
+  subtitle,
+  title,
+}: Readonly<{ backHref: string; children: ReactNode; subtitle?: string; title: string }>) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  return (
+    // The list it closes to is mounted anew: focus goes back to the link to this route (New …)
+    // or the control named like this panel (Edit …).
+    <Modal
+      description={subtitle}
+      onClose={() => router.push(backHref)}
+      open
+      returnFocusTo={{ href: pathname, label: title }}
+      side
+      title={title}
+    >
+      {children}
+    </Modal>
+  );
+}
+
 export function SegmentedControl<TValue extends string>({
   className,
   label,
@@ -623,11 +843,11 @@ export function FilterSearch({
   value: string;
 }>) {
   return (
-    <label className="flex h-9 min-w-[160px] flex-1 items-center gap-2 rounded-control border border-ds-input bg-ds-surface px-2.5 text-ds-muted focus-within:border-ds-primary focus-within:ring-2 focus-within:ring-ds-primary/15">
-      <Search aria-hidden="true" className="h-[15px] w-[15px] shrink-0" />
+    <label className="flex h-10 min-w-[160px] flex-1 items-center gap-2 rounded-full border border-ds-input bg-ds-surface px-3.5 text-ds-muted transition focus-within:border-ds-primary focus-within:ring-4 focus-within:ring-ds-primary/10">
+      <Search aria-hidden="true" className="h-4 w-4 shrink-0" />
       <input
         aria-label={label}
-        className="min-w-0 flex-1 bg-transparent text-[13px] text-ds-text outline-hidden placeholder:text-ds-muted"
+        className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ds-text outline-hidden placeholder:text-ds-muted"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type="search"
@@ -654,7 +874,7 @@ export function FilterSelect({
   return (
     <label
       className={cn(
-        'flex h-9 items-center gap-1.5 rounded-control border border-ds-input bg-ds-surface pl-2.5 pr-1.5 text-[12.5px] text-ds-muted focus-within:border-ds-primary focus-within:ring-2 focus-within:ring-ds-primary/15',
+        'flex h-10 items-center gap-1.5 rounded-full border border-ds-input bg-ds-surface pl-3.5 pr-2 text-[12.5px] text-ds-muted transition focus-within:border-ds-primary focus-within:ring-4 focus-within:ring-ds-primary/10',
         disabled && 'opacity-60',
       )}
     >

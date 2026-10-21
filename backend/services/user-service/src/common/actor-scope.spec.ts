@@ -3,6 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import type { JwtRequestUser } from '@aahar/auth';
 import {
   assertCanGrantScope,
+  assertCanTakeOverSignIn,
   assertHoldsPermissions,
   assertHospitalsWithinReach,
   assertNotSelf,
@@ -72,6 +73,26 @@ test('actor reach rules', () => {
   assert.doesNotThrow(() => assertHoldsPermissions([], admin));
   assert.throws(() => assertHoldsPermissions(['USER_DELETE'], admin), ForbiddenException);
   assert.doesNotThrow(() => assertHoldsPermissions(['USER_DELETE'], superAdmin));
+
+  // Changing someone's sign-in (password, email, mobile)
+  const cashier = { name: 'Cashier', permissionCodes: ['GRN_VIEW'], scopes: ['SINGLE' as const] };
+  assert.doesNotThrow(() => assertCanTakeOverSignIn(cashier, admin));
+  assert.throws(
+    () => assertCanTakeOverSignIn({ ...cashier, permissionCodes: ['ROLE_CREATE'] }, admin),
+    ForbiddenException,
+    'an Admin cannot take over someone holding a permission the Admin lacks',
+  );
+  assert.throws(
+    () => assertCanTakeOverSignIn({ ...cashier, scopes: ['ALL'] }, admin),
+    ForbiddenException,
+    'nor someone with a wider location scope',
+  );
+  assert.doesNotThrow(() =>
+    assertCanTakeOverSignIn(
+      { ...cashier, permissionCodes: ['ROLE_CREATE'], scopes: ['ALL'] },
+      superAdmin,
+    ),
+  );
 
   // Self-service
   assert.throws(() => assertNotSelf('admin', admin, 'role'), ForbiddenException);

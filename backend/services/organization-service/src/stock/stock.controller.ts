@@ -3,6 +3,11 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ListStockBalancesQueryDto } from './dto/list-stock-balances-query.dto';
 import { ListStockLedgersQueryDto } from './dto/list-stock-ledgers-query.dto';
+import {
+  LocationLevelsQueryDto,
+  StoreLevelsQueryDto,
+  StoreMovementsQueryDto,
+} from './dto/store-levels-query.dto';
 import { StockService } from './stock.service';
 
 @ApiBearerAuth('access-token')
@@ -33,6 +38,40 @@ export class StoreStockSummaryController {
   async list(@Query() query: ListStockBalancesQueryDto) {
     return {
       data: await this.stock.listStoreSummaries(query),
+      message: 'Success',
+      success: true,
+    };
+  }
+}
+
+@ApiBearerAuth('access-token')
+@ApiTags('store-stock')
+@Controller('store-stock/levels')
+export class StoreStockLevelsController {
+  constructor(private readonly stock: StockService) {}
+
+  @Get()
+  @Permissions('STOCK_VIEW')
+  @ApiOperation({ summary: 'Get store stock against its average daily issue (days of cover)' })
+  @ApiOkResponse({ description: 'Store stock levels returned successfully.' })
+  async list(@Query() query: StoreLevelsQueryDto) {
+    return { data: await this.stock.listStoreLevels(query), message: 'Success', success: true };
+  }
+}
+
+@ApiBearerAuth('access-token')
+@ApiTags('store-stock')
+@Controller('store-stock/movements')
+export class StoreStockMovementsController {
+  constructor(private readonly stock: StockService) {}
+
+  @Get()
+  @Permissions('STOCK_VIEW')
+  @ApiOperation({ summary: 'Get store stock received and sent out per day' })
+  @ApiOkResponse({ description: 'Store stock movements returned successfully.' })
+  async list(@Query() query: StoreMovementsQueryDto) {
+    return {
+      data: await this.stock.listStoreMovements(query),
       message: 'Success',
       success: true,
     };
@@ -90,6 +129,18 @@ export class RestaurantStockController {
       success: true,
     };
   }
+
+  @Get('levels')
+  @Permissions('RESTAURANT_STOCK_VIEW')
+  @ApiOperation({ summary: 'Get restaurant stock against its average daily issue (days of cover)' })
+  @ApiOkResponse({ description: 'Restaurant stock levels returned successfully.' })
+  async levels(@Query() query: LocationLevelsQueryDto) {
+    return {
+      data: await this.stock.listRestaurantLevels(query),
+      message: 'Success',
+      success: true,
+    };
+  }
 }
 
 @ApiBearerAuth('access-token')
@@ -127,5 +178,51 @@ export class KitchenStockController {
       message: 'Success',
       success: true,
     };
+  }
+}
+
+@ApiBearerAuth('access-token')
+@ApiTags('counter-stock-ledgers')
+@Controller('counter-stock-ledgers')
+export class CounterStockLedgersController {
+  constructor(private readonly stock: StockService) {}
+
+  @Get()
+  @Permissions('COUNTER_STOCK_VIEW')
+  @ApiOperation({ summary: 'Get counter stock ledger entries' })
+  @ApiOkResponse({ description: 'Counter stock ledger entries returned successfully.' })
+  async list(@Query() query: ListStockLedgersQueryDto) {
+    return {
+      data: await this.stock.listCounterLedgers(query),
+      message: 'Success',
+      success: true,
+    };
+  }
+}
+
+@ApiBearerAuth('access-token')
+@ApiTags('counter-stock')
+@Controller('counter-stock')
+export class CounterStockController {
+  constructor(private readonly stock: StockService) {}
+
+  @Get()
+  @Permissions('COUNTER_STOCK_VIEW')
+  @ApiOperation({ summary: 'Get current counter stock balances' })
+  @ApiOkResponse({ description: 'Counter stock balances returned successfully.' })
+  async list(@Query() query: ListStockBalancesQueryDto) {
+    return {
+      data: await this.stock.listCounterBalances(query),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Get('levels')
+  @Permissions('COUNTER_STOCK_VIEW')
+  @ApiOperation({ summary: 'Get counter stock against its average daily issue (days of cover)' })
+  @ApiOkResponse({ description: 'Counter stock levels returned successfully.' })
+  async levels(@Query() query: LocationLevelsQueryDto) {
+    return { data: await this.stock.listCounterLevels(query), message: 'Success', success: true };
   }
 }

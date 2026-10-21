@@ -12,11 +12,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 
 export class CreateItemDto {
   @ApiProperty({
     description:
-      'Unique within its category. Duplicate checks ignore spaces, punctuation, symbols, underscores, hyphens, and case.',
+      'Unique across all items. Duplicate checks ignore spaces, punctuation, symbols, underscores, hyphens, and case.',
     example: 'Coke 500ml',
   })
   @IsNotEmpty()
@@ -25,24 +26,26 @@ export class CreateItemDto {
     message: 'Item name must include at least one letter or number',
   })
   @MaxLength(255)
+  @DisplayName()
   itemName!: string;
 
   @ApiProperty({ enum: FoodType, example: FoodType.VEG })
   @IsEnum(FoodType)
   type!: FoodType;
 
-  @ApiPropertyOptional({ example: 15, minimum: 0 })
+  @ApiPropertyOptional({ example: 15, minimum: 0, nullable: true })
   @IsInt()
   @IsOptional()
   @Min(0)
   @Type(() => Number)
-  preparationTimeMinutes?: number;
+  preparationTimeMinutes?: number | null;
 
-  @ApiPropertyOptional({ example: '2202' })
+  @ApiPropertyOptional({ example: '2202', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(50)
-  hsnCode?: string;
+  @CodeCase()
+  hsnCode?: string | null;
 
   @ApiPropertyOptional({ default: true })
   @IsBoolean()

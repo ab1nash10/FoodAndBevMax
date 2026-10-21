@@ -18,11 +18,13 @@ import {
   FormWarning,
   SubmitButton,
 } from '@/components/organization/shared/form-controls';
-import { applyValidationErrors, hasRequiredText } from '@/components/organization/shared/utils';
+import { applyValidationErrors } from '@/components/organization/shared/utils';
 import { formatLocationOption } from '@/components/organization/shared/locations';
-import { kitchenSchema, isUuid } from '@/components/organization/shared/schemas';
+import { kitchenSchema } from '@/components/organization/shared/schemas';
 import { useHospitalOptions } from '@/components/organization/shared/hooks';
 import type { KitchenFormValues } from '@/components/organization/shared/types';
+
+const requiredFields = kitchenSchema.pick({ hospitalId: true, kitchenName: true });
 
 export function KitchenCreatePageClient() {
   const { isAllLocations, scopedHospitalId } = useLocationContext();
@@ -39,7 +41,9 @@ export function KitchenCreatePageClient() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();
-  const canSubmitKitchen = isUuid(hospitalId) && hasRequiredText(kitchenName);
+  // The first required field still missing, in the schema's own words.
+  const disabledReason = requiredFields.safeParse({ hospitalId, kitchenName }).error?.issues[0]
+    ?.message;
 
   useEffect(() => {
     if (scopedHospitalId && form.getValues('hospitalId') !== scopedHospitalId) {
@@ -103,6 +107,7 @@ export function KitchenCreatePageClient() {
             error={form.formState.errors.hospitalId?.message}
             label="Location"
             name="kitchen-hospital"
+            required
           >
             <Select
               disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
@@ -123,6 +128,7 @@ export function KitchenCreatePageClient() {
             error={form.formState.errors.kitchenName?.message}
             label="Kitchen Name"
             name="kitchen-name"
+            required
           >
             <Input id="kitchen-name" {...form.register('kitchenName')} />
           </Field>
@@ -141,7 +147,7 @@ export function KitchenCreatePageClient() {
         />
         <div className="flex justify-end">
           <SubmitButton
-            disabled={!canSubmitKitchen}
+            disabledReason={disabledReason}
             isPending={createKitchenMutation.isPending}
             label="Create Kitchen"
           />

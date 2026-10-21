@@ -15,6 +15,9 @@ exports[`every prefix stays as it is 1`] = `
     "command-palette",
     "search",
   ],
+  "counterStock": [
+    "counter-stock",
+  ],
   "counters": [
     "counters",
   ],
@@ -164,14 +167,32 @@ exports[`every prefix stays as it is 1`] = `
   "paymentMachines": [
     "payment-machines",
   ],
+  "posBill": [
+    "pos-bill",
+  ],
+  "posBills": [
+    "pos-bills",
+  ],
+  "posCounters": [
+    "pos-counters",
+  ],
   "posDevices": [
     "pos-devices",
+  ],
+  "posEmployee": [
+    "pos-employee",
   ],
   "posLocationOptions": [
     "pos-location-options",
   ],
+  "posMenu": [
+    "pos-menu",
+  ],
   "posRestaurantOptions": [
     "pos-restaurant-options",
+  ],
+  "posSummary": [
+    "pos-summary",
   ],
   "restaurant": [
     "restaurant",
@@ -196,6 +217,9 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "restaurants": [
     "restaurants",
+  ],
+  "staffDiscounts": [
+    "staff-discounts",
   ],
   "stockBalances": [
     "stock-balances",

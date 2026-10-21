@@ -2,35 +2,33 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { FoodType, Item, ItemInput, SortOrder } from '@aahar/api-client';
+import type { Item, ItemInput, ItemType, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { ImportButton } from '@/components/import/import-dialog';
+import { itemImport } from '@/components/import/import-definitions';
+import { CsvImportExport, fetchAllPages, type CsvColumn } from '@/components/csv-import-export';
+import { FilterField, FiltersMenu, ListToolbar, SortControl } from '@/components/list-toolbar';
 import {
-  activeStatus,
-  CsvImportExport,
-  fetchAllPages,
-  numberCell,
-  type CsvColumn,
-  type CsvRowImporter,
-} from '@/components/csv-import-export';
-import { FilterField, FiltersMenu, ListToolbar } from '@/components/list-toolbar';
-import { EmptyState, FoodTypeMarker } from '@/components/design-system';
+  AppPageHeader,
+  EmptyState,
+  FoodTypeMarker,
+  ListPager,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select, Skeleton } from '@/components/ui';
-import {
-  FilterSearch,
-  FilterSelect,
-  Modal,
-  SegmentedControl,
-  Toggle,
-} from '@/components/ui-controls';
+import { FilterSearch, Modal, SegmentedControl, Toggle } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { LoadError } from '@/components/location-empty-states';
 import { IfCanOpen } from '@/components/record-link';
 import {
   setUrlParams,
@@ -38,6 +36,7 @@ import {
   useUrlParam,
   useUrlSearchParam,
 } from '@/lib/use-url-state';
+import { useUndoable } from '@/lib/use-undoable';
 import { cn } from '@/lib/utils';
 import { invalidateItemQueries } from '@/lib/query-invalidation';
 import { ItemDetails } from '@/components/master-data/items/item-details';
@@ -48,7 +47,6 @@ import {
   foodTypeFormLabels,
   foodTypeValues,
   similarItemError,
-  unmappedTwinError,
   type FoodTypeFilter,
   type ItemFormValues,
   itemSchemaLoader,
@@ -62,9 +60,30 @@ import {
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { sortChoices } from '@/lib/sort-choices';
 
-function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
+const itemKinds: Record<ItemType, { className: string; label: string }> = {
+  LIVE: { className: 'bg-ds-status-neutral-bg text-ds-status-neutral-fg', label: 'Live' },
+  MRP: { className: 'bg-ds-status-info-bg text-ds-status-info-fg', label: 'Packaged' },
+  READYMADE: { className: 'bg-ds-primary-soft text-ds-link', label: 'Prepared' },
+};
+
+/** Packaged (mapped to a store), prepared (to a kitchen), or not mapped yet. */
+function ItemKind({ kind }: Readonly<{ kind: ItemType | null }>) {
+  const shown = kind ? itemKinds[kind] : null;
+
+  return shown ? (
+    <span
+      className={cn(
+        'inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium',
+        shown.className,
+      )}
+    >
+      {shown.label}
+    </span>
+  ) : (
+    <span className="text-[13px] text-ds-muted">Not mapped</span>
+  );
 }
 
 function itemToFormValues(item: Item): ItemFormValues {
@@ -81,12 +100,11 @@ function itemToFormValues(item: Item): ItemFormValues {
 
 const itemPageSizes = [25, 50, 100];
 
-const itemSortOptions = [
-  { label: 'Newest', value: 'createdAt:desc' },
-  { label: 'Name A–Z', value: 'itemName:asc' },
-  { label: 'Name Z–A', value: 'itemName:desc' },
-  { label: 'Item code', value: 'itemCode:asc' },
-  { label: 'Last updated', value: 'updatedAt:desc' },
+const itemSortFields = [
+  { label: 'Created date', value: 'createdAt' },
+  { label: 'Name', value: 'itemName' },
+  { label: 'Item code', value: 'itemCode' },
+  { label: 'Updated date', value: 'updatedAt' },
 ];
 
 const itemColumns: Array<CsvColumn<Item>> = [
@@ -96,64 +114,17 @@ const itemColumns: Array<CsvColumn<Item>> = [
   { header: 'HSN code', value: (item) => item.hsnCode },
   { header: 'Prep time (min)', value: (item) => item.preparationTimeMinutes },
   { header: 'Status', value: (item) => (item.isActive ? 'Active' : 'Inactive') },
+  {
+    header: 'Type',
+    readOnly: true,
+    value: (item) =>
+      item.itemType === 'MRP'
+        ? 'Packaged (stores)'
+        : item.itemType === 'READYMADE'
+          ? 'Prepared (kitchens)'
+          : 'Not mapped yet',
+  },
 ];
-
-function foodTypeCell(value: string): FoodType {
-  const key = value.toLowerCase().replace(/[\s_-]/g, '');
-  const type = (
-    { egg: 'EGGETARIAN', eggetarian: 'EGGETARIAN', nonveg: 'NON_VEG', veg: 'VEG' } as const
-  )[key as 'egg' | 'eggetarian' | 'nonveg' | 'veg'];
-
-  if (!type) {
-    throw new Error('Food type must be Veg, Non-veg or Egg');
-  }
-
-  return type;
-}
-
-/**
- * A row with an Item code updates that item; a row without one adds a new item, which gets
- * the next code. Blank HSN and prep time leave an existing item's values as they are.
- */
-async function startItemImport(): Promise<CsvRowImporter> {
-  const existing = await fetchAllPages((page) => organizationApi.listItems({ limit: 100, page }));
-  const byCode = new Map(existing.map((item) => [item.itemCode.toUpperCase(), item]));
-
-  return async (cells) => {
-    const itemCode = cells('Item code').toUpperCase();
-    const itemName = cells('Item name');
-
-    if (!itemName) {
-      throw new Error('Item name is required');
-    }
-
-    const match = itemCode ? byCode.get(itemCode) : undefined;
-
-    if (itemCode && !match) {
-      throw new Error(`No item has code ${itemCode}; leave Item code empty to add a new item`);
-    }
-
-    const preparationTimeMinutes = numberCell(cells('Prep time (min)'), 'Prep time (min)');
-    const hsnCode = cells('HSN code');
-    const body: ItemInput = {
-      isActive: activeStatus(cells('Status'), match?.isActive ?? true),
-      itemName,
-      type: foodTypeCell(cells('Food type')),
-      ...(hsnCode ? { hsnCode } : {}),
-      ...(preparationTimeMinutes === null ? {} : { preparationTimeMinutes }),
-    };
-
-    if (match) {
-      await organizationApi.updateItem(match.id, body);
-
-      return 'updated';
-    }
-
-    await organizationApi.createItem(body);
-
-    return 'created';
-  };
-}
 
 export function ItemsPageClient() {
   const searchParams = useSearchParams();
@@ -173,10 +144,15 @@ export function ItemsPageClient() {
     '',
     foodTypeValues,
   );
+  // Packaged (mapped to a store) or prepared (mapped to a kitchen): the stat strip's filter.
+  const [kindFilter, setKindFilter] = useUrlParam<'' | 'MRP' | 'READYMADE'>('kind', '', [
+    'MRP',
+    'READYMADE',
+  ]);
   const [sort, setSort] = useUrlParam(
     'sort',
     'createdAt:desc',
-    itemSortOptions.map((option) => option.value),
+    sortChoices(itemSortFields).map((choice) => choice.value),
   );
   const [sortBy = 'createdAt', sortDirection] = sort.split(':');
   const sortOrder: SortOrder = sortDirection === 'asc' ? 'asc' : 'desc';
@@ -199,6 +175,7 @@ export function ItemsPageClient() {
         search,
         sortBy,
         sortOrder,
+        itemType: kindFilter || undefined,
         type: foodTypeFilter || undefined,
       });
 
@@ -207,6 +184,7 @@ export function ItemsPageClient() {
     queryKey: queryKeys.items({
       activeFilter,
       foodTypeFilter,
+      kindFilter,
       page,
       pageSize,
       search,
@@ -215,7 +193,27 @@ export function ItemsPageClient() {
     }),
   });
 
-  const items = itemsQuery.data?.items ?? [];
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (query: { isActive?: boolean; itemType?: ItemType }) =>
+        (await organizationApi.listItems({ ...query, limit: 0 })).data.meta.total;
+      const [all, packaged, prepared, inactive] = await Promise.all([
+        count({}),
+        count({ itemType: 'MRP' }),
+        count({ itemType: 'READYMADE' }),
+        count({ isActive: false }),
+      ]);
+
+      return { all, inactive, packaged, prepared };
+    },
+    queryKey: queryKeys.items('stats'),
+  });
+  const stats = statsQuery.data;
+  const undoable = useUndoable();
+  // An item marked inactive shows so at once, while its Undo toast runs.
+  const items = (itemsQuery.data?.items ?? []).map((item) =>
+    undoable.isChanged(item.id) ? { ...item, isActive: false } : item,
+  );
   const meta = itemsQuery.data?.meta ?? { limit: pageSize, page, total: 0, totalPages: 1 };
   const listedItem = items.find((item) => item.id === selectedItemId);
   const linkedItemQuery = useQuery({
@@ -237,7 +235,7 @@ export function ItemsPageClient() {
     onError(error) {
       const message = getApiErrorMessage(error);
 
-      if (message === similarItemError || message === unmappedTwinError) {
+      if (message === similarItemError) {
         form.setError('itemName', { message });
       }
 
@@ -266,10 +264,8 @@ export function ItemsPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateItemQueries(queryClient);
-      showToast({
-        title: variables.isActive ? 'Item activated' : 'Item marked inactive',
-        variant: 'success',
-      });
+      // Marking inactive already had its Undo toast.
+      if (variables.isActive) showToast({ title: 'Item activated', variant: 'success' });
     },
   });
 
@@ -283,11 +279,12 @@ export function ItemsPageClient() {
       return;
     }
 
+    // Blank optional fields are sent as null, so an edit can clear them.
     saveItemMutation.mutate({
-      hsnCode: optionalValue(parsed.data.hsnCode),
+      hsnCode: optionalValue(parsed.data.hsnCode) ?? null,
       isActive: parsed.data.isActive,
       itemName: parsed.data.itemName,
-      preparationTimeMinutes: parsed.data.preparationTimeMinutes,
+      preparationTimeMinutes: parsed.data.preparationTimeMinutes ?? null,
       type: parsed.data.type,
     });
   });
@@ -308,18 +305,20 @@ export function ItemsPageClient() {
   const canEditItems = hasPermission('ITEM_UPDATE');
 
   function toggleItemStatus(item: Item) {
-    const nextIsActive = !item.isActive;
+    // Switching it back on while the Undo toast runs is the same as Undo.
+    if (undoable.undo(item.id)) return;
 
-    if (
-      !nextIsActive &&
-      !window.confirm(
-        'Turning this item inactive will prevent it from being used in new operations. Existing records will remain visible. Continue?',
-      )
-    ) {
+    if (item.isActive) {
+      undoable.schedule({
+        commit: () => toggleItemStatusMutation.mutateAsync({ isActive: false, item }),
+        description: 'It can’t be used in new operations. Existing records stay visible.',
+        id: item.id,
+        title: `${item.itemName} marked inactive`,
+      });
       return;
     }
 
-    toggleItemStatusMutation.mutate({ isActive: nextIsActive, item });
+    toggleItemStatusMutation.mutate({ isActive: true, item });
   }
 
   function changeFilter(apply: () => void) {
@@ -331,53 +330,91 @@ export function ItemsPageClient() {
     setSearch('');
     setActiveFilter('');
     setFoodTypeFilter('');
+    setKindFilter('');
     setPage(1);
   }
 
-  const hasFilters = Boolean(searchInput || activeFilter || foodTypeFilter);
-  const firstRow = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
-  const lastRow = Math.min(meta.page * meta.limit, meta.total);
+  const hasFilters = Boolean(searchInput || activeFilter || foodTypeFilter || kindFilter);
+
+  /** A stat's filter alone: the kind or the inactive status, the other cleared. */
+  function showOnly(kind: '' | 'MRP' | 'READYMADE', status: ActiveFilter) {
+    changeFilter(() => {
+      setKindFilter(kind);
+      setActiveFilter(status);
+    });
+  }
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text">Items</h1>
-          <p className="text-[13.5px] text-ds-muted">
-            One catalogue for every store, kitchen and restaurant. Prices are set per rate type.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <CsvImportExport
-            columns={itemColumns}
-            exportRows={() =>
-              fetchAllPages((exportPage) =>
-                organizationApi.listItems({
-                  isActive: activeFilterToBoolean(activeFilter),
-                  limit: 100,
-                  page: exportPage,
-                  search,
-                  sortBy,
-                  sortOrder,
-                  type: foodTypeFilter || undefined,
-                }),
-              )
-            }
-            filename="items"
-            noun="items"
-            onImported={() => invalidateItemQueries(queryClient)}
-            startImport={hasPermission('ITEM_CREATE') ? startItemImport : undefined}
-          />
-          <IfCanOpen href="/masters/items/new">
-            <Button asChild>
-              <Link href="/masters/items/new">
-                <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                New item
-              </Link>
-            </Button>
-          </IfCanOpen>
-        </div>
-      </div>
+      <AppPageHeader
+        action={
+          <>
+            <CsvImportExport
+              columns={itemColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listItems({
+                    isActive: activeFilterToBoolean(activeFilter),
+                    limit: 100,
+                    page: exportPage,
+                    search,
+                    sortBy,
+                    sortOrder,
+                    itemType: kindFilter || undefined,
+                    type: foodTypeFilter || undefined,
+                  }),
+                )
+              }
+              filename="items"
+              noun="items"
+              onImported={() => invalidateItemQueries(queryClient)}
+            />
+            <ImportButton definition={itemImport} />
+            <IfCanOpen href="/masters/items/new">
+              <Button asChild>
+                <Link href="/masters/items/new">
+                  <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                  New item
+                </Link>
+              </Button>
+            </IfCanOpen>
+          </>
+        }
+        count={stats?.all}
+        description="One catalogue for every store, kitchen and restaurant. Prices are set per rate type."
+        title="Items"
+      />
+
+      <StatStrip
+        label="Items at a glance"
+        stats={[
+          {
+            active: !kindFilter && activeFilter !== 'inactive',
+            label: 'All items',
+            onSelect: () => showOnly('', ''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: kindFilter === 'MRP',
+            label: 'Packaged · in stores',
+            onSelect: () => showOnly('MRP', ''),
+            value: stats?.packaged ?? '–',
+          },
+          {
+            active: kindFilter === 'READYMADE',
+            label: 'Prepared · in kitchens',
+            onSelect: () => showOnly('READYMADE', ''),
+            value: stats?.prepared ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive',
+            onSelect: () => showOnly('', 'inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
 
       <div className="flex flex-wrap items-start gap-5">
         <Panel
@@ -389,7 +426,7 @@ export function ItemsPageClient() {
             <FilterSearch
               label="Search items"
               onChange={(value) => changeFilter(() => setSearch(value))}
-              placeholder="Name or code"
+              placeholder="Name, code or HSN"
               value={searchInput}
             />
             <FiltersMenu activeCount={[activeFilter, foodTypeFilter].filter(Boolean).length}>
@@ -421,53 +458,48 @@ export function ItemsPageClient() {
                 />
               </FilterField>
             </FiltersMenu>
-            <FilterSelect
-              label="Sort"
-              onChange={(value) => changeFilter(() => setSort(value))}
-              value={sort}
-            >
-              {itemSortOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </FilterSelect>
+            <SortControl
+              onChange={(field, order) => changeFilter(() => setSort(`${field}:${order}`))}
+              options={itemSortFields}
+              order={sortOrder}
+              sortBy={sortBy}
+            />
             <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
           </ListToolbar>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] table-fixed text-[13px]">
-              <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
+            <table className={cn(tableStyles.table, 'min-w-[820px] table-fixed')}>
+              <thead className={tableStyles.head}>
                 <tr>
-                  <th className="w-[34%] px-4 py-2.5 font-semibold">Item</th>
-                  <th className="w-[15%] px-3 py-2.5 font-semibold">HSN code</th>
-                  <th className="w-[13%] px-3 py-2.5 font-semibold">Prep time</th>
-                  <th className="w-[16%] px-3 py-2.5 font-semibold">Last updated</th>
-                  <th className="w-[14%] px-3 py-2.5 font-semibold">Status</th>
-                  <th className="w-[8%] px-3 py-2.5 pr-4 text-right font-semibold">Actions</th>
+                  <th className={cn(tableStyles.th, 'w-[32%]')}>Item</th>
+                  <th className={cn(tableStyles.th, 'w-[15%]')}>Type</th>
+                  <th className={cn(tableStyles.th, 'w-[13%]')}>HSN code</th>
+                  <th className={cn(tableStyles.th, 'w-[10%]')}>Prep time</th>
+                  <th className={cn(tableStyles.th, 'w-[12%]')}>Updated</th>
+                  <th className={cn(tableStyles.th, 'w-[13%]')}>Status</th>
+                  <th className={cn(tableStyles.th, 'w-[5%]')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {itemsQuery.isLoading ? (
                   Array.from({ length: 6 }, (_, index) => (
                     <tr className="border-b border-ds-divider" key={`item-skeleton-${index}`}>
-                      <td className="px-4 py-3" colSpan={6}>
+                      <td className="px-4 py-3" colSpan={7}>
                         <Skeleton className="h-8 w-full" />
                       </td>
                     </tr>
                   ))
                 ) : itemsQuery.isError ? (
                   <tr>
-                    <td
-                      className="px-4 py-8 text-center text-sm font-medium text-ds-status-bad-fg"
-                      colSpan={6}
-                    >
-                      {getApiErrorMessage(itemsQuery.error)}
+                    <td className="px-4 py-8" colSpan={7}>
+                      <LoadError error={itemsQuery.error} />
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td className="p-4" colSpan={6}>
+                    <td className="p-4" colSpan={7}>
                       <EmptyState
                         action={
                           hasFilters ? (
@@ -488,30 +520,42 @@ export function ItemsPageClient() {
                 ) : (
                   items.map((item) => {
                     return (
-                      <tr className="border-b border-ds-divider" key={item.id}>
-                        <td className="px-4 py-1.5">
-                          <span className="flex min-w-0 items-center gap-2.5">
+                      <tr
+                        className={cn(tableStyles.row, !canEditItems && 'cursor-default')}
+                        key={item.id}
+                        onClick={canEditItems ? () => editItem(item) : undefined}
+                      >
+                        <td className={tableStyles.td}>
+                          <span className="flex min-w-0 items-center gap-3">
                             <FoodTypeMarker type={item.type} />
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate text-[13.5px] font-bold text-ds-text">
+                            <span className="flex min-w-0 flex-col gap-0.5">
+                              <span className={cn('truncate', tableStyles.title)}>
                                 {item.itemName}
                               </span>
-                              <span className="truncate text-[11.5px] tabular-nums text-ds-muted">
+                              <span className={cn('truncate', tableStyles.code)}>
                                 {item.itemCode}
                               </span>
                             </span>
                           </span>
                         </td>
-                        <td className="truncate px-3 py-1.5 tabular-nums text-ds-text-2">
+                        <td className={tableStyles.td}>
+                          <ItemKind kind={item.itemType} />
+                        </td>
+                        <td
+                          className={cn(tableStyles.td, tableStyles.num, 'truncate text-ds-text-2')}
+                        >
                           {item.hsnCode || '—'}
                         </td>
-                        <td className="truncate px-3 py-1.5 tabular-nums text-ds-text-2">
+                        <td
+                          className={cn(tableStyles.td, tableStyles.num, 'truncate text-ds-text-2')}
+                        >
                           {item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '—'}
                         </td>
-                        <td className="truncate px-3 py-1.5 text-[12.5px] text-ds-muted">
+                        <td className={cn(tableStyles.td, 'truncate text-ds-muted')}>
                           {formatDateOnly(item.updatedAt)}
                         </td>
-                        <td className="px-3 py-1.5">
+                        {/* Its own click: switching the status does not open the item. */}
+                        <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                           <span className="flex items-center gap-2">
                             <Toggle
                               ariaLabel={`${item.itemName} active`}
@@ -529,21 +573,18 @@ export function ItemsPageClient() {
                             </span>
                           </span>
                         </td>
-                        <td className="px-3 py-1.5 pr-4">
-                          <span className="flex justify-end gap-2">
+                        <td className={cn(tableStyles.td, 'pr-3')}>
+                          <span className="flex justify-end">
                             {canEditItems ? (
-                              <Button
-                                aria-label={`Edit ${item.itemName}`}
-                                className="h-9 w-9"
+                              <RowAction
+                                icon={Pencil}
                                 id={`item-edit-${item.id}`}
-                                onClick={() => editItem(item)}
-                                size="icon"
-                                title="Edit"
-                                type="button"
-                                variant="outline"
-                              >
-                                <Pencil aria-hidden="true" className="h-4 w-4" />
-                              </Button>
+                                label={`Edit ${item.itemName}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  editItem(item);
+                                }}
+                              />
                             ) : null}
                           </span>
                         </td>
@@ -554,57 +595,21 @@ export function ItemsPageClient() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-[12.5px] text-ds-muted">
-            <span>
-              Showing{' '}
-              <strong className="font-bold text-ds-text">
-                {firstRow}–{lastRow}
-              </strong>{' '}
-              of {plural(meta.total, 'item')}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <label className="flex items-center gap-1.5">
-                Rows
-                <select
-                  className="h-[30px] rounded-[7px] border border-ds-border bg-ds-surface px-1.5 text-[12.5px] font-bold text-ds-text"
-                  onChange={(event) => changeFilter(() => setPageSize(Number(event.target.value)))}
-                  value={pageSize}
-                >
-                  {itemPageSizes.map((size) => (
-                    <option key={size} value={size}>
-                      {size}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Button
-                aria-label="Previous page"
-                className="h-[30px] w-[30px]"
-                disabled={meta.page <= 1}
-                onClick={() => setPage(meta.page - 1)}
-                size="icon"
-                type="button"
-                variant="outline"
-              >
-                <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-              </Button>
-              <Button
-                aria-label="Next page"
-                className="h-[30px] w-[30px]"
-                disabled={meta.page >= meta.totalPages}
-                onClick={() => setPage(meta.page + 1)}
-                size="icon"
-                type="button"
-                variant="outline"
-              >
-                <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-              </Button>
-            </span>
-          </div>
+          <ListPager
+            limit={meta.limit}
+            noun="item"
+            onLimitChange={(size) => changeFilter(() => setPageSize(size))}
+            onPageChange={setPage}
+            page={meta.page}
+            pageSizes={itemPageSizes}
+            total={meta.total}
+            totalPages={meta.totalPages}
+          />
         </Panel>
       </div>
 
       <Modal
+        side
         footer={
           selectedItem && !isEditing && canEditItems ? (
             <Button onClick={() => editItem(selectedItem)} type="button" variant="outline">

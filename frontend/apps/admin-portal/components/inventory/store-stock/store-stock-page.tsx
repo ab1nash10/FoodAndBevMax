@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
@@ -19,9 +18,9 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { StatusChip } from '@/components/design-system';
+import { RowAction, StatStrip, StatusChip, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
-import { Badge, Input, Panel, Select } from '@/components/ui';
+import { Input, Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
 import { organizationApi } from '@/lib/api';
@@ -51,11 +50,15 @@ import {
   useStores,
 } from '@/components/inventory/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { useIsPhone } from '@/lib/use-is-phone';
+import { cn } from '@/lib/utils';
 
 const stockItemTypes: ItemType[] = ['MRP', 'READYMADE', 'LIVE'];
 
 export function StoreStockPageClient() {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
+  // Phones show four of the nine columns; a row that spans them all has to say so.
+  const columns = useIsPhone() ? 4 : 9;
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -120,6 +123,30 @@ export function StoreStockPageClient() {
     ),
   });
 
+  // The strip's numbers: every item held in a store at the location, then each that needs a look.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (status?: StockBalanceStatus) =>
+        (
+          await organizationApi.listStoreStockSummaries({
+            hospitalId: hospitalFilter,
+            limit: 0,
+            locationType: 'STORE',
+            status,
+          })
+        ).data.meta.total;
+      const [all, nearExpiry, expired, outOfStock] = await Promise.all([
+        count(),
+        count('NEAR_EXPIRY'),
+        count('EXPIRED'),
+        count('OUT_OF_STOCK'),
+      ]);
+
+      return { all, expired, nearExpiry, outOfStock };
+    },
+    queryKey: queryKeys.stockBalances('stats', hospitalFilter),
+  });
+  const stats = statsQuery.data;
   const items = stockQuery.data?.items ?? [];
   const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
@@ -143,6 +170,12 @@ export function StoreStockPageClient() {
     setPage(1);
   }
 
+  /** A stat's status alone; picking the one in force goes back to all stock. */
+  function showStatus(status: '' | StockBalanceStatus) {
+    setStatusFilter((current) => (current === status ? '' : status));
+    setPage(1);
+  }
+
   function toggleSummary(summary: StoreStockSummary) {
     const key = `${summary.storeId}:${summary.itemId}`;
 
@@ -152,14 +185,49 @@ export function StoreStockPageClient() {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <PageHeader
+        count={stats?.all}
         subtitle="Current store stock summarized by store and item, with batch details on expand."
         title="Store Stock"
       />
-      <Panel>
+      <StatStrip
+        label="Store stock at a glance"
+        stats={[
+          {
+            active: !statusFilter,
+            label: 'All items',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: statusFilter === 'NEAR_EXPIRY',
+            label: 'Expiring in 30 days',
+            onSelect: () => showStatus('NEAR_EXPIRY'),
+            tone: 'pending',
+            value: stats?.nearExpiry ?? '–',
+          },
+          {
+            active: statusFilter === 'EXPIRED',
+            label: 'Expired',
+            onSelect: () => showStatus('EXPIRED'),
+            tone: 'bad',
+            value: stats?.expired ?? '–',
+          },
+          {
+            active: statusFilter === 'OUT_OF_STOCK',
+            label: 'Out of stock',
+            onSelect: () => showStatus('OUT_OF_STOCK'),
+            tone: 'bad',
+            value: stats?.outOfStock ?? '–',
+          },
+        ]}
+      />
+      <Panel aria-label="Store stock list" className="overflow-hidden" role="region">
         <ListToolbar>
           <SearchInput
+            label="Search store stock"
+            placeholder="Item name or code, batch or location"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -282,21 +350,31 @@ export function StoreStockPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'table-fixed sm:min-w-[960px]')}>
+            <thead className={tableStyles.head}>
+              {/* Phones: only the button, item, available and status, at fixed widths for the
+                  button, number and chip; the item takes the rest and names its store. */}
               <tr>
-                <th className="w-[6%] px-4 py-2.5">View</th>
-                <th className="w-[18%] px-4 py-2.5">Store</th>
-                <th className="w-[20%] px-4 py-2.5">Item</th>
-                <th className="w-[14%] px-4 py-2.5">Category</th>
-                <th className="w-[12%] px-4 py-2.5">Total Available</th>
-                <th className="w-[12%] px-4 py-2.5">Reserved Qty</th>
-                <th className="w-[10%] px-4 py-2.5">Batches</th>
-                <th className="w-[14%] px-4 py-2.5">Nearest Expiry</th>
-                <th className="w-[12%] px-4 py-2.5">Status</th>
+                <th className={cn(tableStyles.th, 'w-12 pr-0 sm:w-[5%]')}>
+                  <span className="sr-only">Batches</span>
+                </th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[15%]')}>Store</th>
+                <th className={cn(tableStyles.th, 'sm:w-[19%]')}>Item</th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[11%]')}>Category</th>
+                <th className={cn(tableStyles.th, 'w-20 text-right sm:w-[11%]')}>Available</th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[9%] text-right')}>
+                  Reserved
+                </th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[7%] text-right')}>
+                  Batches
+                </th>
+                <th className={cn(tableStyles.th, tableStyles.phoneHidden, 'w-[10%]')}>
+                  Nearest expiry
+                </th>
+                <th className={cn(tableStyles.th, 'w-[120px] sm:w-[13%]')}>Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((summary: StoreStockSummary) => {
                   const rowKey = `${summary.storeId}:${summary.itemId}`;
@@ -304,104 +382,151 @@ export function StoreStockPageClient() {
 
                   return (
                     <Fragment key={rowKey}>
-                      <tr className="hover:bg-ds-subtle">
-                        <td className="px-4 py-3">
-                          <Button
+                      {/* The whole row shows its batches; the store and item links go to those. */}
+                      <tr
+                        className={cn(tableStyles.row, isExpanded && 'bg-ds-subtle')}
+                        onClick={(event) => {
+                          if (!(event.target as HTMLElement).closest('a, button')) {
+                            toggleSummary(summary);
+                          }
+                        }}
+                      >
+                        <td className={cn(tableStyles.td, 'pr-0')}>
+                          <RowAction
                             aria-expanded={isExpanded}
-                            aria-label={isExpanded ? 'Collapse batches' : 'Expand batches'}
+                            icon={isExpanded ? ChevronDown : ChevronRight}
+                            label={isExpanded ? 'Collapse batches' : 'Expand batches'}
                             onClick={() => toggleSummary(summary)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </Button>
+                          />
                         </td>
-                        <td className="px-4 py-3">
+                        <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
                           <RecordLink
-                            className="block font-medium text-ds-text"
+                            className={cn('block truncate', tableStyles.title)}
                             href={locationHref('STORE', summary.storeCode || summary.storeName)}
                           >
                             {summary.storeName}
                           </RecordLink>
-                          <p className="text-xs text-ds-muted">{summary.storeCode ?? '-'}</p>
+                          <p className={cn('truncate', tableStyles.code)}>
+                            {summary.storeCode ?? '—'}
+                          </p>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className={tableStyles.td}>
                           <RecordLink
-                            className="block font-medium text-ds-text"
+                            className={cn('block break-words sm:truncate', tableStyles.title)}
                             href={recordHref('/masters/items', { id: summary.itemId })}
                           >
                             {summary.itemName}
                           </RecordLink>
-                          <p className="text-xs text-ds-muted">{summary.itemCode}</p>
+                          <p className={cn('truncate', tableStyles.code)}>{summary.itemCode}</p>
+                          {/* Phones have no Store column. */}
+                          <p className="truncate text-[12px] text-ds-muted sm:hidden">
+                            {summary.storeName}
+                          </p>
                         </td>
-                        <td className="px-4 py-3 text-ds-text-3">{summary.categoryName ?? '-'}</td>
-                        <td className="px-4 py-3">
-                          <p className="text-lg font-semibold text-ds-text">
+                        <td
+                          className={cn(
+                            tableStyles.td,
+                            tableStyles.phoneHidden,
+                            'truncate text-ds-text-2',
+                          )}
+                        >
+                          {summary.categoryName ?? '—'}
+                        </td>
+                        <td className={cn(tableStyles.td, 'text-right')}>
+                          <p className={cn(tableStyles.num, 'font-semibold text-ds-text')}>
                             {formatQuantity(summary.totalAvailableQty)}
                           </p>
-                          <p className="text-xs text-ds-muted">{formatEnum(summary.itemType)}</p>
+                          <p className="text-[12px] text-ds-muted">
+                            {formatEnum(summary.itemType)}
+                          </p>
                         </td>
-                        <td className="px-4 py-3 text-ds-text-3">
+                        <td
+                          className={cn(
+                            tableStyles.td,
+                            tableStyles.num,
+                            tableStyles.phoneHidden,
+                            'text-right text-ds-text-2',
+                          )}
+                        >
                           {formatQuantity(summary.totalReservedQty)}
                         </td>
-                        <td className="px-4 py-3">
-                          <Badge className="border-ds-status-info-fg/25 bg-ds-status-info-bg text-ds-status-info-fg">
-                            {summary.batchCount}
-                          </Badge>
+                        <td
+                          className={cn(
+                            tableStyles.td,
+                            tableStyles.num,
+                            tableStyles.phoneHidden,
+                            'text-right text-ds-text-2',
+                          )}
+                        >
+                          {summary.batchCount}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
+                        <td
+                          className={cn(
+                            tableStyles.td,
+                            tableStyles.phoneHidden,
+                            'whitespace-nowrap text-ds-muted',
+                          )}
+                        >
                           {formatDateOnly(summary.nearestExpiryDate)}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className={tableStyles.td}>
                           <StatusChip status={summary.status} />
                         </td>
                       </tr>
                       {isExpanded ? (
-                        <tr key={`${rowKey}:batches`} className="bg-ds-subtle/70">
-                          <td className="px-4 py-3" colSpan={9}>
-                            <div className="rounded-lg border bg-white p-3 shadow-xs">
-                              <div className="mb-3 flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold text-ds-text">
-                                    Batch-wise stock
-                                  </p>
-                                  <p className="text-xs text-ds-muted">
-                                    Internal stock remains batch-wise for GRN and transfers.
-                                  </p>
-                                </div>
+                        <tr className="bg-ds-subtle">
+                          <td className="px-4 pb-4 pt-1" colSpan={columns}>
+                            <div className="overflow-hidden rounded-card border border-ds-border bg-ds-surface">
+                              <div className="px-4 py-3">
+                                <p className="text-[13.5px] font-semibold text-ds-text">
+                                  Batch-wise stock
+                                </p>
+                                <p className="text-[12px] text-ds-muted">
+                                  Internal stock remains batch-wise for GRN and transfers.
+                                </p>
                               </div>
                               <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-ds-divider text-sm">
-                                  <thead className="text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+                                <table className={cn(tableStyles.table, 'min-w-[560px]')}>
+                                  <thead className="border-y border-ds-divider bg-ds-subtle text-left text-[12px] text-ds-muted">
                                     <tr>
-                                      <th className="px-3 py-2">Batch Number</th>
-                                      <th className="px-3 py-2">Expiry Date</th>
-                                      <th className="px-3 py-2">Available Qty</th>
-                                      <th className="px-3 py-2">Reserved Qty</th>
-                                      <th className="px-3 py-2">Status</th>
+                                      <th className={tableStyles.th}>Batch</th>
+                                      <th className={tableStyles.th}>Expiry</th>
+                                      <th className={cn(tableStyles.th, 'text-right')}>
+                                        Available
+                                      </th>
+                                      <th className={cn(tableStyles.th, 'text-right')}>Reserved</th>
+                                      <th className={tableStyles.th}>Status</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-ds-divider">
+                                  <tbody>
                                     {summary.batches.map((batch: StoreStockBatchSummary) => (
-                                      <tr key={batch.stockBalanceId}>
-                                        <td className="px-3 py-3 font-medium text-ds-text">
-                                          {batch.batchNumber ?? '-'}
+                                      <tr
+                                        className="border-t border-ds-divider first:border-t-0"
+                                        key={batch.stockBalanceId}
+                                      >
+                                        <td className={cn('px-4 py-2.5', tableStyles.code)}>
+                                          {batch.batchNumber ?? '—'}
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-3 text-ds-text-3">
+                                        <td className="whitespace-nowrap px-4 py-2.5 text-ds-muted">
                                           {formatDateOnly(batch.expiryDate)}
                                         </td>
-                                        <td className="px-3 py-3 font-semibold text-ds-text">
+                                        <td
+                                          className={cn(
+                                            'px-4 py-2.5 text-right font-semibold text-ds-text',
+                                            tableStyles.num,
+                                          )}
+                                        >
                                           {formatQuantity(batch.availableQty)}
                                         </td>
-                                        <td className="px-3 py-3 text-ds-text-3">
+                                        <td
+                                          className={cn(
+                                            'px-4 py-2.5 text-right text-ds-text-2',
+                                            tableStyles.num,
+                                          )}
+                                        >
                                           {formatQuantity(batch.reservedQty)}
                                         </td>
-                                        <td className="px-3 py-3">
+                                        <td className="px-4 py-2.5">
                                           <StatusChip status={batch.status} />
                                         </td>
                                       </tr>
@@ -418,7 +543,7 @@ export function StoreStockPageClient() {
                 })
               ) : (
                 <QueryState
-                  colSpan={9}
+                  colSpan={columns}
                   error={stockQuery.error}
                   isError={stockQuery.isError}
                   isLoading={stockQuery.isLoading}

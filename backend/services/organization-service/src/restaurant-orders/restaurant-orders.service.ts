@@ -28,11 +28,16 @@ export const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
 };
 
 const orderSelect = {
+  bedNumber: true,
+  billNumber: true,
+  channel: true,
   id: true,
+  instructions: true,
   items: true,
   orderNumber: true,
   placedAt: true,
   readyAt: true,
+  roomNumber: true,
   source: true,
   status: true,
 } satisfies Prisma.RestaurantOrderSelect;
@@ -180,12 +185,19 @@ export class RestaurantOrdersService {
 
   async setStatus(id: string, status: OrderStatus, context: ActorContext) {
     const order = await this.prisma.restaurantOrder.findFirst({
-      select: { status: true },
+      select: { source: true, status: true },
       where: { id },
     });
 
     if (!order) {
       throw new NotFoundException('Order not found');
+    }
+
+    // A counter bill is cancelled from its bill, which needs a reason and puts its stock back.
+    if (order.source === OrderSource.COUNTER && status === OrderStatus.CANCELLED) {
+      throw new ConflictException(
+        'Cancel a counter bill from Bill History: it records why and restocks the counter.',
+      );
     }
 
     if (!NEXT_STATUSES[order.status].includes(status)) {

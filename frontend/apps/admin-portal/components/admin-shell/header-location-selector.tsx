@@ -15,7 +15,13 @@ function getLocationMeta(location: HospitalSummary): string {
   return [location.city, location.state].filter(Boolean).join(', ') || 'Location';
 }
 
-export function HeaderLocationSelector() {
+/**
+ * The location every page is scoped to. `wide`: the phone menu's full-width switcher, its name always
+ * shown; otherwise the top bar's button, whose menu hangs from the button on desktop (where it sits
+ * at the left) and from the screen's right edge below that (where it sits at the right), so the
+ * menu never runs off the screen.
+ */
+export function HeaderLocationSelector({ wide = false }: Readonly<{ wide?: boolean }>) {
   const {
     availableLocations,
     canSelectAllLocations,
@@ -72,8 +78,10 @@ export function HeaderLocationSelector() {
             : `Select Location. Current selection: ${locationLabel}`
         }
         className={cn(
-          'w-10 px-0 text-ds-text-2 xl:w-auto xl:px-3.5',
-          !allLocationsSelected && 'border-ds-teal-border bg-ds-teal-soft',
+          wide
+            ? 'h-10 w-full justify-start px-3 text-ds-text'
+            : 'w-10 px-0 text-ds-text-2 xl:w-auto xl:px-3.5',
+          !allLocationsSelected && 'border-ds-primary-border bg-ds-selected',
           isLocationSelectorLocked && 'cursor-default',
         )}
         disabled={isLoadingLocations}
@@ -84,18 +92,32 @@ export function HeaderLocationSelector() {
         type="button"
         variant="outline"
       >
-        <MapPin className="h-[18px] w-[18px] shrink-0 text-ds-teal-text" strokeWidth={1.8} />
-        <span className="hidden max-w-40 truncate xl:inline">{locationLabel}</span>
+        <MapPin className="h-[18px] w-[18px] shrink-0 text-ds-link" strokeWidth={1.8} />
+        <span
+          className={cn(
+            'truncate text-left',
+            wide ? 'min-w-0 flex-1 text-[13px] font-medium' : 'hidden max-w-40 xl:inline',
+          )}
+        >
+          {locationLabel}
+        </span>
         {isLocationSelectorLocked ? null : (
           <ChevronDown
             aria-hidden="true"
-            className="hidden h-4 w-4 shrink-0 text-ds-muted xl:block"
+            className={cn('h-4 w-4 shrink-0 text-ds-muted', !wide && 'hidden xl:block')}
           />
         )}
       </Button>
 
       {isOpen ? (
-        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-xl shadow-ds-text/10">
+        <div
+          className={cn(
+            'absolute z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-xl shadow-ds-text/10',
+            wide
+              ? 'left-0 top-full mt-2'
+              : 'fixed right-4 top-[calc(var(--app-header-h)+0.5rem)] nav:absolute nav:left-0 nav:right-auto nav:top-full nav:mt-2',
+          )}
+        >
           <div className="border-b border-ds-divider px-4 py-3">
             <p className="text-sm font-bold text-ds-text">Select Location</p>
             <p className="mt-1 text-xs text-ds-muted">
@@ -107,7 +129,7 @@ export function HeaderLocationSelector() {
               <button
                 className={cn(
                   'flex w-full items-center gap-3 rounded-control-lg px-3 py-3 text-left transition hover:bg-ds-subtle',
-                  allLocationsSelected && 'bg-ds-teal-soft',
+                  allLocationsSelected && 'bg-ds-selected',
                 )}
                 onClick={() => selectLocation(null)}
                 type="button"
@@ -121,9 +143,7 @@ export function HeaderLocationSelector() {
                     View consolidated data across all locations
                   </span>
                 </span>
-                {allLocationsSelected ? (
-                  <Check className="h-4 w-4 shrink-0 text-ds-teal-text" />
-                ) : null}
+                {allLocationsSelected ? <Check className="h-4 w-4 shrink-0 text-ds-link" /> : null}
               </button>
             ) : null}
 
@@ -134,7 +154,7 @@ export function HeaderLocationSelector() {
                 <button
                   className={cn(
                     'mt-1 flex w-full items-center gap-3 rounded-control-lg px-3 py-3 text-left transition hover:bg-ds-subtle',
-                    isSelected && 'bg-ds-teal-soft',
+                    isSelected && 'bg-ds-selected',
                   )}
                   key={location.id}
                   onClick={() => selectLocation(location.id)}
@@ -152,7 +172,7 @@ export function HeaderLocationSelector() {
                       {getLocationMeta(location)}
                     </span>
                   </span>
-                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-ds-teal-text" /> : null}
+                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-ds-link" /> : null}
                 </button>
               );
             })}

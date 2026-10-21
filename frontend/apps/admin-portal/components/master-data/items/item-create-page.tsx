@@ -13,12 +13,13 @@ import {
   ItemFormFields,
   emptyItemFormValues,
   similarItemError,
-  unmappedTwinError,
   type ItemFormValues,
 } from '@/components/master-data/items/shared';
 import { itemSchema } from '@/components/master-data/items/item-schema';
 import { FormShell, SubmitButton } from '@/components/master-data/shared/components';
 import { applyValidationErrors, optionalValue } from '@/components/master-data/shared/utils';
+
+const requiredFields = itemSchema.pick({ itemName: true, type: true });
 
 export function ItemCreatePageClient() {
   const form = useForm<ItemFormValues>({
@@ -33,7 +34,7 @@ export function ItemCreatePageClient() {
     onError(error) {
       const message = getApiErrorMessage(error);
 
-      if (message === similarItemError || message === unmappedTwinError) {
+      if (message === similarItemError) {
         form.setError('itemName', { message });
       }
 
@@ -58,7 +59,8 @@ export function ItemCreatePageClient() {
 
   // Only the fields this reads, so typing elsewhere in the form does not re-render the page.
   const [itemName, type] = form.watch(['itemName', 'type']);
-  const canSubmit = Boolean(itemName?.trim()) && Boolean(type);
+  // The first required field still missing, in the schema's own words.
+  const disabledReason = requiredFields.safeParse({ itemName, type }).error?.issues[0]?.message;
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = itemSchema.safeParse(values);
@@ -93,7 +95,7 @@ export function ItemCreatePageClient() {
         <ItemFormFields form={form} />
         <div className="flex justify-end">
           <SubmitButton
-            disabled={!canSubmit}
+            disabledReason={disabledReason}
             isPending={createItemMutation.isPending}
             label="Create Item"
           />

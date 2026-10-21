@@ -137,7 +137,7 @@ assert.equal(
 const onlyGrns = (permission) => [permission].flat().includes('GRN_VIEW');
 assert.equal(
   show(getBreadcrumbTrail('/inventory/grns/new', null, onlyGrns)),
-  '[Inventory] › GRNs(/inventory/grns) › New GRN',
+  '[Inventory] › GRNs(/inventory/grns) › Receive a delivery',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/stores/abc/def', null, none)),

@@ -23,6 +23,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
+import { availableParallelism } from 'node:os';
 
 const basePath = (process.env.BASE_PATH ?? '').replace(/\/+$/, '');
 const apiPrefix = `${basePath}/api/v1`;
@@ -31,26 +32,70 @@ const listenPort = Number(process.env.PORT ?? 4000);
 // Unset = Node's default: every address, IPv6 and IPv4 (see the services' main.ts).
 const listenHost = process.env.HOST || undefined;
 
+// The organization service carries almost all the traffic (menus, bills, stock, lists) and a
+// Node process uses one core, so on a pod with more cores it can run as several processes.
+// ORG_WORKERS=1 (the default) is one process, as before; "auto" is one per core left over after
+// the other two services. Each worker gets an equal share of the connection pool it would
+// otherwise have had alone, so more workers do not open more database connections.
+const orgWorkers = Math.max(
+  1,
+  process.env.ORG_WORKERS === 'auto'
+    ? availableParallelism() - 2
+    : Number.parseInt(process.env.ORG_WORKERS ?? '1', 10) || 1,
+);
+
 // Path table from infra/helm/fandb values.yaml `apiPaths`; organization is the catch-all,
 // so it also serves ${apiPrefix}/health - like the chart, where the ALB health check does.
 const services = [
   {
     name: 'auth-service',
     paths: ['/auth'],
-    port: 42001,
+    ports: [42001],
   },
   {
     name: 'user-service',
     paths: ['/users', '/roles', '/permissions', '/notifications'],
-    port: 42002,
+    ports: [42002],
   },
   {
     name: 'organization-service',
     paths: [''],
-    port: 42003,
+    ports: Array.from({ length: orgWorkers }, (_, index) => 42003 + index * 10),
   },
 ];
 const catchAll = services[services.length - 1];
+
+// Connections to the services are kept open and reused: opening a new one for every request
+// cost a connect and a teardown each time.
+const agent = new http.Agent({ keepAlive: true, maxSockets: 512 });
+let nextWorker = 0;
+
+/** The next process of a service to send a request to, taking turns across its workers. */
+function portFor(service) {
+  nextWorker = (nextWorker + 1) % 1_000_000;
+
+  return service.ports[nextWorker % service.ports.length];
+}
+
+/** DATABASE_URL with this worker's share of the pool, when the service runs as several. */
+function databaseUrlFor(workers) {
+  const url = process.env.DATABASE_URL;
+
+  if (!url || workers === 1) {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const pool =
+      Number(parsed.searchParams.get('connection_limit')) || availableParallelism() * 2 + 1;
+    parsed.searchParams.set('connection_limit', String(Math.max(2, Math.ceil(pool / workers))));
+
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 function targetFor(url) {
   const path = url.split('?')[0];
@@ -84,11 +129,12 @@ const server = http.createServer((request, response) => {
   const service = targetFor(request.url ?? '');
   const upstream = http.request(
     {
+      agent,
       headers: request.headers,
       host: '127.0.0.1',
       method: request.method,
       path: request.url,
-      port: service.port,
+      port: portFor(service),
     },
     (upstreamResponse) => {
       response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
@@ -167,26 +213,35 @@ if (process.env.DB_SETUP_ON_START !== 'false') {
 }
 
 for (const service of services) {
-  const child = spawn(
-    process.execPath,
-    ['--enable-source-maps', `backend/services/${service.name}/dist/main.js`],
-    {
-      // Loopback only: the router is the single exposed listener.
-      env: { ...process.env, HOST: '127.0.0.1', PORT: String(service.port) },
-      stdio: 'inherit',
-    },
-  );
+  for (const port of service.ports) {
+    const child = spawn(
+      process.execPath,
+      ['--enable-source-maps', `backend/services/${service.name}/dist/main.js`],
+      {
+        // Loopback only: the router is the single exposed listener.
+        env: {
+          ...process.env,
+          DATABASE_URL: databaseUrlFor(service.ports.length),
+          HOST: '127.0.0.1',
+          PORT: String(port),
+        },
+        stdio: 'inherit',
+      },
+    );
 
-  child.on('exit', (code, signal) => {
-    if (shuttingDown) {
-      return;
-    }
-    // One dead service means sign-in or data silently gone; fail the whole pod instead.
-    console.error(JSON.stringify({ code, event: 'service_exited', service: service.name, signal }));
-    shutdown(1);
-  });
+    child.on('exit', (code, signal) => {
+      if (shuttingDown) {
+        return;
+      }
+      // One dead service means sign-in or data silently gone; fail the whole pod instead.
+      console.error(
+        JSON.stringify({ code, event: 'service_exited', port, service: service.name, signal }),
+      );
+      shutdown(1);
+    });
 
-  children.push(child);
+    children.push(child);
+  }
 }
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -199,6 +254,7 @@ server.listen(listenPort, listenHost, () => {
       apiPrefix,
       event: 'backend_all_listening',
       port: listenPort,
+      orgWorkers,
       services: services.map(({ name }) => name),
     }),
   );

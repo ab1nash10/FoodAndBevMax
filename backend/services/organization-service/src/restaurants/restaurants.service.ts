@@ -254,8 +254,9 @@ export class RestaurantsService {
         }
         if (dto.b2cQrEnabled !== undefined) data.b2cQrEnabled = dto.b2cQrEnabled;
         if (dto.bankBranch !== undefined) data.bankBranch = dto.bankBranch;
+        // Not `??`: null (a cleared field) must win over the older alias, or nothing clears.
         if (dto.bankNameBranch !== undefined || dto.bankName !== undefined) {
-          data.bankName = dto.bankNameBranch ?? dto.bankName;
+          data.bankName = dto.bankNameBranch !== undefined ? dto.bankNameBranch : dto.bankName;
         }
         if (dto.closingTime !== undefined) data.closingTime = dto.closingTime;
         if (dto.coverImageUrl !== undefined) data.coverImageUrl = dto.coverImageUrl;
@@ -264,7 +265,7 @@ export class RestaurantsService {
         }
         if (dto.email !== undefined) data.email = dto.email;
         if (dto.fssaiNumbers !== undefined || dto.fssaiNumber !== undefined) {
-          data.fssaiNumber = dto.fssaiNumbers ?? dto.fssaiNumber;
+          data.fssaiNumber = dto.fssaiNumbers !== undefined ? dto.fssaiNumbers : dto.fssaiNumber;
         }
         if (dto.gstNumber !== undefined) data.gstNumber = dto.gstNumber;
         if (dto.gstAddress !== undefined) data.gstAddress = dto.gstAddress;
@@ -350,7 +351,7 @@ export class RestaurantsService {
           data.posOrders = dto.isPosOrdersEnabled ?? dto.posOrders;
         }
         if (dto.unitNameForQr !== undefined || dto.qrUnitName !== undefined) {
-          data.qrUnitName = dto.unitNameForQr ?? dto.qrUnitName;
+          data.qrUnitName = dto.unitNameForQr !== undefined ? dto.unitNameForQr : dto.qrUnitName;
         }
         if (dto.restaurantCode !== undefined) data.restaurantCode = dto.restaurantCode;
         if (dto.restaurantName !== undefined) data.restaurantName = dto.restaurantName;

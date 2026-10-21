@@ -97,25 +97,36 @@ describe('form helpers', () => {
       }),
     ).toEqual({
       address: '1 Press Enclave Road',
-      area: undefined,
+      area: null,
       billPrefix: 'SKT',
       city: 'New Delhi',
       displayName: 'Max Saket',
       hospitalCode: 'SKT',
       hospitalName: 'Saket',
       invoicePrefix: 'SKT',
-      ipAddress: undefined,
+      ipAddress: null,
       isActive: true,
-      latitude: undefined,
+      latitude: null,
       legalEntityId: null,
       locationCode: 'SKT',
-      longitude: undefined,
+      longitude: null,
       onlinePaymentOption: 'NONE',
-      postalCode: undefined,
+      postalCode: null,
       state: 'Delhi',
       title: 'Saket',
-      visitingCardAddress: undefined,
+      visitingCardAddress: null,
     });
+  });
+
+  test('a blank display name and address are optional: the title stands in for the name', () => {
+    expect(
+      toHospitalInput({
+        ...toHospitalFormDefaults(),
+        address: '  ',
+        displayName: '  ',
+        title: ' Saket ',
+      }),
+    ).toMatchObject({ address: null, displayName: 'Saket' });
   });
 });
 

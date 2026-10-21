@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchAllPages } from '@/components/csv-import-export';
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 import { z, type ZodError } from 'zod';
 import type { ApiList, ApiResponse, Hospital, Item, ItemType, ListQuery } from '@aahar/api-client';
@@ -16,12 +17,11 @@ export const mappingSchema = z.object({
   categoryId: z.string().uuid('Select a category.'),
   isActive: z.boolean(),
   itemId: z.string().uuid('Select an item.'),
-  parentId: z.string().uuid('Select a parent.'),
+  parentId: z.string().uuid('Select a store or kitchen.'),
 });
 
 const dateFormatter = new Intl.DateTimeFormat('en-IN', {
   dateStyle: 'medium',
-  timeStyle: 'short',
 });
 
 export function activeFilterToBoolean(value: ActiveFilter): boolean | undefined {
@@ -91,18 +91,19 @@ export function useHospitalOptions() {
 /** With includeUnmapped, also items not mapped yet: mapping them gives them this type. */
 export function useItemOptions(itemType?: ItemType, { includeUnmapped = false } = {}) {
   return useQuery<Item[]>({
-    queryFn: async () => {
-      const response = await organizationApi.listItems({
-        includeUnmapped: includeUnmapped || undefined,
-        isActive: true,
-        itemType,
-        limit: 100,
-        sortBy: 'itemName',
-        sortOrder: 'asc',
-      });
-
-      return response.data.items;
-    },
+    // Every page: the API serves 100 items a page, and a catalogue can be bigger.
+    queryFn: () =>
+      fetchAllPages((page) =>
+        organizationApi.listItems({
+          includeUnmapped: includeUnmapped || undefined,
+          isActive: true,
+          itemType,
+          limit: 100,
+          page,
+          sortBy: 'itemName',
+          sortOrder: 'asc',
+        }),
+      ),
     queryKey: queryKeys.itemOptions(itemType ?? 'all', includeUnmapped),
   });
 }

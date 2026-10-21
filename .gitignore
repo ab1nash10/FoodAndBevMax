@@ -43,3 +43,7 @@ infra/helm/**/secrets*.yaml
 
 # Playwright MCP browser-session artefacts (snapshots, screenshots)
 .playwright-mcp/
+# Browser checks (pnpm test:ui): the saved sign-in and the run output.
+frontend/apps/admin-portal/e2e/.auth.json
+frontend/apps/admin-portal/test-results/
+frontend/apps/admin-portal/playwright-report/

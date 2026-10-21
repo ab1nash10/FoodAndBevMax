@@ -21,7 +21,7 @@ export class TransferAcknowledgementsController {
   constructor(private readonly acknowledgements: TransferAcknowledgementsService) {}
 
   @Get()
-  @Permissions('TRANSFER_VIEW')
+  @Permissions('TRANSFER_VIEW', 'COUNTER_STOCK_RECEIVE')
   @ApiOperation({ summary: 'Get transfer acknowledgements' })
   @ApiOkResponse({ description: 'Transfer acknowledgements returned successfully.' })
   async list(@Query() query: ListTransferAcknowledgementsQueryDto) {
@@ -29,7 +29,7 @@ export class TransferAcknowledgementsController {
   }
 
   @Get(':id')
-  @Permissions('TRANSFER_VIEW')
+  @Permissions('TRANSFER_VIEW', 'COUNTER_STOCK_RECEIVE')
   @ApiOperation({ summary: 'Get transfer acknowledgement by ID' })
   @ApiParam({ name: 'id' })
   @ApiOkResponse({ description: 'Transfer acknowledgement returned successfully.' })
@@ -38,7 +38,7 @@ export class TransferAcknowledgementsController {
   }
 
   @Post()
-  @Permissions('TRANSFER_ACKNOWLEDGE')
+  @Permissions('TRANSFER_ACKNOWLEDGE', 'COUNTER_STOCK_RECEIVE')
   @ApiBody({ type: CreateTransferAcknowledgementDto })
   @ApiOperation({ summary: 'Acknowledge restaurant transfer receipt' })
   @ApiOkResponse({ description: 'Transfer acknowledged successfully.' })
@@ -51,6 +51,7 @@ export class TransferAcknowledgementsController {
       data: await this.acknowledgements.create(body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
       }),
       message: 'Success',
       success: true,

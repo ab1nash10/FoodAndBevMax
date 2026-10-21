@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Monitor, Moon, Sun } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { getStartPageOptions } from '@/lib/navigation';
+import { getStartPageOptions, homeHref } from '@/lib/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { FormSection, LoadingSkeleton } from '@/components/design-system';
 import { formatGlobalLocationLabel, useLocationContext } from '@/components/location-context';
@@ -36,6 +36,8 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
   const preferencesQuery = usePreferences();
   const savePreferences = useSavePreferences();
   const startPages = useMemo(() => getStartPageOptions(hasPermission), [hasPermission]);
+  // The role's own screen; choosing it saves no choice, so it follows later role changes.
+  const defaultStartPage = homeHref(hasPermission);
   // What the controls show. Kept in component state, so a click updates the control in the same
   // render; via the query cache alone the update lands a tick later and React briefly snaps the
   // control back to its old value.
@@ -132,22 +134,22 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
                   onChange={(event) =>
                     save({
                       startPage:
-                        event.target.value === '/dashboard' ? null : event.target.value || null,
+                        event.target.value === defaultStartPage ? null : event.target.value || null,
                     })
                   }
-                  value={preferences.startPage ?? '/dashboard'}
+                  value={homeHref(hasPermission, preferences.startPage)}
                 >
                   {startPages.map((page) => (
                     <option key={page.href} value={page.href}>
                       {page.group === 'Overview' ? page.label : `${page.group} - ${page.label}`}
-                      {page.href === '/dashboard' ? ' (default)' : ''}
+                      {page.href === defaultStartPage ? ' (default)' : ''}
                     </option>
                   ))}
                 </Select>
               </Field>
 
               {locationChoices.length > 1 ? (
-                <Field label="Default location" name="default-location">
+                <Field label="Default location" name="default-location" required>
                   <Select
                     id="default-location"
                     onChange={(event) => {
@@ -243,7 +245,7 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
       <p className="text-sm text-ds-muted">
         Signed in as <span className="font-medium text-ds-text-2">{email}</span>
       </p>
-      <Field label="Current password" name="current-password">
+      <Field label="Current password" name="current-password" required>
         <PasswordInput
           autoComplete="current-password"
           id="current-password"
@@ -251,7 +253,7 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
           value={currentPassword}
         />
       </Field>
-      <Field label="New password" name="new-password">
+      <Field label="New password" name="new-password" required>
         <PasswordInput
           autoComplete="new-password"
           id="new-password"
@@ -260,7 +262,12 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
           value={newPassword}
         />
       </Field>
-      <Field error={error ?? undefined} label="Confirm new password" name="confirm-password">
+      <Field
+        error={error ?? undefined}
+        label="Confirm new password"
+        name="confirm-password"
+        required
+      >
         <PasswordInput
           autoComplete="new-password"
           id="confirm-password"

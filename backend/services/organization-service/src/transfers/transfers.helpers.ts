@@ -117,8 +117,10 @@ export function assertSupportedSource(sourceType: InventoryLocationType): void {
 
 export function toTransferResponse(transfer: TransferWithRelations) {
   return {
+    acknowledgedAt: transfer.acknowledgements[0]?.acknowledgementDate ?? null,
     businessDate: transfer.businessDate,
     createdAt: transfer.createdAt,
+    createdBy: transfer.createdBy,
     deletedAt: transfer.deletedAt,
     destinationId: transfer.destinationId,
     destinationType: transfer.destinationType,

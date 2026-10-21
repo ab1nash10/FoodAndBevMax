@@ -12,18 +12,21 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'EMP001' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(50)
+  @CodeCase()
   employeeCode!: string;
 
   @ApiProperty({ example: 'John Doe' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(120)
+  @DisplayName()
   name!: string;
 
   @ApiProperty({ example: '9999999999' })

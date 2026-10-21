@@ -20,17 +20,22 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { ImportRowsDto } from '../common/import';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import { CreateRestaurantMenuDto } from './dto/create-restaurant-menu.dto';
 import { ListRestaurantMenusQueryDto } from './dto/list-restaurant-menus-query.dto';
 import { UpdateRestaurantMenuDto } from './dto/update-restaurant-menu.dto';
+import { RestaurantMenusImportService } from './restaurant-menus-import.service';
 import { RestaurantMenusService } from './restaurant-menus.service';
 
 @ApiBearerAuth('access-token')
 @ApiTags('restaurant-menus')
 @Controller('restaurant-menus')
 export class RestaurantMenusController {
-  constructor(private readonly restaurantMenus: RestaurantMenusService) {}
+  constructor(
+    private readonly restaurantMenus: RestaurantMenusService,
+    private readonly restaurantMenusImport: RestaurantMenusImportService,
+  ) {}
 
   @Get()
   @Permissions('RESTAURANT_MENU_VIEW')
@@ -63,6 +68,31 @@ export class RestaurantMenusController {
       data: await this.restaurantMenus.create(body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('import')
+  @Permissions('RESTAURANT_MENU_CREATE', 'RESTAURANT_MENU_UPDATE')
+  @ApiBody({ type: ImportRowsDto })
+  @ApiOperation({
+    summary: 'Add or update menu items and prices from spreadsheet rows, all or nothing',
+  })
+  @ApiOkResponse({
+    description: 'What each row does (or why it cannot), and whether it was saved.',
+  })
+  async import(
+    @Body() body: ImportRowsDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.restaurantMenusImport.import(body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
       }),
       message: 'Success',
       success: true,

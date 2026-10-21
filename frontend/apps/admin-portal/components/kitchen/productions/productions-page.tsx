@@ -2,20 +2,34 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, ChefHat, Clock, Plus, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Clock, Plus, Trash2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { MouseEvent } from 'react';
 import type { KitchenProduction, KitchenProductionStatus, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
-import { StatusChip } from '@/components/design-system';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
+import {
+  AppPageHeader,
+  RowAction,
+  StatStrip,
+  StatusChip,
+  tableStyles,
+} from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Select, Skeleton } from '@/components/ui';
+import { Panel, Skeleton } from '@/components/ui';
 import { useAuth } from '@/components/auth-provider';
-import { FilterTabs } from '@/components/ui-controls';
+import { FilterSearch } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { LoadError } from '@/components/location-empty-states';
 import { RecordLink } from '@/components/record-link';
 import {
   useHrefWith,
@@ -24,6 +38,7 @@ import {
   useUrlParam,
   useUrlSearchParam,
 } from '@/lib/use-url-state';
+import { useUndoable } from '@/lib/use-undoable';
 import { canOpenPath, locationHref, recordHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { invalidateKitchenProductionQueries } from '@/lib/query-invalidation';
@@ -31,9 +46,7 @@ import { formatProductionQuantity } from '@/components/kitchen/productions/share
 import {
   HospitalSelect,
   KitchenSelect,
-  PageHeader,
   PaginationControls,
-  SearchInput,
 } from '@/components/kitchen/shared/components';
 import {
   formatDate,
@@ -72,16 +85,27 @@ function productionTotals(production: KitchenProduction) {
   );
 }
 
-// Board columns from the kitchen concept, one per production status.
-const productionColumns: Array<{ dot: string; label: string; status: KitchenProductionStatus }> = [
-  { dot: 'bg-ds-stage-preparing', label: 'Draft', status: 'DRAFT' },
-  { dot: 'bg-ds-stage-ready', label: 'Posted', status: 'POSTED' },
-  { dot: 'bg-ds-stage-queued', label: 'Cancelled', status: 'CANCELLED' },
+// Board columns from the kitchen concept, one per production status; the stat strip above the
+// board counts each one and filters the board to it.
+const productionColumns: Array<{
+  dot: string;
+  label: string;
+  status: KitchenProductionStatus;
+  tone: 'bad' | 'ok' | 'pending';
+}> = [
+  { dot: 'bg-ds-stage-preparing', label: 'Draft', status: 'DRAFT', tone: 'pending' },
+  { dot: 'bg-ds-stage-ready', label: 'Posted', status: 'POSTED', tone: 'ok' },
+  { dot: 'bg-ds-stage-queued', label: 'Cancelled', status: 'CANCELLED', tone: 'bad' },
 ];
+
+/** A click on a card's own link or button does that, not open the production. */
+function isInnerControl(event: MouseEvent): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest('a, button'));
+}
 
 function personInitials(name: string): string {
   return name
-    .split(/s+/)
+    .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
@@ -94,6 +118,7 @@ export function KitchenProductionsPageClient() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
+  const router = useRouter();
   // ?id= opens that production (from the dashboard, the palette or the board).
   const selectedProductionId = searchParams.get('id');
   const [page, setPage] = useUrlNumberParam('page');
@@ -145,6 +170,31 @@ export function KitchenProductionsPageClient() {
     ),
   });
 
+  // Every status's total at the chosen location and kitchen, whatever the board shows now.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (status?: KitchenProductionStatus) =>
+        (
+          await organizationApi.listKitchenProductions({
+            hospitalId: hospitalFilter,
+            kitchenId: kitchenFilter,
+            limit: 0,
+            status,
+          })
+        ).data.meta.total;
+      const [all, draft, posted, cancelled] = await Promise.all([
+        count(),
+        count('DRAFT'),
+        count('POSTED'),
+        count('CANCELLED'),
+      ]);
+
+      return { all, CANCELLED: cancelled, DRAFT: draft, POSTED: posted };
+    },
+    queryKey: queryKeys.kitchenProductions('stats', hospitalFilter, kitchenFilter),
+  });
+  const stats = statsQuery.data;
+
   const postMutation = useMutation({
     mutationFn: (id: string) => organizationApi.postKitchenProduction(id),
     onError(error) {
@@ -189,12 +239,15 @@ export function KitchenProductionsPageClient() {
       });
     },
     onSuccess() {
+      // The Undo toast already said it was deleted.
       invalidateKitchenProductionQueries(queryClient);
-      showToast({ title: 'Production deleted', variant: 'success' });
     },
   });
+  const undoable = useUndoable();
 
-  const productions = productionsQuery.data?.items ?? [];
+  const productions = (productionsQuery.data?.items ?? []).filter(
+    (production) => !undoable.isChanged(production.id),
+  );
   const meta = productionsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(searchInput || hospitalParam || kitchenFilter || statusFilter);
 
@@ -206,19 +259,26 @@ export function KitchenProductionsPageClient() {
     setPage(1);
   }
 
+  // Only a draft can be deleted, and nothing of it is in stock yet, so it can wait for Undo.
   function deleteProduction(production: KitchenProduction) {
-    if (window.confirm(`Delete ${production.productionNumber}?`)) {
-      deleteMutation.mutate(production.id);
-    }
+    undoable.schedule({
+      commit: () => deleteMutation.mutateAsync(production.id),
+      id: production.id,
+      title: `${production.productionNumber} deleted`,
+    });
   }
 
   const visibleColumns = productionColumns.filter(
     (column) => !statusFilter || column.status === statusFilter,
   );
-  const notPostedCount = productions.filter((production) => production.status === 'DRAFT').length;
   const selectedKitchen = (kitchensQuery.data ?? []).find(
     (kitchen) => kitchen.id === kitchenFilter,
   );
+
+  function showStatus(status: '' | KitchenProductionStatus) {
+    setStatusFilter(status);
+    setPage(1);
+  }
 
   if (selectedProductionId) {
     return (
@@ -227,46 +287,52 @@ export function KitchenProductionsPageClient() {
   }
 
   return (
-    <section className="space-y-5">
-      <PageHeader
+    <section className="space-y-4">
+      <AppPageHeader
         action={
-          <>
-            <FilterTabs
-              label="Production status"
-              onChange={(value) => {
-                setStatusFilter(value);
-                setPage(1);
-              }}
-              options={[
-                { label: 'All', value: '' as const },
-                ...productionColumns.map((column) => ({
-                  label: column.label,
-                  value: column.status,
-                })),
-              ]}
-              value={statusFilter}
-            />
-            {canOpenPath('/kitchen/productions/new', hasPermission) ? (
-              <Button asChild className="h-cta px-5">
-                <Link href="/kitchen/productions/new">
-                  <Plus aria-hidden="true" className="h-[18px] w-[18px]" />
-                  New production
-                </Link>
-              </Button>
-            ) : null}
-          </>
+          canOpenPath('/kitchen/productions/new', hasPermission) ? (
+            <Button asChild>
+              <Link href="/kitchen/productions/new">
+                <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                New production
+              </Link>
+            </Button>
+          ) : null
         }
-        subtitle="Produce mapped READYMADE items and post accepted quantity into kitchen stock."
+        count={stats?.all}
+        description="Produce mapped READYMADE items and post accepted quantity into kitchen stock."
+        eyebrow={selectedKitchen?.kitchenName}
         title="Production board"
+      />
+
+      <StatStrip
+        label="Productions at a glance"
+        stats={[
+          {
+            active: !statusFilter,
+            label: 'All productions',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          ...productionColumns.map((column) => ({
+            active: statusFilter === column.status,
+            label: column.label,
+            onSelect: () => showStatus(column.status),
+            tone: column.tone,
+            value: stats?.[column.status] ?? '–',
+          })),
+        ]}
       />
 
       <Panel>
         <ListToolbar>
-          <SearchInput
+          <FilterSearch
+            label="Search productions"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
             }}
+            placeholder="Number, item or kitchen"
             value={searchInput}
           />
           <FiltersMenu activeCount={[hospitalParam, kitchenFilter].filter(Boolean).length}>
@@ -294,54 +360,31 @@ export function KitchenProductionsPageClient() {
               />
             </FilterField>
           </FiltersMenu>
-          <div className="w-36">
-            <Select
-              aria-label="Sort order"
-              onChange={(event) => {
-                setSortOrder(event.target.value as SortOrder);
-                setPage(1);
-              }}
-              value={sortOrder}
-            >
-              <option value="desc">Newest</option>
-              <option value="asc">Oldest</option>
-            </Select>
-          </div>
-          <RefreshButton onClick={() => void productionsQuery.refetch()} />
+          <SortControl
+            onOrderChange={(value) => {
+              setSortOrder(value);
+              setPage(1);
+            }}
+            options={[{ label: 'Created date', value: 'createdAt' }]}
+            order={sortOrder}
+            sortBy="createdAt"
+          />
+          <RefreshButton
+            onClick={() => {
+              void productionsQuery.refetch();
+              void statsQuery.refetch();
+            }}
+          />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm text-ds-text-3">
-          <span className="inline-flex items-center gap-2">
-            <ChefHat aria-hidden="true" className="h-4 w-4 text-ds-teal-text" strokeWidth={1.8} />
-            <span className="font-semibold text-ds-text">
-              {selectedKitchen?.kitchenName ?? 'All kitchens'}
-            </span>
-          </span>
-          <span aria-live="polite">
-            {productionsQuery.isLoading ? (
-              <Skeleton
-                aria-label="Loading productions"
-                className="inline-block h-4 w-36 align-middle"
-              />
-            ) : (
-              `${meta.total} production${meta.total === 1 ? '' : 's'} on the board`
-            )}
-          </span>
-          {notPostedCount > 0 ? (
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ds-status-bad-bg px-3 py-1 text-xs font-semibold text-ds-status-bad-fg">
-              <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
-              {notPostedCount} not posted yet
-            </span>
-          ) : null}
-        </div>
       </Panel>
 
       {productionsQuery.isError ? (
-        <p className="rounded-tile bg-ds-status-bad-bg px-4 py-6 text-center text-sm font-medium text-ds-status-bad-fg">
-          {getApiErrorMessage(productionsQuery.error)}
-        </p>
+        <div className="rounded-tile bg-ds-status-bad-bg px-4 py-6">
+          <LoadError error={productionsQuery.error} />
+        </div>
       ) : (
-        <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 nav:mx-0 nav:px-0 lg:grid lg:grid-cols-3 lg:overflow-visible">
+        <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 nav:mx-0 nav:grid nav:grid-cols-3 nav:overflow-visible nav:px-0">
           {visibleColumns.map((column) => {
             const columnProductions = productions.filter(
               (production) => production.status === column.status,
@@ -350,17 +393,15 @@ export function KitchenProductionsPageClient() {
             return (
               <section
                 aria-label={`${column.label} productions`}
-                className="flex w-[300px] shrink-0 flex-col rounded-card bg-ds-subtle p-3 lg:w-auto lg:min-w-0"
+                className="flex w-75 shrink-0 flex-col rounded-card bg-ds-subtle p-3 nav:w-auto nav:min-w-0"
                 key={column.status}
               >
-                <header className="flex items-center justify-between gap-2 px-1 pb-3">
-                  <h2 className="flex items-center gap-2 font-bold text-ds-text">
+                {/* Its total is in the stat strip above, so the header only names the column. */}
+                <header className="px-1 pb-3">
+                  <h2 className="flex items-center gap-2 text-[13.5px] font-semibold text-ds-text">
                     <span aria-hidden="true" className={cn('h-2.5 w-2.5 rounded-xs', column.dot)} />
                     {column.label}
                   </h2>
-                  <span className="grid h-6 min-w-6 place-items-center rounded-full bg-ds-surface px-2 text-xs font-bold text-ds-text-3 ring-1 ring-ds-border">
-                    {productionsQuery.isLoading ? '–' : columnProductions.length}
-                  </span>
                 </header>
                 <div className="space-y-3">
                   {productionsQuery.isLoading ? (
@@ -374,13 +415,22 @@ export function KitchenProductionsPageClient() {
                       const [firstLine, ...otherLines] = production.lines;
 
                       return (
+                        // The whole card opens the production; its links and buttons do their own.
                         <article
-                          className="rounded-tile border border-ds-border bg-ds-surface p-4 shadow-card"
+                          className="cursor-pointer rounded-tile border border-ds-border bg-ds-surface p-4 shadow-card transition hover:border-ds-primary/40"
                           key={production.id}
+                          onClick={(event) => {
+                            if (!isInnerControl(event)) {
+                              router.push(hrefWith({ id: production.id }));
+                            }
+                          }}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <Link
-                              className="rounded-sm text-xs font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                              className={cn(
+                                tableStyles.code,
+                                'rounded-sm font-medium text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+                              )}
                               href={hrefWith({ id: production.id })}
                               prefetch={false}
                             >
@@ -409,11 +459,23 @@ export function KitchenProductionsPageClient() {
                             ) : null}
                           </h3>
                           <p className="mt-0.5 text-sm text-ds-text-3">
-                            Produced {formatProductionQuantity(totals.produced)} · Accepted{' '}
-                            {formatProductionQuantity(totals.accepted)}
-                            {totals.wastage
-                              ? ` · Wastage ${formatProductionQuantity(totals.wastage)}`
-                              : ''}
+                            Produced{' '}
+                            <span className={tableStyles.num}>
+                              {formatProductionQuantity(totals.produced)}
+                            </span>{' '}
+                            · Accepted{' '}
+                            <span className={tableStyles.num}>
+                              {formatProductionQuantity(totals.accepted)}
+                            </span>
+                            {totals.wastage ? (
+                              <>
+                                {' '}
+                                · Wastage{' '}
+                                <span className={tableStyles.num}>
+                                  {formatProductionQuantity(totals.wastage)}
+                                </span>
+                              </>
+                            ) : null}
                           </p>
                           <p className="mt-2 flex items-center gap-1.5 text-[13px] text-ds-muted">
                             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
@@ -431,7 +493,7 @@ export function KitchenProductionsPageClient() {
                           </p>
                           <div className="mt-3 flex items-center justify-between gap-2 border-t border-ds-divider pt-3">
                             <span className="flex min-w-0 items-center gap-2 text-[13px] text-ds-text-2">
-                              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ds-teal-soft text-[11px] font-bold text-ds-teal-text">
+                              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ds-selected text-[11px] font-bold text-ds-link">
                                 {production.chef ? personInitials(production.chef.name) : '?'}
                               </span>
                               <span className="truncate">
@@ -461,17 +523,13 @@ export function KitchenProductionsPageClient() {
                               >
                                 Cancel
                               </Button>
-                              <Button
-                                aria-label={`Delete ${production.productionNumber}`}
-                                className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
+                              <RowAction
+                                className="h-9 w-9 hover:text-ds-status-bad-fg"
                                 disabled={deleteMutation.isPending}
+                                icon={Trash2}
+                                label={`Delete ${production.productionNumber}`}
                                 onClick={() => deleteProduction(production)}
-                                size="icon"
-                                type="button"
-                                variant="outline"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              />
                             </div>
                           ) : null}
                         </article>
@@ -493,6 +551,7 @@ export function KitchenProductionsPageClient() {
         <PaginationControls
           limit={meta.limit}
           onPageChange={setPage}
+          noun="production"
           page={meta.page}
           total={meta.total}
           totalPages={meta.totalPages}

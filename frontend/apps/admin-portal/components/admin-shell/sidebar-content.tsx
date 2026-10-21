@@ -1,11 +1,10 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Keyboard } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { KeyboardHint, MaxHealthcareMark } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { organizationApi } from '@/lib/api';
 import { getActiveNavHref, navigationGroups, type NavBadge } from '@/lib/navigation';
@@ -31,7 +30,7 @@ export function useNavCounts(hasPermission: (permission: string | string[]) => b
       (
         await organizationApi.listTransfers({
           hospitalId: scopedHospitalId,
-          limit: 1,
+          limit: 0,
           status: 'PENDING_ACKNOWLEDGEMENT',
         })
       ).data.meta.total,
@@ -44,7 +43,7 @@ export function useNavCounts(hasPermission: (permission: string | string[]) => b
       (
         await organizationApi.listGrns({
           hospitalId: scopedHospitalId,
-          limit: 1,
+          limit: 0,
           // GRNs stay DRAFT until verified and posted to stock.
           status: 'DRAFT',
         })
@@ -58,7 +57,7 @@ export function useNavCounts(hasPermission: (permission: string | string[]) => b
       (
         await organizationApi.listKitchenProductions({
           hospitalId: scopedHospitalId,
-          limit: 1,
+          limit: 0,
           status: 'DRAFT',
         })
       ).data.meta.total,
@@ -82,15 +81,16 @@ function CountBadge({ count, label }: Readonly<{ count: number; label: string }>
 
 export function SidebarContent({
   counts,
+  footer,
   hasPermission,
   onNavigate,
-  onOpenPalette,
   sections = false,
 }: Readonly<{
   counts: NavCounts;
+  /** Under the modules: the signed-in account. */
+  footer?: ReactNode;
   hasPermission: (permission: string | string[]) => boolean;
   onNavigate?: () => void;
-  onOpenPalette: () => void;
   /** Section labels (Setup / Operations / Admin) above their modules: the desktop sidebar. */
   sections?: boolean;
 }>) {
@@ -171,7 +171,7 @@ export function SidebarContent({
                   'flex h-[38px] items-center gap-2.5 rounded-control px-2.5 text-[13.5px] transition',
                   focusRing,
                   isActive
-                    ? 'bg-ds-primary-soft font-bold text-ds-link'
+                    ? 'bg-ds-primary font-semibold text-white shadow-sm shadow-ds-primary/25'
                     : 'font-semibold text-ds-text-2 hover:bg-ds-subtle hover:text-ds-text',
                 )}
                 href={singleItem.href}
@@ -234,7 +234,7 @@ export function SidebarContent({
                           'flex h-[34px] items-center justify-between gap-2 rounded-control px-2.5 text-[13px] transition',
                           focusRing,
                           isActive
-                            ? 'bg-ds-primary-soft font-bold text-ds-link'
+                            ? 'bg-ds-primary font-semibold text-white shadow-sm shadow-ds-primary/25'
                             : 'font-medium text-ds-text-3 hover:bg-ds-subtle hover:text-ds-text',
                         )}
                         href={item.href}
@@ -253,28 +253,7 @@ export function SidebarContent({
         })}
       </nav>
 
-      <div className="flex flex-col gap-2 border-t border-ds-border p-3">
-        <div className="flex items-center gap-2.5 rounded-control-lg border border-ds-border bg-ds-subtle p-2.5">
-          <MaxHealthcareMark />
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate text-[12.5px] font-bold text-ds-text">Max Healthcare</span>
-            <span className="truncate text-[11.5px] text-ds-muted">Hospital workspace</span>
-          </span>
-        </div>
-        <button
-          className={cn(
-            'flex h-[34px] items-center gap-2 rounded-control px-2 text-[12.5px] font-semibold text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text',
-            focusRing,
-          )}
-          onClick={onOpenPalette}
-          title="Search and shortcuts (Ctrl K)"
-          type="button"
-        >
-          <Keyboard aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
-          Search &amp; shortcuts
-          <KeyboardHint className="ml-auto" keys={['Ctrl', 'K']} />
-        </button>
-      </div>
+      {footer ? <div className="border-t border-ds-border p-2">{footer}</div> : null}
     </div>
   );
 }

@@ -22,7 +22,7 @@ import {
   KitchenProductionsRepository,
   KitchenProductionWithRelations,
 } from './kitchen-productions.repository';
-import { optionalText, toDate, toDateOnly, toNumber } from '../common/values';
+import { optionalText, timestampRange, toDate, toDateOnly, toNumber } from '../common/values';
 
 type KitchenProductionClient = Prisma.TransactionClient;
 
@@ -84,10 +84,7 @@ export class KitchenProductionsService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.fromDate || query.toDate
         ? {
-            productionDate: {
-              ...(query.fromDate ? { gte: toDate(query.fromDate) } : {}),
-              ...(query.toDate ? { lte: toDate(query.toDate) } : {}),
-            },
+            productionDate: timestampRange(query.fromDate, query.toDate),
           }
         : {}),
       ...(query.search

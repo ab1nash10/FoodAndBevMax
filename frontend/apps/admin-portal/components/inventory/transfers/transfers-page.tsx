@@ -2,19 +2,33 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, ClipboardCheck, Download, Plus } from 'lucide-react';
+import { ClipboardCheck, Download, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { InventoryLocationType, SortOrder, Transfer, TransferStatus } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
-import { EmptyState, StatusChip, TypeTag } from '@/components/design-system';
+import {
+  FilterField,
+  FiltersMenu,
+  ListToolbar,
+  RefreshButton,
+  SortControl,
+} from '@/components/list-toolbar';
+import {
+  AppPageHeader,
+  EmptyState,
+  ListPager,
+  StatStrip,
+  StatusChip,
+  tableStyles,
+  TypeTag,
+} from '@/components/design-system';
 import { statusPresentation, type StatusTone } from '@/lib/status';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select, Skeleton } from '@/components/ui';
-import { BulkActionBar, DetailPanel, FilterSearch, SavedViewTabs } from '@/components/ui-controls';
+import { BulkActionBar, DetailPanel, FilterSearch } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
 import { downloadCsv } from '@/lib/csv';
@@ -231,7 +245,7 @@ export function TransfersPageClient() {
       const counts = await Promise.all(
         (['', ...transferStatuses] as TransferView[]).map((status) =>
           organizationApi
-            .listTransfers({ ...listFilters, limit: 1, status: status || undefined })
+            .listTransfers({ ...listFilters, limit: 0, status: status || undefined })
             .then((response) => [status, response.data.meta.total] as const),
         ),
       );
@@ -259,8 +273,13 @@ export function TransfersPageClient() {
   function closeTransfer() {
     const id = selectedTransferId;
     setUrlParams({ id: null });
-    // Back to the row the details were opened from.
-    window.requestAnimationFrame(() => document.getElementById(`transfer-open-${id}`)?.focus());
+    // Back to the row (or, on phones, the card) the details were opened from.
+    window.requestAnimationFrame(() =>
+      [`transfer-open-${id}`, `transfer-card-${id}`]
+        .map((elementId) => document.getElementById(elementId))
+        .find((element) => element?.offsetParent)
+        ?.focus(),
+    );
   }
 
   // On narrow screens the details sit under the list; bring them into view when opened.
@@ -338,8 +357,6 @@ export function TransfersPageClient() {
   const visibleIds = transfers.map((transfer) => transfer.id);
   const checkedOnPage = visibleIds.filter((id) => checkedIds.has(id));
   const allChecked = visibleIds.length > 0 && checkedOnPage.length === visibleIds.length;
-  const firstRow = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
-  const lastRow = Math.min(meta.page * meta.limit, meta.total);
 
   function toggleChecked(id: string) {
     setCheckedIds((current) => {
@@ -384,36 +401,59 @@ export function TransfersPageClient() {
     });
   }
 
+  /** A stat's status alone; picking the one in force goes back to every transfer. */
+  function showStatus(status: TransferStatus) {
+    changeFilter(() => setStatusFilter((current) => (current === status ? '' : status)));
+  }
+
+  const viewCounts = viewCountsQuery.data;
+  const statTones: Partial<Record<TransferStatus, 'bad' | 'ok' | 'pending'>> = {
+    ACKNOWLEDGED: 'ok',
+    CANCELLED: 'bad',
+    PENDING_ACKNOWLEDGEMENT: 'pending',
+  };
+
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text">Transfers</h1>
-          <p className="text-[13.5px] text-ds-muted">
-            Stock sent from stores and kitchens to restaurants.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={transfers.length === 0}
-            onClick={() => exportTransfers(transfers)}
-            title="Download this page as CSV"
-            type="button"
-            variant="outline"
-          >
-            <Download aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-            Export
-          </Button>
-          {canOpenPath('/inventory/transfers/new', hasPermission) ? (
-            <Button asChild>
-              <Link href="/inventory/transfers/new">
-                <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                New transfer
-              </Link>
+      <AppPageHeader
+        action={
+          <>
+            <Button
+              disabled={transfers.length === 0}
+              onClick={() => exportTransfers(transfers)}
+              title="Download this page as CSV"
+              type="button"
+              variant="outline"
+            >
+              <Download aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+              Export
             </Button>
-          ) : null}
-        </div>
-      </div>
+            {canOpenPath('/inventory/transfers/new', hasPermission) ? (
+              <Button asChild>
+                <Link href="/inventory/transfers/new">
+                  <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                  New transfer
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        }
+        count={viewCounts?.['']}
+        description="Stock sent from stores and kitchens to restaurants."
+        title="Transfers"
+      />
+
+      {/* One count per status under the list's other filters; the title's count is all of them. */}
+      <StatStrip
+        label="Transfers by status"
+        stats={transferStatuses.map((status) => ({
+          active: statusFilter === status,
+          label: longStatus(status),
+          onSelect: () => showStatus(status),
+          tone: statTones[status],
+          value: viewCounts?.[status] ?? '–',
+        }))}
+      />
 
       <div className="flex flex-wrap items-start gap-5">
         <Panel
@@ -421,17 +461,6 @@ export function TransfersPageClient() {
           className="min-w-0 flex-[1_1_560px] overflow-hidden"
           role="region"
         >
-          <SavedViewTabs<TransferView>
-            label="Saved views"
-            onChange={(value) => changeFilter(() => setStatusFilter(value))}
-            value={statusFilter}
-            views={(['', ...transferStatuses] as TransferView[]).map((status) => ({
-              count: viewCountsQuery.data?.[status],
-              label: status ? longStatus(status) : 'All',
-              value: status,
-            }))}
-          />
-
           {checkedOnPage.length > 0 ? (
             <BulkActionBar count={checkedOnPage.length} onClear={() => setCheckedIds(new Set())}>
               <Button
@@ -451,7 +480,7 @@ export function TransfersPageClient() {
               <FilterSearch
                 label="Search transfers"
                 onChange={(value) => changeFilter(() => setSearch(value))}
-                placeholder="Transfer no., item, remarks…"
+                placeholder="Transfer no., item or remarks"
                 value={searchInput}
               />
               <FiltersMenu
@@ -567,18 +596,12 @@ export function TransfersPageClient() {
                   </Select>
                 </FilterField>
               </FiltersMenu>
-              <div className="w-36">
-                <Select
-                  aria-label="Sort order"
-                  onChange={(event) =>
-                    changeFilter(() => setSortOrder(event.target.value as SortOrder))
-                  }
-                  value={sortOrder}
-                >
-                  <option value="desc">Newest</option>
-                  <option value="asc">Oldest</option>
-                </Select>
-              </div>
+              <SortControl
+                onOrderChange={(value) => changeFilter(() => setSortOrder(value))}
+                options={[{ label: 'Created date', value: 'createdAt' }]}
+                order={sortOrder}
+                sortBy="createdAt"
+              />
               <RefreshButton
                 onClick={() => {
                   void transfersQuery.refetch();
@@ -589,11 +612,109 @@ export function TransfersPageClient() {
             </ListToolbar>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] table-fixed text-[13px]">
-              <thead className="border-b border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
+          {transfers.length > 0 ? (
+            // Phones: one card per transfer instead of a table that scrolls sideways.
+            <ul aria-label="Transfers" className="divide-y divide-ds-divider sm:hidden">
+              {transfers.map((transfer) => {
+                const isSelected = transfer.id === selectedTransfer?.id;
+                const isChecked = checkedIds.has(transfer.id);
+                const subtext = transferSubtext(transfer);
+
+                return (
+                  <li
+                    className={cn(
+                      'flex cursor-pointer gap-3 px-4 py-3 transition-colors',
+                      isSelected
+                        ? 'bg-ds-selected'
+                        : isChecked
+                          ? 'bg-ds-primary-soft'
+                          : 'hover:bg-ds-selected',
+                    )}
+                    key={transfer.id}
+                    // openRowLink only reads the target and the link inside; it is typed for table rows.
+                    onClick={(event) =>
+                      openRowLink(event as unknown as Parameters<typeof openRowLink>[0])
+                    }
+                  >
+                    <input
+                      aria-label={`Select ${transfer.transferNumber}`}
+                      checked={isChecked}
+                      className="mt-1 h-4 w-4 shrink-0 accent-ds-primary"
+                      onChange={() => toggleChecked(transfer.id)}
+                      type="checkbox"
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px]">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <Link
+                            aria-current={isSelected ? 'true' : undefined}
+                            className="rounded-sm font-mono text-[13px] font-semibold text-ds-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                            data-row-link=""
+                            href={hrefWith({ id: transfer.id })}
+                            id={`transfer-card-${transfer.id}`}
+                            prefetch={false}
+                            scroll={false}
+                          >
+                            {transfer.transferNumber}
+                          </Link>
+                          <span className="block text-[11.5px] text-ds-muted">
+                            {formatWhen(transfer.transferDate)}
+                          </span>
+                        </div>
+                        <StatusChip status={transfer.status} />
+                      </div>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <TypeTag type={transfer.sourceType} />
+                        <RecordLink
+                          className="truncate font-bold text-ds-text"
+                          href={locationLink(transfer.sourceType, transfer.sourceId)}
+                        >
+                          {sourceName(transfer)}
+                        </RecordLink>
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span aria-hidden="true" className="text-ds-muted">
+                          →
+                        </span>
+                        <span className="sr-only">to</span>
+                        <TypeTag type={transfer.destinationType} />
+                        <RecordLink
+                          className="truncate text-ds-text-2"
+                          href={locationLink(transfer.destinationType, transfer.destinationId)}
+                        >
+                          {restaurantName(transfer)}
+                        </RecordLink>
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-semibold">
+                        <span className="shrink-0 text-ds-text-2">
+                          <span className="font-mono">{transfer.lines.length}</span>{' '}
+                          {transfer.lines.length === 1 ? 'line' : 'lines'}
+                        </span>
+                        {subtext ? (
+                          <>
+                            <span aria-hidden="true" className="text-ds-muted">
+                              ·
+                            </span>
+                            <span
+                              className={cn('truncate', subtext.className)}
+                              title={subtext.text}
+                            >
+                              {subtext.text}
+                            </span>
+                          </>
+                        ) : null}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+          <div className={cn('overflow-x-auto', transfers.length > 0 && 'hidden sm:block')}>
+            <table className={cn(tableStyles.table, 'min-w-[640px] table-fixed')}>
+              <thead className={tableStyles.head}>
                 <tr>
-                  <th className="w-10 py-2.5 pl-4">
+                  <th className={cn(tableStyles.th, 'w-10 pr-0')}>
                     <input
                       aria-label="Select all transfers on this page"
                       checked={allChecked}
@@ -608,10 +729,10 @@ export function TransfersPageClient() {
                       type="checkbox"
                     />
                   </th>
-                  <th className="w-[130px] px-3 py-2.5 font-semibold">Transfer</th>
-                  <th className="px-3 py-2.5 font-semibold">Route</th>
-                  <th className="w-16 px-3 py-2.5 text-right font-semibold">Lines</th>
-                  <th className="w-[180px] px-3 py-2.5 pr-4 font-semibold">Status</th>
+                  <th className={cn(tableStyles.th, 'w-[140px]')}>Transfer</th>
+                  <th className={tableStyles.th}>Route</th>
+                  <th className={cn(tableStyles.th, 'w-16 text-right')}>Lines</th>
+                  <th className={cn(tableStyles.th, 'w-[180px]')}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -624,17 +745,16 @@ export function TransfersPageClient() {
                     return (
                       <tr
                         className={cn(
-                          'cursor-pointer border-b border-ds-divider transition',
-                          isSelected
-                            ? 'bg-ds-selected'
-                            : isChecked
-                              ? 'bg-ds-primary-soft'
-                              : 'hover:bg-ds-subtle',
+                          tableStyles.row,
+                          isSelected ? 'bg-ds-selected' : isChecked && 'bg-ds-primary-soft',
                         )}
                         key={transfer.id}
                         onClick={openRowLink}
                       >
-                        <td className="py-2 pl-4" onClick={(event) => event.stopPropagation()}>
+                        <td
+                          className={cn(tableStyles.td, 'pr-0')}
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <input
                             aria-label={`Select ${transfer.transferNumber}`}
                             checked={isChecked}
@@ -643,10 +763,13 @@ export function TransfersPageClient() {
                             type="checkbox"
                           />
                         </td>
-                        <td className="px-3 py-2">
+                        <td className={tableStyles.td}>
                           <Link
                             aria-current={isSelected ? 'true' : undefined}
-                            className="rounded-sm text-[13px] font-extrabold tabular-nums text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                            className={cn(
+                              tableStyles.num,
+                              'rounded-sm text-[13px] font-semibold text-ds-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+                            )}
                             data-row-link=""
                             href={hrefWith({ id: transfer.id })}
                             id={`transfer-open-${transfer.id}`}
@@ -655,21 +778,21 @@ export function TransfersPageClient() {
                           >
                             {transfer.transferNumber}
                           </Link>
-                          <span className="block text-[11.5px] text-ds-muted">
+                          <span className="block text-[12px] text-ds-muted">
                             {formatWhen(transfer.transferDate)}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className={tableStyles.td}>
                           <span className="flex min-w-0 items-center gap-1.5">
                             <TypeTag type={transfer.sourceType} />
                             <RecordLink
-                              className="truncate font-bold text-ds-text"
+                              className={cn('truncate', tableStyles.title)}
                               href={locationLink(transfer.sourceType, transfer.sourceId)}
                             >
                               {sourceName(transfer)}
                             </RecordLink>
                           </span>
-                          <span className="mt-[3px] flex min-w-0 items-center gap-1.5">
+                          <span className="mt-1 flex min-w-0 items-center gap-1.5">
                             <TypeTag type={transfer.destinationType} />
                             <RecordLink
                               className="truncate text-ds-text-2"
@@ -679,15 +802,17 @@ export function TransfersPageClient() {
                             </RecordLink>
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-right font-bold tabular-nums text-ds-text">
+                        <td
+                          className={cn(tableStyles.td, tableStyles.num, 'text-right text-ds-text')}
+                        >
                           {transfer.lines.length}
                         </td>
-                        <td className="px-3 py-2 pr-4">
+                        <td className={tableStyles.td}>
                           <StatusChip status={transfer.status} />
                           {subtext ? (
                             <span
                               className={cn(
-                                'mt-[3px] block truncate text-[11.5px] font-semibold',
+                                'mt-1 block truncate text-[12px] font-medium',
                                 subtext.className,
                               )}
                               title={subtext.text}
@@ -711,39 +836,14 @@ export function TransfersPageClient() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-[12.5px] text-ds-muted">
-            <span>
-              Showing{' '}
-              <strong className="font-bold text-ds-text">
-                {firstRow}–{lastRow}
-              </strong>{' '}
-              of {meta.total}
-            </span>
-            <span className="flex gap-1.5">
-              <Button
-                aria-label="Previous page"
-                className="h-[34px] w-[34px]"
-                disabled={meta.page <= 1}
-                onClick={() => setPage(meta.page - 1)}
-                size="icon"
-                type="button"
-                variant="outline"
-              >
-                <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-              </Button>
-              <Button
-                aria-label="Next page"
-                className="h-[34px] w-[34px]"
-                disabled={meta.page >= meta.totalPages}
-                onClick={() => setPage(meta.page + 1)}
-                size="icon"
-                type="button"
-                variant="outline"
-              >
-                <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-              </Button>
-            </span>
-          </div>
+          <ListPager
+            limit={meta.limit}
+            noun="transfer"
+            onPageChange={setPage}
+            page={meta.page}
+            total={meta.total}
+            totalPages={meta.totalPages}
+          />
         </Panel>
 
         {selectedTransferId ? (

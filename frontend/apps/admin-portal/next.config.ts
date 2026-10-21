@@ -33,6 +33,22 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   output: 'standalone',
   poweredByHeader: false,
+  // The bare origin has no page under the prefix, so send it in. Only reachable locally: the
+  // ingress routes nothing outside the prefix to the portal.
+  redirects() {
+    return Promise.resolve(
+      BASE_PATH
+        ? [
+            {
+              basePath: false,
+              destination: `${BASE_PATH}/dashboard`,
+              permanent: false,
+              source: '/',
+            },
+          ]
+        : [],
+    );
+  },
   reactStrictMode: true,
   transpilePackages: ['@aahar/api-client', '@aahar/types', '@aahar/ui'],
 };

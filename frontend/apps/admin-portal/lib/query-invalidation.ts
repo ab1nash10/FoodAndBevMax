@@ -58,9 +58,24 @@ export function invalidateTransferQueries(queryClient: QueryClient): void {
     queryKeys.stockLedgers(),
     queryKeys.kitchenStock(),
     queryKeys.restaurantStock(),
+    queryKeys.counterStock(),
+    queryKeys.posMenu(),
     queryKeys.transferStoreStock(),
     queryKeys.transferKitchenStock(),
     queryKeys.dashboard(),
+  ]);
+}
+
+/** A bill made or cancelled: the bill lists, the day's takings, the kitchen queue and stock. */
+export function invalidatePosBillQueries(queryClient: QueryClient): void {
+  invalidate(queryClient, [
+    queryKeys.posBills(),
+    queryKeys.posBill(),
+    queryKeys.posSummary(),
+    queryKeys.posMenu(),
+    queryKeys.counterStock(),
+    queryKeys.restaurantOrders(),
+    queryKeys.stockLedgers(),
   ]);
 }
 

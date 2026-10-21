@@ -273,7 +273,7 @@ export function WorkQueue({
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-2">
               <RecordLink
-                className="text-[13.5px] font-extrabold tabular-nums text-ds-text"
+                className="font-mono text-[13px] font-medium text-ds-text"
                 href={task.recordHref}
               >
                 {task.reference}
@@ -328,7 +328,10 @@ export function WorkQueue({
           <KindTile kind={entry.kind} size="sm" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-[13px] text-ds-text-2">
-              <RecordLink className="font-extrabold text-ds-text" href={entry.href}>
+              <RecordLink
+                className="font-mono text-[12.5px] font-medium text-ds-text"
+                href={entry.href}
+              >
                 {entry.reference}
               </RecordLink>{' '}
               {entry.verb}
@@ -444,7 +447,7 @@ export function WorkRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   }
 
   return (
-    <div className="flex flex-wrap items-stretch gap-5">
+    <div className="flex flex-wrap items-stretch gap-4">
       {showQueue ? (
         <div className="flex min-w-0 flex-[2_1_560px] flex-col">
           <WorkQueue stats={stats} />

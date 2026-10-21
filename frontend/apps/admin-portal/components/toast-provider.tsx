@@ -8,9 +8,14 @@ import { cn } from '@/lib/utils';
 type ToastVariant = 'error' | 'info' | 'success';
 
 interface ToastInput {
-  /** A link to what the toast is about, e.g. { href: '/inventory/transfers?id=…', label: 'View TRF0043' }. */
-  action?: { href: string; label: string };
+  /**
+   * A link to what the toast is about, e.g. { href: '/inventory/transfers?id=…', label: 'View TRF0043' },
+   * or a button such as Undo. Either closes the toast.
+   */
+  action?: { href: string; label: string } | { label: string; onClick: () => void };
   description?: string;
+  /** How long it stays, in ms; by default 5 s, or 8 s with an action. */
+  duration?: number;
   title: string;
   variant?: ToastVariant;
 }
@@ -39,6 +44,9 @@ const variantIcons: Record<ToastVariant, typeof CheckCircle2> = {
   success: CheckCircle2,
 };
 
+const actionStyles =
+  'mt-1.5 inline-flex items-center gap-1 rounded-sm text-sm font-bold underline-offset-2 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-current';
+
 export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -47,7 +55,7 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
   }, []);
 
   const showToast = useCallback(
-    ({ action, description, title, variant = 'info' }: ToastInput) => {
+    ({ action, description, duration, title, variant = 'info' }: ToastInput) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       setToasts((currentToasts) => [
@@ -62,7 +70,7 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
       ]);
 
       // A toast with a link stays a little longer, so there is time to follow it.
-      window.setTimeout(() => dismissToast(id), action ? 8000 : 5000);
+      window.setTimeout(() => dismissToast(id), duration ?? (action ? 8000 : 5000));
 
       return id;
     },
@@ -83,11 +91,12 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
       <div className="fixed right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-sm flex-col gap-3">
         {toasts.map((toast) => {
           const Icon = variantIcons[toast.variant];
+          const { action } = toast;
 
           return (
             <div
               className={cn(
-                'flex items-start gap-3 rounded-lg border p-4 shadow-lg shadow-ds-text/10 backdrop-blur-sm',
+                'toast-enter flex items-start gap-3 rounded-lg border p-4 shadow-lg shadow-ds-text/10 backdrop-blur-sm',
                 variantStyles[toast.variant],
               )}
               key={toast.id}
@@ -99,15 +108,26 @@ export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
                 {toast.description ? (
                   <p className="mt-1 text-sm opacity-80">{toast.description}</p>
                 ) : null}
-                {toast.action ? (
+                {action && 'href' in action ? (
                   <Link
-                    className="mt-1.5 inline-flex items-center gap-1 rounded-sm text-sm font-bold underline-offset-2 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-current"
-                    href={toast.action.href}
+                    className={actionStyles}
+                    href={action.href}
                     onClick={() => dismissToast(toast.id)}
                   >
-                    {toast.action.label}
+                    {action.label}
                     <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
                   </Link>
+                ) : action ? (
+                  <button
+                    className={actionStyles}
+                    onClick={() => {
+                      action.onClick();
+                      dismissToast(toast.id);
+                    }}
+                    type="button"
+                  >
+                    {action.label}
+                  </button>
                 ) : null}
               </div>
               <button

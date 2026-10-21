@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function CreateCounterPage() {
-  redirect('/masters/pos');
+  redirect('/masters/pos?tab=counters');
 }

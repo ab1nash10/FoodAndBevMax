@@ -2,6 +2,14 @@ import type { NextFunction, Request, Response } from 'express';
 import { getRequestId, type CorrelatedRequest } from './correlation-id.middleware';
 import { startQueryCount } from './query-log';
 
+/**
+ * The path to log, without the query string: it can carry secrets (the order board's ?token=)
+ * and people's details (a search for a name or mobile number).
+ */
+export function loggedPath(request: { originalUrl?: string; url?: string }): string {
+  return (request.originalUrl || request.url || '').split('?')[0]!;
+}
+
 export function requestLoggingMiddleware(serviceName: string) {
   return (request: Request, response: Response, next: NextFunction) => {
     const startedAt = process.hrtime.bigint();
@@ -9,7 +17,7 @@ export function requestLoggingMiddleware(serviceName: string) {
 
     response.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-      const path = request.originalUrl || request.url;
+      const path = loggedPath(request);
 
       console.info(
         JSON.stringify({

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { DisplayName } from '../../common/display-name.decorator';
 
 export class CreateItemCategoryDto {
   @ApiProperty({
@@ -13,6 +14,7 @@ export class CreateItemCategoryDto {
     message: 'Category name must include at least one letter or number',
   })
   @MaxLength(255)
+  @DisplayName()
   categoryName!: string;
 
   @ApiPropertyOptional({ default: true })

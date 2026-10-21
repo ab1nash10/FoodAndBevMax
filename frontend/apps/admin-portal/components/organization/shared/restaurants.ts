@@ -201,23 +201,26 @@ export function toRestaurantFormDefaults(restaurant?: Restaurant): RestaurantFor
   };
 }
 
+/** A blank box sends null, so emptying a field on an edit removes the saved value. */
+const cleared = (value: string) => optionalValue(value) ?? null;
+
 export function toRestaurantInput(
   values: RestaurantFormValues,
   imageUrls: { coverImageUrl?: string; thumbnailUrl?: string } = {},
 ): RestaurantInput {
-  const address = optionalValue(values.address);
+  const address = cleared(values.address);
 
   return {
-    accountNumber: optionalValue(values.accountNumber),
+    accountNumber: cleared(values.accountNumber),
     address,
-    bankNameBranch: optionalValue(values.bankNameBranch),
+    bankNameBranch: cleared(values.bankNameBranch),
     coverImageUrl: imageUrls.coverImageUrl,
-    email: optionalValue(values.email),
-    fssaiNumbers: optionalValue(values.fssaiNumbers),
+    email: cleared(values.email),
+    fssaiNumbers: cleared(values.fssaiNumbers),
     gstAddress: address,
-    gstNumber: optionalValue(values.gstNumber),
+    gstNumber: cleared(values.gstNumber),
     hospitalId: values.hospitalId,
-    ifscCode: optionalValue(values.ifscCode),
+    ifscCode: cleared(values.ifscCode),
     isActive: values.isActive,
     isAtTableDiningEnabled: values.isAtTableDiningEnabled,
     isDeliveryEnabled: values.isDeliveryEnabled,
@@ -235,17 +238,17 @@ export function toRestaurantInput(
     isTakeawayEnabled: values.isTakeawayEnabled,
     isVegOnly: values.isVegOnly,
     legalEntityId: values.legalEntityId || null,
-    legalName: optionalValue(values.legalName),
-    mobile: optionalValue(values.mobile),
-    panNumber: optionalValue(values.panNumber),
+    legalName: cleared(values.legalName),
+    mobile: cleared(values.mobile),
+    panNumber: cleared(values.panNumber),
     restaurantName: values.restaurantName.trim(),
-    sodexoMid: optionalValue(values.sodexoMid),
-    sodexoTid: optionalValue(values.sodexoTid),
-    sunBu: optionalValue(values.sunBu),
-    sunT1: optionalValue(values.sunT1),
-    sunT2: optionalValue(values.sunT2),
+    sodexoMid: cleared(values.sodexoMid),
+    sodexoTid: cleared(values.sodexoTid),
+    sunBu: cleared(values.sunBu),
+    sunT1: cleared(values.sunT1),
+    sunT2: cleared(values.sunT2),
     thumbnailUrl: imageUrls.thumbnailUrl,
-    unitNameForQr: optionalValue(values.unitNameForQr),
-    upiId: optionalValue(values.upiId),
+    unitNameForQr: cleared(values.unitNameForQr),
+    upiId: cleared(values.upiId),
   };
 }

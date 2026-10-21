@@ -68,7 +68,9 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
   let rawQuery: <T>(sql: string, ...values: unknown[]) => Promise<T[]> = () => Promise.resolve([]);
   let baseUrl = '';
   let token = '';
+  let signFor: (user: { id: string; sessionVersion: number }) => string = () => '';
   const fx = {
+    categoryId: '',
     hospitalId: '',
     kitchenId: '',
     mrpItemId: '',
@@ -220,7 +222,8 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       },
     });
     if (!superAdmin) throw new Error('DATABASE_URL_TEST needs the seed: no active Super Admin');
-    token = signAccessToken(config.getOrThrow<string>('JWT_ACCESS_SECRET'), superAdmin);
+    signFor = (user) => signAccessToken(config.getOrThrow<string>('JWT_ACCESS_SECRET'), user);
+    token = signFor(superAdmin);
 
     const kitchen = await first('/kitchens?limit=1&isActive=true');
     fx.hospitalId = kitchen.hospitalId as string;
@@ -229,22 +232,25 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     fx.restaurantId = idOf(
       await first(`/restaurants?limit=1&isActive=true&hospitalId=${fx.hospitalId}`),
     );
-    const categoryId = idOf(
+    const categoryId = (fx.categoryId = idOf(
       await ok('POST', '/item-categories', { categoryName: `Characterisation ${run}` }),
-    );
+    ));
+    // An item's type comes from its first mapping: a store makes it MRP, a kitchen READYMADE.
     const item = async (itemType: string) =>
       idOf(
         await ok('POST', '/items', {
-          categoryId,
           itemName: `Characterisation ${itemType} ${run}`,
-          itemType,
           type: 'VEG',
         }),
       );
     fx.mrpItemId = await item('MRP');
     fx.readyItemId = await item('READYMADE');
-    await ok('POST', '/store-items', { itemId: fx.mrpItemId, storeId: fx.storeId });
-    await ok('POST', '/kitchen-items', { itemId: fx.readyItemId, kitchenId: fx.kitchenId });
+    await ok('POST', '/store-items', { categoryId, itemId: fx.mrpItemId, storeId: fx.storeId });
+    await ok('POST', '/kitchen-items', {
+      categoryId,
+      itemId: fx.readyItemId,
+      kitchenId: fx.kitchenId,
+    });
   }, 60_000);
 
   afterAll(async () => {
@@ -565,7 +571,10 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       vendorName: `Edited ${run}`,
     });
     expect(edited.status).toBe(200);
-    expect(edited.data).toMatchObject({ status: 'DRAFT', vendorName: `Edited ${run}` });
+    expect(edited.data).toMatchObject({
+      status: 'DRAFT',
+      vendorName: `Edited ${run[0]!.toUpperCase()}${run.slice(1)}`,
+    });
     expect((edited.data.lines as Body[])[0]).toMatchObject({
       acceptedQty: 7,
       receivedQty: 8,
@@ -745,6 +754,242 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
         expect(rows.length).toBeGreaterThan(0);
         expect(numbers).toEqual(expected);
       }
+    }
+  });
+
+  it('counter POS: receive at a counter, bill from its stock, resend, comp, cancel and restock', async () => {
+    const counter = await ok('POST', '/counters', {
+      counterCode: `PC${run}`,
+      counterName: `POS ${run}`,
+      hospitalId: fx.hospitalId,
+      restaurantId: fx.restaurantId,
+    });
+    const counterId = idOf(counter);
+    const menu = await ok('POST', '/restaurant-menus', {
+      categoryId: fx.categoryId,
+      gstPercent: 18,
+      isGstInclusive: false,
+      isDiscountable: true,
+      itemId: fx.mrpItemId,
+      price: 49.5,
+      restaurantId: fx.restaurantId,
+      roomPrice: 60,
+      serveAt: 'BOTH',
+      storeId: fx.storeId,
+    });
+    const menuId = idOf(menu);
+    const counterQty = async () =>
+      items(
+        await ok('GET', `/counter-stock?itemId=${fx.mrpItemId}&locationId=${counterId}`),
+      ).reduce((sum, balance) => sum + Number(balance.availableQty), 0);
+
+    // Stock reaches the counter through a transfer the counter acknowledges.
+    const batch = await stockBatch('PC', 10);
+    const transfer = await ok('POST', '/transfers', {
+      businessDate: today,
+      destinationId: counterId,
+      destinationType: 'COUNTER',
+      hospitalId: fx.hospitalId,
+      items: [{ ...batch, itemId: fx.mrpItemId, sentQty: 5 }],
+      sourceId: fx.storeId,
+      sourceType: 'STORE',
+      transferDate: new Date().toISOString(),
+    });
+    const dispatched = await ok('PATCH', `/transfers/${idOf(transfer)}/dispatch`);
+    const ack = await acknowledge(dispatched, { acceptedQty: 5, rejectedQty: 0 });
+    expect(ack.status).toBe(201);
+    expect(await counterQty()).toBe(5);
+    expect(ledgerRows(await ledger(fx.mrpItemId, idOf(ack.data)))).toEqual([
+      ['COUNTER_RECEIVE_IN', 'TRANSFER_ACKNOWLEDGEMENT', 'COUNTER', 5, 0, 5],
+    ]);
+
+    const menuFor = async (channel: string) =>
+      firstOf(
+        (
+          (await ok('GET', `/pos/menu?counterId=${counterId}&channel=${channel}`)).items as Body[]
+        ).filter((entry) => entry.id === menuId),
+      );
+    expect(await menuFor('COUNTER')).toMatchObject({ isOnSale: true, price: 49.5, stock: 5 });
+    expect(await menuFor('ROOM')).toMatchObject({ price: 60 });
+
+    // 2 x 49.50 + 18% = 116.82, rounded to 117. The till's prices are never used.
+    const bill = {
+      channel: 'COUNTER',
+      clientOrderId: `bill-${run}`,
+      counterId,
+      lines: [{ menuId, quantity: 2 }],
+      paymentMode: 'UPI',
+    };
+    const created = await api('POST', '/pos/orders', bill);
+    expect(created.status).toBe(201);
+    expect(created.data).toMatchObject({
+      grandTotal: 117,
+      gstTotal: 17.82,
+      isComplimentary: false,
+      paymentMode: 'UPI',
+      roundOff: 0.18,
+      status: 'PLACED',
+      subtotal: 99,
+    });
+    // The location's invoice series (PREFIX/00000042); the counter's first order of the day.
+    expect(created.data.billNumber).toMatch(/^[^/]+\/\d{8}$/);
+    expect(created.data.orderNumber).toBe('0001');
+    const invoiceNo = (bill: Body) => Number(String(bill.billNumber).split('/')[1]);
+    expect(await counterQty()).toBe(3);
+    expect(ledgerRows(await ledger(fx.mrpItemId, idOf(created.data)))).toEqual([
+      ['SALE_OUT', 'ORDER', 'COUNTER', 0, 2, 3],
+    ]);
+
+    // A resend (double tap, retry) returns the same bill and takes no more stock.
+    const resent = await ok('POST', '/pos/orders', bill);
+    expect(idOf(resent)).toBe(idOf(created.data));
+    expect(await counterQty()).toBe(3);
+
+    const oversold = await api('POST', '/pos/orders', {
+      ...bill,
+      clientOrderId: `over-${run}`,
+      lines: [{ menuId, quantity: 4 }],
+    });
+    expect(oversold.status).toBe(400);
+    expect(String(oversold.body.message)).toMatch(/^Only 3 of /);
+
+    const noReason = await api('POST', '/pos/orders', {
+      ...bill,
+      clientOrderId: `comp0-${run}`,
+      isComplimentary: true,
+      paymentMode: undefined,
+    });
+    expect(noReason.status).toBe(400);
+    const comp = await ok('POST', '/pos/orders', {
+      ...bill,
+      clientOrderId: `comp-${run}`,
+      complimentaryReason: 'Duty doctor',
+      isComplimentary: true,
+      lines: [{ menuId, quantity: 1 }],
+      paymentMode: undefined,
+    });
+    expect(comp).toMatchObject({ isComplimentary: true, paymentMode: null });
+    // Failed bills use no number: the next bill is the next invoice and the next order.
+    expect(invoiceNo(comp)).toBe(invoiceNo(created.data) + 1);
+    expect(comp.orderNumber).toBe('0002');
+    expect(await counterQty()).toBe(2);
+
+    const cancelled = await api('PATCH', `/pos/orders/${idOf(created.data)}/cancel`, {
+      reason: 'Wrong item',
+    });
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.data).toMatchObject({ cancelReason: 'Wrong item', status: 'CANCELLED' });
+    expect(await counterQty()).toBe(4);
+    expect(ledgerRows(await ledger(fx.mrpItemId, idOf(created.data)))).toEqual(
+      expect.arrayContaining([['SALE_CANCEL_IN', 'ORDER', 'COUNTER', 2, 0, 4]]),
+    );
+    const twice = await api('PATCH', `/pos/orders/${idOf(created.data)}/cancel`, { reason: 'x' });
+    expect(twice.status).toBe(409);
+
+    expect(await ok('GET', `/pos/summary?counterId=${counterId}`)).toMatchObject({
+      bills: 0,
+      cancelled: { amount: 117, count: 1 },
+      complimentary: { count: 1 },
+      sales: 0,
+    });
+    expect(items(await ok('GET', `/pos/orders?counterId=${counterId}`))).toHaveLength(2);
+    expect(
+      items(await ok('GET', `/pos/orders?counterId=${counterId}&isComplimentary=true`)),
+    ).toHaveLength(1);
+
+    // Staff discount: the restaurant's rate for the employee's type, off the value before GST.
+    const rates = await ok('PUT', `/pos/staff-discounts/${fx.restaurantId}`, {
+      rates: [
+        { discountPercent: 10, employmentType: 'ON_ROLL' },
+        { discountPercent: 5, employmentType: 'OUTSOURCED' },
+      ],
+      staffDiscountApplicable: true,
+    });
+    expect(rates).toMatchObject({ staffDiscountApplicable: true });
+    await ok('POST', '/employees', {
+      employeeCode: `E${run}`,
+      employeeName: 'Staff Member',
+      employmentType: 'ON_ROLL',
+      hospitalId: fx.hospitalId,
+    });
+    expect(await ok('GET', `/pos/employee?counterId=${counterId}&code=e${run}`)).toMatchObject({
+      discountPercent: 10,
+      employmentType: 'ON_ROLL',
+    });
+
+    // 49.50 - 10% = 44.55, GST 2 x 4.01 = 8.02, 52.57 -> 53.
+    const staffBill = await ok('POST', '/pos/orders', {
+      ...bill,
+      clientOrderId: `staff-${run}`,
+      employeeCode: `E${run}`,
+      lines: [{ menuId, quantity: 1 }],
+    });
+    expect(staffBill).toMatchObject({
+      discountPercent: 10,
+      discountTotal: 4.95,
+      grandTotal: 53,
+      gstTotal: 8.02,
+      subtotal: 49.5,
+    });
+    expect((staffBill.lines as Body[])[0]).toMatchObject({
+      discountAmount: 4.95,
+      taxableAmount: 44.55,
+    });
+
+    const unknown = await api('POST', '/pos/orders', {
+      ...bill,
+      clientOrderId: `nobody-${run}`,
+      employeeCode: 'NOBODY',
+    });
+    expect([unknown.status, unknown.body.message]).toEqual([
+      400,
+      'No active employee with ID NOBODY.',
+    ]);
+
+    // Staff get their discount at every Max location: a cashier who sees only this location
+    // still finds an employee registered at another one; nothing else widens.
+    const [elsewhere] = await rawQuery<{ id: string }>(
+      `INSERT INTO hospitals (id, hospital_code, hospital_name, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, now()) RETURNING id`,
+      `OT${run}`.toUpperCase(),
+      `Other ${run}`,
+    );
+    await rawQuery(
+      `INSERT INTO employees (id, employee_code, employee_name, employment_type, hospital_id, updated_at)
+       VALUES (gen_random_uuid(), $1, 'Elsewhere Staff', 'OUTSOURCED', $2::uuid, now())`,
+      `X${run}`.toUpperCase(),
+      elsewhere!.id,
+    );
+    const [cashier] = await rawQuery<{ id: string; sessionVersion: number }>(
+      `INSERT INTO users (id, employee_code, name, mobile, hospital_id, updated_at)
+       VALUES (gen_random_uuid(), $1, 'Test Cashier', $2, $3::uuid, now())
+       RETURNING id, session_version AS "sessionVersion"`,
+      `C${run}`.toUpperCase(),
+      `7${String(Date.now()).slice(-9)}`,
+      fx.hospitalId,
+    );
+    await rawQuery(
+      `INSERT INTO user_roles (id, user_id, role_id, updated_at)
+       SELECT gen_random_uuid(), $1::uuid, id, now() FROM roles WHERE name = 'POS Cashier'`,
+      cashier!.id,
+    );
+    await rawQuery(
+      `INSERT INTO user_hospitals (id, user_id, hospital_id, updated_at)
+       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, now())`,
+      cashier!.id,
+      fx.hospitalId,
+    );
+    const admin = token;
+    token = signFor(cashier!);
+    try {
+      expect(await ok('GET', `/pos/employee?counterId=${counterId}&code=X${run}`)).toMatchObject({
+        discountPercent: 5,
+        employeeName: 'Elsewhere Staff',
+      });
+      // Everything else stays limited to the cashier's own location.
+      expect((await api('GET', `/pos/orders?hospitalId=${elsewhere!.id}`)).status).toBe(403);
+    } finally {
+      token = admin;
     }
   });
 

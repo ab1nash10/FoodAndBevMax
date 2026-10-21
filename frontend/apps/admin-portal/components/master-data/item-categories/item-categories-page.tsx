@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus, Tags } from 'lucide-react';
+import { Loader2, Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -20,6 +20,7 @@ import {
   activeStatus,
   CsvImportExport,
   fetchAllPages,
+  nameKey,
   type CsvColumn,
   type CsvRowImporter,
 } from '@/components/csv-import-export';
@@ -30,12 +31,20 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import {
+  AppPageHeader,
+  DateTimeCell,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
 import { Panel } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { IfCanOpen } from '@/components/record-link';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { useUndoable } from '@/lib/use-undoable';
 import { invalidateItemCategoryQueries } from '@/lib/query-invalidation';
 import {
   CategoryFormFields,
@@ -45,33 +54,33 @@ import {
 } from '@/components/master-data/item-categories/shared';
 import {
   ActiveFilterSelect,
-  PageHeader,
   PaginationControls,
   QueryState,
   SearchInput,
-  StatusBadge,
 } from '@/components/master-data/shared/components';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  formatDate,
   listLimit,
 } from '@/components/master-data/shared/utils';
+import { queryKeys } from '@/lib/query-keys';
+import { cn } from '@/lib/utils';
 
 const categoryColumns: Array<CsvColumn<ItemCategory>> = [
   { header: 'Category name', value: (category) => category.categoryName },
   { header: 'Status', value: (category) => (category.isActive ? 'Active' : 'Inactive') },
 ];
 
-/** A row whose name matches a category (ignoring case) updates it; any other name adds one. */
+/**
+ * A row whose name matches a category (ignoring case, spaces and punctuation, as the server
+ * does) updates it, renaming it to the row's spelling; any other name adds one.
+ */
 async function startCategoryImport(): Promise<CsvRowImporter> {
   const existing = await fetchAllPages((page) =>
     organizationApi.listItemCategories({ limit: 100, page }),
   );
-  const byName = new Map(
-    existing.map((category) => [category.categoryName.trim().toLowerCase(), category]),
-  );
+  const byName = new Map(existing.map((category) => [nameKey(category.categoryName), category]));
 
   return async (cells) => {
     const categoryName = cells('Category name');
@@ -80,7 +89,7 @@ async function startCategoryImport(): Promise<CsvRowImporter> {
       throw new Error('Category name is required');
     }
 
-    const match = byName.get(categoryName.toLowerCase());
+    const match = byName.get(nameKey(categoryName));
     const isActive = activeStatus(cells('Status'), match?.isActive ?? true);
 
     if (match) {
@@ -92,7 +101,7 @@ async function startCategoryImport(): Promise<CsvRowImporter> {
     const { data } = await organizationApi.createItemCategory({ categoryName, isActive });
 
     // A second row with the same name in this file updates it rather than adding a twin.
-    byName.set(categoryName.toLowerCase(), data);
+    byName.set(nameKey(categoryName), data);
 
     return 'created';
   };
@@ -192,14 +201,30 @@ export function ItemCategoriesPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateItemCategoryQueries(queryClient);
-      showToast({
-        title: variables.isActive ? 'Category activated' : 'Category marked inactive',
-        variant: 'success',
-      });
+      // Marking inactive already had its Undo toast.
+      if (variables.isActive) showToast({ title: 'Category activated', variant: 'success' });
     },
   });
+  const undoable = useUndoable();
 
-  const items = categoriesQuery.data?.items ?? [];
+  // The strip's counts: under the list's own key, so every save refreshes them too.
+  const statsQuery = useQuery({
+    queryFn: async () => {
+      const count = async (isActive?: boolean) =>
+        (await organizationApi.listItemCategories({ isActive, limit: 0 })).data.meta.total;
+      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
+
+      return { active, all, inactive };
+    },
+    queryKey: queryKeys.itemCategories('stats'),
+  });
+  const stats = statsQuery.data;
+  const canEditCategories = hasPermission('ITEM_CATEGORY_UPDATE');
+
+  // A category marked inactive shows so at once, while its Undo toast runs.
+  const items = (categoriesQuery.data?.items ?? []).map((category) =>
+    undoable.isChanged(category.id) ? { ...category, isActive: false } : category,
+  );
   const meta = categoriesQuery.data?.meta ?? {
     limit: listLimit,
     page,
@@ -229,6 +254,12 @@ export function ItemCategoriesPageClient() {
     setPage(1);
   }
 
+  /** A stat's status filter alone. */
+  function showStatus(status: ActiveFilter) {
+    setActiveFilter(status);
+    setPage(1);
+  }
+
   function startEditingCategory(category: ItemCategory) {
     setEditingCategory(category);
     form.reset({
@@ -246,23 +277,25 @@ export function ItemCategoriesPageClient() {
   }
 
   function toggleCategoryStatus(category: ItemCategory) {
-    const nextIsActive = !category.isActive;
+    // Switching it back on while the Undo toast runs is the same as Undo.
+    if (undoable.undo(category.id)) return;
 
-    if (
-      !nextIsActive &&
-      !window.confirm(
-        'Turning this category inactive will prevent it from being used for new items. Existing records will remain visible. Continue?',
-      )
-    ) {
+    if (category.isActive) {
+      undoable.schedule({
+        commit: () => toggleCategoryStatusMutation.mutateAsync({ category, isActive: false }),
+        description: 'It can’t be used for new items. Existing records stay visible.',
+        id: category.id,
+        title: `${category.categoryName} marked inactive`,
+      });
       return;
     }
 
-    toggleCategoryStatusMutation.mutate({ category, isActive: nextIsActive });
+    toggleCategoryStatusMutation.mutate({ category, isActive: true });
   }
 
   return (
-    <section className="space-y-5">
-      <PageHeader
+    <section className="space-y-4">
+      <AppPageHeader
         action={
           <div className="flex flex-wrap gap-2">
             <CsvImportExport
@@ -288,19 +321,45 @@ export function ItemCategoriesPageClient() {
               <Button asChild>
                 <Link href="/masters/item-categories/new">
                   <Plus className="h-4 w-4" />
-                  Create
+                  New category
                 </Link>
               </Button>
             </IfCanOpen>
           </div>
         }
-        eyebrow="Master Data"
-        icon={Tags}
-        subtitle="Configure global item grouping reusable across hospitals."
+        count={stats?.all}
+        description="Configure global item grouping reusable across hospitals."
         title="Item Categories"
       />
 
+      <StatStrip
+        label="Item categories at a glance"
+        stats={[
+          {
+            active: !activeFilter,
+            label: 'All categories',
+            onSelect: () => showStatus(''),
+            value: stats?.all ?? '–',
+          },
+          {
+            active: activeFilter === 'active',
+            label: 'Active',
+            onSelect: () => showStatus('active'),
+            tone: 'ok',
+            value: stats?.active ?? '–',
+          },
+          {
+            active: activeFilter === 'inactive',
+            label: 'Inactive',
+            onSelect: () => showStatus('inactive'),
+            tone: 'pending',
+            value: stats?.inactive ?? '–',
+          },
+        ]}
+      />
+
       <Modal
+        side
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button onClick={cancelEditingCategory} type="button" variant="outline">
@@ -327,9 +386,11 @@ export function ItemCategoriesPageClient() {
         </form>
       </Modal>
 
-      <Panel>
+      <Panel aria-label="Item category list" className="overflow-hidden" role="region">
         <ListToolbar>
           <SearchInput
+            label="Search categories"
+            placeholder="Category name"
             onChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -369,58 +430,73 @@ export function ItemCategoriesPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed divide-y divide-ds-divider text-sm">
-            <thead className="bg-ds-subtle text-left text-xs font-semibold uppercase tracking-normal text-ds-muted">
+          <table className={cn(tableStyles.table, 'min-w-[720px] table-fixed')}>
+            <thead className={tableStyles.head}>
               <tr>
-                <th className="w-[24%] px-4 py-2.5">Category Name</th>
-                <th className="w-[11%] px-4 py-2.5">Status</th>
-                <th className="w-[14%] px-4 py-2.5">Active / Inactive</th>
-                <th className="w-[18%] px-4 py-2.5">Created Date Time</th>
-                <th className="w-[18%] px-4 py-2.5">Updated Date Time</th>
-                <th className="w-[15%] px-4 py-2.5">Actions</th>
+                <th className={cn(tableStyles.th, 'w-[38%]')}>Category</th>
+                <th className={cn(tableStyles.th, 'w-[19%]')}>Created</th>
+                <th className={cn(tableStyles.th, 'w-[19%]')}>Updated</th>
+                <th className={cn(tableStyles.th, 'w-[17%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[7%]')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ds-divider bg-white">
+            <tbody>
               {items.length > 0 ? (
                 items.map((category) => (
-                  <tr className="hover:bg-ds-subtle" key={category.id}>
-                    <td className="px-4 py-3 font-medium text-ds-text">{category.categoryName}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge isActive={category.isActive} />
+                  <tr
+                    className={cn(tableStyles.row, !canEditCategories && 'cursor-default')}
+                    key={category.id}
+                    onClick={canEditCategories ? () => startEditingCategory(category) : undefined}
+                  >
+                    <td className={cn(tableStyles.td, tableStyles.title, 'truncate')}>
+                      {category.categoryName}
                     </td>
-                    <td className="px-4 py-3">
-                      <Toggle
-                        ariaLabel={`${category.categoryName} active`}
-                        checked={category.isActive}
-                        disabled={toggleCategoryStatusMutation.isPending}
-                        onChange={() => toggleCategoryStatus(category)}
-                      />
+                    <td className={tableStyles.td}>
+                      <DateTimeCell value={category.createdAt} />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
-                      {formatDate(category.createdAt)}
+                    <td className={tableStyles.td}>
+                      <DateTimeCell value={category.updatedAt} />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-ds-text-3">
-                      {formatDate(category.updatedAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          aria-label={`Edit ${category.categoryName}`}
-                          onClick={() => startEditingCategory(category)}
-                          size="icon"
-                          title="Edit"
-                          type="button"
-                          variant="outline"
+                    {/* Its own click: switching the status does not open the category. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <span className="flex items-center gap-2">
+                        <Toggle
+                          ariaLabel={`${category.categoryName} active`}
+                          checked={category.isActive}
+                          disabled={toggleCategoryStatusMutation.isPending}
+                          onChange={() => toggleCategoryStatus(category)}
+                        />
+                        <span
+                          className={cn(
+                            'text-xs font-bold',
+                            category.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                          )}
                         >
-                          <Pencil aria-hidden="true" className="h-4 w-4" />
-                        </Button>
-                      </div>
+                          {category.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </span>
+                    </td>
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      <span className="flex justify-end">
+                        {canEditCategories ? (
+                          <RowAction
+                            icon={Pencil}
+                            label={`Edit ${category.categoryName}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              startEditingCategory(category);
+                            }}
+                          />
+                        ) : null}
+                      </span>
                     </td>
                   </tr>
                 ))
               ) : (
                 <QueryState
-                  colSpan={6}
+                  colSpan={5}
                   error={categoriesQuery.error}
                   isError={categoriesQuery.isError}
                   isLoading={categoriesQuery.isLoading}

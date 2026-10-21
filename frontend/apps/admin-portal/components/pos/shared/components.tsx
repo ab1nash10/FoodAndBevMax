@@ -1,71 +1,26 @@
 'use client';
 
-import { Button } from '@aahar/ui';
-import { Search } from 'lucide-react';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
-import { Toggle } from '@/components/ui-controls';
-import { Input, Select } from '@/components/ui';
+import { FilterSearch, Toggle } from '@/components/ui-controls';
+import { Select } from '@/components/ui';
 import type { ActiveFilter } from '@/components/pos/shared/types';
+import { ListPager } from '@/components/design-system';
 import { pageLimitOptions } from '@/components/pos/shared/utils';
 
 export { QueryState as TableState } from '@/components/location-empty-states';
-export function PaginationControls({
-  limit,
-  onLimitChange,
-  onPageChange,
-  page,
-  total,
-  totalPages,
-}: Readonly<{
-  limit: number;
-  onLimitChange: (limit: number) => void;
-  onPageChange: (page: number) => void;
-  page: number;
-  total: number;
-  totalPages: number;
-}>) {
-  const safeTotalPages = Math.max(totalPages, 1);
-
-  return (
-    <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-ds-text-3 sm:flex-row sm:items-center sm:justify-between">
-      <span>
-        Page {page} of {safeTotalPages} · {total} records
-      </span>
-      <div className="flex items-center gap-2">
-        <Select
-          aria-label="Records per page"
-          className="h-9 w-20"
-          onChange={(event) => onLimitChange(Number(event.target.value))}
-          value={limit}
-        >
-          {pageLimitOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-        <Button
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Previous
-        </Button>
-        <Button
-          disabled={page >= safeTotalPages}
-          onClick={() => onPageChange(page + 1)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Next
-        </Button>
-      </div>
-    </div>
-  );
+/** The shared list footer, with the POS page sizes. */
+export function PaginationControls(
+  props: Readonly<{
+    limit: number;
+    onLimitChange: (limit: number) => void;
+    onPageChange: (page: number) => void;
+    page: number;
+    total: number;
+    totalPages: number;
+  }>,
+) {
+  return <ListPager pageSizes={pageLimitOptions} {...props} />;
 }
 
 export function FilterBar({
@@ -75,6 +30,8 @@ export function FilterBar({
   onRefresh,
   onSearchChange,
   search,
+  searchLabel,
+  searchPlaceholder,
 }: Readonly<{
   activeFilter: ActiveFilter;
   onActiveFilterChange: (value: ActiveFilter) => void;
@@ -83,19 +40,19 @@ export function FilterBar({
   onRefresh: () => void;
   onSearchChange: (value: string) => void;
   search: string;
+  /** "Search POS devices": what a screen reader announces for the box. */
+  searchLabel: string;
+  /** The fields the search matches. */
+  searchPlaceholder: string;
 }>) {
   return (
     <ListToolbar>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-muted" />
-        <Input
-          className="pl-9"
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search"
-          type="search"
-          value={search}
-        />
-      </div>
+      <FilterSearch
+        label={searchLabel}
+        onChange={onSearchChange}
+        placeholder={searchPlaceholder}
+        value={search}
+      />
       <FiltersMenu activeCount={activeFilter ? 1 : 0}>
         <FilterField label="Status">
           <Select

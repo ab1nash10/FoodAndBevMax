@@ -1,8 +1,18 @@
 'use client';
 
+import {
+  ArrowRightLeft,
+  CheckCircle2,
+  ChefHat,
+  ClipboardCheck,
+  PackageCheck,
+  Scale,
+  Timer,
+} from 'lucide-react';
 import { Skeleton } from '@/components/ui';
 import { Sparkline } from '@/components/charts/sparkline';
-import { InsightCard } from '@/components/dashboard/insight-card';
+import { InsightItem } from '@/components/dashboard/insight-card';
+import { cn } from '@/lib/utils';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import type { DashboardStats } from '@/hooks/use-dashboard-stats';
 import {
@@ -19,33 +29,64 @@ import {
   plural,
 } from '@/components/organization/dashboard/format';
 
-/** "What changed": up to three cards from the numbers, once every source they read is in. */
-export function InsightsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
+/**
+ * "What changed", as the hero's floating card: up to three rows from the numbers, once every
+ * source they read is in, or a line saying all is well.
+ */
+export function AttentionCard({ stats }: Readonly<{ stats: DashboardStats }>) {
   const { can } = stats;
   const loading =
     (can.transfers && (stats.transfers.isLoading || stats.pending.isLoading)) ||
     (can.productions && stats.productions.isLoading) ||
     (can.grns && stats.grns.isLoading);
-  // One column below 1100px, one row above: a wrapped card never sits alone beside a gap.
-  const grid = 'flex flex-col gap-3 min-[1100px]:flex-row *:min-w-0 *:flex-1';
+  const toCheck = stats.insights.filter((insight) => insight.tone !== 'good').length;
 
-  if (loading) {
-    return (
-      <div aria-hidden="true" className={grid}>
-        {[0, 1, 2].map((index) => (
-          <Skeleton className="h-rail rounded-tile" key={index} />
-        ))}
+  return (
+    <section
+      aria-labelledby="attention-title"
+      className="rounded-card bg-ds-surface/95 p-2 shadow-[0_24px_48px_-20px_rgb(16_24_40/0.35)] ring-1 ring-ds-text/5 backdrop-blur-md"
+    >
+      <div className="flex items-center justify-between gap-3 px-3 pb-1.5 pt-2.5">
+        <h2 className="text-[13px] font-semibold text-ds-text" id="attention-title">
+          Worth a look
+        </h2>
+        {loading ? null : (
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-xs font-semibold',
+              toCheck
+                ? 'bg-ds-status-bad-bg text-ds-status-bad-fg'
+                : 'bg-ds-status-ok-bg text-ds-status-ok-fg',
+            )}
+          >
+            {toCheck ? `${toCheck} to check` : 'All good'}
+          </span>
+        )}
       </div>
-    );
-  }
-
-  return stats.insights.length ? (
-    <section aria-label="What changed" className={grid}>
-      {stats.insights.map((insight) => (
-        <InsightCard key={insight.title} {...insight} />
-      ))}
+      {loading ? (
+        <div aria-hidden="true" className="space-y-2 p-2">
+          {[0, 1, 2].map((index) => (
+            <Skeleton className="h-12 rounded-[12px]" key={index} />
+          ))}
+        </div>
+      ) : stats.insights.length ? (
+        <ul>
+          {stats.insights.map((insight) => (
+            <li key={insight.title}>
+              <InsightItem {...insight} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="flex items-center gap-3 p-3 text-[13.5px] text-ds-text-2">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-ds-status-ok-bg text-ds-status-ok-fg">
+            <CheckCircle2 aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+          </span>
+          Nothing stands out in this period.
+        </p>
+      )}
     </section>
-  ) : null;
+  );
 }
 
 /** The four key numbers, each linking to the list behind it; hidden without the permission. */
@@ -67,13 +108,54 @@ export function NewKpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
     return null;
   }
 
+  const pendingTotal = stats.pending.stats?.total ?? 0;
+  const grnsToVerify = stats.queue.grns.data?.meta.total ?? 0;
+
+  // What waits on the user leads (with a status dot); the period's activity follows.
   return (
-    <section
-      aria-label="Key numbers"
-      className="flex flex-wrap gap-3.5 *:min-w-0 *:grow *:basis-full sm:*:basis-[calc(50%-7px)] xl:*:basis-0"
-    >
-      {can.transfers ? (
-        <>
+    <section aria-labelledby="dashboard-needs-you" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-[15px] font-semibold text-ds-text" id="dashboard-needs-you">
+          Needs you today
+        </h2>
+        <p className="text-[12.5px] text-ds-muted">
+          What waits on you first, then what moved in the last {period} days.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3.5 *:min-w-0 *:grow *:basis-full sm:*:basis-[calc(50%-7px)] xl:*:basis-0">
+        {can.transfers ? (
+          <KpiCard
+            foot={pendingTotal ? 'Waiting on restaurants' : 'Nothing waiting on restaurants'}
+            href={pendingHref}
+            icon={ClipboardCheck}
+            label="Pending acknowledgement"
+            error={stats.pending.isError}
+            loading={stats.pending.isLoading}
+            scope="Right now"
+            status={pendingTotal ? 'waiting' : 'clear'}
+            value={String(pendingTotal)}
+          />
+        ) : null}
+        {can.grns ? (
+          <KpiCard
+            foot={
+              lastGrn
+                ? lastGrn.status === 'POSTED_TO_STOCK'
+                  ? `${lastGrn.grnNumber} posted to ${lastGrn.store.storeName}`
+                  : `${lastGrn.grnNumber} ${grnVerbs[lastGrn.status]} · ${lastGrn.store.storeName}`
+                : 'No GRNs yet'
+            }
+            href="/inventory/grns?view=DRAFT"
+            icon={PackageCheck}
+            label="GRNs to verify"
+            error={stats.queue.grns.isError}
+            loading={stats.queue.grns.isLoading || loadingRecent}
+            scope="Right now"
+            status={grnsToVerify ? 'waiting' : 'clear'}
+            value={String(grnsToVerify)}
+          />
+        ) : null}
+        {can.transfers ? (
           <KpiCard
             foot={
               lastTransfer
@@ -81,59 +163,31 @@ export function NewKpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
                 : 'No transfers sent yet'
             }
             href={`/inventory/transfers?date=${period}d`}
+            icon={ArrowRightLeft}
             label="Transfers"
             error={stats.transfers.isError}
             loading={stats.transfers.isLoading || loadingRecent}
             scope={scope}
             value={String(stats.transfers.stats?.count ?? 0)}
           />
+        ) : null}
+        {can.productions ? (
           <KpiCard
             foot={
-              stats.pending.stats?.total
-                ? 'Waiting on restaurants'
-                : 'Nothing waiting on restaurants'
+              lastProduction
+                ? `${lastProduction.productionNumber} posted on ${dayMonthFormatter.format(new Date(lastProduction.productionDate))}`
+                : 'No production posted yet'
             }
-            href={pendingHref}
-            label="Pending acknowledgement"
-            error={stats.pending.isError}
-            loading={stats.pending.isLoading}
-            scope="Right now"
-            value={String(stats.pending.stats?.total ?? 0)}
+            href="/kitchen/productions?view=POSTED"
+            icon={ChefHat}
+            label="Kitchen production"
+            error={stats.productions.isError}
+            loading={stats.productions.isLoading || loadingRecent}
+            scope={scope}
+            value={String(stats.wastage?.posted ?? 0)}
           />
-        </>
-      ) : null}
-      {can.grns ? (
-        <KpiCard
-          foot={
-            lastGrn
-              ? lastGrn.status === 'POSTED_TO_STOCK'
-                ? `${lastGrn.grnNumber} posted to ${lastGrn.store.storeName}`
-                : `${lastGrn.grnNumber} ${grnVerbs[lastGrn.status]} · ${lastGrn.store.storeName}`
-              : 'No GRNs yet'
-          }
-          href="/inventory/grns?view=DRAFT"
-          label="GRNs to verify"
-          error={stats.queue.grns.isError}
-          loading={stats.queue.grns.isLoading || loadingRecent}
-          scope="Right now"
-          value={String(stats.queue.grns.data?.meta.total ?? 0)}
-        />
-      ) : null}
-      {can.productions ? (
-        <KpiCard
-          foot={
-            lastProduction
-              ? `${lastProduction.productionNumber} posted on ${dayMonthFormatter.format(new Date(lastProduction.productionDate))}`
-              : 'No production posted yet'
-          }
-          href="/kitchen/productions?view=POSTED"
-          label="Kitchen production"
-          error={stats.productions.isError}
-          loading={stats.productions.isLoading || loadingRecent}
-          scope={scope}
-          value={String(stats.wastage?.posted ?? 0)}
-        />
-      ) : null}
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -168,6 +222,24 @@ export function KpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
       {can.transfers ? (
         <>
           <KpiCard
+            delta={pending?.overHour ? { text: `${pending.overHour} over 1 h`, tone: 'bad' } : null}
+            foot={
+              oldest
+                ? `Oldest: ${oldest.transferNumber} · ${formatAge(oldest.updatedAt, Date.now())} · ${
+                    oldest.hospital.displayName || oldest.hospital.hospitalName
+                  }`
+                : 'Nothing waiting on restaurants'
+            }
+            href={pendingHref}
+            icon={ClipboardCheck}
+            label="Pending acknowledgement"
+            error={stats.pending.isError}
+            loading={stats.pending.isLoading}
+            scope="Right now"
+            status={pending?.total ? 'waiting' : 'clear'}
+            value={String(pending?.total ?? 0)}
+          />
+          <KpiCard
             delta={transfers ? percentDelta(transfers.count, transfers.prevCount, 'none') : null}
             foot={[
               'vs previous period',
@@ -179,6 +251,7 @@ export function KpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
               .filter(Boolean)
               .join(' · ')}
             href={`/inventory/transfers?date=${period}d`}
+            icon={ArrowRightLeft}
             label="Transfers"
             error={stats.transfers.isError}
             loading={stats.transfers.isLoading}
@@ -193,22 +266,6 @@ export function KpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
             value={String(transfers?.count ?? 0)}
           />
           <KpiCard
-            delta={pending?.overHour ? { text: `${pending.overHour} over 1 h`, tone: 'bad' } : null}
-            foot={
-              oldest
-                ? `Oldest: ${oldest.transferNumber} · ${formatAge(oldest.updatedAt, Date.now())} · ${
-                    oldest.hospital.displayName || oldest.hospital.hospitalName
-                  }`
-                : 'Nothing waiting on restaurants'
-            }
-            href={pendingHref}
-            label="Pending acknowledgement"
-            error={stats.pending.isError}
-            loading={stats.pending.isLoading}
-            scope="Right now"
-            value={String(pending?.total ?? 0)}
-          />
-          <KpiCard
             delta={ackDelta}
             foot={
               transfers?.ackAvgMinutes === null || !transfers
@@ -220,6 +277,7 @@ export function KpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
                     : 'From sending to acknowledgement'
             }
             href={`/inventory/transfers?view=ACKNOWLEDGED&date=${period}d`}
+            icon={Timer}
             label="Avg time to acknowledge"
             error={stats.transfers.isError}
             loading={stats.transfers.isLoading}
@@ -244,6 +302,7 @@ export function KpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
               : `Target ${WASTAGE_LIMIT}% or less · nothing posted in this period`
           }
           href="/kitchen/productions?view=POSTED"
+          icon={Scale}
           label="Kitchen wastage"
           error={stats.productions.isError}
           loading={stats.productions.isLoading}

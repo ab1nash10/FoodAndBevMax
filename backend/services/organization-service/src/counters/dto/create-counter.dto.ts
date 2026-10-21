@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 
 export class CreateCounterDto {
   @ApiProperty({ example: 'd2d2f99b-0d2d-4c94-8c8a-21d4f90c4f80' })
@@ -11,13 +12,17 @@ export class CreateCounterDto {
   restaurantId!: string;
 
   @ApiProperty({ example: 'CAF-COUNTER-01' })
+  @IsNotEmpty()
   @IsString()
   @MaxLength(50)
+  @CodeCase()
   counterCode!: string;
 
   @ApiProperty({ example: 'Main Cafeteria Counter' })
+  @IsNotEmpty()
   @IsString()
   @MaxLength(150)
+  @DisplayName()
   counterName!: string;
 
   @ApiPropertyOptional({ example: 'POS-MAX-001' })
