@@ -2,15 +2,32 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Info, Loader2, Plus, Trash2, TriangleAlert } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  ChevronLeft,
+  Info,
+  Loader2,
+  Plus,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { KitchenProductionInput } from '@aahar/api-client';
-import { FlowStepper, LoadingSkeleton, StatusChip, SummaryCard } from '@/components/design-system';
-import { plural } from '@/components/inventory/shared/utils';
+import { useConfirm } from '@/components/confirm-provider';
+import {
+  FlowStepper,
+  LoadingSkeleton,
+  StatusChip,
+  Stepper,
+  SummaryCard,
+  type StepItem,
+} from '@/components/design-system';
+import { formatWhen, plural } from '@/components/inventory/shared/utils';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { FieldError, Input, Panel, RequiredMark, Skeleton } from '@/components/ui';
@@ -24,6 +41,7 @@ import { formatProductionQuantity } from '@/components/kitchen/productions/share
 import { useHospitals, useKitchens } from '@/components/kitchen/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { useDeviceDraft } from '@/lib/use-device-draft';
+import { useHrefWith } from '@/lib/use-url-state';
 import { SetupNotice } from '@/components/location-empty-states';
 
 const headerSchema = z.object({
@@ -230,6 +248,9 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
+  // Back to the list keeps its filters (they are still in the URL).
+  const listHref = useHrefWith()({ id: null });
   const [lines, setLines] = useState<ProductionLineDraft[]>([]);
   const [formError, setFormError] = useState('');
   const [hasTriedSave, setHasTriedSave] = useState(false);
@@ -362,6 +383,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
       showToast({
         action: { href, label: `View ${saved.productionNumber}` },
         description: saved.productionNumber,
+        recordId: saved.id,
         title: saved.status === 'POSTED' ? 'Posted to kitchen stock' : 'Draft saved',
         variant: 'success',
       });
@@ -380,9 +402,9 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, id) {
       invalidateKitchenProductionQueries(queryClient);
-      showToast({ title: 'Production cancelled', variant: 'success' });
+      showToast({ recordId: id, title: 'Production cancelled', variant: 'success' });
     },
   });
 
@@ -644,62 +666,156 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
     </span>
   );
 
+  // A saved production's steps: drafted, then posted to stock or cancelled.
+  const statusSteps: StepItem[] = production
+    ? [
+        {
+          detail: `Created ${formatWhen(production.createdAt)}`,
+          label: 'Draft',
+          state: production.status === 'DRAFT' ? 'current' : 'done',
+        },
+        production.status === 'CANCELLED'
+          ? { detail: formatWhen(production.updatedAt), label: 'Cancelled', state: 'stopped' }
+          : {
+              detail:
+                production.status === 'POSTED'
+                  ? formatWhen(production.updatedAt)
+                  : 'Adds to kitchen stock',
+              label: 'Added to stock',
+              state: production.status === 'POSTED' ? 'done' : 'todo',
+            },
+      ]
+    : [];
+  const cardClass = 'rounded-card border border-ds-border bg-ds-surface px-[18px] py-4 shadow-card';
+
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1
+      {production ? (
+        <Link
+          className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[13px] font-medium text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+          href={listHref}
+        >
+          <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
+          Production
+        </Link>
+      ) : null}
+      {/* A saved production gets the record header card (as a GRN does); a new one stays plain. */}
+      <div
+        className={cn(
+          production &&
+            'relative isolate space-y-6 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6',
+        )}
+      >
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1
+                className={cn(
+                  'text-ds-text',
+                  production
+                    ? 'font-mono text-[28px] font-semibold leading-tight tracking-[-0.02em]'
+                    : 'text-2xl font-extrabold tracking-[-0.01em]',
+                )}
+              >
+                {production?.productionNumber ?? 'New production'}
+              </h1>
+              <StatusChip
+                label={production?.status === 'POSTED' ? 'Added to stock' : undefined}
+                status={production?.status ?? 'DRAFT'}
+              />
+            </div>
+            <p className="text-[13.5px] text-ds-muted">
+              {[
+                selectedKitchenId ? kitchenName : null,
+                production?.hospital.hospitalName,
+                production?.chef ? `chef ${production.chef.name}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'Choose the kitchen, then add what it produced.'}
+            </p>
+          </div>
+          {isEditable && isExisting && production && hasPermission('KITCHEN_PRODUCTION_UPDATE') ? (
+            <Button
+              className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
+              disabled={isBusy}
+              onClick={() =>
+                void confirm({
+                  confirmLabel: 'Cancel production',
+                  description: 'Nothing is added to stock.',
+                  title: `Cancel ${production.productionNumber}?`,
+                  tone: 'danger',
+                }).then((confirmed) => {
+                  if (confirmed) cancelMutation.mutate(production.id);
+                })
+              }
+              type="button"
+              variant="ghost"
+            >
+              Cancel production
+            </Button>
+          ) : null}
+          {draft.savedAt ? (
+            <div className="flex items-center gap-3">
+              <span aria-live="polite" className="text-xs text-ds-muted">
+                Draft kept {timeOnlyFormatter.format(draft.savedAt)}
+              </span>
+              <Button disabled={isBusy} onClick={startOver} size="sm" type="button" variant="ghost">
+                Start over
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        {production ? <Stepper label="Production progress" steps={statusSteps} /> : null}
+      </div>
+
+      {production ? (
+        <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className={cardClass}>
+            <dt className="text-[12.5px] text-ds-muted">Produced</dt>
+            <dd className="mt-1.5 text-2xl font-semibold tracking-[-0.02em] text-ds-text tabular-nums">
+              {formatTotal(totalProduced)}
+            </dd>
+            <p className="mt-1 text-xs text-ds-muted">
+              {formatTotal(totalAccepted)} accepted to stock
+            </p>
+          </div>
+          <div className={cardClass}>
+            <dt className="text-[12.5px] text-ds-muted">Wastage</dt>
+            <dd
               className={cn(
-                'text-2xl font-extrabold tracking-[-0.01em] text-ds-text',
-                production && 'font-mono',
+                'mt-1.5 text-2xl font-semibold tracking-[-0.02em] tabular-nums',
+                overallPercent > WASTAGE_ALERT_PERCENT
+                  ? 'text-ds-status-pending-fg'
+                  : 'text-ds-text',
               )}
             >
-              {production?.productionNumber ?? 'New production'}
-            </h1>
-            <StatusChip
-              label={production?.status === 'POSTED' ? 'Posted to stock' : undefined}
-              status={production?.status ?? 'DRAFT'}
-            />
+              {formatTotal(totalWasted)}
+            </dd>
+            <p className="mt-1 text-xs text-ds-muted">{overallPercent.toFixed(1)}% of produced</p>
           </div>
-          <p className="text-[13.5px] text-ds-muted">
-            {[
-              selectedKitchenId ? kitchenName : null,
-              production?.hospital.hospitalName,
-              production?.chef ? `chef ${production.chef.name}` : null,
-            ]
-              .filter(Boolean)
-              .join(' · ') || 'Choose the kitchen, then add what it produced.'}
-          </p>
-        </div>
-        {isEditable && isExisting && production && hasPermission('KITCHEN_PRODUCTION_UPDATE') ? (
-          <Button
-            className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
-            disabled={isBusy}
-            onClick={() => {
-              if (
-                window.confirm(`Cancel ${production.productionNumber}? Nothing is added to stock.`)
-              ) {
-                cancelMutation.mutate(production.id);
-              }
-            }}
-            type="button"
-            variant="ghost"
-          >
-            Cancel production
-          </Button>
-        ) : null}
-        {draft.savedAt ? (
-          <div className="flex items-center gap-3">
-            <span aria-live="polite" className="text-xs text-ds-muted">
-              Draft kept {timeOnlyFormatter.format(draft.savedAt)}
-            </span>
-            <Button disabled={isBusy} onClick={startOver} size="sm" type="button" variant="ghost">
-              Start over
-            </Button>
+          <div className={cardClass}>
+            <dt className="text-[12.5px] text-ds-muted">Items</dt>
+            <dd className="mt-1.5 text-2xl font-semibold tracking-[-0.02em] text-ds-text tabular-nums">
+              {lines.length}
+            </dd>
+            <p className="mt-1 text-xs text-ds-muted">
+              {flagged} above the {WASTAGE_ALERT_PERCENT}% limit
+            </p>
           </div>
-        ) : null}
-      </div>
+          <div className={cardClass}>
+            <dt className="text-[12.5px] text-ds-muted">Kitchen</dt>
+            <dd
+              className="mt-1.5 truncate text-[17px] font-semibold text-ds-text"
+              title={kitchenName}
+            >
+              {kitchenName}
+            </dd>
+            <p className="mt-1 truncate text-xs text-ds-muted">
+              {production.chef ? `Made by ${production.chef.name}` : 'No chef assigned'}
+            </p>
+          </div>
+        </dl>
+      ) : null}
 
       {isEditable ? (
         <FlowStepper

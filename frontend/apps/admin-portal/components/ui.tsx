@@ -56,7 +56,7 @@ export const Input = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<'inpu
     return (
       <input
         className={cn(
-          'h-control w-full rounded-control border border-ds-input bg-ds-surface px-3 text-sm text-ds-text outline-hidden transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/15 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
+          'h-control w-full rounded-control border border-ds-input bg-ds-surface px-3.5 shadow-xs hover:border-ds-primary/40 text-sm text-ds-text outline-hidden transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-4 focus:ring-ds-primary/12 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
           className,
         )}
         onBlur={
@@ -102,7 +102,7 @@ export const Select = forwardRef<HTMLSelectElement, ComponentPropsWithoutRef<'se
     <span className="relative block w-full">
       <select
         className={cn(
-          'h-control w-full appearance-none rounded-control border border-ds-input bg-ds-surface px-3 pr-8 text-sm text-ds-text outline-hidden transition focus:border-ds-primary focus:ring-2 focus:ring-ds-primary/15 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
+          'h-control w-full appearance-none rounded-control border border-ds-input bg-ds-surface px-3.5 shadow-xs hover:border-ds-primary/40 pr-8 text-sm text-ds-text outline-hidden transition focus:border-ds-primary focus:ring-4 focus:ring-ds-primary/12 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
           className,
         )}
         disabled={disabled}
@@ -127,7 +127,7 @@ Select.displayName = 'Select';
 export function Label({ className, ...props }: ComponentPropsWithoutRef<'label'>) {
   return (
     <label
-      className={cn('text-[13px] font-semibold leading-none text-ds-text-2', className)}
+      className={cn('text-[13px] font-semibold leading-none text-ds-text', className)}
       {...props}
     />
   );

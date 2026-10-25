@@ -128,9 +128,13 @@ export function UserDialog({
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.accessUsers() });
-      showToast({ title: user ? 'User updated' : 'User created', variant: 'success' });
+      showToast({
+        recordId: response.data.id,
+        title: user ? 'User updated' : 'User created',
+        variant: 'success',
+      });
       onClose();
     },
   });

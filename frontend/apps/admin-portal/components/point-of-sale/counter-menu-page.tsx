@@ -5,7 +5,8 @@ import { ChevronDown } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { FoodType, PosChannel, PosMenuItem } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
-import { AppPageHeader, FoodTypeMarker, StatStrip, tableStyles } from '@/components/design-system';
+import { useConfirm } from '@/components/confirm-provider';
+import { AppPageHeader, RecordAvatar, StatStrip, tableStyles } from '@/components/design-system';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { QueryState } from '@/components/location-empty-states';
 import {
@@ -56,6 +57,7 @@ function windowSummary(item: PosMenuItem): string {
 export function CounterMenuPageClient() {
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
   const [channel, setChannel] = useUrlParam<PosChannel>('channel', 'COUNTER', ['COUNTER', 'ROOM']);
@@ -87,7 +89,33 @@ export function CounterMenuPageClient() {
         variant: 'error',
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.posMenu() }),
+    onSuccess: (_response, variables) =>
+      showToast({
+        recordId: variables.menuId,
+        title: variables.isAvailable ? 'Item available' : 'Item unavailable',
+        variant: 'success',
+      }),
   });
+
+  async function toggleAvailability(item: PosMenuItem, isAvailable: boolean) {
+    const confirmed = await confirm(
+      isAvailable
+        ? {
+            confirmLabel: 'Make available',
+            description: 'It can be ordered again straight away.',
+            title: `Make ${item.itemName} available?`,
+          }
+        : {
+            confirmLabel: 'Make unavailable',
+            description:
+              'It shows as sold out and can’t be ordered until it is made available again.',
+            title: `Make ${item.itemName} unavailable?`,
+            tone: 'danger',
+          },
+    );
+
+    if (confirmed) availability.mutate({ isAvailable, menuId: item.id });
+  }
 
   const items = menuQuery.data?.items ?? [];
   const categories = [
@@ -134,10 +162,14 @@ export function CounterMenuPageClient() {
     const isSaving = availability.isPending && availability.variables?.menuId === item.id;
 
     return (
-      <tr className="border-t border-ds-divider" key={item.id}>
+      <tr
+        className="row-accent border-t border-ds-divider transition-colors hover:bg-ds-selected"
+        data-record-id={item.id}
+        key={item.id}
+      >
         <td className={tableStyles.td}>
-          <span className="flex min-w-0 items-center gap-2.5">
-            <FoodTypeMarker type={item.foodType} />
+          <span className="flex min-w-0 items-center gap-3">
+            <RecordAvatar foodType={item.foodType} name={item.itemName} />
             <span className="min-w-0">
               <span className={cn('block truncate', tableStyles.title)}>{item.itemName}</span>
               <span className={cn('block truncate', tableStyles.code)}>
@@ -189,7 +221,7 @@ export function CounterMenuPageClient() {
                 ariaLabel={`${item.itemName} available`}
                 checked={item.isAvailable}
                 disabled={isSaving}
-                onChange={(isAvailable) => availability.mutate({ isAvailable, menuId: item.id })}
+                onChange={(isAvailable) => void toggleAvailability(item, isAvailable)}
               />
             ) : null}
             {item.isOnSale ? (
@@ -304,7 +336,7 @@ export function CounterMenuPageClient() {
               <RefreshButton onClick={() => void menuQuery.refetch()} />
             </ListToolbar>
             <div className="overflow-x-auto">
-              <table className={cn(tableStyles.table, 'min-w-240 table-fixed')}>
+              <table className={cn(tableStyles.table, 'phone-cards min-w-240 table-fixed')}>
                 <thead className={tableStyles.head}>
                   <tr>
                     <th className={cn(tableStyles.th, 'w-[24%]')}>Item</th>

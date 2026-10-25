@@ -105,7 +105,10 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
     transferId,
     transfer?.transferNumber ?? (transferQuery.isError ? 'Not found' : undefined),
   );
-  const canAcknowledge = hasPermission('TRANSFER_ACKNOWLEDGE');
+  // Restaurant staff accept another restaurant's leftovers; everything else needs TRANSFER_ACKNOWLEDGE.
+  const canAcknowledge =
+    hasPermission('TRANSFER_ACKNOWLEDGE') ||
+    (transfer?.sourceType === 'RESTAURANT' && hasPermission('RESTAURANT_TRANSFER_RECEIVE'));
   const backHref = `/inventory/transfers?id=${transferId}`;
 
   // Start from "everything arrived", once per transfer, so a refetch keeps what was typed.
@@ -139,6 +142,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         description: transfer
           ? `${transfer.transferNumber} · ${outcomeCopy[outcome].title}`
           : undefined,
+        recordId: transfer?.id,
         title: 'Transfer acknowledged',
         variant: 'success',
       });
@@ -276,14 +280,15 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-1.5">
-        <Link
-          className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[12.5px] font-medium text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-          href={backHref}
-        >
-          <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-          Transfers
-        </Link>
+      <Link
+        className="inline-flex min-h-6 items-center gap-1 self-start rounded-sm text-[13px] font-medium text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+        href={backHref}
+      >
+        <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
+        Transfers
+      </Link>
+      {/* The record's header card, as on the transfer and GRN pages. */}
+      <div className="relative isolate flex flex-col gap-1.5 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6">
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ds-text">
             Acknowledge <span className="font-mono tracking-normal">{transfer.transferNumber}</span>
@@ -304,10 +309,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         </p>
       </div>
 
-      <dl
-        aria-label="Transfer details"
-        className="grid gap-px overflow-hidden rounded-card border border-ds-border bg-ds-border grid-cols-[repeat(auto-fit,minmax(180px,1fr))]"
-      >
+      <dl aria-label="Transfer details" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             href: locationLink(transfer.sourceType, transfer.sourceId),
@@ -323,11 +325,14 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
           { href: null, label: 'Remarks', value: transfer.remarks || '—' },
         ].map((entry) => (
           <div
-            className="flex min-w-0 flex-col gap-[3px] bg-ds-surface px-4 py-3"
+            className="flex min-w-0 flex-col rounded-card border border-ds-border bg-ds-surface px-[18px] py-4 shadow-card"
             key={entry.label}
           >
-            <dt className="text-[12px] font-medium text-ds-muted">{entry.label}</dt>
-            <dd className="truncate text-[13.5px] font-semibold text-ds-text" title={entry.value}>
+            <dt className="text-[12.5px] text-ds-muted">{entry.label}</dt>
+            <dd
+              className="mt-1.5 truncate text-[15px] font-semibold text-ds-text"
+              title={entry.value}
+            >
               <RecordLink href={entry.href}>{entry.value}</RecordLink>
             </dd>
           </div>

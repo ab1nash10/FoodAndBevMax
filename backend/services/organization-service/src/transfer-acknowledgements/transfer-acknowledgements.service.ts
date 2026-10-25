@@ -281,11 +281,8 @@ export class TransferAcknowledgementsService {
       throw new BadRequestException('Only pending transfers can be acknowledged');
     }
 
-    if (
-      transfer.sourceType !== InventoryLocationType.STORE &&
-      transfer.sourceType !== InventoryLocationType.KITCHEN
-    ) {
-      throw new BadRequestException('Transfer source must be Store or Kitchen');
+    if (transfer.sourceType === InventoryLocationType.COUNTER) {
+      throw new BadRequestException('Transfer source must be a store, kitchen or restaurant');
     }
 
     if (
@@ -295,12 +292,18 @@ export class TransferAcknowledgementsService {
       throw new BadRequestException('Transfer destination must be a restaurant or a counter');
     }
 
-    // A cashier receives at their counter only; restaurant receipts stay with TRANSFER_ACKNOWLEDGE.
-    if (
-      !context.permissions?.includes('TRANSFER_ACKNOWLEDGE') &&
-      transfer.destinationType !== InventoryLocationType.COUNTER
-    ) {
-      throw new ForbiddenException('You can receive transfers at a counter only.');
+    // A cashier receives at their counter, restaurant staff take another restaurant's leftovers;
+    // every other restaurant receipt stays with TRANSFER_ACKNOWLEDGE.
+    const permissions = context.permissions ?? [];
+    const mayReceive =
+      permissions.includes('TRANSFER_ACKNOWLEDGE') ||
+      (transfer.destinationType === InventoryLocationType.COUNTER &&
+        permissions.includes('COUNTER_STOCK_RECEIVE')) ||
+      (transfer.sourceType === InventoryLocationType.RESTAURANT &&
+        permissions.includes('RESTAURANT_TRANSFER_RECEIVE'));
+
+    if (!mayReceive) {
+      throw new ForbiddenException('You do not have permission to receive this transfer.');
     }
 
     return transfer;

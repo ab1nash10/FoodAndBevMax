@@ -49,9 +49,12 @@ describe('board rules', () => {
     const view = boardView(many, now);
     expect(view.preparing).toHaveLength(8);
     expect(view.preparingMore).toBe(4);
-    const readyMany = Array.from({ length: 8 }, (_, index) => ready(`A ${index}`, index));
-    // One in the banner, seven left for six places: five tiles and "+2 more".
-    expect(boardView(readyMany, now)).toMatchObject({ readyMore: 2, readyTotal: 8 });
+    const readyMany = Array.from({ length: 11 }, (_, index) => ready(`A ${index}`, index));
+    // One in the banner, ten left for eight places: seven tiles and "+3 more".
+    expect(boardView(readyMany, now)).toMatchObject({ readyMore: 3, readyTotal: 11 });
+    const readyFew = Array.from({ length: 9 }, (_, index) => ready(`B ${index}`, index));
+    // Eight after the banner fill the eight places exactly: no "+N more".
+    expect(boardView(readyFew, now)).toMatchObject({ readyMore: 0, readyTotal: 9 });
   });
 
   test('minutes follow the given clock (the server), not the machine', () => {

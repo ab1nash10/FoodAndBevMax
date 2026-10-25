@@ -8,11 +8,26 @@ import {
   Receipt,
   type LucideIcon,
 } from 'lucide-react';
-import Link from 'next/link';
-import { Pending } from '@/components/admin-shell/top-nav';
+import Link, { useLinkStatus } from 'next/link';
 import { getActiveNavHref } from '@/lib/navigation';
 import { usePrefetchOnIntent } from '@/lib/prefetch';
 import { cn } from '@/lib/utils';
+
+/** Until the clicked link's page arrives, it already shows as the chosen one. */
+function Pending({ className }: Readonly<{ className: string }>) {
+  const { pending } = useLinkStatus();
+
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        className,
+        'transition-opacity duration-150',
+        pending ? 'opacity-100' : 'opacity-0',
+      )}
+    />
+  );
+}
 
 interface TabPage {
   group: string;
@@ -45,12 +60,12 @@ export function MobileTabBar({
     return first ? [{ ...tab, href: first.href }] : [];
   });
   const itemClass =
-    'relative flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary';
+    'relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary';
 
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t border-ds-border bg-ds-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl nav:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex h-[68px] border-t border-ds-border bg-ds-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl nav:hidden"
     >
       {items.map(({ group, href, icon: Icon, label }) => {
         const isActive = group === activeGroup;
@@ -63,7 +78,14 @@ export function MobileTabBar({
             key={group}
             {...prefetchProps(href)}
           >
-            <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={isActive ? 2.2 : 1.8} />
+            <span
+              className={cn(
+                'grid h-[30px] w-[52px] place-items-center rounded-full transition-colors duration-150',
+                isActive && 'bg-ds-primary-soft',
+              )}
+            >
+              <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={isActive ? 2.2 : 1.8} />
+            </span>
             {label}
             {isActive ? null : (
               <Pending className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-ds-primary" />
@@ -72,7 +94,9 @@ export function MobileTabBar({
         );
       })}
       <button className={cn(itemClass, 'text-ds-muted')} onClick={onMore} type="button">
-        <MoreHorizontal aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
+        <span className="grid h-[30px] w-[52px] place-items-center">
+          <MoreHorizontal aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
+        </span>
         More
       </button>
     </nav>

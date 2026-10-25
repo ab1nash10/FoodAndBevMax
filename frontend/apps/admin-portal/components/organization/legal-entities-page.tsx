@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -63,6 +64,7 @@ export function LegalEntitiesPageClient() {
   const editing = dialog !== null && dialog !== 'new' ? dialog : null;
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const form = useForm<EntityFormValues>({ defaultValues: emptyEntity });
   const [sortBy, setSortBy] = useState('locationName');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -111,9 +113,13 @@ export function LegalEntitiesPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       invalidateLegalEntityQueries(queryClient);
-      showToast({ title: editing ? 'Entity updated' : 'Entity created', variant: 'success' });
+      showToast({
+        recordId: response.data.id,
+        title: editing ? 'Entity updated' : 'Entity created',
+        variant: 'success',
+      });
       closeDialog();
     },
   });
@@ -131,11 +137,21 @@ export function LegalEntitiesPageClient() {
     onSuccess(_response, entity) {
       invalidateLegalEntityQueries(queryClient);
       showToast({
+        recordId: entity.id,
         title: entity.isActive ? 'Entity marked inactive' : 'Entity activated',
         variant: 'success',
       });
     },
   });
+
+  async function toggleEntity(entity: LegalEntity) {
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: !entity.isActive,
+      name: entity.entityName,
+    });
+
+    if (confirmed) toggleMutation.mutate(entity);
+  }
 
   const hasFilters = Boolean(searchInput || activeFilter);
 
@@ -207,6 +223,7 @@ export function LegalEntitiesPageClient() {
             active: !activeFilter,
             label: 'All entities',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
@@ -214,6 +231,7 @@ export function LegalEntitiesPageClient() {
             label: 'Active',
             onSelect: () => showStatus('active'),
             tone: 'ok',
+            share: stats?.all ? stats.active / stats.all : undefined,
             value: stats?.active ?? '–',
           },
           {
@@ -221,6 +239,7 @@ export function LegalEntitiesPageClient() {
             label: 'Inactive',
             onSelect: () => showStatus('inactive'),
             tone: 'pending',
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             value: stats?.inactive ?? '–',
           },
         ]}
@@ -349,7 +368,7 @@ export function LegalEntitiesPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-190 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-190 table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[14%]')}>Location</th>
@@ -367,6 +386,7 @@ export function LegalEntitiesPageClient() {
                 items.map((entity) => (
                   <tr
                     className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    data-record-id={entity.id}
                     key={entity.id}
                     onClick={canEdit ? () => openDialog(entity) : undefined}
                   >
@@ -389,7 +409,7 @@ export function LegalEntitiesPageClient() {
                           ariaLabel={`${entity.entityName} active`}
                           checked={entity.isActive}
                           disabled={!canEdit || toggleMutation.isPending}
-                          onChange={() => toggleMutation.mutate(entity)}
+                          onChange={() => void toggleEntity(entity)}
                         />
                         <span
                           className={cn(

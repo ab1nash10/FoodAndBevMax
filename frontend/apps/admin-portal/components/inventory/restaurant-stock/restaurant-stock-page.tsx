@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  DiscardBatchButton,
+  DiscardStockDialog,
+  type DiscardableBatch,
+} from '@/components/inventory/discard-stock-dialog';
 import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRightLeft } from 'lucide-react';
@@ -19,7 +24,7 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { StatStrip, StatusChip, tableStyles } from '@/components/design-system';
+import { RecordAvatar, StatStrip, StatusChip, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { Input, Panel, Select } from '@/components/ui';
 import { IfCanOpen, RecordLink } from '@/components/record-link';
@@ -79,6 +84,7 @@ function RestaurantSelect({
 }
 
 export function RestaurantStockPageClient() {
+  const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   // Phones show three of the seven columns; a row that spans them all has to say so.
   const columns = useIsPhone() ? 3 : 7;
@@ -231,6 +237,7 @@ export function RestaurantStockPageClient() {
 
   return (
     <section className="space-y-4">
+      <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
       <PageHeader
         count={stats?.all}
         subtitle="Current restaurant stock received from acknowledged transfers."
@@ -243,12 +250,14 @@ export function RestaurantStockPageClient() {
             active: !statusFilter,
             label: 'All batches',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: statusFilter === 'NEAR_EXPIRY',
             label: 'Expiring in 30 days',
             onSelect: () => showStatus('NEAR_EXPIRY'),
+            share: stats?.all ? stats.nearExpiry / stats.all : undefined,
             tone: 'pending',
             value: stats?.nearExpiry ?? '–',
           },
@@ -256,6 +265,7 @@ export function RestaurantStockPageClient() {
             active: statusFilter === 'EXPIRED',
             label: 'Expired',
             onSelect: () => showStatus('EXPIRED'),
+            share: stats?.all ? stats.expired / stats.all : undefined,
             tone: 'bad',
             value: stats?.expired ?? '–',
           },
@@ -263,6 +273,7 @@ export function RestaurantStockPageClient() {
             active: statusFilter === 'OUT_OF_STOCK',
             label: 'Out of stock',
             onSelect: () => showStatus('OUT_OF_STOCK'),
+            share: stats?.all ? stats.outOfStock / stats.all : undefined,
             tone: 'bad',
             value: stats?.outOfStock ?? '–',
           },
@@ -453,7 +464,8 @@ export function RestaurantStockPageClient() {
 
                   return (
                     <tr
-                      className="border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                      className="row-accent border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                      data-record-id={stock.id}
                       key={stock.id}
                     >
                       <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
@@ -474,31 +486,38 @@ export function RestaurantStockPageClient() {
                         </span>
                       </td>
                       <td className={tableStyles.td}>
-                        <RecordLink
-                          className={cn('block break-words sm:truncate', tableStyles.title)}
-                          href={recordHref('/masters/items', { id: stock.item.id })}
-                        >
-                          {stock.item.itemName}
-                        </RecordLink>
-                        <p className={cn('truncate', tableStyles.code)}>{stock.item.itemCode}</p>
-                        <p className="truncate text-[12px] text-ds-muted sm:hidden">
-                          {stock.batchNumber ?? 'No batch'} · {stock.location.name}
-                        </p>
-                        {low ? (
-                          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <Chip className={levelChip[low.level].className}>
-                              {levelChip[low.level].label}
-                            </Chip>
-                            <IfCanOpen href="/inventory/transfers/new">
-                              <Link
-                                className="text-xs font-semibold text-ds-link hover:underline"
-                                href={sendFromStoreHref('RESTAURANT', [low], coverDays)}
-                              >
-                                Send from store
-                              </Link>
-                            </IfCanOpen>
+                        <span className="flex items-start gap-3">
+                          <RecordAvatar foodType={stock.item.type} name={stock.item.itemName} />
+                          <span className="min-w-0 flex-1">
+                            <RecordLink
+                              className={cn('block break-words sm:truncate', tableStyles.title)}
+                              href={recordHref('/masters/items', { id: stock.item.id })}
+                            >
+                              {stock.item.itemName}
+                            </RecordLink>
+                            <p className={cn('truncate', tableStyles.code)}>
+                              {stock.item.itemCode}
+                            </p>
+                            <p className="truncate text-[12px] text-ds-muted sm:hidden">
+                              {stock.batchNumber ?? 'No batch'} · {stock.location.name}
+                            </p>
+                            {low ? (
+                              <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <Chip className={levelChip[low.level].className}>
+                                  {levelChip[low.level].label}
+                                </Chip>
+                                <IfCanOpen href="/inventory/transfers/new">
+                                  <Link
+                                    className="text-xs font-semibold text-ds-link hover:underline"
+                                    href={sendFromStoreHref('RESTAURANT', [low], coverDays)}
+                                  >
+                                    Send from store
+                                  </Link>
+                                </IfCanOpen>
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
+                        </span>
                       </td>
                       <td
                         className={cn(
@@ -532,6 +551,19 @@ export function RestaurantStockPageClient() {
                       </td>
                       <td className={tableStyles.td}>
                         <StatusChip status={stock.status} />
+                        <span className="mt-1 block">
+                          <DiscardBatchButton
+                            batch={{
+                              availableQty: stock.availableQty,
+                              batchNumber: stock.batchNumber,
+                              expiryDate: stock.expiryDate,
+                              itemName: stock.item.itemName,
+                              locationName: stock.location.name,
+                              stockBalanceId: stock.id,
+                            }}
+                            onDiscard={setDiscarding}
+                          />
+                        </span>
                       </td>
                     </tr>
                   );

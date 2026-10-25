@@ -2,12 +2,13 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardCheck, Eye, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { Grn, GrnStatus, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -15,7 +16,15 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { RowAction, StatStrip, StatusChip, tableStyles } from '@/components/design-system';
+import {
+  InlineProgress,
+  RecordAvatar,
+  RowAction,
+  RowOpen,
+  StatStrip,
+  StatusChip,
+  tableStyles,
+} from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -33,7 +42,6 @@ import {
   useUrlSearchParam,
 } from '@/lib/use-url-state';
 import { useIsPhone } from '@/lib/use-is-phone';
-import { useUndoable } from '@/lib/use-undoable';
 import { cn } from '@/lib/utils';
 import { invalidateGrnQueries } from '@/lib/query-invalidation';
 import { GrnVerificationView } from '@/components/inventory/grns/grn-verification-view';
@@ -132,7 +140,7 @@ export function GrnsPageClient() {
   const stats = statsQuery.data;
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteGrn(id),
+    mutationFn: (grn: Grn) => organizationApi.deleteGrn(grn.id),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
@@ -140,14 +148,14 @@ export function GrnsPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
-      // The Undo toast already said it was deleted.
+    onSuccess(_response, grn) {
       invalidateGrnQueries(queryClient);
+      showToast({ title: `${grn.grnNumber} deleted`, variant: 'success' });
     },
   });
-  const undoable = useUndoable();
+  const confirm = useConfirm();
 
-  const grns = (grnsQuery.data?.items ?? []).filter((grn) => !undoable.isChanged(grn.id));
+  const grns = grnsQuery.data?.items ?? [];
   const meta = grnsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
     searchInput || hospitalFilter !== (scopedHospitalId ?? '') || storeFilter || statusFilter,
@@ -171,13 +179,16 @@ export function GrnsPageClient() {
     setUrlParams({ id: grn.id }, 'push');
   }
 
-  // Only a draft can be deleted, and nothing of it is in stock yet, so it can wait for Undo.
-  function deleteGrn(grn: Grn) {
-    undoable.schedule({
-      commit: () => deleteMutation.mutateAsync(grn.id),
-      id: grn.id,
-      title: `${grn.grnNumber} deleted`,
+  // Only a draft can be deleted; nothing of it is in stock yet.
+  async function deleteGrn(grn: Grn) {
+    const confirmed = await confirm({
+      confirmLabel: 'Delete',
+      description: 'The draft and its lines are removed. This can’t be undone.',
+      title: `Delete ${grn.grnNumber}?`,
+      tone: 'danger',
     });
+
+    if (confirmed) deleteMutation.mutate(grn);
   }
 
   if (selectedGrnId) {
@@ -192,35 +203,38 @@ export function GrnsPageClient() {
             <Button asChild>
               <Link href="/inventory/grns/new">
                 <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                New GRN
+                Receive a delivery
               </Link>
             </Button>
           ) : undefined
         }
         count={stats?.all}
-        subtitle="Receive mapped MRP items into store stock through manual GRN entry."
-        title="GRNs"
+        subtitle="Deliveries from vendors (GRNs): check what arrived, then add it to store stock."
+        title="Deliveries (GRN)"
       />
       <StatStrip
         label="GRNs at a glance"
         stats={[
           {
             active: !statusFilter,
-            label: 'All GRNs',
+            label: 'All deliveries',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: statusFilter === 'DRAFT',
             label: 'Drafts to verify',
             onSelect: () => showStatus(statusFilter === 'DRAFT' ? '' : 'DRAFT'),
+            share: stats?.all ? stats.drafts / stats.all : undefined,
             tone: 'pending',
             value: stats?.drafts ?? '–',
           },
           {
             active: statusFilter === 'POSTED_TO_STOCK',
-            label: 'Posted to stock',
+            label: 'Added to stock',
             onSelect: () => showStatus(statusFilter === 'POSTED_TO_STOCK' ? '' : 'POSTED_TO_STOCK'),
+            share: stats?.all ? stats.posted / stats.all : undefined,
             tone: 'ok',
             value: stats?.posted ?? '–',
           },
@@ -228,6 +242,7 @@ export function GrnsPageClient() {
             active: statusFilter === 'CANCELLED',
             label: 'Cancelled',
             onSelect: () => showStatus(statusFilter === 'CANCELLED' ? '' : 'CANCELLED'),
+            share: stats?.all ? stats.cancelled / stats.all : undefined,
             tone: 'bad',
             value: stats?.cancelled ?? '–',
           },
@@ -327,10 +342,21 @@ export function GrnsPageClient() {
               {grns.length > 0 ? (
                 grns.map((grn) => {
                   const isDraft = grn.status === 'DRAFT';
+                  // How much of what came in was accepted: known once the GRN has been checked.
+                  const received = grn.lines.reduce((sum, line) => sum + line.receivedQty, 0);
+                  const acceptedShare =
+                    isDraft || grn.status === 'CANCELLED' || received <= 0
+                      ? null
+                      : grn.lines.reduce((sum, line) => sum + line.acceptedQty, 0) / received;
 
                   return (
                     // The whole row opens the GRN (its number is the link it follows).
-                    <tr className={tableStyles.row} key={grn.id} onClick={openRowLink}>
+                    <tr
+                      className={tableStyles.row}
+                      data-record-id={grn.id}
+                      key={grn.id}
+                      onClick={openRowLink}
+                    >
                       <td className={tableStyles.td}>
                         <Link
                           className={cn(
@@ -351,19 +377,34 @@ export function GrnsPageClient() {
                         </p>
                       </td>
                       <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
-                        <RecordLink
-                          className={cn('block truncate', tableStyles.title)}
-                          href={locationHref('STORE', grn.store.storeCode || grn.store.storeName)}
-                        >
-                          {grn.store.storeName}
-                        </RecordLink>
-                        <p className={cn('truncate', tableStyles.code)}>{grn.store.storeCode}</p>
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <RecordAvatar name={grn.store.storeName} size="sm" />
+                          <span className="min-w-0">
+                            <RecordLink
+                              className={cn('block truncate', tableStyles.title)}
+                              href={locationHref(
+                                'STORE',
+                                grn.store.storeCode || grn.store.storeName,
+                              )}
+                            >
+                              {grn.store.storeName}
+                            </RecordLink>
+                            <p className={cn('truncate', tableStyles.code)}>
+                              {grn.store.storeCode}
+                            </p>
+                          </span>
+                        </span>
                       </td>
                       <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
-                        <p className="truncate text-ds-text-2">{grn.vendorName || '—'}</p>
-                        <p className={cn('truncate', tableStyles.code)}>
-                          {grn.poNumber || 'No PO'}
-                        </p>
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          {grn.vendorName ? <RecordAvatar name={grn.vendorName} size="sm" /> : null}
+                          <span className="min-w-0">
+                            <p className="truncate text-ds-text-2">{grn.vendorName || '—'}</p>
+                            <p className={cn('truncate', tableStyles.code)}>
+                              {grn.poNumber || 'No PO'}
+                            </p>
+                          </span>
+                        </span>
                       </td>
                       <td
                         className={cn(
@@ -376,6 +417,19 @@ export function GrnsPageClient() {
                       </td>
                       <td className={tableStyles.td}>
                         <StatusChip status={grn.status} />
+                        {acceptedShare === null ? null : (
+                          <InlineProgress
+                            label={`${Math.round(acceptedShare * 100)}% accepted`}
+                            tone={
+                              acceptedShare >= 0.95
+                                ? 'ok'
+                                : acceptedShare >= 0.8
+                                  ? 'pending'
+                                  : 'bad'
+                            }
+                            value={acceptedShare}
+                          />
+                        )}
                       </td>
                       <td
                         className={cn(
@@ -389,13 +443,14 @@ export function GrnsPageClient() {
                       </td>
                       <td className={cn(tableStyles.td, 'pr-3')}>
                         <span className="flex items-center justify-end gap-0.5">
-                          <RowAction
-                            icon={isDraft ? ClipboardCheck : Eye}
-                            label={`${isDraft ? 'Verify' : 'View'} ${grn.grnNumber}`}
+                          <RowOpen
+                            label={`${isDraft ? 'Verify' : 'Open'} ${grn.grnNumber}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               openGrn(grn);
                             }}
+                            nextStep={isDraft}
+                            text={isDraft ? 'Verify' : 'Open'}
                           />
                           {isDraft ? (
                             <RowAction
@@ -405,7 +460,7 @@ export function GrnsPageClient() {
                               label={`Delete ${grn.grnNumber}`}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                deleteGrn(grn);
+                                void deleteGrn(grn);
                               }}
                             />
                           ) : null}
@@ -420,7 +475,7 @@ export function GrnsPageClient() {
                   error={grnsQuery.error}
                   isError={grnsQuery.isError}
                   isLoading={grnsQuery.isLoading}
-                  label="GRNs"
+                  label="deliveries"
                 />
               )}
             </tbody>

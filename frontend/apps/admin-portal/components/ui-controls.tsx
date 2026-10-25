@@ -193,7 +193,12 @@ export function QuantityStepper({
     onChange(String(Number(held.toFixed(3))));
   };
   const buttonClass =
-    (compact ? 'grid w-9 ' : touch ? 'grid w-14 active:bg-ds-divider ' : 'grid w-11 ') +
+    // On a touch screen (pointer-coarse) the compact stepper grows to finger size.
+    (compact
+      ? 'grid w-9 pointer-coarse:w-12 '
+      : touch
+        ? 'grid w-14 active:bg-ds-divider '
+        : 'grid w-11 ') +
     'shrink-0 place-items-center bg-ds-subtle text-ds-text-2 transition hover:bg-ds-divider focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary disabled:cursor-not-allowed disabled:opacity-40';
 
   return (
@@ -201,7 +206,7 @@ export function QuantityStepper({
       className={cn(
         'inline-flex items-stretch overflow-hidden border border-ds-input bg-ds-surface',
         compact
-          ? 'h-[38px] w-full rounded-control border-[1.5px]'
+          ? 'h-[38px] w-full rounded-control border-[1.5px] pointer-coarse:h-11'
           : touch
             ? 'h-14 rounded-control-lg'
             : 'h-12 rounded-control-lg',
@@ -254,6 +259,10 @@ interface ModalProps {
   /** A line under the title: what this panel is for. */
   description?: string;
   footer?: ReactNode;
+  /** Before the title, for a record's panel: its picture (RecordAvatar). */
+  leading?: ReactNode;
+  /** Under the title, for a record's panel: its code, type and status as small tags. */
+  meta?: ReactNode;
   onClose: () => void;
   open: boolean;
   /**
@@ -396,6 +405,8 @@ export function Modal({
   children,
   description,
   footer,
+  leading,
+  meta,
   onClose,
   open,
   returnFocusTo,
@@ -408,7 +419,11 @@ export function Modal({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      // Only the dialog on top closes: a confirm opened over another dialog (Discard over the
+      // unsent bills) must not take the one underneath with it. It is the last in the page.
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+
+      if (event.key === 'Escape' && dialogs[dialogs.length - 1] === dialogRef.current) {
         onClose();
       }
     };
@@ -547,9 +562,10 @@ export function Modal({
       className={cn(
         'fixed inset-0 z-50 mt-0! flex',
         // A side panel keeps the list behind it readable: a light veil, no blur. From sm up it
-        // floats as a rounded sheet inset from the edges; phones keep it full screen.
+        // floats as a rounded sheet inset from the edges; on phones it is a bottom sheet, as tall
+        // as its content up to 92% of the screen.
         side
-          ? 'side-overlay justify-end bg-ds-text/20 sm:p-3'
+          ? 'side-overlay items-end justify-end bg-ds-text/20 sm:items-stretch sm:p-3'
           : 'items-start justify-center overflow-y-auto bg-ds-overlay p-4 backdrop-blur-xs sm:p-6',
       )}
     >
@@ -566,7 +582,7 @@ export function Modal({
         className={cn(
           'relative z-10 w-full border-ds-border bg-ds-surface shadow-2xl shadow-ds-text/20 outline-hidden',
           side
-            ? 'flex h-full max-w-2xl flex-col overflow-hidden border-l sm:rounded-[24px] sm:border'
+            ? 'flex max-h-[92dvh] max-w-2xl flex-col overflow-hidden rounded-t-[24px] border-t sm:h-full sm:max-h-none sm:rounded-[24px] sm:border'
             : 'my-auto max-w-2xl rounded-[24px] border',
         )}
         data-side={side ? '' : undefined}
@@ -574,22 +590,33 @@ export function Modal({
         role="dialog"
         tabIndex={-1}
       >
+        {side ? (
+          // A bottom sheet's grab handle, on phones only (it is not a control).
+          <span
+            aria-hidden="true"
+            className="mx-auto mt-2 block h-1 w-10 shrink-0 rounded-full bg-ds-border sm:hidden"
+          />
+        ) : null}
         <div
           className={cn(
             'flex items-start justify-between gap-4 border-b border-ds-divider',
-            side ? 'px-6 pb-4 pt-6' : 'px-5 py-3.5',
+            side ? 'px-6 pt-3 pb-4 sm:pt-6' : 'px-5 py-3.5',
           )}
         >
-          <div className="min-w-0">
-            <h2
-              className={cn(
-                'font-semibold text-ds-text',
-                side ? 'text-[21px] leading-7 tracking-[-0.02em]' : 'text-base',
-              )}
-            >
-              {title}
-            </h2>
-            {description ? <p className="mt-1 text-sm text-ds-muted">{description}</p> : null}
+          <div className="flex min-w-0 items-start gap-3.5">
+            {leading ? <span className="shrink-0">{leading}</span> : null}
+            <div className="min-w-0">
+              <h2
+                className={cn(
+                  'font-semibold text-ds-text',
+                  side ? 'text-[21px] leading-7 tracking-[-0.02em]' : 'text-base',
+                )}
+              >
+                {title}
+              </h2>
+              {description ? <p className="mt-1 text-sm text-ds-muted">{description}</p> : null}
+              {meta ? <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div> : null}
+            </div>
           </div>
           <button
             aria-label="Close"
@@ -601,7 +628,13 @@ export function Modal({
           </button>
         </div>
         <div
-          className={cn('overflow-y-auto', side ? 'flex-1 px-6 py-5' : 'max-h-[70vh] px-5 py-4')}
+          className={cn(
+            'overflow-y-auto',
+            // min-h-0: in the sheet, which sizes to its content, the body shrinks and scrolls.
+            side
+              ? 'min-h-0 flex-1 px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]'
+              : 'max-h-[70vh] px-5 py-4',
+          )}
         >
           {children}
         </div>
@@ -835,24 +868,61 @@ export function FilterSearch({
   label,
   onChange,
   placeholder,
+  shortcut = true,
   value,
 }: Readonly<{
   label: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /** "/" anywhere on the page (outside a field or dialog) jumps here; a key hint shows it. */
+  shortcut?: boolean;
   value: string;
 }>) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!shortcut) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      // defaultPrevented: another "/" (a second search on the page, the till) already took it.
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.defaultPrevented) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) {
+        return;
+      }
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shortcut]);
+
   return (
     <label className="flex h-10 min-w-[160px] flex-1 items-center gap-2 rounded-full border border-ds-input bg-ds-surface px-3.5 text-ds-muted transition focus-within:border-ds-primary focus-within:ring-4 focus-within:ring-ds-primary/10">
       <Search aria-hidden="true" className="h-4 w-4 shrink-0" />
       <input
+        aria-keyshortcuts={shortcut ? '/' : undefined}
         aria-label={label}
-        className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ds-text outline-hidden placeholder:text-ds-muted"
+        className="peer min-w-0 flex-1 bg-transparent text-[13.5px] text-ds-text outline-hidden placeholder:text-ds-muted"
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') event.currentTarget.blur();
+        }}
         placeholder={placeholder}
+        ref={inputRef}
         type="search"
         value={value}
       />
+      {shortcut && !value ? (
+        <kbd
+          aria-hidden="true"
+          className="hidden h-5 min-w-5 place-items-center rounded-md border border-ds-border bg-ds-subtle px-1 font-mono text-[11px] text-ds-muted peer-focus:hidden sm:grid"
+        >
+          /
+        </kbd>
+      ) : null}
     </label>
   );
 }

@@ -47,3 +47,6 @@ infra/helm/**/secrets*.yaml
 frontend/apps/admin-portal/e2e/.auth.json
 frontend/apps/admin-portal/test-results/
 frontend/apps/admin-portal/playwright-report/
+
+# Client templates with live payment-machine tokens and staff contacts: never commit.
+Master Module Template.zip

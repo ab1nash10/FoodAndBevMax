@@ -3,7 +3,7 @@
 import type { ThemePreference, UserPreferences, UserPreferencesInput } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Monitor, Moon, Sun } from 'lucide-react';
+import { Loader2, Monitor, Moon, Rows3, Rows4, Sun } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { getStartPageOptions, homeHref } from '@/lib/navigation';
@@ -15,6 +15,7 @@ import { useToast } from '@/components/toast-provider';
 import { Field, Select } from '@/components/ui';
 import { Modal, PasswordInput } from '@/components/ui-controls';
 import { getApiErrorMessage, userApi } from '@/lib/api';
+import { useDensity, type Density } from '@/lib/use-density';
 import { cn } from '@/lib/utils';
 import { preferencesQueryKey, usePreferences, useSavePreferences } from './use-preferences';
 
@@ -24,6 +25,11 @@ const themeOptions: Array<{ icon: typeof Sun; label: string; value: ThemePrefere
   { icon: Monitor, label: 'Match system', value: 'system' },
 ];
 
+const densityOptions: Array<{ icon: typeof Sun; label: string; value: Density }> = [
+  { icon: Rows3, label: 'Comfortable', value: 'comfortable' },
+  { icon: Rows4, label: 'Compact', value: 'compact' },
+];
+
 const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
 
 /** Personal settings, opened from the profile menu. Mounted only while open, so it starts fresh. */
@@ -31,6 +37,7 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
   const { currentUser, hasPermission } = useAuth();
   const { availableLocations } = useLocationContext();
   const { setTheme, theme } = useTheme();
+  const [density, setDensity] = useDensity();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const preferencesQuery = usePreferences();
@@ -124,6 +131,30 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
                 );
               })}
             </div>
+            {/* Kept on this device (no account field for it), so it saves at once, quietly. */}
+            <p className="mt-4 mb-2 text-[13px] font-medium text-ds-text-2">List rows</p>
+            <div aria-label="List rows" className="grid gap-2 sm:grid-cols-2" role="group">
+              {densityOptions.map((option) => (
+                <button
+                  aria-pressed={density === option.value}
+                  className={cn(
+                    'flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition',
+                    density === option.value
+                      ? 'border-ds-primary bg-ds-primary-soft text-ds-link'
+                      : 'border-ds-border text-ds-text-3 hover:bg-ds-subtle',
+                  )}
+                  key={option.value}
+                  onClick={() => setDensity(option.value)}
+                  type="button"
+                >
+                  <option.icon className="h-4 w-4" />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-ds-muted">
+              Compact fits more rows on screen. Saved on this device.
+            </p>
           </FormSection>
 
           <FormSection description="Where the portal takes you when you sign in." title="Workspace">

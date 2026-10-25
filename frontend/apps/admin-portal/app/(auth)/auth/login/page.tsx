@@ -2,35 +2,24 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation } from '@tanstack/react-query';
-import {
-  ArrowRight,
-  ChefHat,
-  CookingPot,
-  Eye,
-  EyeOff,
-  Lock,
-  Mail,
-  Smartphone,
-  Soup,
-  Utensils,
-} from 'lucide-react';
+import type { SendOtpRequest, VerifyOtpRequest } from '@aahar/api-client';
+import { ArrowRight, ChefHat, Mail, Package, Receipt, ShieldCheck, Smartphone } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { z } from 'zod';
 import { useAuth } from '@/components/auth-provider';
 import { useGoHomeWhenSignedIn } from '@/components/auth/use-go-home';
 import { useToast } from '@/components/toast-provider';
-import { Input } from '@/components/ui';
 import { SegmentedControl } from '@/components/ui-controls';
 import { authApi, getApiErrorMessage } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
 import { cn } from '@/lib/utils';
 import {
   applyValidationErrors,
-  emailPasswordSchema,
   resendDelaySeconds,
+  sendEmailOtpSchema,
   sendOtpSchema,
+  verifyEmailOtpSchema,
   verifyOtpSchema,
   type LoginFormValues,
   type LoginMethod,
@@ -39,19 +28,22 @@ import { ErrorText, OtpBoxes } from '@/components/auth/otp-boxes';
 
 // What AAHAR covers, on the sign-in brand panel.
 const features = [
-  { icon: Soup, label: 'Fresh meals' },
-  { icon: CookingPot, label: 'Cafeteria operations' },
-  { icon: ChefHat, label: 'Room service' },
-  { icon: Utensils, label: 'Employee food ordering' },
+  { detail: 'Quick counters for every restaurant', icon: Receipt, label: 'Bill in seconds' },
+  {
+    detail: 'From delivery to plate, every batch tracked',
+    icon: Package,
+    label: 'Stock you can trust',
+  },
+  { detail: 'Productions and the TV board update live', icon: ChefHat, label: 'Kitchens in sync' },
 ];
 
 const fieldShell =
-  'flex h-12 items-center overflow-hidden rounded-xl border-[1.5px] bg-ds-surface transition focus-within:border-ds-primary focus-within:ring-2 focus-within:ring-ds-primary/15 dark:focus-within:border-ds-link dark:focus-within:ring-ds-link/20';
+  'flex h-12 items-center gap-2.5 overflow-hidden rounded-[14px] border bg-ds-subtle transition-colors duration-150 focus-within:border-ds-primary focus-within:bg-ds-surface focus-within:ring-2 focus-within:ring-ds-primary/15 dark:focus-within:border-ds-link dark:focus-within:ring-ds-link/20';
 
 const bareInput =
-  'h-full min-w-0 flex-1 border-0 bg-transparent px-3.5 text-[15px] font-semibold text-ds-text outline-hidden placeholder:font-medium placeholder:text-ds-muted focus-visible:outline-hidden';
+  'h-full min-w-0 flex-1 border-0 bg-transparent pr-3.5 text-[15px] font-medium text-ds-text outline-hidden placeholder:font-normal placeholder:text-ds-muted focus-visible:outline-hidden';
 
-const fieldLabel = 'text-[13px] font-bold text-ds-text-2';
+const fieldLabel = 'text-sm font-medium text-ds-text';
 
 // The portal goes full screen on sign-in. Browsers allow that only shortly after the user's own
 // click or key press, so it is asked for as soon as sign-in succeeds; if the browser refuses
@@ -74,7 +66,6 @@ export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [isOtpStep, setIsOtpStep] = useState(false);
   const [hasShownSessionNotice, setHasShownSessionNotice] = useState(false);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   // Errors appear on the first submit, then follow the user's typing.
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
   const [resendAt, setResendAt] = useState(0);
@@ -84,12 +75,13 @@ export default function LoginPage() {
       email: '',
       mobile: '',
       otp: '',
-      password: '',
     },
   });
   const errors = form.formState.errors;
-  const activeSchema =
-    loginMethod === 'email' ? emailPasswordSchema : isOtpStep ? verifyOtpSchema : sendOtpSchema;
+  // Email and mobile both sign in by a one-time code: the address first, then the code.
+  const sendSchema = loginMethod === 'email' ? sendEmailOtpSchema : sendOtpSchema;
+  const verifySchema = loginMethod === 'email' ? verifyEmailOtpSchema : verifyOtpSchema;
+  const activeSchema = isOtpStep ? verifySchema : sendSchema;
   const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
   useEffect(() => {
@@ -139,7 +131,7 @@ export default function LoginPage() {
   }, [isOtpStep, resendSeconds]);
 
   const sendOtpMutation = useMutation({
-    mutationFn: (body: z.output<typeof sendOtpSchema>) => authApi.sendOtp(body),
+    mutationFn: (body: SendOtpRequest) => authApi.sendOtp(body),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
@@ -162,26 +154,7 @@ export default function LoginPage() {
   });
 
   const verifyOtpMutation = useMutation({
-    mutationFn: (body: z.output<typeof verifyOtpSchema>) => authApi.verifyOtp(body),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Login failed',
-        variant: 'error',
-      });
-    },
-    onSuccess(response) {
-      enterFullscreen();
-      signIn(response.data);
-      showToast({
-        title: 'Signed in',
-        variant: 'success',
-      });
-    },
-  });
-
-  const emailPasswordMutation = useMutation({
-    mutationFn: (body: z.output<typeof emailPasswordSchema>) => authApi.loginWithPassword(body),
+    mutationFn: (body: VerifyOtpRequest) => authApi.verifyOtp(body),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
@@ -201,7 +174,7 @@ export default function LoginPage() {
 
   const handleSendOtp = form.handleSubmit((values) => {
     setHasTriedSubmit(true);
-    const parsed = sendOtpSchema.safeParse(values);
+    const parsed = sendSchema.safeParse(values);
 
     if (!parsed.success) {
       applyValidationErrors(form, parsed.error);
@@ -213,7 +186,7 @@ export default function LoginPage() {
 
   const handleVerifyOtp = form.handleSubmit((values) => {
     setHasTriedSubmit(true);
-    const parsed = verifyOtpSchema.safeParse(values);
+    const parsed = verifySchema.safeParse(values);
 
     if (!parsed.success) {
       applyValidationErrors(form, parsed.error);
@@ -223,97 +196,93 @@ export default function LoginPage() {
     verifyOtpMutation.mutate(parsed.data);
   });
 
-  const handleEmailPasswordLogin = form.handleSubmit((values) => {
-    setHasTriedSubmit(true);
-    const parsed = emailPasswordSchema.safeParse(values);
-
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
-
-    emailPasswordMutation.mutate(parsed.data);
-  });
-
   const changeLoginMethod = (method: LoginMethod) => {
     setLoginMethod(method);
     setIsOtpStep(false);
     setHasTriedSubmit(false);
-    setIsPasswordVisible(false);
     form.clearErrors();
     form.setValue('otp', '');
-    form.setValue('password', '');
   };
 
-  const isBusy =
-    sendOtpMutation.isPending || verifyOtpMutation.isPending || emailPasswordMutation.isPending;
+  const isBusy = sendOtpMutation.isPending || verifyOtpMutation.isPending;
   const mobile = form.watch('mobile');
+  const email = form.watch('email');
   const emailField = form.register('email');
-  const passwordField = form.register('password');
   const mobileField = form.register('mobile');
 
   return (
-    <main className="flex min-h-screen flex-wrap bg-ds-page text-ds-text">
+    // The brand panel on the left, the form on plain white beside it.
+    <main className="flex min-h-screen flex-wrap bg-ds-surface text-ds-text">
       <section
         aria-label="About AAHAR"
-        className="hidden flex-[1_1_440px] flex-col justify-between gap-10 border-r border-ds-brand-panel-border bg-ds-brand-panel px-14 py-12 text-white lg:flex"
+        className="relative isolate hidden max-w-[640px] flex-[1_1_520px] flex-col gap-8 overflow-hidden bg-[linear-gradient(150deg,#09336b_0%,#0b57a4_55%,#6e73fa_100%)] px-14 py-12 text-white lg:flex [@media(max-height:760px)]:gap-5 [@media(max-height:760px)]:py-8"
       >
-        <div>
-          <div className="flex items-start justify-between gap-6">
-            <span className="flex rounded-xl bg-ds-logo-chip p-3 shadow-lg shadow-black/10">
+        <span
+          aria-hidden="true"
+          className="absolute left-[300px] top-[-180px] -z-10 h-[520px] w-[520px] rounded-full bg-white/7"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute left-[-160px] top-[600px] -z-10 h-[420px] w-[420px] rounded-full bg-white/6"
+        />
+        <div className="flex items-center justify-between gap-6">
+          <span className="flex items-center gap-3">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-ds-logo-chip p-1.5">
               <Image
-                alt="AAHAR"
-                className="h-[88px] w-auto object-contain"
+                alt=""
+                className="h-full w-full object-contain"
                 height={149}
                 priority
                 src={withBasePath('/brand/aahar-logo.png')}
                 width={200}
               />
             </span>
-            <span className="flex rounded-xl bg-ds-logo-chip px-4 py-3 shadow-lg shadow-black/10">
-              <Image
-                alt="Max Healthcare"
-                className="h-12 w-auto"
-                height={58}
-                src={withBasePath('/brand/max-logo.svg')}
-                width={168}
-              />
+            <span className="flex flex-col">
+              <strong className="text-base font-semibold leading-[22px]">AAHAR</strong>
+              <span className="text-xs text-white/80">Food &amp; Cafeteria</span>
             </span>
-          </div>
-          <div className="mt-14 flex max-w-md flex-col gap-4">
-            <p className="text-sm font-bold uppercase tracking-[0.08em] text-ds-brand-panel-accent">
-              Max Healthcare
-            </p>
-            <h1 className="text-4xl font-extrabold tracking-[-0.01em]">AAHAR</h1>
-            <p className="text-lg font-semibold leading-7 text-white/90">
-              Food &amp; Cafeteria Management Platform
-            </p>
-            <p className="max-w-sm text-sm leading-6 text-white/80">
-              Hospital food operations, cafeteria service, and restaurant readiness in one calm
-              workspace.
-            </p>
-          </div>
+          </span>
+          <span className="flex rounded-xl bg-ds-logo-chip px-3 py-2">
+            <Image
+              alt="Max Healthcare"
+              className="h-7 w-auto"
+              height={58}
+              src={withBasePath('/brand/max-logo.svg')}
+              width={168}
+            />
+          </span>
         </div>
-        <ul className="grid grid-cols-2 gap-3">
-          {features.map(({ icon: Icon, label }) => (
+        <div className="flex-1" />
+        <h1 className="max-w-[500px] text-[32px] font-semibold leading-[1.15] tracking-[-0.02em] xl:text-[40px]">
+          Every counter, store and kitchen across Max — in one calm place.
+        </h1>
+        <ul className="flex flex-col gap-3.5">
+          {features.map(({ detail, icon: Icon, label }) => (
             <li
-              className="flex min-h-24 flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4"
+              className="flex w-fit items-center gap-3.5 rounded-2xl border border-white/16 bg-white/10 py-3 pl-3.5 pr-[18px]"
               key={label}
             >
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-ds-brand-panel-accent/10 text-ds-brand-panel-accent ring-1 ring-ds-brand-panel-accent/25">
-                <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/16">
+                <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={2} />
               </span>
-              <span className="text-sm font-semibold leading-5 text-white">{label}</span>
+              <span className="flex flex-col">
+                <strong className="font-medium">{label}</strong>
+                <span className="text-[13px] text-white/82">{detail}</span>
+              </span>
             </li>
           ))}
         </ul>
+        <div className="flex-1" />
+        <p className="text-xs text-white/75">
+          Max Healthcare · AAHAR food &amp; cafeteria management
+        </p>
       </section>
 
       <section
         aria-label="Sign in"
-        className="flex flex-[1_1_440px] items-center justify-center px-6 py-12"
+        className="flex flex-[1_1_420px] items-center justify-center px-6 py-12 [@media(max-height:760px)]:py-6"
       >
-        <div className="flex w-full max-w-[400px] flex-col gap-6">
+        <div className="flex w-full max-w-[420px] flex-col gap-[22px]">
           <div className="flex items-center gap-3 lg:hidden">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-ds-border bg-ds-logo-chip">
               <Image
@@ -326,10 +295,8 @@ export default function LoginPage() {
               />
             </span>
             <span className="flex min-w-0 flex-col">
-              <span className="text-[15px] font-extrabold tracking-[0.08em]">AAHAR</span>
-              <span className="truncate text-xs text-ds-muted">
-                Nourishing Health, Enhancing Lives
-              </span>
+              <span className="text-[15px] font-semibold">AAHAR</span>
+              <span className="truncate text-xs text-ds-muted">Food &amp; Cafeteria</span>
             </span>
             <span className="ml-auto flex shrink-0 rounded-lg border border-ds-border bg-ds-logo-chip px-2 py-1.5">
               <Image
@@ -343,12 +310,14 @@ export default function LoginPage() {
           </div>
 
           {isOtpStep ? (
-            <div className="flex flex-col gap-1.5">
-              <h2 className="text-2xl font-extrabold">Enter the code</h2>
-              <p className="text-sm text-ds-muted">
-                Sent to +91 {mobile}.{' '}
+            <div className="flex flex-col gap-2">
+              <h2 className="text-[28px] font-semibold leading-[34px] tracking-[-0.015em]">
+                Enter the code
+              </h2>
+              <p className="text-ds-text-2">
+                Sent to {loginMethod === 'email' ? email.trim().toLowerCase() : `+91 ${mobile}`}.{' '}
                 <button
-                  className="font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                  className="font-semibold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
                   disabled={isBusy}
                   onClick={() => {
                     form.setValue('otp', '');
@@ -364,15 +333,13 @@ export default function LoginPage() {
             </div>
           ) : (
             <>
-              <div className="flex flex-col gap-1.5">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-ds-link">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-[28px] font-semibold leading-[34px] tracking-[-0.015em]">
                   Welcome back
-                </p>
-                <h2 className="text-[26px] font-extrabold tracking-[-0.01em]">Sign in to AAHAR</h2>
-                <p className="text-sm text-ds-muted">
-                  {loginMethod === 'email'
-                    ? 'Use your registered work email and password.'
-                    : 'We’ll send a one-time password to your registered mobile number.'}
+                </h2>
+                <p className="text-ds-text-2">
+                  Sign in with the email or mobile number your admin registered. We’ll send you a
+                  one-time code.
                 </p>
               </div>
               <SegmentedControl<LoginMethod>
@@ -384,7 +351,7 @@ export default function LoginPage() {
                     label: (
                       <>
                         <Mail aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                        Email &amp; password
+                        Email code
                       </>
                     ),
                     value: 'email',
@@ -393,7 +360,7 @@ export default function LoginPage() {
                     label: (
                       <>
                         <Smartphone aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                        Mobile OTP
+                        Mobile code
                       </>
                     ),
                     value: 'mobile',
@@ -406,83 +373,15 @@ export default function LoginPage() {
           )}
 
           <form
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-[22px]"
             noValidate
             onSubmit={(event) => {
-              void (
-                loginMethod === 'email'
-                  ? handleEmailPasswordLogin
-                  : isOtpStep
-                    ? handleVerifyOtp
-                    : handleSendOtp
-              )(event);
+              void (isOtpStep ? handleVerifyOtp : handleSendOtp)(event);
             }}
           >
-            {loginMethod === 'email' ? (
-              <>
-                <div className="flex flex-col gap-2">
-                  <label className={fieldLabel} htmlFor="login-email">
-                    Work email
-                  </label>
-                  <Input
-                    aria-describedby={errors.email ? 'login-email-error' : undefined}
-                    aria-invalid={errors.email ? true : undefined}
-                    autoComplete="username"
-                    className={cn(
-                      'h-12 rounded-xl border-[1.5px] px-3.5 text-[15px] font-semibold placeholder:font-medium',
-                      errors.email && 'border-ds-status-bad-fg',
-                    )}
-                    id="login-email"
-                    placeholder="name@maxhealthcare.com"
-                    type="email"
-                    {...emailField}
-                  />
-                  <ErrorText id="login-email-error">{errors.email?.message}</ErrorText>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className={fieldLabel} htmlFor="login-password">
-                    Password
-                  </label>
-                  <span
-                    className={cn(
-                      fieldShell,
-                      errors.password ? 'border-ds-status-bad-fg' : 'border-ds-input',
-                    )}
-                  >
-                    <input
-                      aria-describedby={errors.password ? 'login-password-error' : undefined}
-                      aria-invalid={errors.password ? true : undefined}
-                      autoComplete="current-password"
-                      className={bareInput}
-                      id="login-password"
-                      placeholder="Enter your password"
-                      type={isPasswordVisible ? 'text' : 'password'}
-                      {...passwordField}
-                    />
-                    <button
-                      aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
-                      aria-pressed={isPasswordVisible}
-                      className="grid h-full w-12 shrink-0 place-items-center border-l border-ds-border bg-ds-subtle text-ds-text-2 transition hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary"
-                      onClick={() => setIsPasswordVisible((current) => !current)}
-                      type="button"
-                    >
-                      {isPasswordVisible ? (
-                        <EyeOff
-                          aria-hidden="true"
-                          className="h-[18px] w-[18px]"
-                          strokeWidth={1.8}
-                        />
-                      ) : (
-                        <Eye aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                      )}
-                    </button>
-                  </span>
-                  <ErrorText id="login-password-error">{errors.password?.message}</ErrorText>
-                </div>
-              </>
-            ) : isOtpStep ? (
+            {isOtpStep ? (
               <fieldset className="flex flex-col gap-2">
-                <legend className={cn(fieldLabel, 'pb-2')}>6-digit OTP</legend>
+                <legend className={cn(fieldLabel, 'pb-2')}>6-digit code</legend>
                 <OtpBoxes
                   describedBy={errors.otp ? 'login-otp-error' : undefined}
                   invalid={Boolean(errors.otp)}
@@ -491,6 +390,42 @@ export default function LoginPage() {
                 />
                 <ErrorText id="login-otp-error">{errors.otp?.message}</ErrorText>
               </fieldset>
+            ) : loginMethod === 'email' ? (
+              <div className="flex flex-col gap-2">
+                <label className={fieldLabel} htmlFor="login-email">
+                  Work email
+                </label>
+                <span
+                  className={cn(
+                    fieldShell,
+                    errors.email ? 'border-ds-status-bad-fg' : 'border-ds-border',
+                  )}
+                >
+                  <Mail
+                    aria-hidden="true"
+                    className="ml-3.5 h-[18px] w-[18px] shrink-0 text-ds-muted"
+                  />
+                  <input
+                    aria-describedby={errors.email ? 'login-email-error' : 'login-email-hint'}
+                    aria-invalid={errors.email ? true : undefined}
+                    autoComplete="email"
+                    className={bareInput}
+                    id="login-email"
+                    placeholder="name@maxhealthcare.com"
+                    // Autofill/temp-mail extensions inject attributes before hydration.
+                    suppressHydrationWarning
+                    type="email"
+                    {...emailField}
+                  />
+                </span>
+                {errors.email ? (
+                  <ErrorText id="login-email-error">{errors.email.message}</ErrorText>
+                ) : (
+                  <span className="text-xs text-ds-muted" id="login-email-hint">
+                    Use the address on your AAHAR profile.
+                  </span>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <label className={fieldLabel} htmlFor="login-mobile">
@@ -499,75 +434,78 @@ export default function LoginPage() {
                 <span
                   className={cn(
                     fieldShell,
-                    errors.mobile ? 'border-ds-status-bad-fg' : 'border-ds-input',
+                    errors.mobile ? 'border-ds-status-bad-fg' : 'border-ds-border',
                   )}
                 >
-                  <span className="flex h-full items-center border-r border-ds-border bg-ds-subtle px-3 text-sm font-bold text-ds-text-2">
-                    +91
-                  </span>
+                  <span className="pl-3.5 font-medium text-ds-muted">+91</span>
                   <input
-                    aria-describedby={errors.mobile ? 'login-mobile-error' : undefined}
+                    aria-describedby={errors.mobile ? 'login-mobile-error' : 'login-mobile-hint'}
                     aria-invalid={errors.mobile ? true : undefined}
                     autoComplete="tel-national"
-                    className={cn(bareInput, 'px-3 font-bold tracking-[0.04em]')}
+                    className={cn(bareInput, 'tracking-[0.04em]')}
                     id="login-mobile"
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder="9999999999"
+                    placeholder="10-digit number"
+                    // Autofill/temp-mail extensions inject attributes before hydration.
+                    suppressHydrationWarning
                     type="tel"
                     {...mobileField}
                   />
                 </span>
-                <ErrorText id="login-mobile-error">{errors.mobile?.message}</ErrorText>
+                {errors.mobile ? (
+                  <ErrorText id="login-mobile-error">{errors.mobile.message}</ErrorText>
+                ) : (
+                  <span className="text-xs text-ds-muted" id="login-mobile-hint">
+                    We’ll text a 6-digit code to this number.
+                  </span>
+                )}
               </div>
             )}
 
             <Button
-              className="h-12 w-full rounded-xl text-[14.5px] font-bold"
+              className="h-[50px] w-full rounded-full bg-ds-primary text-[15px] font-medium text-white shadow-[0_6px_16px_rgb(11_87_164/0.28)] hover:bg-ds-primary/90"
               disabled={isBusy}
               type="submit"
             >
-              {loginMethod === 'email' ? 'Sign in' : isOtpStep ? 'Verify & sign in' : 'Send OTP'}
-              {isOtpStep && loginMethod === 'mobile' ? null : (
-                <ArrowRight aria-hidden="true" className="h-4 w-4" />
-              )}
+              {isOtpStep ? 'Verify & sign in' : 'Send code'}
+              {isOtpStep ? null : <ArrowRight aria-hidden="true" className="h-4 w-4" />}
             </Button>
 
-            {loginMethod === 'email' ? (
-              <p className="text-[12.5px] text-ds-muted">
-                Forgot your password? Ask your hospital admin to reset it, or sign in with your
-                mobile number instead.
-              </p>
-            ) : isOtpStep ? (
+            {isOtpStep ? (
               <p className="text-[13px] text-ds-muted">
                 Didn’t get it?{' '}
                 {resendSeconds > 0 ? (
-                  <span className="font-bold text-ds-text-2">
+                  <span className="font-semibold text-ds-text-2">
                     Resend in 0:{String(resendSeconds).padStart(2, '0')}
                   </span>
                 ) : (
                   <button
-                    className="font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:text-ds-muted"
+                    className="font-semibold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:text-ds-muted"
                     disabled={isBusy}
-                    onClick={() => sendOtpMutation.mutate({ mobile: form.getValues('mobile') })}
+                    onClick={() =>
+                      sendOtpMutation.mutate(
+                        loginMethod === 'email'
+                          ? { email: form.getValues('email').trim().toLowerCase() }
+                          : { mobile: form.getValues('mobile') },
+                      )
+                    }
                     type="button"
                   >
                     Resend code
                   </button>
                 )}
               </p>
-            ) : (
-              <p className="text-[12.5px] text-ds-muted">
-                Trouble signing in? Ask your hospital admin to check that your number is registered.
-              </p>
-            )}
+            ) : null}
           </form>
 
-          <p className="flex items-center gap-2 border-t border-ds-border pt-4 text-xs text-ds-muted">
-            <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
-            {loginMethod === 'email'
-              ? 'Passwords are never shown to admins. Sessions end automatically after inactivity.'
-              : 'Secured with OTP. Sessions end automatically after inactivity.'}
+          <p className="flex items-center gap-2.5 rounded-[14px] bg-ds-subtle px-3.5 py-3 text-[13px] leading-[18px] text-ds-text-2">
+            <ShieldCheck
+              aria-hidden="true"
+              className="h-[18px] w-[18px] shrink-0 text-ds-status-ok-fg"
+              strokeWidth={2}
+            />
+            Codes expire in 5 minutes. Only people added by an admin can sign in.
           </p>
         </div>
       </section>

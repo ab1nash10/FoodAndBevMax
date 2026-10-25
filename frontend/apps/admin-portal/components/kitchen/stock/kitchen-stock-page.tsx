@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  DiscardBatchButton,
+  DiscardStockDialog,
+  type DiscardableBatch,
+} from '@/components/inventory/discard-stock-dialog';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import type { Item, ItemType, SortOrder, StockBalanceStatus } from '@aahar/api-client';
@@ -14,6 +19,7 @@ import {
 import {
   AppPageHeader,
   DateTimeCell,
+  RecordAvatar,
   StatStrip,
   StatusChip,
   tableStyles,
@@ -83,6 +89,7 @@ function useItems(itemType?: ItemType) {
 }
 
 export function KitchenStockPageClient() {
+  const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   // Phones show three of the seven columns; a row that spans them all has to say so.
   const columns = useIsPhone() ? 3 : 7;
@@ -199,6 +206,7 @@ export function KitchenStockPageClient() {
 
   return (
     <section className="space-y-4">
+      <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
       <AppPageHeader
         count={stats?.all}
         description="Current READYMADE stock posted from kitchen production entries."
@@ -211,12 +219,14 @@ export function KitchenStockPageClient() {
             active: !statusFilter,
             label: 'All stock lines',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: statusFilter === 'AVAILABLE',
             label: 'Available',
             onSelect: () => showStatus('AVAILABLE'),
+            share: stats?.all ? stats.AVAILABLE / stats.all : undefined,
             tone: 'ok',
             value: stats?.AVAILABLE ?? '–',
           },
@@ -224,6 +234,7 @@ export function KitchenStockPageClient() {
             active: statusFilter === 'LOW_STOCK',
             label: 'Low stock',
             onSelect: () => showStatus('LOW_STOCK'),
+            share: stats?.all ? stats.LOW_STOCK / stats.all : undefined,
             tone: 'pending',
             value: stats?.LOW_STOCK ?? '–',
           },
@@ -231,6 +242,7 @@ export function KitchenStockPageClient() {
             active: statusFilter === 'OUT_OF_STOCK',
             label: 'Out of stock',
             onSelect: () => showStatus('OUT_OF_STOCK'),
+            share: stats?.all ? stats.OUT_OF_STOCK / stats.all : undefined,
             tone: 'bad',
             value: stats?.OUT_OF_STOCK ?? '–',
           },
@@ -371,7 +383,8 @@ export function KitchenStockPageClient() {
                 items.map((stock) => (
                   // A stock line has no panel of its own: its kitchen and item link to theirs.
                   <tr
-                    className="border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                    className="row-accent border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                    data-record-id={stock.id}
                     key={stock.id}
                   >
                     <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
@@ -387,16 +400,21 @@ export function KitchenStockPageClient() {
                       <p className={cn('truncate', tableStyles.code)}>{stock.location.code}</p>
                     </td>
                     <td className={tableStyles.td}>
-                      <RecordLink
-                        className={cn('block break-words sm:truncate', tableStyles.title)}
-                        href={recordHref('/masters/items', { id: stock.item.id })}
-                      >
-                        {stock.item.itemName}
-                      </RecordLink>
-                      <p className={cn('truncate', tableStyles.code)}>{stock.item.itemCode}</p>
-                      <p className="truncate text-[12px] text-ds-muted sm:hidden">
-                        {formatDateOnly(stock.businessDate)} · {stock.location.name}
-                      </p>
+                      <span className="flex items-start gap-3">
+                        <RecordAvatar foodType={stock.item.type} name={stock.item.itemName} />
+                        <span className="min-w-0 flex-1">
+                          <RecordLink
+                            className={cn('block break-words sm:truncate', tableStyles.title)}
+                            href={recordHref('/masters/items', { id: stock.item.id })}
+                          >
+                            {stock.item.itemName}
+                          </RecordLink>
+                          <p className={cn('truncate', tableStyles.code)}>{stock.item.itemCode}</p>
+                          <p className="truncate text-[12px] text-ds-muted sm:hidden">
+                            {formatDateOnly(stock.businessDate)} · {stock.location.name}
+                          </p>
+                        </span>
+                      </span>
                     </td>
                     <td className={cn(tableStyles.td, tableStyles.num, 'text-right text-ds-text')}>
                       {stock.availableQty.toFixed(3)}
@@ -422,6 +440,19 @@ export function KitchenStockPageClient() {
                     </td>
                     <td className={tableStyles.td}>
                       <StatusChip status={stock.status} />
+                      <span className="mt-1 block">
+                        <DiscardBatchButton
+                          batch={{
+                            availableQty: stock.availableQty,
+                            batchNumber: stock.batchNumber,
+                            expiryDate: stock.expiryDate,
+                            itemName: stock.item.itemName,
+                            locationName: stock.location.name,
+                            stockBalanceId: stock.id,
+                          }}
+                          onDiscard={setDiscarding}
+                        />
+                      </span>
                     </td>
                     <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
                       <DateTimeCell

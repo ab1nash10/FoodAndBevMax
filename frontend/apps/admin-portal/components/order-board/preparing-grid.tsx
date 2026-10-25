@@ -1,31 +1,33 @@
-import { CookingPot } from 'lucide-react';
 import type { PreparingTileView } from '@/lib/order-board/rules';
+import { glass } from './board-header';
 import { PreparingTile } from './preparing-tile';
 
-/** "Preparing": orders in the kitchen, soonest first, 3×3 and never scrolling. */
+/** "Preparing": orders in the kitchen, soonest first, 3×3 and never scrolling, on a glass card. */
 export function PreparingGrid({
   more,
   orders,
   total,
 }: Readonly<{ more: number; orders: PreparingTileView[]; total: number }>) {
   return (
-    <section aria-label="Preparing" className="flex min-h-0 flex-1 flex-col">
-      <h2 className="flex items-center gap-[14px] text-[40px] font-extrabold leading-tight text-ds-text">
-        <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-ds-status-info-bg text-ds-status-info-fg">
-          <CookingPot aria-hidden="true" className="h-[30px] w-[30px]" strokeWidth={2.4} />
-        </span>
-        Preparing
-        <span className="rounded-full bg-ds-status-info-bg px-[16px] py-[2px] text-[26px] font-bold tabular-nums text-ds-status-info-fg">
-          {total}
-        </span>
-      </h2>
-      <p className="mt-[4px] text-[22px] font-medium text-ds-muted">We&apos;re cooking these now</p>
-      <ul className="mt-[18px] grid min-h-0 flex-1 grid-cols-3 grid-rows-3 gap-[16px]">
+    <section
+      aria-label="Preparing"
+      className={`flex min-h-0 flex-1 flex-col gap-[22px] rounded-[40px] p-[30px] ${glass}`}
+    >
+      <div className="flex items-center gap-[16px]">
+        <h2 className="flex h-[60px] items-center gap-[14px] rounded-full bg-ds-primary pl-[26px] pr-[8px] text-[32px] font-bold tracking-[-0.02em] text-white shadow-[0_14px_30px_-14px_rgb(11_87_164/0.8)]">
+          Preparing
+          <span className="grid h-[44px] min-w-[44px] place-items-center rounded-full bg-white/95 px-[12px] text-[24px] font-extrabold tabular-nums text-ds-primary">
+            {total}
+          </span>
+        </h2>
+        <span className="ml-auto text-[20px] text-ds-text-3">We&apos;re cooking these now</span>
+      </div>
+      <ul className="grid min-h-0 flex-1 grid-cols-3 grid-rows-3 gap-[14px]">
         {orders.map((order) => (
           <PreparingTile key={order.orderNumber} order={order} />
         ))}
         {more ? (
-          <li className="flex items-center justify-center rounded-[18px] border-2 border-dashed border-ds-border text-[34px] font-extrabold text-ds-muted">
+          <li className="flex items-center justify-center rounded-[24px] border-2 border-dashed border-ds-primary-border text-[30px] font-extrabold text-ds-link">
             +{more} more
           </li>
         ) : null}

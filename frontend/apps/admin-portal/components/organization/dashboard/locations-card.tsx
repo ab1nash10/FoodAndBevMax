@@ -211,7 +211,10 @@ function LocationsCard({ stats }: Readonly<{ stats: DashboardStats }>) {
   );
 }
 
-/** Locations beside Quick create over Master data; the table grows to the column's height. */
+/**
+ * Locations across the full width, then Quick create beside Master data. Side by side with the
+ * two stacked cards, a short Locations list (one location) left a large empty space under it.
+ */
 export function LocationsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   const { hasPermission } = useAuth();
   const { can } = stats;
@@ -229,12 +232,10 @@ export function LocationsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   }
 
   return (
-    <div className="flex flex-wrap items-stretch gap-4">
-      <div className="flex min-w-0 flex-[2_1_560px] flex-col">
-        <LocationsCard stats={stats} />
-      </div>
+    <div className="flex flex-col gap-4">
+      <LocationsCard stats={stats} />
       {hasQuickCreate || hasMasters ? (
-        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
+        <div className="flex flex-col gap-4 min-[1100px]:flex-row *:min-w-0 *:flex-1">
           <QuickCreateCard />
           <MasterDataCard stats={stats} />
         </div>

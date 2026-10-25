@@ -32,8 +32,8 @@ function compareStockForAllocation(
   right: StockBalance,
   sourceType: InventoryLocationType,
 ): number {
-  const leftDate = sourceType === 'KITCHEN' ? left.businessDate : left.expiryDate;
-  const rightDate = sourceType === 'KITCHEN' ? right.businessDate : right.expiryDate;
+  const leftDate = sourceType === 'STORE' ? left.expiryDate : left.businessDate;
+  const rightDate = sourceType === 'STORE' ? right.expiryDate : right.businessDate;
 
   if (!leftDate && !rightDate) {
     return left.updatedAt.localeCompare(right.updatedAt);
@@ -57,7 +57,7 @@ function compareStockForAllocation(
 }
 
 function getTransferGroupKey(stock: StockBalance, sourceType: InventoryLocationType): string {
-  if (sourceType === 'KITCHEN') {
+  if (sourceType !== 'STORE') {
     return `${stock.itemId}:${toDateOnlyValue(stock.businessDate)}`;
   }
 
@@ -101,13 +101,13 @@ export function buildTransferItemGroups(
       );
       const firstStock = sortedStocks[0];
       const nearestExpiryDate =
-        sourceType === 'KITCHEN'
-          ? toDateOnlyValue(firstStock?.businessDate)
-          : toDateOnlyValue(firstStock?.expiryDate);
+        sourceType === 'STORE'
+          ? toDateOnlyValue(firstStock?.expiryDate)
+          : toDateOnlyValue(firstStock?.businessDate);
 
       return {
         batchCount: sortedStocks.length,
-        businessDate: sourceType === 'KITCHEN' ? toDateOnlyValue(firstStock?.businessDate) : null,
+        businessDate: sourceType === 'STORE' ? null : toDateOnlyValue(firstStock?.businessDate),
         itemCode: firstStock?.item.itemCode ?? '',
         itemId: firstStock?.itemId ?? '',
         itemName: firstStock?.item.itemName ?? '',

@@ -21,6 +21,7 @@ const deltaTones: Record<DeltaTone, string> = {
 
 export function KpiCard({
   delta,
+  empty,
   error = false,
   foot,
   href,
@@ -33,6 +34,9 @@ export function KpiCard({
   value,
 }: Readonly<{
   delta?: { text: string; tone: DeltaTone } | null;
+  /** Nothing to count yet: says so in words ("All clear", "No transfers yet") instead of a
+   * bare 0 or dash, with no delta or trend. The card keeps its height. */
+  empty?: string | null;
   /** The source failed: the value reads "—" and the footer says so (same height). */
   error?: boolean;
   foot: ReactNode;
@@ -61,7 +65,7 @@ export function KpiCard({
           <span
             aria-hidden="true"
             className={cn(
-              'grid h-9 w-9 shrink-0 place-items-center rounded-[10px]',
+              'grid h-11 w-11 shrink-0 place-items-center rounded-[14px]',
               !status || loading || error
                 ? 'bg-ds-status-info-bg text-ds-status-info-fg'
                 : status === 'clear'
@@ -69,7 +73,7 @@ export function KpiCard({
                   : 'bg-ds-status-pending-bg text-ds-status-pending-fg',
             )}
           >
-            <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+            <Icon className="h-[22px] w-[22px]" strokeWidth={1.9} />
           </span>
         ) : (
           <span
@@ -85,7 +89,7 @@ export function KpiCard({
           />
         )}
         <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate text-[13px] font-semibold text-ds-text-2" title={label}>
+          <span className="truncate text-[13.5px] font-semibold text-ds-text" title={label}>
             {label}
           </span>
           <span className="text-[11.5px] text-ds-muted">{scope}</span>
@@ -96,10 +100,16 @@ export function KpiCard({
       ) : (
         <span className="flex flex-wrap items-baseline gap-2">
           {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø" this large. */}
-          <span className="text-[32px] font-semibold leading-none tracking-[-0.03em] tabular-nums">
-            {error ? '—' : value}
-          </span>
-          {delta && !error ? (
+          {empty && !error ? (
+            <span className="flex min-h-8 items-center text-[19px] font-bold text-ds-text-2">
+              {empty}
+            </span>
+          ) : (
+            <span className="text-[36px] font-bold leading-none tracking-[-0.035em] tabular-nums">
+              {error ? '—' : value}
+            </span>
+          )}
+          {delta && !error && !empty ? (
             <span
               className={cn(
                 'rounded-full px-[7px] py-0.5 text-[11.5px] font-extrabold tabular-nums',
@@ -114,7 +124,7 @@ export function KpiCard({
       {sparkline !== undefined ? (
         loading ? (
           <Skeleton className="h-8 w-full" />
-        ) : error ? (
+        ) : error || empty ? (
           <span aria-hidden="true" className="block h-8" />
         ) : (
           sparkline

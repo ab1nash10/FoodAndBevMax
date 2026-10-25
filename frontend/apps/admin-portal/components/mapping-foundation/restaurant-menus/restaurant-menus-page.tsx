@@ -17,13 +17,14 @@ import type {
 import { useAuth } from '@/components/auth-provider';
 import {
   AppPageHeader,
-  FoodTypeMarker,
   ListPager,
+  RecordAvatar,
   RowAction,
   StatStrip,
   tableStyles,
 } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
 import { ImportButton } from '@/components/import/import-dialog';
 import { menuImport } from '@/components/import/import-definitions';
@@ -33,7 +34,6 @@ import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import { FilterSearch, Modal } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
-import { useUndoable } from '@/lib/use-undoable';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RestaurantMenuFormFields } from '@/components/mapping-foundation/restaurant-menus/restaurant-menu-form-fields';
@@ -93,7 +93,9 @@ const restaurantMenuSchema = z
     isActive: z.boolean(),
     isAvailable: z.boolean(),
     isDiscountable: z.boolean(),
+    isFeatured: z.boolean(),
     isGstInclusive: z.boolean(),
+    subCode: z.string().trim().max(50, 'Keep it under 50 characters.'),
     // This menu item's own category; the item's other menus and mappings keep theirs.
     categoryId: z.string().uuid('Select a category.'),
     itemId: z.string().uuid('Select a food item.'),
@@ -202,6 +204,7 @@ function emptyRestaurantMenuFormValues(): RestaurantMenuFormValues {
     isActive: true,
     isAvailable: true,
     isDiscountable: false,
+    isFeatured: false,
     isGstInclusive: false,
     itemId: '',
     kitchenId: '',
@@ -214,6 +217,7 @@ function emptyRestaurantMenuFormValues(): RestaurantMenuFormValues {
     roomPrice: '',
     serveAt: 'BOTH',
     serves: '1',
+    subCode: '',
   };
 }
 
@@ -231,7 +235,9 @@ function restaurantMenuToFormValues(menu: RestaurantMenu): RestaurantMenuFormVal
     isActive: menu.isActive,
     isAvailable: menu.isAvailable,
     isDiscountable: menu.isDiscountable,
+    isFeatured: menu.isFeatured,
     isGstInclusive: menu.isGstInclusive,
+    subCode: text(menu.subCode),
     itemId: menu.itemId,
     kitchenId: text(menu.kitchenId),
     storeId: text(menu.storeId),
@@ -386,9 +392,10 @@ export function RestaurantMenusPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       invalidateMenus();
       showToast({
+        recordId: response.data.id,
         title: editingMenu ? 'Menu item updated' : 'Menu item added',
         variant: 'success',
       });
@@ -408,16 +415,16 @@ export function RestaurantMenusPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateMenus();
-      // Marking inactive already had its Undo toast.
-      if (variables.isActive) showToast({ title: 'Menu item activated', variant: 'success' });
+      showToast({
+        recordId: variables.menu.id,
+        title: variables.isActive ? 'Menu item activated' : 'Menu item deactivated',
+        variant: 'success',
+      });
     },
   });
-  const undoable = useUndoable();
+  const confirm = useConfirm();
 
-  // A menu item marked inactive shows so at once, while its Undo toast runs.
-  const menus = (menusQuery.data?.items ?? []).map((menu) =>
-    undoable.isChanged(menu.id) ? { ...menu, isActive: false } : menu,
-  );
+  const menus = menusQuery.data?.items ?? [];
   const referenceMenus =
     referenceMenusQuery.data?.filter((menu) => menu.id !== editingMenu?.id) ?? [];
   const meta = menusQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
@@ -443,7 +450,9 @@ export function RestaurantMenusPageClient() {
       isActive: data.isActive,
       isAvailable: data.isAvailable,
       isDiscountable: data.isDiscountable,
+      isFeatured: data.isFeatured,
       isGstInclusive: data.isGstInclusive,
+      subCode: data.subCode || null,
       itemId: data.itemId,
       kitchenId: data.kitchenId || null,
       storeId: data.storeId || null,
@@ -477,7 +486,6 @@ export function RestaurantMenusPageClient() {
     form.reset(emptyRestaurantMenuFormValues());
   }
 
-  // Available is the day-to-day switch (sold out, kitchen down), so it needs no confirmation.
   const toggleAvailabilityMutation = useMutation({
     mutationFn: ({ isAvailable, menu }: { isAvailable: boolean; menu: RestaurantMenu }) =>
       organizationApi.updateRestaurantMenu(menu.id, { isAvailable }),
@@ -491,27 +499,43 @@ export function RestaurantMenusPageClient() {
     onSuccess(_response, variables) {
       invalidateMenus();
       showToast({
+        recordId: variables.menu.id,
         title: variables.isAvailable ? 'Menu item available' : 'Menu item unavailable',
         variant: 'success',
       });
     },
   });
 
-  function toggleMenuStatus(menu: RestaurantMenu) {
-    // Switching it back on while the Undo toast runs is the same as Undo.
-    if (undoable.undo(menu.id)) return;
+  async function toggleAvailability(menu: RestaurantMenu) {
+    const isAvailable = !menu.isAvailable;
+    const name = `${menu.item.itemName} in ${menu.restaurant.restaurantName}`;
+    const confirmed = await confirm(
+      isAvailable
+        ? {
+            confirmLabel: 'Make available',
+            description: 'It can be ordered again straight away.',
+            title: `Make ${name} available?`,
+          }
+        : {
+            confirmLabel: 'Make unavailable',
+            description: 'It can’t be ordered until it is made available again.',
+            title: `Make ${name} unavailable?`,
+            tone: 'danger',
+          },
+    );
 
-    if (menu.isActive) {
-      undoable.schedule({
-        commit: () => toggleMenuStatusMutation.mutateAsync({ isActive: false, menu }),
-        description: 'It’s hidden from the restaurant menu and POS. Existing records stay visible.',
-        id: menu.id,
-        title: `${menu.item.itemName} marked inactive`,
-      });
-      return;
-    }
+    if (confirmed) toggleAvailabilityMutation.mutate({ isAvailable, menu });
+  }
 
-    toggleMenuStatusMutation.mutate({ isActive: true, menu });
+  async function toggleMenuStatus(menu: RestaurantMenu) {
+    const isActive = !menu.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      effect: 'It’s hidden from the restaurant menu and POS. Existing records stay visible.',
+      name: `${menu.item.itemName} in ${menu.restaurant.restaurantName}`,
+    });
+
+    if (confirmed) toggleMenuStatusMutation.mutate({ isActive, menu });
   }
 
   function changeFilter(apply: () => void) {
@@ -588,12 +612,14 @@ export function RestaurantMenusPageClient() {
             active: !availabilityFilter && !activeFilter,
             label: 'Menu items',
             onSelect: () => showOnly('', ''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: availabilityFilter === 'available',
             label: 'Available now',
             onSelect: () => showOnly('available', ''),
+            share: stats?.all ? stats.available / stats.all : undefined,
             tone: 'ok',
             value: stats?.available ?? '–',
           },
@@ -601,6 +627,7 @@ export function RestaurantMenusPageClient() {
             active: availabilityFilter === 'unavailable',
             label: 'Not available',
             onSelect: () => showOnly('unavailable', ''),
+            share: stats?.all ? stats.unavailable / stats.all : undefined,
             tone: 'bad',
             value: stats?.unavailable ?? '–',
           },
@@ -608,6 +635,7 @@ export function RestaurantMenusPageClient() {
             active: activeFilter === 'inactive',
             label: 'Inactive',
             onSelect: () => showOnly('', 'inactive'),
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             tone: 'pending',
             value: stats?.inactive ?? '–',
           },
@@ -693,7 +721,7 @@ export function RestaurantMenusPageClient() {
         </ListToolbar>
 
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-[960px] table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-[960px] table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[20%]')}>Item</th>
@@ -728,12 +756,13 @@ export function RestaurantMenusPageClient() {
                   return (
                     <tr
                       className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      data-record-id={menu.id}
                       key={menu.id}
                       onClick={canEdit ? () => openForm(menu) : undefined}
                     >
                       <td className={tableStyles.td}>
                         <span className="flex min-w-0 items-center gap-3">
-                          <FoodTypeMarker type={menu.item.type} />
+                          <RecordAvatar foodType={menu.item.type} name={menu.item.itemName} />
                           <span className="flex min-w-0 flex-col gap-0.5">
                             <span className={cn('truncate', tableStyles.title)}>
                               {menu.item.itemName}
@@ -806,12 +835,7 @@ export function RestaurantMenusPageClient() {
                           checked={menu.isAvailable}
                           disabled={toggleAvailabilityMutation.isPending || !canEdit}
                           offLabel="Unavailable"
-                          onChange={() =>
-                            toggleAvailabilityMutation.mutate({
-                              isAvailable: !menu.isAvailable,
-                              menu,
-                            })
-                          }
+                          onChange={() => void toggleAvailability(menu)}
                           onLabel="Available"
                         />
                       </td>
@@ -821,7 +845,7 @@ export function RestaurantMenusPageClient() {
                           checked={menu.isActive}
                           disabled={toggleMenuStatusMutation.isPending || !canEdit}
                           offLabel="Inactive"
-                          onChange={() => toggleMenuStatus(menu)}
+                          onChange={() => void toggleMenuStatus(menu)}
                           onLabel="Active"
                         />
                       </td>

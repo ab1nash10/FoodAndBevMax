@@ -32,18 +32,23 @@ export function stockKey(input: {
   }|${input.businessDate ? formatDateOnly(input.businessDate) : ''}`;
 }
 
+/** A store sends MRP batches; a kitchen, or a restaurant passing on its leftovers, READYMADE. */
 export function sourceItemType(sourceType: InventoryLocationType): ItemType {
-  return sourceType === InventoryLocationType.KITCHEN ? ItemType.READYMADE : ItemType.MRP;
+  return sourceType === InventoryLocationType.STORE ? ItemType.MRP : ItemType.READYMADE;
 }
 
 export function dispatchTransactionType(sourceType: InventoryLocationType): StockTransactionType {
+  if (sourceType === InventoryLocationType.RESTAURANT) {
+    return StockTransactionType.RESTAURANT_TRANSFER_OUT;
+  }
+
   return sourceType === InventoryLocationType.KITCHEN
     ? StockTransactionType.KITCHEN_TRANSFER_OUT
     : StockTransactionType.STORE_TO_RESTAURANT_OUT;
 }
 
 export function sourceDisplayName(sourceType: InventoryLocationType): string {
-  return sourceType === InventoryLocationType.KITCHEN ? 'kitchen' : 'store';
+  return sourceType.toLowerCase();
 }
 
 export function stockBalanceKey(
@@ -91,6 +96,7 @@ export function toNullableText(value: string | undefined): string | null {
 /**
  * The routes accept either the store or the kitchen transfer permission, so the check that the
  * permission matches the source has to happen here: a kitchen-only grant must not move store stock.
+ * Restaurant staff send leftovers with one grant (RESTAURANT_TRANSFER_SEND) for create and dispatch.
  */
 export function assertCanMoveStockFrom(
   sourceType: InventoryLocationType,
@@ -100,7 +106,9 @@ export function assertCanMoveStockFrom(
   const accepted =
     sourceType === InventoryLocationType.KITCHEN
       ? [`TRANSFER_${action}`, `KITCHEN_TRANSFER_${action}`]
-      : [`TRANSFER_${action}`];
+      : sourceType === InventoryLocationType.RESTAURANT
+        ? [`TRANSFER_${action}`, 'RESTAURANT_TRANSFER_SEND']
+        : [`TRANSFER_${action}`];
 
   if (!accepted.some((code) => permissions?.includes(code))) {
     throw new ForbiddenException(
@@ -110,8 +118,8 @@ export function assertCanMoveStockFrom(
 }
 
 export function assertSupportedSource(sourceType: InventoryLocationType): void {
-  if (sourceType !== InventoryLocationType.STORE && sourceType !== InventoryLocationType.KITCHEN) {
-    throw new BadRequestException('Source must be Store or Kitchen');
+  if (sourceType === InventoryLocationType.COUNTER) {
+    throw new BadRequestException('Source must be a store, kitchen or restaurant');
   }
 }
 

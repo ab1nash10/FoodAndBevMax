@@ -155,7 +155,7 @@ export function openRowLink(event: MouseEvent<HTMLTableRowElement>) {
 }
 
 /** `value`, once it has stopped changing for `delayMs` (for search boxes that query per key). */
-export function useDebouncedValue<T>(value: T, delayMs = 300): T {
+export function useDebouncedValue<T>(value: T, delayMs = 180): T {
   const [debounced, setDebounced] = useState(value);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export function useDebouncedValue<T>(value: T, delayMs = 300): T {
  */
 export function useUrlSearchParam(
   name: string,
-  delayMs = 250,
+  delayMs = 180,
 ): [string, (next: string) => void, string] {
   const [urlValue, setUrlValue] = useUrlParam(name);
   const [text, setText] = useState(urlValue);

@@ -110,14 +110,26 @@ export function isOnSale(
   },
   now: Date,
 ): boolean {
+  return (
+    menu.isAvailable &&
+    isInSchedule({ days: menu.daysOfWeek, from: menu.availableFrom, to: menu.availableTo }, now)
+  );
+}
+
+/**
+ * Whether `now` (site time, India) falls on one of `days` (none = every day) and inside the HH:mm
+ * window (none = all day; one that ends before it starts runs past midnight). Menus' on-sale hours
+ * and employee discounts' serve days and special timings both use it.
+ */
+export function isInSchedule(
+  schedule: { days: readonly string[]; from: string | null; to: string | null },
+  now: Date,
+): boolean {
   const { date, minute } = siteClock(now);
   const weekday = WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()];
 
   return (
-    menu.isAvailable &&
-    (menu.daysOfWeek.length === 0 || menu.daysOfWeek.includes(weekday as string)) &&
-    (!menu.availableFrom ||
-      !menu.availableTo ||
-      isWithin(menu.availableFrom, menu.availableTo, minute))
+    (schedule.days.length === 0 || schedule.days.includes(weekday as string)) &&
+    (!schedule.from || !schedule.to || isWithin(schedule.from, schedule.to, minute))
   );
 }

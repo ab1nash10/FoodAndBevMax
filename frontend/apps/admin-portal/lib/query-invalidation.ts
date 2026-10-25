@@ -7,6 +7,11 @@ function invalidate(queryClient: QueryClient, keys: QueryKey[]): void {
   });
 }
 
+/** Time slots: their list and the slot picker on restaurant menu items. */
+export function invalidateTimeSlotQueries(queryClient: QueryClient): void {
+  invalidate(queryClient, [queryKeys.timeSlots()]);
+}
+
 export function invalidateItemCategoryQueries(queryClient: QueryClient): void {
   // Items carry their category's name and status, so their lists and pickers refresh too.
   invalidate(queryClient, [
@@ -23,7 +28,7 @@ export function invalidateKitchenQueries(queryClient: QueryClient): void {
     queryKeys.kitchens(),
     queryKeys.kitchenOptions(),
     queryKeys.inventoryKitchens(),
-    queryKeys.inventoryAllKitchens(),
+    queryKeys.locationNames(),
     queryKeys.kitchenKitchens(),
   ]);
 }
@@ -38,6 +43,21 @@ export function invalidateItemQueries(queryClient: QueryClient): void {
 
 export function invalidateEmployeeQueries(queryClient: QueryClient): void {
   invalidate(queryClient, [queryKeys.employees(), queryKeys.dashboardSetup()]);
+}
+
+/** A discard lowers one batch wherever it is held, and adds a ledger line. */
+export function invalidateStockDiscardQueries(queryClient: QueryClient): void {
+  invalidate(queryClient, [
+    queryKeys.stockBalances(),
+    queryKeys.stockLedgers(),
+    queryKeys.restaurantStock(),
+    queryKeys.kitchenStock(),
+    queryKeys.kitchenStockLedgers(),
+    queryKeys.counterStock(),
+    queryKeys.transferStoreStock(),
+    queryKeys.transferKitchenStock(),
+    queryKeys.dashboard(),
+  ]);
 }
 
 export function invalidateGrnQueries(queryClient: QueryClient): void {

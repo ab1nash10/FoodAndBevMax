@@ -20,11 +20,14 @@ import {
   type RestaurantMenuFormValues,
 } from '@/components/mapping-foundation/restaurant-menus/shared';
 import { fetchAllPages } from '@/components/csv-import-export';
+import { useAuth } from '@/components/auth-provider';
+import { slotHours } from '@/components/master-data/time-slots/shared';
 import { organizationApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 import { Textarea } from '@/components/organization/shared/form-controls';
 import { MultiSelectDropdown, Toggle } from '@/components/ui-controls';
 
-type BooleanField = 'isActive' | 'isAvailable' | 'isDiscountable' | 'isGstInclusive';
+type BooleanField = 'isActive' | 'isAvailable' | 'isDiscountable' | 'isFeatured' | 'isGstInclusive';
 
 function formatPositionType(value: RestaurantMenuPositionType): string {
   if (value === 'BEFORE_ITEM') {
@@ -141,6 +144,71 @@ function SectionDivider({ children }: Readonly<{ children: string }>) {
       {children}
       <span className="h-px flex-1 bg-ds-border" />
     </div>
+  );
+}
+
+/**
+ * Fills the item's on-sale hours from a named time slot (Breakfast, Lunch…), so they are picked,
+ * not typed. It shows the slot the current hours match; hand-typed hours read "Custom hours".
+ * Only for roles that may view time slots (others type the hours as before).
+ */
+function TimeSlotPicker({
+  form,
+  hospitalId,
+}: Readonly<{ form: UseFormReturn<RestaurantMenuFormValues>; hospitalId: string | undefined }>) {
+  const { hasPermission } = useAuth();
+  const canView = hasPermission('TIME_SLOT_VIEW');
+  const slotsQuery = useQuery({
+    enabled: canView,
+    queryFn: async () =>
+      (
+        await organizationApi.listTimeSlots({
+          hospitalId,
+          isActive: true,
+          limit: 100,
+          sortBy: 'startTime',
+          sortOrder: 'asc',
+        })
+      ).data.items,
+    queryKey: queryKeys.timeSlots('picker', hospitalId ?? ''),
+  });
+  const from = form.watch('availableFrom') ?? '';
+  const to = form.watch('availableTo') ?? '';
+  const slots = slotsQuery.data ?? [];
+
+  if (!canView || slots.length === 0) return null;
+
+  const matching = slots.find((slot) =>
+    slot.isAlwaysAvailable ? !from && !to : slot.startTime === from && slot.endTime === to,
+  );
+
+  return (
+    <Field label="Time slot" name="menu-time-slot">
+      <Select
+        id="menu-time-slot"
+        onChange={(event) => {
+          const slot = slots.find((entry) => entry.id === event.target.value);
+          if (!slot) return;
+          const options = { shouldDirty: true, shouldValidate: true };
+          form.setValue(
+            'availableFrom',
+            slot.isAlwaysAvailable ? '' : (slot.startTime ?? ''),
+            options,
+          );
+          form.setValue('availableTo', slot.isAlwaysAvailable ? '' : (slot.endTime ?? ''), options);
+        }}
+        value={matching?.id ?? ''}
+      >
+        <option disabled value="">
+          {from || to ? 'Custom hours' : 'Pick a time slot'}
+        </option>
+        {slots.map((slot) => (
+          <option key={slot.id} value={slot.id}>
+            {slot.slotName} · {slotHours(slot)}
+          </option>
+        ))}
+      </Select>
+    </Field>
   );
 }
 
@@ -360,11 +428,15 @@ export function RestaurantMenuFormFields({
       <Field error={errors.addOn?.message} label="Add-On" name="add-on">
         <Input id="add-on" {...form.register('addOn')} />
       </Field>
+      <Field error={errors.subCode?.message} label="Sub-Code" name="sub-code">
+        <Input id="sub-code" {...form.register('subCode')} />
+      </Field>
 
       <div className="grid gap-3.5 py-1">
         {switchLine('Available?', 'isAvailable')}
         {switchLine('Active', 'isActive')}
         {switchLine('Discountable?', 'isDiscountable')}
+        {switchLine('Featured on the kiosk?', 'isFeatured')}
       </div>
 
       <Field
@@ -388,6 +460,7 @@ export function RestaurantMenuFormFields({
       </Field>
 
       <SectionDivider>Availability</SectionDivider>
+      <TimeSlotPicker form={form} hospitalId={hospitalId} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field error={errors.availableFrom?.message} label="Available From" name="available-from">
           <Input id="available-from" type="time" {...form.register('availableFrom')} />

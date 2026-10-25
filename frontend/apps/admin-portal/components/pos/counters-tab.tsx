@@ -9,7 +9,8 @@ import { z } from 'zod';
 import type { Counter, CounterInput } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import { RowAction, tableStyles } from '@/components/design-system';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
+import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
@@ -148,11 +149,13 @@ function CounterForm({
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.counters() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.locationNames() });
       // The Point of Sale's counter picker.
       void queryClient.invalidateQueries({ queryKey: queryKeys.posCounters() });
       showToast({
+        recordId: response.data.id,
         title: editingCounter ? 'Counter updated' : 'Counter created',
         variant: 'success',
       });
@@ -355,6 +358,7 @@ export function CountersTab() {
   const posDevicesQuery = usePosDeviceOptions(hospitalFilter || undefined);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
@@ -397,11 +401,27 @@ export function CountersTab() {
       });
       void query.refetch();
     },
-    onSuccess() {
+    onSuccess(_response, variables) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.counters() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.locationNames() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.posCounters() });
+      showToast({
+        recordId: variables.id,
+        title: variables.isActive ? 'Counter activated' : 'Counter deactivated',
+        variant: 'success',
+      });
     },
   });
+
+  async function toggleCounterStatus(counter: Counter) {
+    const isActive = !counter.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      name: counter.counterName,
+    });
+
+    if (confirmed) statusMutation.mutate({ id: counter.id, isActive });
+  }
 
   const openCreateForm = () => {
     setEditingCounter(undefined);
@@ -509,7 +529,7 @@ export function CountersTab() {
           />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-200 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-200 table-fixed')}>
             <thead className={cn(tableStyles.head, 'whitespace-nowrap')}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[22%]')}>Name</th>
@@ -527,12 +547,22 @@ export function CountersTab() {
                 items.map((counter) => (
                   <tr
                     className={tableStyles.row}
+                    data-record-id={counter.id}
                     key={counter.id}
                     onClick={() => openEditForm(counter)}
                   >
                     <td className={tableStyles.td}>
-                      <p className={cn('truncate', tableStyles.title)}>{counter.counterName}</p>
-                      <p className={cn('truncate', tableStyles.code)}>{counter.counterCode}</p>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={counter.counterName} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className={cn('truncate', tableStyles.title)}>
+                            {counter.counterName}
+                          </span>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {counter.counterCode}
+                          </span>
+                        </span>
+                      </span>
                     </td>
                     <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
                       {counter.hospital.hospitalName}
@@ -551,9 +581,7 @@ export function CountersTab() {
                       <StatusToggleCell
                         disabled={!canEdit || statusMutation.isPending}
                         isActive={counter.isActive}
-                        onToggle={() =>
-                          statusMutation.mutate({ id: counter.id, isActive: !counter.isActive })
-                        }
+                        onToggle={() => void toggleCounterStatus(counter)}
                       />
                     </td>
                     <td className={cn(tableStyles.td, 'pr-3')}>

@@ -6,10 +6,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useLocationContext } from '@/components/location-context';
 import { IfCanOpen } from '@/components/record-link';
-import { Skeleton } from '@/components/ui';
+import { TableSkeletonRows } from '@/components/design-system';
 import { getApiErrorMessage } from '@/lib/api';
-
-const loadingRows = ['one', 'two', 'three', 'four', 'five'];
 
 /** The location chosen in the header, by name; null for "All Locations". */
 export function useLocationName(): string | null {
@@ -70,20 +68,20 @@ export function QueryState({
   const locationName = useLocationName();
 
   if (isLoading) {
+    // Shaped like the list's rows. Phones keep two cells, as a list there shows few columns.
     return (
       <>
-        {loadingRows.map((row, index) => (
-          <tr key={row}>
-            <td className="px-4 py-3" colSpan={colSpan}>
-              {index === 0 ? (
-                <span className="sr-only" role="status">
-                  Loading {label}…
-                </span>
-              ) : null}
-              <Skeleton className="h-9 w-full" />
-            </td>
-          </tr>
-        ))}
+        <tr className="sr-only">
+          <td colSpan={colSpan}>
+            <span role="status">Loading {label}…</span>
+          </td>
+        </tr>
+        <TableSkeletonRows
+          cells={Array.from({ length: colSpan - 1 }, (_, index) =>
+            index === 0 ? undefined : 'hidden sm:table-cell',
+          )}
+          rows={5}
+        />
       </>
     );
   }

@@ -78,13 +78,6 @@ spec:
                 name: user-service
                 port:
                   number: 80
-          - path: /fandb/api/v1/notifications
-            pathType: Prefix
-            backend:
-              service:
-                name: user-service
-                port:
-                  number: 80
           # Everything else under the API is organisation, master data and inventory.
           - path: /fandb/api/v1
             pathType: Prefix

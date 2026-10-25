@@ -5,7 +5,7 @@
 //
 // Runs only with DATABASE_URL_TEST: a migrated and seeded database it may write to. Each run adds
 // its own uniquely named items, so it never touches existing stock and needs no cleanup.
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -230,7 +230,10 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     fx.kitchenId = idOf(kitchen);
     fx.storeId = idOf(await first(`/stores?limit=1&isActive=true&hospitalId=${fx.hospitalId}`));
     fx.restaurantId = idOf(
-      await first(`/restaurants?limit=1&isActive=true&hospitalId=${fx.hospitalId}`),
+      // The oldest one: later runs add restaurants of their own (restaurant leftovers).
+      await first(
+        `/restaurants?limit=1&isActive=true&sortBy=createdAt&sortOrder=asc&hospitalId=${fx.hospitalId}`,
+      ),
     );
     const categoryId = (fx.categoryId = idOf(
       await ok('POST', '/item-categories', { categoryName: `Characterisation ${run}` }),
@@ -536,6 +539,83 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     expect(String(restaurant?.businessDate).slice(0, 10)).toBe(today);
   });
 
+  it('restaurant leftovers: ready-made only, to another restaurant, the receiver accepts', async () => {
+    const other = idOf(
+      await ok('POST', '/restaurants', {
+        hospitalId: fx.hospitalId,
+        restaurantName: `Leftovers ${run}`,
+      }),
+    );
+    const production = await ok('POST', '/kitchen-productions', {
+      businessDate: today,
+      hospitalId: fx.hospitalId,
+      items: [{ itemId: fx.readyItemId, producedQty: 6, wastageQty: 0 }],
+      kitchenId: fx.kitchenId,
+      productionDate: new Date().toISOString(),
+    });
+    await ok('PATCH', `/kitchen-productions/${idOf(production)}/post`);
+    const fromKitchen = await ok('POST', '/transfers', {
+      businessDate: today,
+      destinationId: fx.restaurantId,
+      destinationType: 'RESTAURANT',
+      hospitalId: fx.hospitalId,
+      items: [{ itemId: fx.readyItemId, sentQty: 6 }],
+      sourceId: fx.kitchenId,
+      sourceType: 'KITCHEN',
+      transferDate: new Date().toISOString(),
+    });
+    await acknowledge(await ok('PATCH', `/transfers/${idOf(fromKitchen)}/dispatch`), {
+      acceptedQty: 6,
+      rejectedQty: 0,
+    });
+    const atRestaurant = async (restaurantId: string) =>
+      Number(
+        (await balances(fx.readyItemId, 'RESTAURANT')).find((b) => b.locationId === restaurantId)
+          ?.availableQty ?? 0,
+      );
+    const before = await atRestaurant(fx.restaurantId);
+    const leftovers = (body: Body) =>
+      api('POST', '/transfers', {
+        businessDate: today,
+        destinationId: other,
+        destinationType: 'RESTAURANT',
+        hospitalId: fx.hospitalId,
+        items: [{ itemId: fx.readyItemId, sentQty: 3 }],
+        sourceId: fx.restaurantId,
+        sourceType: 'RESTAURANT',
+        transferDate: new Date().toISOString(),
+        ...body,
+      });
+
+    const toCounter = await leftovers({ destinationType: 'COUNTER' });
+    expect([toCounter.status, toCounter.body.message]).toEqual([
+      400,
+      'A restaurant sends its leftovers to another restaurant only',
+    ]);
+    const mrp = await leftovers({ items: [{ itemId: fx.mrpItemId, sentQty: 1 }] });
+    expect([mrp.status, mrp.body.message]).toEqual([
+      400,
+      'Line 1: restaurant transfers support only READYMADE items',
+    ]);
+
+    const draft = await leftovers({});
+    expect(draft.status).toBe(201);
+    const sent = await ok('PATCH', `/transfers/${idOf(draft.data)}/dispatch`);
+    expect(ledgerRows(await ledger(fx.readyItemId, idOf(sent)))).toEqual([
+      ['RESTAURANT_TRANSFER_OUT', 'TRANSFER', 'RESTAURANT', 0, 3, before - 3],
+    ]);
+    // Nothing reaches the other restaurant until it accepts; a rejected part goes back.
+    expect(await atRestaurant(other)).toBe(0);
+    const ack = await acknowledge(sent, {
+      acceptedQty: 2,
+      rejectedQty: 1,
+      rejectionReason: 'Spoilt',
+    });
+    expect(ack.data.status).toBe('ACCEPTED_PARTIAL');
+    expect(await atRestaurant(other)).toBe(2);
+    expect(await atRestaurant(fx.restaurantId)).toBe(before - 2);
+  });
+
   it('stock views: balances list and the grouped store summary agree', async () => {
     await stockBatch('SV', 9);
     const list = await api(
@@ -820,6 +900,13 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       lines: [{ menuId, quantity: 2 }],
       paymentMode: 'UPI',
     };
+    // A till bills only inside an open shift.
+    const noShift = await api('POST', '/pos/orders', bill);
+    expect([noShift.status, noShift.body.message]).toEqual([
+      400,
+      'Open a shift at this counter before billing.',
+    ]);
+    await ok('POST', '/pos/shifts', { counterId, openingCash: 0 });
     const created = await api('POST', '/pos/orders', bill);
     expect(created.status).toBe(201);
     expect(created.data).toMatchObject({
@@ -897,15 +984,24 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       items(await ok('GET', `/pos/orders?counterId=${counterId}&isComplimentary=true`)),
     ).toHaveLength(1);
 
-    // Staff discount: the restaurant's rate for the employee's type, off the value before GST.
+    // Staff discount: the restaurant's Employee Discount rule for the employee's level, off the
+    // value before GST, while the restaurant gives staff discount.
     const rates = await ok('PUT', `/pos/staff-discounts/${fx.restaurantId}`, {
-      rates: [
-        { discountPercent: 10, employmentType: 'ON_ROLL' },
-        { discountPercent: 5, employmentType: 'OUTSOURCED' },
-      ],
+      rates: [],
       staffDiscountApplicable: true,
     });
     expect(rates).toMatchObject({ staffDiscountApplicable: true });
+    for (const [employmentType, discountPercent] of [
+      ['ON_ROLL', 10],
+      ['OUTSOURCED', 5],
+    ] as const) {
+      await ok('POST', '/employee-discounts', {
+        discountPercent,
+        employmentType,
+        name: `Staff ${employmentType} ${run}`,
+        restaurantId: fx.restaurantId,
+      });
+    }
     await ok('POST', '/employees', {
       employeeCode: `E${run}`,
       employeeName: 'Staff Member',
@@ -988,9 +1084,174 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       });
       // Everything else stays limited to the cashier's own location.
       expect((await api('GET', `/pos/orders?hospitalId=${elsewhere!.id}`)).status).toBe(403);
+      // A cashier bills room orders, but only an approver may make a meal complimentary.
+      const comp = await api('POST', '/pos/orders', {
+        channel: 'COUNTER',
+        clientOrderId: `cashier-comp-${run}`,
+        complimentaryReason: 'Duty doctor',
+        counterId,
+        isComplimentary: true,
+        lines: [{ menuId: randomUUID(), quantity: 1 }],
+      });
+      expect(comp.status).toBe(403);
+      expect(String(comp.body.message)).toMatch(/complimentary/);
     } finally {
       token = admin;
     }
+  });
+
+  it('shifts: count the cash, hand over, close; a closed day bills on the next one', async () => {
+    const counterId = idOf(
+      await ok('POST', '/counters', {
+        counterCode: `SH${run}`,
+        counterName: `Shift ${run}`,
+        hospitalId: fx.hospitalId,
+        restaurantId: fx.restaurantId,
+      }),
+    );
+    // The counter POS test put this item on the restaurant's menu; this counter keeps no stock
+    // of it, so it sells freely.
+    const menuId = idOf(
+      firstOf(
+        (
+          (await ok('GET', `/pos/menu?counterId=${counterId}&channel=COUNTER`)).items as Body[]
+        ).filter((entry) => entry.itemId === fx.mrpItemId),
+      ),
+    );
+    const bill = (name: string, paymentMode = 'CASH') =>
+      api('POST', '/pos/orders', {
+        channel: 'COUNTER',
+        clientOrderId: `shift-${name}-${run}`,
+        counterId,
+        lines: [{ menuId, quantity: 1 }],
+        paymentMode,
+      });
+    const shiftState = async () =>
+      ((await ok('GET', '/pos/counters')) as unknown as Body[]).find(
+        (counter) => counter.id === counterId,
+      )?.shift as Body;
+
+    const first = await ok('POST', '/pos/shifts', { counterId, openingCash: 500 });
+    expect(first).toMatchObject({ openingCash: 500, status: 'OPEN', takenOverFromId: null });
+    expect((await api('POST', '/pos/shifts', { counterId, openingCash: 0 })).status).toBe(409);
+    expect((await shiftState()).open).toMatchObject({ id: idOf(first) });
+
+    // 49.50 + 18% = 58.41 -> 58 each; only the cash one is in the till.
+    const cashBill = await bill('cash');
+    expect(cashBill.data.grandTotal).toBe(58);
+    expect((await bill('upi', 'UPI')).status).toBe(201);
+
+    const handed = await ok('PATCH', `/pos/shifts/${idOf(first)}/end`, {
+      countedCash: 550,
+      handover: true,
+    });
+    expect(handed).toMatchObject({ countedCash: 550, expectedCash: 558, status: 'HANDED_OVER' });
+    expect(handed.summary).toMatchObject({ bills: 2, sales: 116 });
+    expect(
+      (
+        await api('PATCH', `/pos/shifts/${idOf(first)}/end`, {
+          countedCash: 0,
+          handover: false,
+        })
+      ).status,
+    ).toBe(409);
+    expect(await shiftState()).toMatchObject({ handover: { id: idOf(first) }, open: null });
+
+    // The next cashier takes the handover on.
+    const second = await ok('POST', '/pos/shifts', { counterId, openingCash: 550 });
+    expect(second.takenOverFromId).toBe(idOf(first));
+    expect((await shiftState()).handover).toBeNull();
+    expect((await api('POST', '/pos/day-closes', { counterId })).status).toBe(409);
+    await ok('PATCH', `/pos/shifts/${idOf(second)}/end`, { countedCash: 550, handover: false });
+
+    const closed = await ok('POST', '/pos/day-closes', { counterId });
+    const summary = await ok('GET', `/pos/summary?counterId=${counterId}`);
+    expect(closed.businessDate).toBe(summary.date);
+    expect(summary.dayClose).not.toBeNull();
+    expect((summary.shifts as Body[]).map((shift) => shift.status)).toEqual([
+      'HANDED_OVER',
+      'CLOSED',
+    ]);
+    expect((await api('POST', '/pos/day-closes', { counterId })).status).toBe(409);
+    expect((await shiftState()).dayClosed).toBe(true);
+
+    // After the day is closed: its bills are final, and new ones go on the next day.
+    const cancelClosed = await api('PATCH', `/pos/orders/${idOf(cashBill.data)}/cancel`, {
+      reason: 'x',
+    });
+    expect(cancelClosed.status).toBe(409);
+    const third = await ok('POST', '/pos/shifts', { counterId, openingCash: 0 });
+    const nextDay = await bill('next');
+    expect(String(nextDay.data.businessDate).slice(0, 10)).toBe(
+      new Date(Date.parse(String(summary.date)) + 86_400_000).toISOString().slice(0, 10),
+    );
+    await ok('PATCH', `/pos/shifts/${idOf(third)}/end`, { countedCash: 58, handover: false });
+  });
+
+  it('online UPI: the server prices it, the bill must match it, and it pays one bill only', async () => {
+    const counterId = idOf(
+      await ok('POST', '/counters', {
+        counterCode: `OP${run}`,
+        counterName: `Online ${run}`,
+        hospitalId: fx.hospitalId,
+        restaurantId: fx.restaurantId,
+      }),
+    );
+    const menuId = idOf(
+      firstOf(
+        (
+          (await ok('GET', `/pos/menu?counterId=${counterId}&channel=COUNTER`)).items as Body[]
+        ).filter((entry) => entry.itemId === fx.mrpItemId),
+      ),
+    );
+    const draft = { channel: 'COUNTER', counterId, lines: [{ menuId, quantity: 1 }] };
+    const shift = await ok('POST', '/pos/shifts', { counterId, openingCash: 0 });
+    const providers = (await ok('GET', '/pos/online-payments/providers')) as unknown as string[];
+
+    // A real sandbox round trip when Razorpay test keys are set: link made, still unpaid, let go.
+    if (providers.includes('RAZORPAY')) {
+      const started = await ok('POST', '/pos/online-payments', { ...draft, provider: 'RAZORPAY' });
+      expect(started).toMatchObject({ amount: 58, provider: 'RAZORPAY', status: 'PENDING' });
+      expect(String(started.paymentUrl)).toMatch(/^https:\/\//);
+      expect((await ok('GET', `/pos/online-payments/${idOf(started)}`)).status).toBe('PENDING');
+      expect((await ok('POST', `/pos/online-payments/${idOf(started)}/cancel`, {})).status).toBe(
+        'CANCELLED',
+      );
+    }
+
+    // A paid one, as the provider would report it.
+    const [paid] = await rawQuery<{ id: string }>(
+      `INSERT INTO online_payments (id, hospital_id, counter_id, provider, status, amount, provider_ref,
+         payment_url, paid_reference, paid_at, updated_at)
+       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'RAZORPAY', 'PAID', 58, $3, 'https://rzp.io/x',
+         'pay_test_1', now(), now()) RETURNING id`,
+      fx.hospitalId,
+      counterId,
+      `plink_${run}`,
+    );
+    const billWith = (name: string, quantity: number) =>
+      api('POST', '/pos/orders', {
+        ...draft,
+        clientOrderId: `online-${name}-${run}`,
+        lines: [{ menuId, quantity }],
+        onlinePaymentId: paid!.id,
+        paymentMode: 'UPI',
+      });
+
+    const tooMuch = await billWith('two', 2);
+    expect(tooMuch.status).toBe(409);
+    expect(String(tooMuch.body.message)).toMatch(
+      /^₹58.00 was paid, but the bill now comes to ₹117.00/,
+    );
+    const billed = await billWith('one', 1);
+    expect(billed.status).toBe(201);
+    expect(billed.data).toMatchObject({
+      grandTotal: 58,
+      paymentMode: 'UPI',
+      paymentReference: 'pay_test_1',
+    });
+    expect((await billWith('again', 1)).status).toBe(409);
+    await ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
   });
 
   // Dates are kept as UTC calendar days whatever the server's zone: these used to land a day early

@@ -196,19 +196,27 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
       active: !statusFilter,
       label: complimentary ? 'Complimentary bills' : 'All bills',
       onSelect: () => showStatus(''),
+      share: stats?.all ? 1 : undefined,
       value: stats?.all ?? '–',
     },
     {
       active: statusFilter === 'CANCELLED',
       label: 'Cancelled',
       onSelect: () => showStatus(statusFilter === 'CANCELLED' ? '' : 'CANCELLED'),
+      share: stats?.all ? stats.cancelled / stats.all : undefined,
       tone: 'bad',
       value: stats?.cancelled ?? '–',
     },
   ];
 
   if (!complimentary) {
-    statList.push({ label: 'Complimentary', tone: 'pending', value: stats?.complimentary ?? '–' });
+    statList.push({
+      label: 'Complimentary',
+      share:
+        stats?.all && stats.complimentary !== null ? stats.complimentary / stats.all : undefined,
+      tone: 'pending',
+      value: stats?.complimentary ?? '–',
+    });
   }
 
   if (singleCounterDay) {
@@ -390,7 +398,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
           {/* What a reviewer scans for; the rest (instructions, subtotal, GST, lines) is in the
               bill's panel, which the row opens. Complimentary bills have no payment mode, so
               their page shows the reason in that place. */}
-          <table className={cn(tableStyles.table, 'min-w-208 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-208 table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-40')}>Bill</th>
@@ -417,7 +425,12 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
 
                   return (
                     // The whole row opens the bill (its number is the link it follows).
-                    <tr className={tableStyles.row} key={bill.id} onClick={openRowLink}>
+                    <tr
+                      className={tableStyles.row}
+                      data-record-id={bill.id}
+                      key={bill.id}
+                      onClick={openRowLink}
+                    >
                       <td className={tableStyles.td}>
                         <Link
                           className={cn(

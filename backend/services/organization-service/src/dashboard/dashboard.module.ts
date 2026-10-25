@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CommonModule } from '../common/common.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { GrnsModule } from '../grns/grns.module';
 import { HospitalsModule } from '../hospitals/hospitals.module';
@@ -17,6 +18,7 @@ import { DashboardService } from './dashboard.service';
 @Module({
   controllers: [DashboardController],
   imports: [
+    CommonModule,
     EmployeesModule,
     GrnsModule,
     HospitalsModule,

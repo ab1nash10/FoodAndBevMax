@@ -6,6 +6,7 @@ export const itemCategorySortFields = [
   'categoryName',
   'createdAt',
   'isActive',
+  'sortOrder',
   'updatedAt',
 ] as const;
 

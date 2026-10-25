@@ -48,6 +48,9 @@ exports[`every prefix stays as it is 1`] = `
     "dashboard",
     "stats",
   ],
+  "employeeDiscounts": [
+    "employee-discounts",
+  ],
   "employees": [
     "employees",
   ],
@@ -66,15 +69,6 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "hospitals": [
     "hospitals",
-  ],
-  "inventoryAllKitchens": [
-    "inventory-all-kitchens",
-  ],
-  "inventoryAllRestaurants": [
-    "inventory-all-restaurants",
-  ],
-  "inventoryAllStores": [
-    "inventory-all-stores",
   ],
   "inventoryHospitals": [
     "inventory-hospitals",
@@ -108,6 +102,12 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "items": [
     "items",
+  ],
+  "kioskMenu": [
+    "kiosk-menu",
+  ],
+  "kioskOrderToBill": [
+    "kiosk-order-to-bill",
   ],
   "kitchenHospitals": [
     "kitchen-hospitals",
@@ -145,6 +145,9 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "legalEntityOptions": [
     "legal-entity-options",
+  ],
+  "locationNames": [
+    "location-names",
   ],
   "locationOptions": [
     "location-options",
@@ -188,11 +191,17 @@ exports[`every prefix stays as it is 1`] = `
   "posMenu": [
     "pos-menu",
   ],
+  "posPaymentProviders": [
+    "pos-payment-providers",
+  ],
   "posRestaurantOptions": [
     "pos-restaurant-options",
   ],
   "posSummary": [
     "pos-summary",
+  ],
+  "reports": [
+    "reports",
   ],
   "restaurant": [
     "restaurant",
@@ -232,6 +241,9 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "stores": [
     "stores",
+  ],
+  "timeSlots": [
+    "time-slots",
   ],
   "transferAcknowledgements": [
     "transfer-acknowledgements",

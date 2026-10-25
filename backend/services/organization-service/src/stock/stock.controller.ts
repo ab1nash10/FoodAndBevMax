@@ -1,6 +1,9 @@
-import { Permissions } from '@aahar/auth';
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser, Permissions } from '@aahar/auth';
+import type { JwtRequestUser } from '@aahar/auth';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
+import { DiscardStockDto } from './dto/discard-stock.dto';
 import { ListStockBalancesQueryDto } from './dto/list-stock-balances-query.dto';
 import { ListStockLedgersQueryDto } from './dto/list-stock-ledgers-query.dto';
 import {
@@ -8,7 +11,35 @@ import {
   StoreLevelsQueryDto,
   StoreMovementsQueryDto,
 } from './dto/store-levels-query.dto';
+import { StockDiscardService } from './stock-discard.service';
 import { StockService } from './stock.service';
+
+@ApiBearerAuth('access-token')
+@ApiTags('stock-discards')
+@Controller('stock-discards')
+export class StockDiscardsController {
+  constructor(private readonly discards: StockDiscardService) {}
+
+  @Post()
+  @Permissions('STOCK_DISCARD')
+  @ApiBody({ type: DiscardStockDto })
+  @ApiOperation({ summary: 'Discard stock from one batch (expired, damaged, spoilt…)' })
+  @ApiOkResponse({ description: 'Stock discarded successfully.' })
+  async discard(
+    @Body() body: DiscardStockDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.discards.discard(body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+}
 
 @ApiBearerAuth('access-token')
 @ApiTags('stock-ledgers')

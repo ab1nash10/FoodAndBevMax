@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { Employee, EmployeeInput, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { ImportButton } from '@/components/import/import-dialog';
 import { employeeImport } from '@/components/import/import-definitions';
 import {
@@ -19,6 +20,7 @@ import {
 import {
   AppPageHeader,
   DateTimeCell,
+  RecordAvatar,
   RowAction,
   StatStrip,
   tableStyles,
@@ -28,7 +30,6 @@ import { Badge, Panel, Select } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
-import { useUndoable } from '@/lib/use-undoable';
 import { invalidateEmployeeQueries } from '@/lib/query-invalidation';
 import {
   EmployeeFormFields,
@@ -171,9 +172,10 @@ export function EmployeesPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       invalidateEmployeeQueries(queryClient);
       showToast({
+        recordId: response.data.id,
         title: editingEmployee ? 'Employee updated' : 'Employee created',
         variant: 'success',
       });
@@ -193,33 +195,27 @@ export function EmployeesPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateEmployeeQueries(queryClient);
-      // Marking inactive already had its Undo toast.
-      if (variables.isActive) showToast({ title: 'Employee activated', variant: 'success' });
+      showToast({
+        recordId: variables.employee.id,
+        title: variables.isActive ? 'Employee activated' : 'Employee deactivated',
+        variant: 'success',
+      });
     },
   });
-  const undoable = useUndoable();
+  const confirm = useConfirm();
 
-  function toggleEmployeeStatus(employee: Employee) {
-    // Switching it back on while the Undo toast runs is the same as Undo.
-    if (undoable.undo(employee.id)) return;
+  async function toggleEmployeeStatus(employee: Employee) {
+    const isActive = !employee.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      effect: 'They can’t be used in new operations. Existing records stay visible.',
+      name: employee.employeeName,
+    });
 
-    if (employee.isActive) {
-      undoable.schedule({
-        commit: () => toggleEmployeeStatusMutation.mutateAsync({ employee, isActive: false }),
-        description: 'They can’t be used in new operations. Existing records stay visible.',
-        id: employee.id,
-        title: `${employee.employeeName} marked inactive`,
-      });
-      return;
-    }
-
-    toggleEmployeeStatusMutation.mutate({ employee, isActive: true });
+    if (confirmed) toggleEmployeeStatusMutation.mutate({ employee, isActive });
   }
 
-  // An employee marked inactive shows so at once, while its Undo toast runs.
-  const employees = (employeesQuery.data?.items ?? []).map((employee) =>
-    undoable.isChanged(employee.id) ? { ...employee, isActive: false } : employee,
-  );
+  const employees = employeesQuery.data?.items ?? [];
   const meta = employeesQuery.data?.meta ?? {
     limit: listLimit,
     page,
@@ -310,12 +306,14 @@ export function EmployeesPageClient() {
             active: !activeFilter && !discountFilter,
             label: 'All employees',
             onSelect: () => showOnly('', ''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: activeFilter === 'active' && !discountFilter,
             label: 'Active',
             onSelect: () => showOnly('active', ''),
+            share: stats?.all ? stats.active / stats.all : undefined,
             tone: 'ok',
             value: stats?.active ?? '–',
           },
@@ -323,12 +321,14 @@ export function EmployeesPageClient() {
             active: discountFilter === 'eligible' && !activeFilter,
             label: 'Discount eligible',
             onSelect: () => showOnly('', 'eligible'),
+            share: stats?.all ? stats.eligible / stats.all : undefined,
             value: stats?.eligible ?? '–',
           },
           {
             active: activeFilter === 'inactive' && !discountFilter,
             label: 'Inactive',
             onSelect: () => showOnly('inactive', ''),
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             tone: 'pending',
             value: stats?.inactive ?? '–',
           },
@@ -398,7 +398,7 @@ export function EmployeesPageClient() {
         </ListToolbar>
         <div className="overflow-x-auto">
           {/* The created date/time sits on two lines so the table stays narrow. */}
-          <table className={cn(tableStyles.table, 'min-w-200')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-200')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={tableStyles.th}>Employee</th>
@@ -422,12 +422,18 @@ export function EmployeesPageClient() {
                   return (
                     <tr
                       className={cn(tableStyles.row, !editable && 'cursor-default')}
+                      data-record-id={employee.id}
                       key={employee.id}
                       onClick={editable ? () => openEdit(employee) : undefined}
                     >
                       <td className={tableStyles.td}>
-                        <p className={tableStyles.title}>{employee.employeeName}</p>
-                        <p className={tableStyles.code}>{employee.employeeCode}</p>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <RecordAvatar name={employee.employeeName} />
+                          <span className="min-w-0">
+                            <p className={tableStyles.title}>{employee.employeeName}</p>
+                            <p className={tableStyles.code}>{employee.employeeCode}</p>
+                          </span>
+                        </span>
                       </td>
                       <td className={tableStyles.td}>
                         <MasterLocationCell hospital={employee.hospital} />
@@ -459,7 +465,7 @@ export function EmployeesPageClient() {
                             ariaLabel={`${employee.employeeName} active`}
                             checked={employee.isActive}
                             disabled={toggleEmployeeStatusMutation.isPending || !editable}
-                            onChange={() => toggleEmployeeStatus(employee)}
+                            onChange={() => void toggleEmployeeStatus(employee)}
                           />
                           <span
                             className={cn(

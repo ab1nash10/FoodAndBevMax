@@ -1,0 +1,132 @@
+/* The board's motion. Transform and opacity only, so a TV's small GPU keeps up; all of it stops
+   under reduced motion. */
+
+@keyframes drift-a {
+  to {
+    transform: translate3d(-140px, 90px, 0) scale(1.15);
+  }
+}
+
+@keyframes drift-b {
+  to {
+    transform: translate3d(160px, -80px, 0) scale(1.1);
+  }
+}
+
+@keyframes drift-c {
+  to {
+    transform: translate3d(-60px, -120px, 0) scale(1.2);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes glow {
+  50% {
+    box-shadow: 0 0 60px 6px rgb(15 123 99 / 0.3);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes tip {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  12%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.driftA {
+  animation: drift-a 26s ease-in-out infinite alternate;
+}
+
+.driftB {
+  animation: drift-b 32s ease-in-out infinite alternate;
+}
+
+.driftC {
+  animation: drift-c 38s ease-in-out infinite alternate;
+}
+
+/* The light running round the "Now ready" card's edge. */
+.spin {
+  animation: spin 6s linear infinite;
+}
+
+.live {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* A new "Now ready" order arrives with a pop; it glows while it is the one just called. */
+.pop {
+  animation: pop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.glow {
+  animation:
+    pop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    glow 2.4s ease-in-out 0.7s infinite;
+}
+
+/* A tile that has just joined a list. */
+.rise {
+  animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Each footer tip fades in and out over its 5 s turn. */
+.tip {
+  animation: tip 5s ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driftA,
+  .driftB,
+  .driftC,
+  .spin,
+  .live,
+  .pop,
+  .glow,
+  .rise,
+  .tip {
+    animation: none;
+  }
+}

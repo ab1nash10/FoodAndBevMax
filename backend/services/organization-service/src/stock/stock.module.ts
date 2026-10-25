@@ -8,11 +8,13 @@ import {
   RestaurantStockController,
   RestaurantStockLedgersController,
   StockBalancesController,
+  StockDiscardsController,
   StockLedgersController,
   StoreStockLevelsController,
   StoreStockMovementsController,
   StoreStockSummaryController,
 } from './stock.controller';
+import { StockDiscardService } from './stock-discard.service';
 import { StockRepository } from './stock.repository';
 import { StockService } from './stock.service';
 
@@ -29,8 +31,9 @@ import { StockService } from './stock.service';
     KitchenStockController,
     CounterStockLedgersController,
     CounterStockController,
+    StockDiscardsController,
   ],
   imports: [CommonModule],
-  providers: [StockRepository, StockService],
+  providers: [StockDiscardService, StockRepository, StockService],
 })
 export class StockModule {}

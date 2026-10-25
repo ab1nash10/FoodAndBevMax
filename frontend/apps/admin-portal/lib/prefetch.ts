@@ -4,7 +4,7 @@ import { useQueryClient, type FetchQueryOptions } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import { todayInIndia } from '@/components/point-of-sale/shared';
+import { todayInIndia } from '@/lib/today-in-india';
 import { organizationApi } from '@/lib/api';
 import { canOpenPath } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';

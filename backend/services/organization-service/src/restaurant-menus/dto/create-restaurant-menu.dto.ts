@@ -137,6 +137,17 @@ export class CreateRestaurantMenuDto {
   @MaxLength(255)
   addOn?: string | null;
 
+  @ApiPropertyOptional({ description: 'A second code for the item.', nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  subCode?: string | null;
+
+  @ApiPropertyOptional({ default: false, description: 'Shown first on the kiosk.' })
+  @IsBoolean()
+  @IsOptional()
+  isFeatured?: boolean;
+
   @ApiPropertyOptional({ default: false })
   @IsBoolean()
   @IsOptional()

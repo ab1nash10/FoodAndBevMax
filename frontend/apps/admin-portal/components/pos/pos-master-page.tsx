@@ -111,12 +111,14 @@ export function PosMasterPageClient() {
             active: activeTab === 'devices' && activeFilter !== 'inactive',
             label: 'POS devices',
             onSelect: () => show('devices', ''),
+            share: devices?.all ? 1 : undefined,
             value: devices?.all ?? '–',
           },
           {
             active: activeTab === 'payments' && activeFilter !== 'inactive',
             label: 'Payment machines',
             onSelect: () => show('payments', ''),
+            share: machines?.all ? 1 : undefined,
             value: machines?.all ?? '–',
           },
           {
@@ -124,6 +126,7 @@ export function PosMasterPageClient() {
             label: 'Inactive devices',
             onSelect: () => show('devices', 'inactive'),
             tone: 'pending',
+            share: devices?.all ? devices.inactive / devices.all : undefined,
             value: devices?.inactive ?? '–',
           },
           {
@@ -131,6 +134,7 @@ export function PosMasterPageClient() {
             label: 'Inactive machines',
             onSelect: () => show('payments', 'inactive'),
             tone: 'pending',
+            share: machines?.all ? machines.inactive / machines.all : undefined,
             value: machines?.inactive ?? '–',
           },
         ]}

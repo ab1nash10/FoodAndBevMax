@@ -42,7 +42,7 @@ const presentations: Record<KnownStatus, StatusPresentation> = {
   // GRNs
   ACCEPTED: { label: 'Accepted', tone: 'ok' },
   PARTIALLY_ACCEPTED: { label: 'Partially accepted', tone: 'pending' },
-  POSTED_TO_STOCK: { label: 'Posted to stock', tone: 'ok' },
+  POSTED_TO_STOCK: { label: 'Added to stock', tone: 'ok' },
   REJECTED: { label: 'Rejected', tone: 'bad' },
   UNDER_VERIFICATION: { label: 'Under verification', tone: 'info' },
   // Kitchen production

@@ -15,58 +15,38 @@ type NavCounts = Partial<Record<NavBadge, number>>;
 
 /**
  * Work waiting in each queue, for the sidebar badges: transfers awaiting acknowledgement,
- * draft GRNs (not yet verified and posted) and draft productions. Keyed under ['dashboard'], so the existing
- * query invalidation refreshes them after every GRN, transfer or production change.
+ * draft GRNs (not yet verified and posted) and draft productions, in one request (GET
+ * /dashboard/nav-counts) instead of three. Keyed under ['dashboard'], so the existing query
+ * invalidation refreshes them after every GRN, transfer or production change; a count the user
+ * may not view comes back undefined.
  */
 export function useNavCounts(hasPermission: (permission: string | string[]) => boolean): NavCounts {
   // Called by the shell before it waits for the location, so the counts wait for it here.
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const scope = scopedHospitalId ?? 'all';
   const refresh = { refetchInterval: 60_000, staleTime: 30_000 };
-  const transfers = useQuery({
+  const counts = useQuery({
     ...refresh,
-    enabled: !isLoadingLocations && hasPermission(['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW']),
+    enabled:
+      !isLoadingLocations &&
+      hasPermission([
+        'TRANSFER_VIEW',
+        'KITCHEN_TRANSFER_VIEW',
+        'GRN_VIEW',
+        'KITCHEN_PRODUCTION_VIEW',
+      ]),
     queryFn: async () =>
-      (
-        await organizationApi.listTransfers({
-          hospitalId: scopedHospitalId,
-          limit: 0,
-          status: 'PENDING_ACKNOWLEDGEMENT',
-        })
-      ).data.meta.total,
-    queryKey: queryKeys.dashboardNavCounts('transfers', scope),
-  });
-  const grns = useQuery({
-    ...refresh,
-    enabled: !isLoadingLocations && hasPermission('GRN_VIEW'),
-    queryFn: async () =>
-      (
-        await organizationApi.listGrns({
-          hospitalId: scopedHospitalId,
-          limit: 0,
-          // GRNs stay DRAFT until verified and posted to stock.
-          status: 'DRAFT',
-        })
-      ).data.meta.total,
-    queryKey: queryKeys.dashboardNavCounts('grns', scope),
-  });
-  const productions = useQuery({
-    ...refresh,
-    enabled: !isLoadingLocations && hasPermission('KITCHEN_PRODUCTION_VIEW'),
-    queryFn: async () =>
-      (
-        await organizationApi.listKitchenProductions({
-          hospitalId: scopedHospitalId,
-          limit: 0,
-          status: 'DRAFT',
-        })
-      ).data.meta.total,
-    queryKey: queryKeys.dashboardNavCounts('productions', scope),
+      (await organizationApi.getDashboardNavCounts({ hospitalId: scopedHospitalId })).data,
+    queryKey: queryKeys.dashboardNavCounts('all', scope),
   });
 
   return useMemo(
-    () => ({ grns: grns.data, productions: productions.data, transfers: transfers.data }),
-    [grns.data, productions.data, transfers.data],
+    () => ({
+      grns: counts.data?.grns,
+      productions: counts.data?.productions,
+      transfers: counts.data?.transfers,
+    }),
+    [counts.data],
   );
 }
 
@@ -83,6 +63,7 @@ export function SidebarContent({
   counts,
   footer,
   hasPermission,
+  note,
   onNavigate,
   sections = false,
 }: Readonly<{
@@ -90,6 +71,8 @@ export function SidebarContent({
   /** Under the modules: the signed-in account. */
   footer?: ReactNode;
   hasPermission: (permission: string | string[]) => boolean;
+  /** Above the account: a short tip (the desktop sidebar). */
+  note?: ReactNode;
   onNavigate?: () => void;
   /** Section labels (Setup / Operations / Admin) above their modules: the desktop sidebar. */
   sections?: boolean;
@@ -133,7 +116,7 @@ export function SidebarContent({
     <div className="flex min-h-0 flex-1 flex-col">
       <nav
         aria-label="Modules"
-        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-3 pt-1"
+        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3 pt-1 *:shrink-0"
       >
         {navigationGroups.map((group) => {
           const visibleItems = group.items.filter(
@@ -168,11 +151,11 @@ export function SidebarContent({
               <Link
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex h-[38px] items-center gap-2.5 rounded-control px-2.5 text-[13.5px] transition',
+                  'flex h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors duration-150',
                   focusRing,
                   isActive
-                    ? 'bg-ds-primary font-semibold text-white shadow-sm shadow-ds-primary/25'
-                    : 'font-semibold text-ds-text-2 hover:bg-ds-subtle hover:text-ds-text',
+                    ? 'bg-ds-primary font-semibold text-white shadow-[0_6px_16px_rgb(11_87_164/0.28)]'
+                    : 'font-medium text-ds-text-2 hover:bg-ds-subtle hover:text-ds-text',
                 )}
                 href={singleItem.href}
                 key={group.label}
@@ -192,7 +175,7 @@ export function SidebarContent({
           return (
             <div className="flex flex-col gap-px pt-1" key={group.label}>
               {sectionLabel ? (
-                <div className="px-2.5 pb-1 pt-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ds-muted">
+                <div className="px-3 pb-1.5 pt-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-ds-muted">
                   {sectionLabel}
                 </div>
               ) : null}
@@ -200,9 +183,9 @@ export function SidebarContent({
                 aria-controls={groupId}
                 aria-expanded={isOpen}
                 className={cn(
-                  'flex h-[38px] w-full items-center gap-2.5 rounded-control px-2.5 text-left text-[13.5px] transition hover:bg-ds-subtle',
+                  'flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors duration-150 hover:bg-ds-subtle',
                   focusRing,
-                  isGroupActive ? 'font-bold text-ds-text' : 'font-semibold text-ds-text-2',
+                  isGroupActive ? 'font-semibold text-ds-text' : 'font-medium text-ds-text-2',
                 )}
                 onClick={() => toggleGroup(group.label)}
                 type="button"
@@ -220,7 +203,7 @@ export function SidebarContent({
               </button>
               {isOpen ? (
                 <div
-                  className="mb-1 ml-[19px] flex flex-col gap-px border-l border-ds-divider pl-2.5"
+                  className="mb-1 ml-[21px] flex flex-col gap-px border-l border-ds-divider pl-2.5"
                   id={groupId}
                 >
                   {visibleItems.map((item) => {
@@ -231,10 +214,10 @@ export function SidebarContent({
                       <Link
                         aria-current={isActive ? 'page' : undefined}
                         className={cn(
-                          'flex h-[34px] items-center justify-between gap-2 rounded-control px-2.5 text-[13px] transition',
+                          'flex h-10 shrink-0 items-center justify-between gap-2 rounded-xl px-3 text-sm transition-colors duration-150',
                           focusRing,
                           isActive
-                            ? 'bg-ds-primary font-semibold text-white shadow-sm shadow-ds-primary/25'
+                            ? 'bg-ds-primary font-semibold text-white shadow-[0_6px_16px_rgb(11_87_164/0.28)]'
                             : 'font-medium text-ds-text-3 hover:bg-ds-subtle hover:text-ds-text',
                         )}
                         href={item.href}
@@ -253,6 +236,7 @@ export function SidebarContent({
         })}
       </nav>
 
+      {note ? <div className="px-3 pb-3">{note}</div> : null}
       {footer ? <div className="border-t border-ds-border p-2">{footer}</div> : null}
     </div>
   );

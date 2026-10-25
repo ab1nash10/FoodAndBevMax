@@ -54,7 +54,7 @@ const services = [
   },
   {
     name: 'user-service',
-    paths: ['/users', '/roles', '/permissions', '/notifications'],
+    paths: ['/users', '/roles', '/permissions'],
     ports: [42002],
   },
   {

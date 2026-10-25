@@ -49,7 +49,7 @@ export const grnVerbs: Record<Grn['status'], string> = {
   CANCELLED: 'cancelled',
   DRAFT: 'drafted',
   PARTIALLY_ACCEPTED: 'partially accepted',
-  POSTED_TO_STOCK: 'posted to stock',
+  POSTED_TO_STOCK: 'added to stock',
   REJECTED: 'rejected',
   UNDER_VERIFICATION: 'received',
 };

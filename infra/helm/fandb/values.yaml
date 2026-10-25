@@ -103,7 +103,6 @@ services:
       - /api/v1/users
       - /api/v1/roles
       - /api/v1/permissions
-      - /api/v1/notifications
   - name: fandb-organization
     service: organization-service
     tagPrefix: organization-service

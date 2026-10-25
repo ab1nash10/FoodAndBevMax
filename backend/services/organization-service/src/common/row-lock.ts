@@ -1,7 +1,12 @@
 import { Prisma } from '@prisma/client';
 
 type LockableTable =
-  'counters' | 'grns' | 'kitchen_productions' | 'restaurant_orders' | 'transfers';
+  | 'counter_shifts'
+  | 'counters'
+  | 'grns'
+  | 'kitchen_productions'
+  | 'restaurant_orders'
+  | 'transfers';
 
 /**
  * Holds the document's row lock until the transaction ends.

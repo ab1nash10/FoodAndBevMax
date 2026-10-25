@@ -9,7 +9,7 @@ import { recordHref } from '@/lib/navigation';
 import type { RestaurantInput } from '@aahar/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@aahar/ui';
-import { BadgePercent, Utensils } from 'lucide-react';
+import { BadgePercent, Clock3, Utensils } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm, type Path } from 'react-hook-form';
@@ -35,6 +35,7 @@ import { restaurantSchema } from '@/components/organization/shared/schemas';
 import { useHospitalOptions, useLegalEntityOptions } from '@/components/organization/shared/hooks';
 import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
 import type { RestaurantFormValues } from '@/components/organization/shared/types';
+import { ShiftSettingsPanel } from '@/components/organization/shift-settings-panel';
 import { StaffDiscountPanel } from '@/components/organization/staff-discount-panel';
 import { queryKeys } from '@/lib/query-keys';
 import { restaurantDetailQuery } from '@/lib/detail-queries';
@@ -63,6 +64,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
   const [imageErrors, setImageErrors] = useState<{ cover?: string; thumbnail?: string }>({});
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [isStaffDiscountOpen, setIsStaffDiscountOpen] = useState(false);
+  const [isShiftSettingsOpen, setIsShiftSettingsOpen] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | undefined>();
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | undefined>();
   // The first required field still missing, in the schema's own words.
@@ -131,6 +133,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         description: response.data.restaurantCode
           ? `Restaurant Code: ${response.data.restaurantCode}`
           : undefined,
+        recordId: response.data.id,
         title: restaurantId ? 'Restaurant updated' : 'Restaurant created',
         variant: 'success',
       });
@@ -521,11 +524,27 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
             <SectionHeading title="Staff Discount" />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ds-muted">
-                Whether staff get a discount here, and the % for each employee type.
+                Whether staff get a discount here, and its Employee Discount rules.
               </p>
               <Button onClick={() => setIsStaffDiscountOpen(true)} type="button" variant="outline">
                 <BadgePercent className="h-4 w-4" />
-                Set rates
+                Staff discount
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {restaurantId ? (
+          // Saved on its own from the panel, like the staff discount.
+          <div className="space-y-4 border-t border-ds-divider pt-6">
+            <SectionHeading title="Shifts" />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-ds-muted">
+                Whether each cashier opens and closes their own shift, or shifts follow fixed times.
+              </p>
+              <Button onClick={() => setIsShiftSettingsOpen(true)} type="button" variant="outline">
+                <Clock3 className="h-4 w-4" />
+                Shift settings
               </Button>
             </div>
           </div>
@@ -569,6 +588,10 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
           />
         </div>
       </form>
+      <ShiftSettingsPanel
+        onClose={() => setIsShiftSettingsOpen(false)}
+        restaurant={isShiftSettingsOpen ? (restaurantQuery.data ?? null) : null}
+      />
       <StaffDiscountPanel
         onClose={() => setIsStaffDiscountOpen(false)}
         restaurant={isStaffDiscountOpen ? (restaurantQuery.data ?? null) : null}

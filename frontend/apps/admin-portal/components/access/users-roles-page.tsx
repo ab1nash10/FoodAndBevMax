@@ -10,6 +10,7 @@ import {
   AppPageHeader,
   EmptyState,
   ListPager,
+  RecordAvatar,
   RowAction,
   StatStrip,
   tableStyles,
@@ -61,7 +62,7 @@ function PermissionsDialog({ user, onClose }: Readonly<{ onClose: () => void; us
     onSuccess(response) {
       setSelected(new Set(response.data.effectivePermissionIds));
       void queryClient.invalidateQueries({ queryKey: queryKeys.userPermissions(user.id) });
-      showToast({ title: 'Permissions saved', variant: 'success' });
+      showToast({ recordId: user.id, title: 'Permissions saved', variant: 'success' });
       onClose();
     },
   });
@@ -293,12 +294,14 @@ export function UsersRolesPageClient() {
             active: !statusFilter && !roleFilter,
             label: 'Users',
             onSelect: () => showOnly('', ''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: statusFilter === 'ACTIVE' && !roleFilter,
             label: 'Active',
             onSelect: () => showOnly('ACTIVE', ''),
+            share: stats?.all ? stats.active / stats.all : undefined,
             tone: 'ok',
             value: stats?.active ?? '–',
           },
@@ -306,6 +309,7 @@ export function UsersRolesPageClient() {
             active: statusFilter === 'DISABLED' && !roleFilter,
             label: 'Disabled',
             onSelect: () => showOnly('DISABLED', ''),
+            share: stats?.all ? stats.disabled / stats.all : undefined,
             tone: 'bad',
             value: stats?.disabled ?? '–',
           },
@@ -313,6 +317,8 @@ export function UsersRolesPageClient() {
             active: Boolean(superAdminRoleId) && roleFilter === superAdminRoleId && !statusFilter,
             label: 'Super Admins',
             onSelect: superAdminRoleId ? () => showOnly('', superAdminRoleId) : undefined,
+            share:
+              stats?.all && stats.superAdmins !== null ? stats.superAdmins / stats.all : undefined,
             tone: 'pending',
             value: stats?.superAdmins ?? '–',
           },
@@ -409,6 +415,7 @@ export function UsersRolesPageClient() {
                 return (
                   <tr
                     className={cn(tableStyles.row, locked && 'cursor-default')}
+                    data-record-id={user.id}
                     key={user.id}
                     onClick={locked ? undefined : () => setEditingUser(user)}
                     title={locked ? lockedReason : undefined}
@@ -428,16 +435,38 @@ export function UsersRolesPageClient() {
                       />
                     </td>
                     <td className={tableStyles.td}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className={cn('truncate', tableStyles.title)}>{user.name}</span>
-                        <span className="truncate text-[12.5px] text-ds-muted">
-                          {user.email ?? user.mobile}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={user.name} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className={cn('truncate', tableStyles.title)}>{user.name}</span>
+                          <span className="truncate text-[12.5px] text-ds-muted">
+                            {user.email ?? user.mobile}
+                          </span>
                         </span>
                       </span>
                     </td>
                     <td className={cn(tableStyles.td, tableStyles.code)}>{user.employeeCode}</td>
-                    <td className={cn(tableStyles.td, 'text-ds-text-2')}>
-                      {user.roles.map((role) => role.name).join(', ') || 'Unassigned'}
+                    <td className={tableStyles.td}>
+                      {/* Roles as chips; Super Admin stands out, as only it can change Super Admin access. */}
+                      {user.roles.length ? (
+                        <span className="flex flex-wrap gap-1.5">
+                          {user.roles.map((role) => (
+                            <span
+                              className={cn(
+                                'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap',
+                                role.name === SUPER_ADMIN_ROLE
+                                  ? 'bg-ds-primary-soft text-ds-link'
+                                  : 'bg-ds-subtle text-ds-text-2 ring-1 ring-ds-border',
+                              )}
+                              key={role.id}
+                            >
+                              {role.name}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-ds-muted">Unassigned</span>
+                      )}
                     </td>
                     <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {user.locationScope === 'ALL' ? (

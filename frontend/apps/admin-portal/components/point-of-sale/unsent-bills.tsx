@@ -4,6 +4,7 @@ import { Button } from '@aahar/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { CloudOff, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useConfirm } from '@/components/confirm-provider';
 import { Modal } from '@/components/ui-controls';
 import { useToast } from '@/components/toast-provider';
 import { organizationApi } from '@/lib/api';
@@ -148,6 +149,7 @@ export function UnsentBillsButton({ unsent }: Readonly<{ unsent: UnsentBills }>)
 /** The unsent bills, to retry or discard. Outside the page header, whose layer would cover it. */
 export function UnsentBillsDialog({ unsent }: Readonly<{ unsent: UnsentBills }>) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const { bills } = unsent;
   const { attention, waiting } = counts(bills);
 
@@ -213,15 +215,16 @@ export function UnsentBillsDialog({ unsent }: Readonly<{ unsent: UnsentBills }>)
                   {bill.error}
                 </p>
                 <Button
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Discard this ${formatMoney(bill.total)} bill? It will never be sent; settle it with the customer.`,
-                      )
-                    ) {
-                      unsent.discard(bill.payload.clientOrderId);
-                    }
-                  }}
+                  onClick={() =>
+                    void confirm({
+                      confirmLabel: 'Discard',
+                      description: 'It will never be sent; settle it with the customer.',
+                      title: `Discard this ${formatMoney(bill.total)} bill?`,
+                      tone: 'danger',
+                    }).then((confirmed) => {
+                      if (confirmed) unsent.discard(bill.payload.clientOrderId);
+                    })
+                  }
                   size="sm"
                   type="button"
                   variant="ghost"

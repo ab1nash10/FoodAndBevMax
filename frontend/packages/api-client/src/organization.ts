@@ -196,6 +196,15 @@ export interface KitchenListQuery extends ListQuery {
   locationId?: string;
 }
 
+export type ShiftMode = 'CASHIER' | 'FIXED';
+
+/** A fixed shift, e.g. Morning 07:00–15:00; one ending before it starts runs past midnight. */
+export interface ShiftTiming {
+  endTime: string;
+  name: string;
+  startTime: string;
+}
+
 export interface Restaurant {
   address: string | null;
   accountNumber: string | null;
@@ -262,6 +271,9 @@ export interface Restaurant {
   restaurantCode: string;
   restaurantName: string;
   staffDiscountApplicable: boolean;
+  /** CASHIER: each cashier opens and closes their own shift; FIXED: shifts follow shiftTimings. */
+  shiftMode: ShiftMode;
+  shiftTimings: ShiftTiming[];
   store: Pick<Store, 'id' | 'isActive' | 'storeCode' | 'storeName'> | null;
   storeId: string | null;
   sodexoMid: string | null;
@@ -335,6 +347,8 @@ export interface RestaurantInput {
   restaurantCode?: string;
   restaurantName: string;
   staffDiscountApplicable?: boolean;
+  shiftMode?: ShiftMode;
+  shiftTimings?: ShiftTiming[];
   storeId?: string;
   sodexoMid?: string | null;
   sodexoTid?: string | null;

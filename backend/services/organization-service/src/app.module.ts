@@ -48,6 +48,8 @@ import { StockModule } from './stock/stock.module';
 import { StoreItemsModule } from './store-items/store-items.module';
 import { StoresModule } from './stores/stores.module';
 import { TimeSlotsModule } from './time-slots/time-slots.module';
+import { EmployeeDiscountsModule } from './employee-discounts/employee-discounts.module';
+import { ReportsModule } from './reports/reports.module';
 import { TransferAcknowledgementsModule } from './transfer-acknowledgements/transfer-acknowledgements.module';
 import { TransfersModule } from './transfers/transfers.module';
 
@@ -104,6 +106,8 @@ import { TransfersModule } from './transfers/transfers.module';
     StoreItemsModule,
     StoresModule,
     TimeSlotsModule,
+    EmployeeDiscountsModule,
+    ReportsModule,
     TransferAcknowledgementsModule,
     TransfersModule,
   ],

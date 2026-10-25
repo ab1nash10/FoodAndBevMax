@@ -19,8 +19,26 @@ const serviceEnvSchema = z.object({
   // Fails closed: development relaxes CORS and accepts the fixed dev OTP, so an unset value
   // must not mean development. Every local .env sets it explicitly.
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
+  // Email OTPs (auth-service), sent through Microsoft Graph as MAIL_SENDER by an Entra app
+  // registration with the Mail.Send application permission. All four are needed; with any
+  // missing, email OTPs are only printed in development and refused elsewhere. The client
+  // secret is a secret.
+  MAIL_CLIENT_ID: z.string().optional(),
+  MAIL_CLIENT_SECRET: z.string().optional(),
+  MAIL_SENDER: z.string().optional(),
+  MAIL_TENANT_ID: z.string().optional(),
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  // Online UPI at the till (organization-service): the cashier picks Razorpay or PayU. A
+  // provider is offered only with all of its settings; key and client secrets are secrets.
+  // PayU's URLs point at its UAT servers in test and at the live ones in production.
+  PAYU_BASE_URL: z.string().url().optional(),
+  PAYU_CLIENT_ID: z.string().optional(),
+  PAYU_CLIENT_SECRET: z.string().optional(),
+  PAYU_MERCHANT_ID: z.string().optional(),
+  PAYU_TOKEN_URL: z.string().url().optional(),
   PORT: z.coerce.number().int().min(1).max(65535),
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
   // Bulk SMS gateway for mobile OTPs (auth-service). All four of feed id, username, password
   // and sender id are needed; with any missing, OTPs are only printed in development and
   // refused elsewhere. Username and password are secrets.

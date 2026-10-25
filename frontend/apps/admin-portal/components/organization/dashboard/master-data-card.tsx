@@ -115,8 +115,9 @@ export function MasterDataCard({ stats }: Readonly<{ stats: DashboardStats }>) {
   ].filter((card) => card.visible);
 
   return masterData.length > 0 ? (
-    <ChartCard title="Master data">
-      <div className="-mt-1 grid grid-cols-2 gap-2">
+    // Three tiles a row once the card is wide enough (beside Quick create), two when narrow.
+    <ChartCard className="@container" title="Master data">
+      <div className="-mt-1 grid grid-cols-2 gap-2 @md:grid-cols-3">
         {masterData.map((card) => (
           <Link
             className="flex items-center gap-2.5 rounded-xl border border-ds-border bg-ds-subtle p-2.5 transition hover:border-ds-primary/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"

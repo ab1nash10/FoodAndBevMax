@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import { DateTimeCell, RowAction, StatStrip, tableStyles } from '@/components/design-system';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
+import {
+  DateTimeCell,
+  RecordAvatar,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import {
   FilterField,
   FiltersMenu,
@@ -56,6 +63,7 @@ export function HospitalsPageClient() {
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -136,6 +144,7 @@ export function HospitalsPageClient() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitals() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
       showToast({
+        recordId: variables.id,
         title: variables.isActive ? 'Location activated' : 'Location deactivated',
         variant: 'success',
       });
@@ -163,10 +172,15 @@ export function HospitalsPageClient() {
     setPage(1);
   }
 
-  function toggleLocationStatus(location: HospitalRecord) {
+  async function toggleLocationStatus(location: HospitalRecord) {
     const nextIsActive = !location.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: nextIsActive,
+      effect: freezeServicesMessage,
+      name: getLocationTitle(location),
+    });
 
-    if (!nextIsActive && !window.confirm(freezeServicesMessage)) {
+    if (!confirmed) {
       return;
     }
 
@@ -204,6 +218,7 @@ export function HospitalsPageClient() {
             active: !activeFilter,
             label: 'All locations',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
@@ -211,6 +226,7 @@ export function HospitalsPageClient() {
             label: 'Active',
             onSelect: () => showStatus('active'),
             tone: 'ok',
+            share: stats?.all ? stats.active / stats.all : undefined,
             value: stats?.active ?? '–',
           },
           {
@@ -218,6 +234,7 @@ export function HospitalsPageClient() {
             label: 'Inactive · services frozen',
             onSelect: () => showStatus('inactive'),
             tone: 'pending',
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             value: stats?.inactive ?? '–',
           },
         ]}
@@ -318,7 +335,7 @@ export function HospitalsPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-215 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-215 table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[22%]')}>Location</th>
@@ -344,15 +361,21 @@ export function HospitalsPageClient() {
                   return (
                     <tr
                       className={cn(tableStyles.row, !canOpen && 'cursor-default')}
+                      data-record-id={location.id}
                       key={location.id}
                       onClick={canOpen ? () => router.push(editHref) : undefined}
                     >
                       <td className={tableStyles.td}>
-                        <p className={cn('truncate', tableStyles.title)}>{title}</p>
-                        <p className="truncate text-xs text-ds-muted">
-                          <span className={tableStyles.code}>{getLocationCode(location)}</span>
-                          {displayName === title ? null : ` · ${displayName}`}
-                        </p>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <RecordAvatar name={title} />
+                          <span className="min-w-0">
+                            <p className={cn('truncate', tableStyles.title)}>{title}</p>
+                            <p className="truncate text-xs text-ds-muted">
+                              <span className={tableStyles.code}>{getLocationCode(location)}</span>
+                              {displayName === title ? null : ` · ${displayName}`}
+                            </p>
+                          </span>
+                        </span>
                       </td>
                       <td className={tableStyles.td}>
                         <LegalEntityCell
@@ -383,7 +406,7 @@ export function HospitalsPageClient() {
                         <StatusToggleCell
                           disabled={statusMutation.isPending && statusUpdatingId === location.id}
                           isActive={location.isActive}
-                          onToggle={() => toggleLocationStatus(location)}
+                          onToggle={() => void toggleLocationStatus(location)}
                           showFrozenMessage={!location.isActive}
                         />
                       </td>

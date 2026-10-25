@@ -12,7 +12,7 @@ import { BoardMessage } from './board-message';
 import { HowItWorks } from './how-it-works';
 import { NowReadyBanner } from './now-ready-banner';
 import { PreparingGrid } from './preparing-grid';
-import { ReadyGrid } from './ready-grid';
+import { ReadyEmpty, ReadyGrid, ReadyHeading } from './ready-grid';
 import { ReconnectingBadge } from './reconnecting-badge';
 
 export interface OrderBoardProps {
@@ -89,25 +89,26 @@ export function OrderBoard({ demo, restaurantId, sound, theme, token }: Readonly
     );
   } else {
     body = (
-      <main className="grid min-h-0 flex-1 grid-cols-[700px_1fr] gap-[40px] p-[40px]">
-        <div className="flex min-h-0 flex-col gap-[28px]">
-          <PreparingGrid
-            more={view.preparingMore}
-            orders={view.preparing}
-            total={view.preparingTotal}
-          />
-          <HowItWorks />
-        </div>
-        <div className="flex min-h-0 flex-col gap-[28px]">
+      // Ready gets the wider side: it is where people look for their number.
+      <main className="grid min-h-0 flex-1 grid-cols-[1.48fr_1fr] gap-[28px] px-[56px] pb-[22px] pt-[6px]">
+        <section aria-label="Ready to collect" className="flex min-h-0 flex-col gap-[22px]">
+          <ReadyHeading total={view.readyTotal} />
           {view.nowReady ? (
             <NowReadyBanner
               highlight={justReady}
               key={view.nowReady.orderNumber}
               order={view.nowReady}
             />
-          ) : null}
-          <ReadyGrid more={view.readyMore} orders={view.ready} total={view.readyTotal} />
-        </div>
+          ) : (
+            <ReadyEmpty />
+          )}
+          <ReadyGrid more={view.readyMore} orders={view.ready} />
+        </section>
+        <PreparingGrid
+          more={view.preparingMore}
+          orders={view.preparing}
+          total={view.preparingTotal}
+        />
       </main>
     );
   }
@@ -116,6 +117,7 @@ export function OrderBoard({ demo, restaurantId, sound, theme, token }: Readonly
     <BoardCanvas>
       <div className="relative flex h-full flex-col">
         <BoardHeader
+          live={Boolean(feed?.isOpen) && !reconnecting}
           locationName={feed?.locationName}
           now={now}
           restaurantName={feed?.restaurantName ?? 'Order status'}

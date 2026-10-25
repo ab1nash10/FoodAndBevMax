@@ -10,6 +10,7 @@ import { WorkQueueCard } from '@/components/dashboard/work-queue-card';
 import type { DashboardStats } from '@/hooks/use-dashboard-stats';
 import { recordHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
+import { AttentionCard } from '@/components/organization/dashboard/kpi-row';
 import { Button } from '@aahar/ui';
 import { ArrowRightLeft, Check, ClipboardCheck, CookingPot, type LucideIcon } from 'lucide-react';
 import {
@@ -453,11 +454,10 @@ export function WorkRow({ stats }: Readonly<{ stats: DashboardStats }>) {
           <WorkQueue stats={stats} />
         </div>
       ) : null}
-      {can.stock ? (
-        <div className="flex min-w-0 flex-[1_1_300px] flex-col">
-          <ExpiringCard stats={stats} />
-        </div>
-      ) : null}
+      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
+        {showQueue && stats.isModeKnown ? <AttentionCard stats={stats} /> : null}
+        {can.stock ? <ExpiringCard stats={stats} /> : null}
+      </div>
     </div>
   );
 }

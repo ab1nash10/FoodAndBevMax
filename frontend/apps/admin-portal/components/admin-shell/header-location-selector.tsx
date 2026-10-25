@@ -19,9 +19,13 @@ function getLocationMeta(location: HospitalSummary): string {
  * The location every page is scoped to. `wide`: the phone menu's full-width switcher, its name always
  * shown; otherwise the top bar's button, whose menu hangs from the button on desktop (where it sits
  * at the left) and from the screen's right edge below that (where it sits at the right), so the
- * menu never runs off the screen.
+ * menu never runs off the screen. `inHeader` with `wide`: the phone top bar's full pill, its menu
+ * hanging from the screen's right edge like the button's.
  */
-export function HeaderLocationSelector({ wide = false }: Readonly<{ wide?: boolean }>) {
+export function HeaderLocationSelector({
+  inHeader = false,
+  wide = false,
+}: Readonly<{ inHeader?: boolean; wide?: boolean }>) {
   const {
     availableLocations,
     canSelectAllLocations,
@@ -113,7 +117,7 @@ export function HeaderLocationSelector({ wide = false }: Readonly<{ wide?: boole
         <div
           className={cn(
             'absolute z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-xl shadow-ds-text/10',
-            wide
+            wide && !inHeader
               ? 'left-0 top-full mt-2'
               : 'fixed right-4 top-[calc(var(--app-header-h)+0.5rem)] nav:absolute nav:left-0 nav:right-auto nav:top-full nav:mt-2',
           )}

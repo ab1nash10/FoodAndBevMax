@@ -338,11 +338,17 @@ export class TransfersService {
       throw new BadRequestException('Destination must be a restaurant or a counter');
     }
 
+    if (toCounter && transfer.sourceType === InventoryLocationType.RESTAURANT) {
+      throw new BadRequestException('A restaurant sends its leftovers to another restaurant only');
+    }
+
     const [hospital, source, restaurant] = await Promise.all([
       this.transfers.findActiveHospital(transfer.hospitalId, client),
       transfer.sourceType === InventoryLocationType.KITCHEN
         ? this.transfers.findActiveKitchen(transfer.sourceId, client)
-        : this.transfers.findActiveStore(transfer.sourceId, client),
+        : transfer.sourceType === InventoryLocationType.RESTAURANT
+          ? this.transfers.findActiveRestaurant(transfer.sourceId, client)
+          : this.transfers.findActiveStore(transfer.sourceId, client),
       toCounter
         ? this.transfers.findActiveCounter(transfer.destinationId, client)
         : this.transfers.findActiveRestaurant(transfer.destinationId, client),
@@ -467,9 +473,9 @@ export class TransfersService {
         throw new BadRequestException(`${lineLabel}: expiry date is required`);
       }
 
-      if (sourceType === InventoryLocationType.KITCHEN && (batchNumber || expiryDate)) {
+      if (sourceType !== InventoryLocationType.STORE && (batchNumber || expiryDate)) {
         throw new BadRequestException(
-          `${lineLabel}: kitchen READYMADE transfers must not include batch or expiry`,
+          `${lineLabel}: READYMADE transfers must not include batch or expiry`,
         );
       }
 

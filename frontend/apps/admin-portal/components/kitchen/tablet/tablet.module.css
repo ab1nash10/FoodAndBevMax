@@ -1,0 +1,41 @@
+/* The tablet's motion, as on the order board: soft colour drifting behind the glass, and a posted
+   line rising into the log. Transform and opacity only; all of it stops under reduced motion. */
+
+@keyframes drift-a {
+  to {
+    transform: translate3d(-80px, 60px, 0) scale(1.15);
+  }
+}
+
+@keyframes drift-b {
+  to {
+    transform: translate3d(90px, -50px, 0) scale(1.1);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.driftA {
+  animation: drift-a 26s ease-in-out infinite alternate;
+}
+
+.driftB {
+  animation: drift-b 32s ease-in-out infinite alternate;
+}
+
+.rise {
+  animation: rise 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driftA,
+  .driftB,
+  .rise {
+    animation: none;
+  }
+}

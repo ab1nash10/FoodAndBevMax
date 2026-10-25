@@ -37,12 +37,14 @@ const detailFields = [
   'availableTo',
   'gstPercent',
   'isDiscountable',
+  'isFeatured',
   'isGstInclusive',
   'preparationTimeMinutes',
   'price',
   'roomPrice',
   'serveAt',
   'serves',
+  'subCode',
 ] as const;
 
 type MenuDetails = Pick<Prisma.RestaurantMenuUncheckedCreateInput, (typeof detailFields)[number]>;
@@ -583,7 +585,9 @@ export class RestaurantMenusService {
       isActive: mapping.isActive,
       isAvailable: mapping.isAvailable,
       isDiscountable: mapping.isDiscountable,
+      isFeatured: mapping.isFeatured,
       isGstInclusive: mapping.isGstInclusive,
+      subCode: mapping.subCode,
       category: mapping.category,
       categoryId: mapping.categoryId,
       menuItemCode: mapping.menuItemCode,

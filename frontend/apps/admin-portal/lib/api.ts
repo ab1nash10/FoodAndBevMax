@@ -3,6 +3,7 @@ import {
   createApiClient,
   createAuthApi,
   createOrganizationApi,
+  createReportsApi,
   createUserApi,
 } from '@aahar/api-client';
 import {
@@ -84,6 +85,13 @@ export async function refreshStoredSession(): Promise<string | null> {
 }
 
 export const organizationApi = createOrganizationApi({
+  baseUrl: apiConfig.organizationBaseUrl,
+  getAccessToken: getStoredAccessToken,
+  onUnauthorized: handleUnauthorizedSession,
+  refreshAccessToken: refreshStoredSession,
+});
+
+export const reportsApi = createReportsApi({
   baseUrl: apiConfig.organizationBaseUrl,
   getAccessToken: getStoredAccessToken,
   onUnauthorized: handleUnauthorizedSession,

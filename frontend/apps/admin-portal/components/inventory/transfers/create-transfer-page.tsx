@@ -50,6 +50,7 @@ import {
 import {
   defaultTransferDate,
   transferHeaderSchema,
+  type SourceType,
   type TransferHeaderFormValues,
   type TransferLineDraft,
 } from '@/components/inventory/transfers/transfer-form';
@@ -76,9 +77,28 @@ function emptyHeader(hospitalId: string): TransferHeaderFormValues {
   };
 }
 
+const sourceTypeChoices = [
+  { label: 'Store', permissions: ['TRANSFER_CREATE'], value: 'STORE' },
+  {
+    label: 'Kitchen',
+    permissions: ['TRANSFER_CREATE', 'KITCHEN_TRANSFER_CREATE'],
+    value: 'KITCHEN',
+  },
+  // A restaurant passes its ready-made leftovers to another restaurant.
+  {
+    label: 'Restaurant',
+    permissions: ['TRANSFER_CREATE', 'RESTAURANT_TRANSFER_SEND'],
+    value: 'RESTAURANT',
+  },
+] as const satisfies ReadonlyArray<{
+  label: string;
+  permissions: readonly string[];
+  value: SourceType;
+}>;
+
 export function CreateTransferPageClient() {
   const { isAllLocations, isLoadingLocations, scopedHospitalId } = useLocationContext();
-  const { currentUser } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -107,6 +127,14 @@ export function CreateTransferPageClient() {
   const selectedHospitalId = header.hospitalId;
   const selectedSourceId = header.sourceId;
   const selectedSourceType = header.sourceType;
+  // Kitchens and restaurants hold ready-made stock by business date; stores hold MRP batches.
+  const isReadymade = selectedSourceType !== 'STORE';
+  const sourceNoun = selectedSourceType.toLowerCase();
+  const sourceTypeOptions = sourceTypeChoices
+    .filter((choice) => hasPermission([...choice.permissions]))
+    .map(({ label, value }) => ({ label, value }));
+  const firstSourceType = sourceTypeOptions[0]?.value;
+  const mayUseSourceType = sourceTypeOptions.some((option) => option.value === selectedSourceType);
   const selectedBusinessDate = header.businessDate;
   const selectedRestaurantId = header.restaurantId;
   const selectedDestinationType = header.destinationType;
@@ -135,10 +163,9 @@ export function CreateTransferPageClient() {
         id: counter.id,
         name: `${counter.restaurant.restaurantName} · ${counter.counterName}`,
       }))
-    : (restaurantsQuery.data ?? []).map((restaurant) => ({
-        id: restaurant.id,
-        name: restaurant.restaurantName,
-      }));
+    : (restaurantsQuery.data ?? [])
+        .filter((restaurant) => restaurant.id !== selectedSourceId)
+        .map((restaurant) => ({ id: restaurant.id, name: restaurant.restaurantName }));
   const stockQuery = useSourceStock(selectedSourceType, selectedSourceId, selectedBusinessDate);
   const stockOptions = useMemo(() => stockQuery.data ?? [], [stockQuery.data]);
   const stockMap = useMemo(
@@ -153,10 +180,25 @@ export function CreateTransferPageClient() {
     () => new Map(stockGroups.map((group) => [group.key, group])),
     [stockGroups],
   );
-  const sourceName =
-    (selectedSourceType === 'KITCHEN'
-      ? kitchensQuery.data?.find((kitchen) => kitchen.id === selectedSourceId)?.kitchenName
-      : storesQuery.data?.find((store) => store.id === selectedSourceId)?.storeName) ?? null;
+  const sourceOptions = {
+    KITCHEN: (kitchensQuery.data ?? []).map((kitchen) => ({
+      id: kitchen.id,
+      name: kitchen.kitchenName,
+    })),
+    RESTAURANT: (restaurantsQuery.data ?? []).map((restaurant) => ({
+      id: restaurant.id,
+      name: restaurant.restaurantName,
+    })),
+    STORE: (storesQuery.data ?? []).map((store) => ({ id: store.id, name: store.storeName })),
+  }[selectedSourceType];
+  const sourceName = sourceOptions.find((option) => option.id === selectedSourceId)?.name ?? null;
+
+  // Open on a source this user may send from: restaurant staff send from restaurants only.
+  useEffect(() => {
+    if (mayUseSourceType || !firstSourceType) return;
+    form.setValue('sourceType', firstSourceType);
+    if (firstSourceType === 'RESTAURANT') form.setValue('destinationType', 'RESTAURANT');
+  }, [firstSourceType, form, mayUseSourceType]);
   const restaurantName =
     destinationOptions.find((option) => option.id === selectedRestaurantId)?.name ?? null;
 
@@ -291,6 +333,7 @@ export function CreateTransferPageClient() {
         showToast({
           action: { href, label: `View ${transfer.transferNumber}` },
           description: transfer.transferNumber,
+          recordId: transfer.id,
           title: transfer.status === 'DRAFT' ? 'Draft saved' : 'Submitted for acknowledgement',
           variant: 'success',
         });
@@ -540,13 +583,13 @@ export function CreateTransferPageClient() {
     const businessDateFilter = optionalValue(parsed.businessDate);
     let transferBusinessDate = businessDateFilter;
 
-    if (parsed.sourceType === 'KITCHEN') {
+    if (parsed.sourceType !== 'STORE') {
       const stockBusinessDates = new Set(
         selectedStocks.map((stock) => toDateOnlyValue(stock.businessDate)).filter(Boolean),
       );
 
       if (stockBusinessDates.size === 0) {
-        return 'Selected kitchen stock is missing a business date.';
+        return 'Selected ready-made stock is missing a business date.';
       }
 
       if (businessDateFilter) {
@@ -555,10 +598,10 @@ export function CreateTransferPageClient() {
         );
 
         if (mismatchedStock) {
-          return 'Selected kitchen stock does not match the chosen business date.';
+          return 'Selected ready-made stock does not match the chosen business date.';
         }
       } else if (stockBusinessDates.size > 1) {
-        return 'Select kitchen stock from one business date per transfer.';
+        return 'Select ready-made stock from one business date per transfer.';
       } else {
         transferBusinessDate = [...stockBusinessDates][0];
       }
@@ -814,23 +857,28 @@ export function CreateTransferPageClient() {
                   <legend className="px-1.5 text-xs font-bold uppercase tracking-[0.06em] text-ds-muted">
                     From
                   </legend>
-                  <SegmentedControl<'KITCHEN' | 'STORE'>
+                  <SegmentedControl<SourceType>
                     className="flex w-full"
                     label="Source type"
                     onChange={(value) => {
                       form.setValue('sourceType', value);
                       form.setValue('sourceId', '');
+                      // A restaurant's leftovers go to another restaurant, never a counter.
+                      if (value === 'RESTAURANT') {
+                        form.setValue('destinationType', 'RESTAURANT');
+                        form.setValue('restaurantId', '');
+                      }
                       resetLines();
                     }}
-                    options={[
-                      { label: 'Store', value: 'STORE' },
-                      { label: 'Kitchen', value: 'KITCHEN' },
-                    ]}
-                    value={selectedSourceType === 'KITCHEN' ? 'KITCHEN' : 'STORE'}
+                    options={sourceTypeOptions}
+                    value={selectedSourceType}
                   />
                   <label className={fieldLabel}>
                     <span>
-                      {selectedSourceType === 'KITCHEN' ? 'Kitchen' : 'Store'}
+                      {
+                        sourceTypeChoices.find((choice) => choice.value === selectedSourceType)
+                          ?.label
+                      }
                       <RequiredMark />
                     </span>
                     <select
@@ -847,25 +895,18 @@ export function CreateTransferPageClient() {
                       value={selectedSourceId}
                     >
                       <option value="">
-                        {selectedHospitalId
-                          ? `Select ${selectedSourceType === 'KITCHEN' ? 'kitchen' : 'store'}`
-                          : 'Choose a location first'}
+                        {selectedHospitalId ? `Select ${sourceNoun}` : 'Choose a location first'}
                       </option>
-                      {selectedSourceType === 'KITCHEN'
-                        ? (kitchensQuery.data ?? []).map((kitchen) => (
-                            <option key={kitchen.id} value={kitchen.id}>
-                              {kitchen.kitchenName}
-                            </option>
-                          ))
-                        : (storesQuery.data ?? []).map((store) => (
-                            <option key={store.id} value={store.id}>
-                              {store.storeName}
-                            </option>
-                          ))}
+                      {sourceOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
                     </select>
                     {errors.sourceId ? <FieldError>{errors.sourceId.message}</FieldError> : null}
                   </label>
                   {selectedHospitalId &&
+                  selectedSourceType !== 'RESTAURANT' &&
                   (selectedSourceType === 'KITCHEN' ? kitchensQuery.data : storesQuery.data)
                     ?.length === 0 ? (
                     selectedSourceType === 'KITCHEN' ? (
@@ -890,10 +931,14 @@ export function CreateTransferPageClient() {
                       form.setValue('destinationType', value);
                       form.setValue('restaurantId', '');
                     }}
-                    options={[
-                      { label: 'Restaurant', value: 'RESTAURANT' },
-                      { label: 'Counter', value: 'COUNTER' },
-                    ]}
+                    options={
+                      selectedSourceType === 'RESTAURANT'
+                        ? [{ label: 'Restaurant', value: 'RESTAURANT' }]
+                        : [
+                            { label: 'Restaurant', value: 'RESTAURANT' },
+                            { label: 'Counter', value: 'COUNTER' },
+                          ]
+                    }
                     value={selectedDestinationType}
                   />
                   <label className={fieldLabel}>
@@ -928,14 +973,17 @@ export function CreateTransferPageClient() {
                     ) : null}
                   </label>
                   {selectedHospitalId &&
-                  (isToCounter ? countersQuery.data : restaurantsQuery.data)?.length === 0 ? (
+                  (isToCounter ? countersQuery.data : restaurantsQuery.data) &&
+                  destinationOptions.length === 0 ? (
                     isToCounter ? (
                       <SetupNotice href="/masters/counters/new" linkLabel="Create a counter">
                         This location has no active counter to send stock to yet.
                       </SetupNotice>
                     ) : (
                       <SetupNotice href="/masters/restaurants/new" linkLabel="Create a restaurant">
-                        This location has no restaurant to send stock to yet.
+                        {selectedSourceType === 'RESTAURANT'
+                          ? 'This location has no other restaurant to pass leftovers to.'
+                          : 'This location has no restaurant to send stock to yet.'}
                       </SetupNotice>
                     )
                   ) : null}
@@ -963,13 +1011,13 @@ export function CreateTransferPageClient() {
                     disabled={isBusy}
                     type="date"
                     {...form.register('businessDate', {
-                      // Kitchen stock is listed per business date, so lines no longer match.
-                      onChange: () => selectedSourceType === 'KITCHEN' && resetLines(),
+                      // Ready-made stock is listed per business date, so lines no longer match.
+                      onChange: () => isReadymade && resetLines(),
                     })}
                   />
                   <span className="text-[11.5px] font-medium text-ds-muted">
-                    {selectedSourceType === 'KITCHEN'
-                      ? 'Shows kitchen stock from this date only.'
+                    {isReadymade
+                      ? `Shows ${sourceNoun} stock from this date only.`
                       : 'Optional for store stock.'}
                   </span>
                 </label>
@@ -996,8 +1044,8 @@ export function CreateTransferPageClient() {
                     Items
                   </h2>
                   <span className="text-[12.5px] text-ds-muted">
-                    {selectedSourceType === 'KITCHEN'
-                      ? 'Ready-made kitchen stock, oldest business date first'
+                    {isReadymade
+                      ? `Ready-made ${sourceNoun} stock, oldest business date first`
                       : 'Batches are picked first-expiry-first-out (FEFO)'}
                   </span>
                 </div>
@@ -1053,7 +1101,7 @@ export function CreateTransferPageClient() {
                       }}
                       placeholder={
                         selectedSourceId
-                          ? `Add an item by name or code — only items in stock at this ${selectedSourceType === 'KITCHEN' ? 'kitchen' : 'store'}`
+                          ? `Add an item by name or code — only items in stock at this ${sourceNoun}`
                           : 'Choose the source first'
                       }
                       role="combobox"
@@ -1077,8 +1125,10 @@ export function CreateTransferPageClient() {
                       ) : itemMatches.length === 0 ? (
                         <li className="px-3 py-2 text-[13px] text-ds-muted">
                           {stockGroups.length === 0
-                            ? selectedSourceType === 'KITCHEN'
-                              ? 'No ready-made stock at this kitchen for the chosen date. It arrives when a production is posted.'
+                            ? isReadymade
+                              ? selectedSourceType === 'RESTAURANT'
+                                ? 'No ready-made stock at this restaurant for the chosen date. It arrives when a kitchen transfer is accepted.'
+                                : 'No ready-made stock at this kitchen for the chosen date. It arrives when a production is posted.'
                               : 'No MRP stock at this store. It arrives when a GRN is posted.'
                             : `No item matches “${itemQuery.trim()}”.`}
                         </li>
@@ -1107,7 +1157,7 @@ export function CreateTransferPageClient() {
                               </span>
                               <span className="truncate text-[11.5px] text-ds-muted">
                                 {group.itemCode}
-                                {selectedSourceType === 'KITCHEN' && group.businessDate
+                                {isReadymade && group.businessDate
                                   ? ` · produced ${formatDateOnly(group.businessDate)}`
                                   : group.nearestExpiryDate
                                     ? ` · next expiry ${formatDateOnly(group.nearestExpiryDate)}`
@@ -1158,7 +1208,7 @@ export function CreateTransferPageClient() {
                         <th className="w-10 py-2 pl-[18px] font-semibold">#</th>
                         <th className="px-2 py-2 font-semibold">Item</th>
                         <th className="w-[34%] px-2 py-2 font-semibold">
-                          {selectedSourceType === 'KITCHEN' ? 'Produced' : 'Batch'}
+                          {isReadymade ? 'Produced' : 'Batch'}
                         </th>
                         <th className="w-[88px] px-2 py-2 text-right font-semibold">Available</th>
                         <th className="w-[120px] px-2 py-2 font-semibold">Send qty</th>
@@ -1245,7 +1295,7 @@ export function CreateTransferPageClient() {
                                     )}
                                   >
                                     <span className="font-semibold">
-                                      {selectedSourceType === 'KITCHEN'
+                                      {isReadymade
                                         ? formatDateOnly(first?.businessDate)
                                         : [
                                             first?.batchNumber ?? 'No batch',
@@ -1458,7 +1508,7 @@ export function CreateTransferPageClient() {
                           {(check?.allocations ?? []).map((allocation) => (
                             <li className="flex flex-wrap gap-x-1.5" key={allocation.stock.id}>
                               <span>
-                                {selectedSourceType === 'KITCHEN'
+                                {isReadymade
                                   ? `Produced ${formatDateOnly(allocation.stock.businessDate)}`
                                   : [
                                       allocation.stock.batchNumber ?? 'No batch',
@@ -1510,7 +1560,7 @@ export function CreateTransferPageClient() {
               value: <span className="font-mono">{formatQuantity(totalQty)}</span>,
             },
             {
-              label: selectedSourceType === 'KITCHEN' ? 'Stock rows' : 'Batches',
+              label: isReadymade ? 'Stock rows' : 'Batches',
               value: <span className="font-mono">{batchCount}</span>,
             },
           ]}

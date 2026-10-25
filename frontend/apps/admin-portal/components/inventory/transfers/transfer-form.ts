@@ -1,8 +1,10 @@
 'use client';
 
 import { z } from 'zod';
-import type { InventoryLocationType } from '@aahar/api-client';
 import { defaultReceivedDate } from '@/components/inventory/shared/utils';
+
+/** Where a transfer can come from: a store (MRP), a kitchen, or a restaurant's leftovers. */
+export type SourceType = 'KITCHEN' | 'RESTAURANT' | 'STORE';
 
 export interface TransferHeaderFormValues {
   businessDate: string;
@@ -12,7 +14,7 @@ export interface TransferHeaderFormValues {
   /** The receiving restaurant, or the counter when destinationType is COUNTER. */
   restaurantId: string;
   sourceId: string;
-  sourceType: InventoryLocationType;
+  sourceType: SourceType;
   transferDate: string;
 }
 
@@ -30,8 +32,8 @@ export const transferHeaderSchema = z.object({
   hospitalId: z.string().uuid('Select a hospital.'),
   remarks: z.string().trim().max(500, 'Remarks can be at most 500 characters.'),
   restaurantId: z.string().uuid('Select where the stock goes.'),
-  sourceId: z.string().uuid('Select the store or kitchen to send from.'),
-  sourceType: z.enum(['STORE', 'KITCHEN']),
+  sourceId: z.string().uuid('Select where the stock comes from.'),
+  sourceType: z.enum(['STORE', 'KITCHEN', 'RESTAURANT']),
   transferDate: z.string().trim().min(1, 'Transfer date is required.'),
 });
 

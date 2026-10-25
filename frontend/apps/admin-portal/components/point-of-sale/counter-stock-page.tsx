@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  DiscardBatchButton,
+  DiscardStockDialog,
+  type DiscardableBatch,
+} from '@/components/inventory/discard-stock-dialog';
+import { useState } from 'react';
 import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRightLeft } from 'lucide-react';
@@ -8,6 +14,7 @@ import type { StockBalanceStatus } from '@aahar/api-client';
 import {
   AppPageHeader,
   ListPager,
+  RecordAvatar,
   StatStrip,
   StatusChip,
   tableStyles,
@@ -43,6 +50,7 @@ type StockTab = 'movements' | 'stock' | 'summary';
 
 const movementLabels: Record<string, string> = {
   COUNTER_RECEIVE_IN: 'Received',
+  DISCARD_OUT: 'Discarded',
   SALE_CANCEL_IN: 'Bill cancelled',
   SALE_OUT: 'Sold',
 };
@@ -53,6 +61,7 @@ function formatQty(value: number): string {
 
 /** Per item for a day: stock added, consumed and available; plus batches and every movement. */
 export function CounterStockPageClient() {
+  const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
   const today = todayInIndia();
   const [tab, setTab] = useUrlParam<StockTab>('tab', 'summary', ['movements', 'stock', 'summary']);
@@ -124,9 +133,14 @@ export function CounterStockPageClient() {
     : summaryItems;
   const summaryCount = (match: (item: (typeof summaryItems)[number]) => boolean) =>
     summaryQuery.data ? summaryItems.filter(match).length : '–';
+  const summaryShare = (match: (item: (typeof summaryItems)[number]) => boolean) =>
+    summaryQuery.data && summaryItems.length
+      ? summaryItems.filter(match).length / summaryItems.length
+      : undefined;
 
   return (
     <section className="space-y-4">
+      <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
       <AppPageHeader
         action={
           <CounterPicker
@@ -146,10 +160,16 @@ export function CounterStockPageClient() {
         <StatStrip
           label="Counter stock at a glance"
           stats={[
-            { label: 'Items', value: summaryCount(() => true) },
-            { label: 'In stock', tone: 'ok', value: summaryCount((item) => item.available > 0) },
+            { label: 'Items', share: summaryShare(() => true), value: summaryCount(() => true) },
+            {
+              label: 'In stock',
+              share: summaryShare((item) => item.available > 0),
+              tone: 'ok',
+              value: summaryCount((item) => item.available > 0),
+            },
             {
               label: 'Out of stock',
+              share: summaryShare((item) => item.isTracked && item.available === 0),
               tone: 'bad',
               value: summaryCount((item) => item.isTracked && item.available === 0),
             },
@@ -235,7 +255,7 @@ export function CounterStockPageClient() {
           ) : null}
           <div className="overflow-x-auto">
             {tab === 'summary' ? (
-              <table className={cn(tableStyles.table, 'min-w-180 table-fixed')}>
+              <table className={cn(tableStyles.table, 'phone-cards min-w-180 table-fixed')}>
                 <thead className={tableStyles.head}>
                   <tr>
                     <th className={cn(tableStyles.th, 'w-[40%]')}>Item</th>
@@ -250,25 +270,34 @@ export function CounterStockPageClient() {
                       const low = lowByItem.get(item.itemId);
 
                       return (
-                        <tr className="border-t border-ds-divider" key={item.itemId}>
+                        <tr
+                          className="row-accent border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                          data-record-id={item.itemId}
+                          key={item.itemId}
+                        >
                           <td className={tableStyles.td}>
-                            <p className={cn('truncate', tableStyles.title)}>{item.itemName}</p>
-                            <p className={cn('truncate', tableStyles.code)}>{item.itemCode}</p>
-                            {low ? (
-                              <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <Chip className={levelChip[low.level].className}>
-                                  {levelChip[low.level].label}
-                                </Chip>
-                                <IfCanOpen href="/inventory/transfers/new">
-                                  <Link
-                                    className="text-xs font-semibold text-ds-link hover:underline"
-                                    href={sendFromStoreHref('COUNTER', [low], coverDays)}
-                                  >
-                                    Send from store
-                                  </Link>
-                                </IfCanOpen>
+                            <span className="flex items-start gap-3">
+                              <RecordAvatar name={item.itemName} />
+                              <span className="min-w-0 flex-1">
+                                <p className={cn('truncate', tableStyles.title)}>{item.itemName}</p>
+                                <p className={cn('truncate', tableStyles.code)}>{item.itemCode}</p>
+                                {low ? (
+                                  <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <Chip className={levelChip[low.level].className}>
+                                      {levelChip[low.level].label}
+                                    </Chip>
+                                    <IfCanOpen href="/inventory/transfers/new">
+                                      <Link
+                                        className="text-xs font-semibold text-ds-link hover:underline"
+                                        href={sendFromStoreHref('COUNTER', [low], coverDays)}
+                                      >
+                                        Send from store
+                                      </Link>
+                                    </IfCanOpen>
+                                  </span>
+                                ) : null}
                               </span>
-                            ) : null}
+                            </span>
                           </td>
                           <td
                             className={cn(
@@ -328,7 +357,7 @@ export function CounterStockPageClient() {
                 </tbody>
               </table>
             ) : tab === 'stock' ? (
-              <table className={cn(tableStyles.table, 'min-w-180 table-fixed')}>
+              <table className={cn(tableStyles.table, 'phone-cards min-w-180 table-fixed')}>
                 <thead className={tableStyles.head}>
                   <tr>
                     <th className={cn(tableStyles.th, 'w-[34%]')}>Item</th>
@@ -341,10 +370,23 @@ export function CounterStockPageClient() {
                 <tbody>
                   {stockQuery.data?.items.length ? (
                     stockQuery.data.items.map((stock) => (
-                      <tr className="border-t border-ds-divider" key={stock.id}>
+                      <tr
+                        className="row-accent border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                        data-record-id={stock.id}
+                        key={stock.id}
+                      >
                         <td className={tableStyles.td}>
-                          <p className={cn('truncate', tableStyles.title)}>{stock.item.itemName}</p>
-                          <p className={cn('truncate', tableStyles.code)}>{stock.item.itemCode}</p>
+                          <span className="flex items-start gap-3">
+                            <RecordAvatar foodType={stock.item.type} name={stock.item.itemName} />
+                            <span className="min-w-0 flex-1">
+                              <p className={cn('truncate', tableStyles.title)}>
+                                {stock.item.itemName}
+                              </p>
+                              <p className={cn('truncate', tableStyles.code)}>
+                                {stock.item.itemCode}
+                              </p>
+                            </span>
+                          </span>
                         </td>
                         <td className={cn(tableStyles.td, tableStyles.code, 'truncate')}>
                           {stock.batchNumber ?? 'No batch'}
@@ -363,6 +405,19 @@ export function CounterStockPageClient() {
                         </td>
                         <td className={tableStyles.td}>
                           <StatusChip status={stock.status} />
+                          <span className="mt-1 block">
+                            <DiscardBatchButton
+                              batch={{
+                                availableQty: stock.availableQty,
+                                batchNumber: stock.batchNumber,
+                                expiryDate: stock.expiryDate,
+                                itemName: stock.item.itemName,
+                                locationName: stock.location.name,
+                                stockBalanceId: stock.id,
+                              }}
+                              onDiscard={setDiscarding}
+                            />
+                          </span>
                         </td>
                       </tr>
                     ))
@@ -380,7 +435,7 @@ export function CounterStockPageClient() {
                 </tbody>
               </table>
             ) : (
-              <table className={cn(tableStyles.table, 'min-w-200 table-fixed')}>
+              <table className={cn(tableStyles.table, 'phone-cards min-w-200 table-fixed')}>
                 <thead className={tableStyles.head}>
                   <tr>
                     <th className={cn(tableStyles.th, 'w-[19%]')}>When</th>
@@ -394,7 +449,11 @@ export function CounterStockPageClient() {
                 <tbody>
                   {ledgerQuery.data?.items.length ? (
                     ledgerQuery.data.items.map((entry) => (
-                      <tr className="border-t border-ds-divider" key={entry.id}>
+                      <tr
+                        className="border-t border-ds-divider"
+                        data-record-id={entry.id}
+                        key={entry.id}
+                      >
                         <td className={cn(tableStyles.td, 'text-ds-text-3')}>
                           {formatDateTime(entry.transactionDateTime)}
                         </td>

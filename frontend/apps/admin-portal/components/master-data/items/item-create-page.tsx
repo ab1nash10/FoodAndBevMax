@@ -50,6 +50,7 @@ export function ItemCreatePageClient() {
       showToast({
         action: { href, label: `View ${response.data.itemName}` },
         description: `Generated item code: ${response.data.itemCode}`,
+        recordId: response.data.id,
         title: 'Item created',
         variant: 'success',
       });

@@ -18,6 +18,10 @@ export type StockReferenceType =
 
 export type StockTransactionType =
   | 'COUNTER_RECEIVE_IN'
+  /** Thrown away from a batch; the reason is in the ledger line's remarks. */
+  | 'DISCARD_OUT'
+  /** Ready-made leftovers sent from one restaurant to another. */
+  | 'RESTAURANT_TRANSFER_OUT'
   | 'GRN_IN'
   | 'KITCHEN_PRODUCTION_IN'
   | 'KITCHEN_TRANSFER_OUT'
@@ -132,6 +136,16 @@ export interface StockLocationSummary {
   id: string;
   name: string;
   type: InventoryLocationType;
+}
+
+export type StockDiscardReason = 'DAMAGED' | 'EXPIRED' | 'OTHER' | 'SPILLED' | 'SPOILT';
+
+export interface StockDiscardInput {
+  /** Required for OTHER. */
+  note?: string;
+  quantity: number;
+  reason: StockDiscardReason;
+  stockBalanceId: string;
 }
 
 export interface StockBalance {

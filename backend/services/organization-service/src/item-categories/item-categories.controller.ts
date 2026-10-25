@@ -23,6 +23,7 @@ import {
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import { CreateItemCategoryDto } from './dto/create-item-category.dto';
 import { ListItemCategoriesQueryDto } from './dto/list-item-categories-query.dto';
+import { ReorderItemCategoriesDto } from './dto/reorder-item-categories.dto';
 import { UpdateItemCategoryDto } from './dto/update-item-category.dto';
 import { ItemCategoriesService } from './item-categories.service';
 
@@ -69,6 +70,27 @@ export class ItemCategoriesController {
   ) {
     return {
       data: await this.itemCategories.create(body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  // Before PUT :id, so "order" is not read as a category id.
+  @Put('order')
+  @Permissions('ITEM_CATEGORY_UPDATE')
+  @ApiBody({ type: ReorderItemCategoriesDto })
+  @ApiOperation({ summary: 'Set the order of item categories on menus, the till and the kiosk' })
+  @ApiOkResponse({ description: 'Item category order saved successfully.' })
+  async reorder(
+    @Body() body: ReorderItemCategoriesDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.itemCategories.reorder(body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),

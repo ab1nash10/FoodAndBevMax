@@ -2,13 +2,14 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus } from 'lucide-react';
+import { ChefHat, Package, Pencil, Plus, Sprout, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { Item, ItemInput, ItemType, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { ImportButton } from '@/components/import/import-dialog';
 import { itemImport } from '@/components/import/import-definitions';
 import { CsvImportExport, fetchAllPages, type CsvColumn } from '@/components/csv-import-export';
@@ -18,9 +19,9 @@ import {
   EmptyState,
   FoodTypeMarker,
   ListPager,
+  RecordAvatar,
   RowAction,
   StatStrip,
-  tableStyles,
 } from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select, Skeleton } from '@/components/ui';
@@ -36,7 +37,6 @@ import {
   useUrlParam,
   useUrlSearchParam,
 } from '@/lib/use-url-state';
-import { useUndoable } from '@/lib/use-undoable';
 import { cn } from '@/lib/utils';
 import { invalidateItemQueries } from '@/lib/query-invalidation';
 import { ItemDetails } from '@/components/master-data/items/item-details';
@@ -62,10 +62,18 @@ import {
 import { queryKeys } from '@/lib/query-keys';
 import { sortChoices } from '@/lib/sort-choices';
 
-const itemKinds: Record<ItemType, { className: string; label: string }> = {
-  LIVE: { className: 'bg-ds-status-neutral-bg text-ds-status-neutral-fg', label: 'Live' },
-  MRP: { className: 'bg-ds-status-info-bg text-ds-status-info-fg', label: 'Packaged' },
-  READYMADE: { className: 'bg-ds-primary-soft text-ds-link', label: 'Prepared' },
+const itemKinds: Record<ItemType, { className: string; icon: LucideIcon; label: string }> = {
+  LIVE: {
+    className: 'bg-ds-status-neutral-bg text-ds-status-neutral-fg',
+    icon: Sprout,
+    label: 'Live',
+  },
+  MRP: {
+    className: 'bg-ds-status-info-bg text-ds-status-info-fg',
+    icon: Package,
+    label: 'Packaged',
+  },
+  READYMADE: { className: 'bg-ds-primary-soft text-ds-link', icon: ChefHat, label: 'Prepared' },
 };
 
 /** Packaged (mapped to a store), prepared (to a kitchen), or not mapped yet. */
@@ -75,14 +83,29 @@ function ItemKind({ kind }: Readonly<{ kind: ItemType | null }>) {
   return shown ? (
     <span
       className={cn(
-        'inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium',
+        'inline-flex h-6 items-center gap-1.5 rounded-full pr-2.5 pl-2 text-xs font-medium',
         shown.className,
       )}
     >
+      <shown.icon aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
       {shown.label}
     </span>
   ) : (
     <span className="text-[13px] text-ds-muted">Not mapped</span>
+  );
+}
+
+// The cards' pastel tops, picked by name so an item keeps its colour.
+const itemTiles = ['tile-blue', 'tile-violet', 'tile-green', 'tile-rose', 'tile-amber'];
+
+function initialsOf(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]!.toUpperCase())
+      .join('') || '?'
   );
 }
 
@@ -209,11 +232,8 @@ export function ItemsPageClient() {
     queryKey: queryKeys.items('stats'),
   });
   const stats = statsQuery.data;
-  const undoable = useUndoable();
-  // An item marked inactive shows so at once, while its Undo toast runs.
-  const items = (itemsQuery.data?.items ?? []).map((item) =>
-    undoable.isChanged(item.id) ? { ...item, isActive: false } : item,
-  );
+  const confirm = useConfirm();
+  const items = itemsQuery.data?.items ?? [];
   const meta = itemsQuery.data?.meta ?? { limit: pageSize, page, total: 0, totalPages: 1 };
   const listedItem = items.find((item) => item.id === selectedItemId);
   const linkedItemQuery = useQuery({
@@ -245,9 +265,9 @@ export function ItemsPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       invalidateItemQueries(queryClient);
-      showToast({ title: 'Item updated', variant: 'success' });
+      showToast({ recordId: response.data.id, title: 'Item updated', variant: 'success' });
       closeItem();
     },
   });
@@ -264,8 +284,11 @@ export function ItemsPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateItemQueries(queryClient);
-      // Marking inactive already had its Undo toast.
-      if (variables.isActive) showToast({ title: 'Item activated', variant: 'success' });
+      showToast({
+        recordId: variables.item.id,
+        title: variables.isActive ? 'Item activated' : 'Item deactivated',
+        variant: 'success',
+      });
     },
   });
 
@@ -304,21 +327,15 @@ export function ItemsPageClient() {
 
   const canEditItems = hasPermission('ITEM_UPDATE');
 
-  function toggleItemStatus(item: Item) {
-    // Switching it back on while the Undo toast runs is the same as Undo.
-    if (undoable.undo(item.id)) return;
+  async function toggleItemStatus(item: Item) {
+    const isActive = !item.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      effect: 'It can’t be used in new operations. Existing records stay visible.',
+      name: item.itemName,
+    });
 
-    if (item.isActive) {
-      undoable.schedule({
-        commit: () => toggleItemStatusMutation.mutateAsync({ isActive: false, item }),
-        description: 'It can’t be used in new operations. Existing records stay visible.',
-        id: item.id,
-        title: `${item.itemName} marked inactive`,
-      });
-      return;
-    }
-
-    toggleItemStatusMutation.mutate({ isActive: true, item });
+    if (confirmed) toggleItemStatusMutation.mutate({ isActive, item });
   }
 
   function changeFilter(apply: () => void) {
@@ -392,24 +409,28 @@ export function ItemsPageClient() {
             active: !kindFilter && activeFilter !== 'inactive',
             label: 'All items',
             onSelect: () => showOnly('', ''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: kindFilter === 'MRP',
             label: 'Packaged · in stores',
             onSelect: () => showOnly('MRP', ''),
+            share: stats?.all ? stats.packaged / stats.all : undefined,
             value: stats?.packaged ?? '–',
           },
           {
             active: kindFilter === 'READYMADE',
             label: 'Prepared · in kitchens',
             onSelect: () => showOnly('READYMADE', ''),
+            share: stats?.all ? stats.prepared / stats.all : undefined,
             value: stats?.prepared ?? '–',
           },
           {
             active: activeFilter === 'inactive',
             label: 'Inactive',
             onSelect: () => showOnly('', 'inactive'),
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             tone: 'pending',
             value: stats?.inactive ?? '–',
           },
@@ -467,134 +488,126 @@ export function ItemsPageClient() {
             <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
           </ListToolbar>
 
-          <div className="overflow-x-auto">
-            <table className={cn(tableStyles.table, 'min-w-[820px] table-fixed')}>
-              <thead className={tableStyles.head}>
-                <tr>
-                  <th className={cn(tableStyles.th, 'w-[32%]')}>Item</th>
-                  <th className={cn(tableStyles.th, 'w-[15%]')}>Type</th>
-                  <th className={cn(tableStyles.th, 'w-[13%]')}>HSN code</th>
-                  <th className={cn(tableStyles.th, 'w-[10%]')}>Prep time</th>
-                  <th className={cn(tableStyles.th, 'w-[12%]')}>Updated</th>
-                  <th className={cn(tableStyles.th, 'w-[13%]')}>Status</th>
-                  <th className={cn(tableStyles.th, 'w-[5%]')}>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {itemsQuery.isLoading ? (
-                  Array.from({ length: 6 }, (_, index) => (
-                    <tr className="border-b border-ds-divider" key={`item-skeleton-${index}`}>
-                      <td className="px-4 py-3" colSpan={7}>
-                        <Skeleton className="h-8 w-full" />
-                      </td>
-                    </tr>
-                  ))
-                ) : itemsQuery.isError ? (
-                  <tr>
-                    <td className="px-4 py-8" colSpan={7}>
-                      <LoadError error={itemsQuery.error} />
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td className="p-4" colSpan={7}>
-                      <EmptyState
-                        action={
-                          hasFilters ? (
-                            <Button onClick={clearFilters} type="button" variant="outline">
-                              Clear filters
-                            </Button>
-                          ) : undefined
-                        }
-                        description={
-                          hasFilters
-                            ? 'Try another name or clear the food-type filter.'
-                            : 'Create the first item to start the catalogue.'
-                        }
-                        title={hasFilters ? 'No items match' : 'No items yet'}
+          {/* The catalogue as cards: a pastel top with the food mark and the item's initials,
+              then its name, code and status. A card opens the item, as a row did. */}
+          {itemsQuery.isLoading ? (
+            <div
+              aria-hidden="true"
+              className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4"
+            >
+              {Array.from({ length: 8 }, (_, index) => (
+                <Skeleton className="h-[188px] rounded-[20px]" key={index} />
+              ))}
+            </div>
+          ) : itemsQuery.isError ? (
+            <div className="px-4 py-8">
+              <LoadError error={itemsQuery.error} />
+            </div>
+          ) : items.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                action={
+                  hasFilters ? (
+                    <Button onClick={clearFilters} type="button" variant="outline">
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+                description={
+                  hasFilters
+                    ? 'Try another name or clear the food-type filter.'
+                    : 'Create the first item to start the catalogue.'
+                }
+                title={hasFilters ? 'No items match' : 'No items yet'}
+              />
+            </div>
+          ) : (
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4">
+              {items.map((item) => (
+                <li
+                  className={cn(
+                    'group flex flex-col overflow-hidden rounded-[20px] border border-ds-border bg-ds-surface shadow-card transition-shadow duration-150',
+                    canEditItems && 'cursor-pointer hover:shadow-card-hover',
+                  )}
+                  data-record-id={item.id}
+                  key={item.id}
+                  onClick={canEditItems ? () => editItem(item) : undefined}
+                >
+                  <div
+                    className={cn(
+                      'relative flex h-[104px] items-start justify-between gap-2 overflow-hidden p-3.5',
+                      itemTiles[
+                        [...item.itemName].reduce((sum, char) => sum + char.charCodeAt(0), 0) %
+                          itemTiles.length
+                      ],
+                    )}
+                  >
+                    {item.type ? (
+                      <span className="rounded-[5px] bg-ds-surface p-px shadow-xs">
+                        <FoodTypeMarker type={item.type} />
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <ItemKind kind={item.itemType} />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-3.5 right-3.5 text-[64px] font-semibold leading-none tracking-[-0.03em] text-ds-text opacity-[0.12]"
+                    >
+                      {initialsOf(item.itemName)}
+                    </span>
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2.5 px-4 pb-3 pt-3.5">
+                    <div className="min-w-0">
+                      <h2 className="truncate text-base font-semibold text-ds-text">
+                        {item.itemName}
+                      </h2>
+                      <p className="truncate font-mono text-xs text-ds-muted">
+                        {item.itemCode}
+                        {item.hsnCode ? ` · HSN ${item.hsnCode}` : ''}
+                      </p>
+                    </div>
+                    {/* Its own click: switching the status does not open the item. */}
+                    <div
+                      className="mt-auto flex items-center gap-2"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Toggle
+                        ariaLabel={`${item.itemName} active`}
+                        checked={item.isActive}
+                        disabled={toggleItemStatusMutation.isPending}
+                        onChange={() => void toggleItemStatus(item)}
                       />
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => {
-                    return (
-                      <tr
-                        className={cn(tableStyles.row, !canEditItems && 'cursor-default')}
-                        key={item.id}
-                        onClick={canEditItems ? () => editItem(item) : undefined}
+                      <span
+                        className={cn(
+                          'text-xs font-medium',
+                          item.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                        )}
                       >
-                        <td className={tableStyles.td}>
-                          <span className="flex min-w-0 items-center gap-3">
-                            <FoodTypeMarker type={item.type} />
-                            <span className="flex min-w-0 flex-col gap-0.5">
-                              <span className={cn('truncate', tableStyles.title)}>
-                                {item.itemName}
-                              </span>
-                              <span className={cn('truncate', tableStyles.code)}>
-                                {item.itemCode}
-                              </span>
-                            </span>
-                          </span>
-                        </td>
-                        <td className={tableStyles.td}>
-                          <ItemKind kind={item.itemType} />
-                        </td>
-                        <td
-                          className={cn(tableStyles.td, tableStyles.num, 'truncate text-ds-text-2')}
-                        >
-                          {item.hsnCode || '—'}
-                        </td>
-                        <td
-                          className={cn(tableStyles.td, tableStyles.num, 'truncate text-ds-text-2')}
-                        >
-                          {item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '—'}
-                        </td>
-                        <td className={cn(tableStyles.td, 'truncate text-ds-muted')}>
-                          {formatDateOnly(item.updatedAt)}
-                        </td>
-                        {/* Its own click: switching the status does not open the item. */}
-                        <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                          <span className="flex items-center gap-2">
-                            <Toggle
-                              ariaLabel={`${item.itemName} active`}
-                              checked={item.isActive}
-                              disabled={toggleItemStatusMutation.isPending}
-                              onChange={() => toggleItemStatus(item)}
-                            />
-                            <span
-                              className={cn(
-                                'text-xs font-bold',
-                                item.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
-                              )}
-                            >
-                              {item.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </span>
-                        </td>
-                        <td className={cn(tableStyles.td, 'pr-3')}>
-                          <span className="flex justify-end">
-                            {canEditItems ? (
-                              <RowAction
-                                icon={Pencil}
-                                id={`item-edit-${item.id}`}
-                                label={`Edit ${item.itemName}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  editItem(item);
-                                }}
-                              />
-                            ) : null}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                        {item.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className="ml-auto truncate text-xs text-ds-muted">
+                        {item.preparationTimeMinutes
+                          ? `${item.preparationTimeMinutes} min prep`
+                          : formatDateOnly(item.updatedAt)}
+                      </span>
+                      {canEditItems ? (
+                        <RowAction
+                          icon={Pencil}
+                          id={`item-edit-${item.id}`}
+                          label={`Edit ${item.itemName}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            editItem(item);
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
           <ListPager
             limit={meta.limit}
             noun="item"
@@ -610,6 +623,32 @@ export function ItemsPageClient() {
 
       <Modal
         side
+        leading={
+          selectedItem ? (
+            <RecordAvatar foodType={selectedItem.type} name={selectedItem.itemName} />
+          ) : undefined
+        }
+        meta={
+          selectedItem ? (
+            <>
+              <span className="rounded-md bg-ds-subtle px-2 py-0.5 font-mono text-[11.5px] text-ds-text-3">
+                {selectedItem.itemCode}
+              </span>
+              <ItemKind kind={selectedItem.itemType} />
+              <span
+                className={cn(
+                  'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium',
+                  selectedItem.isActive
+                    ? 'bg-ds-status-ok-bg text-ds-status-ok-fg'
+                    : 'bg-ds-status-neutral-bg text-ds-status-neutral-fg',
+                )}
+              >
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                {selectedItem.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </>
+          ) : undefined
+        }
         footer={
           selectedItem && !isEditing && canEditItems ? (
             <Button onClick={() => editItem(selectedItem)} type="button" variant="outline">

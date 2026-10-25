@@ -51,6 +51,7 @@ export function ItemCategoryCreatePageClient() {
       invalidateItemCategoryQueries(queryClient);
       showToast({
         action: { href, label: `View ${response.data.categoryName}` },
+        recordId: response.data.id,
         title: 'Category created',
         variant: 'success',
       });

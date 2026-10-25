@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -11,7 +12,13 @@ import {
 } from '@/components/list-toolbar';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import { DateTimeCell, RowAction, StatStrip, tableStyles } from '@/components/design-system';
+import {
+  DateTimeCell,
+  RecordAvatar,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -54,6 +61,7 @@ export function StoresPageClient() {
   const canEdit = hasPermission('STORE_UPDATE');
   const [editingStore, setEditingStore] = useState<StoreRecord | null>(null);
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
@@ -122,10 +130,10 @@ export function StoresPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_, variables) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.stores() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storeOptions() });
-      showToast({ title: 'Store updated', variant: 'success' });
+      showToast({ recordId: variables.id, title: 'Store updated', variant: 'success' });
       setEditingStore(null);
     },
   });
@@ -147,6 +155,7 @@ export function StoresPageClient() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.stores() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.storeOptions() });
       showToast({
+        recordId: variables.id,
         title: variables.isActive ? 'Store activated' : 'Store deactivated',
         variant: 'success',
       });
@@ -172,7 +181,7 @@ export function StoresPageClient() {
     setPage(1);
   }
 
-  function toggleStoreStatus(store: StoreRecord) {
+  async function toggleStoreStatus(store: StoreRecord) {
     const nextIsActive = !store.isActive;
 
     if (nextIsActive && !store.hospital.isActive) {
@@ -184,7 +193,13 @@ export function StoresPageClient() {
       return;
     }
 
-    if (!nextIsActive && !window.confirm(freezeServicesMessage)) {
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: nextIsActive,
+      effect: freezeServicesMessage,
+      name: store.storeName,
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -222,6 +237,7 @@ export function StoresPageClient() {
             active: !activeFilter,
             label: 'All stores',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
@@ -229,6 +245,7 @@ export function StoresPageClient() {
             label: 'Active',
             onSelect: () => showStatus('active'),
             tone: 'ok',
+            share: stats?.all ? stats.active / stats.all : undefined,
             value: stats?.active ?? '–',
           },
           {
@@ -236,6 +253,7 @@ export function StoresPageClient() {
             label: 'Inactive',
             onSelect: () => showStatus('inactive'),
             tone: 'pending',
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             value: stats?.inactive ?? '–',
           },
         ]}
@@ -304,7 +322,7 @@ export function StoresPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-160 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-160 table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[32%]')}>Store/F&B</th>
@@ -321,12 +339,22 @@ export function StoresPageClient() {
                 items.map((store) => (
                   <tr
                     className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    data-record-id={store.id}
                     key={store.id}
                     onClick={canEdit ? () => setEditingStore(store) : undefined}
                   >
                     <td className={tableStyles.td}>
-                      <p className={cn('truncate', tableStyles.title)}>{store.storeName}</p>
-                      <p className={cn('truncate', tableStyles.code)}>{store.storeCode}</p>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={store.storeName} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className={cn('truncate', tableStyles.title)}>
+                            {store.storeName}
+                          </span>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {store.storeCode}
+                          </span>
+                        </span>
+                      </span>
                     </td>
                     <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {getLocationDisplayName(store.hospital)}
@@ -336,7 +364,7 @@ export function StoresPageClient() {
                       <StatusToggleCell
                         disabled={statusMutation.isPending && statusUpdatingId === store.id}
                         isActive={store.isActive}
-                        onToggle={() => toggleStoreStatus(store)}
+                        onToggle={() => void toggleStoreStatus(store)}
                         showFrozenMessage={!store.hospital.isActive}
                       />
                     </td>

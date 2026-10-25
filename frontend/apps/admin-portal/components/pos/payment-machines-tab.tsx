@@ -7,7 +7,8 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PaymentMachine, PaymentMachineInput, PrimaryUpiProvider } from '@aahar/api-client';
-import { RowAction, tableStyles } from '@/components/design-system';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
+import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Modal, PasswordInput, Toggle } from '@/components/ui-controls';
@@ -190,9 +191,10 @@ function PaymentMachineForm({
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.paymentMachines() });
       showToast({
+        recordId: response.data.id,
         title: editingMachine ? 'Payment machine updated' : 'Payment machine created',
         variant: 'success',
       });
@@ -410,6 +412,7 @@ export function PaymentMachinesTab() {
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const query = useQuery({
     queryFn: async () =>
       (
@@ -443,6 +446,27 @@ export function PaymentMachinesTab() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.paymentMachines() });
     },
   });
+
+  async function toggleMachineStatus(machine: PaymentMachine) {
+    const isActive = !machine.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      name: machine.name,
+    });
+
+    if (!confirmed) return;
+    flagMutation.mutate(
+      { body: { isActive }, id: machine.id },
+      {
+        onSuccess: () =>
+          showToast({
+            recordId: machine.id,
+            title: isActive ? 'Payment machine activated' : 'Payment machine deactivated',
+            variant: 'success',
+          }),
+      },
+    );
+  }
 
   const openCreateForm = () => {
     setEditingMachine(undefined);
@@ -496,7 +520,7 @@ export function PaymentMachinesTab() {
           searchPlaceholder="Name, serial no., merchant ID or IMEI"
         />
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-240 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-240 table-fixed')}>
             <thead className={cn(tableStyles.head, 'whitespace-nowrap')}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[15%]')}>Name</th>
@@ -517,23 +541,22 @@ export function PaymentMachinesTab() {
                 items.map((machine) => (
                   <tr
                     className={tableStyles.row}
+                    data-record-id={machine.id}
                     key={machine.id}
                     onClick={() => openEditForm(machine)}
                   >
-                    <td className={cn(tableStyles.td, tableStyles.title, 'truncate')}>
-                      {machine.name}
+                    <td className={tableStyles.td}>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={machine.name} />
+                        <span className={cn('truncate', tableStyles.title)}>{machine.name}</span>
+                      </span>
                     </td>
                     {/* The switches have their own clicks: they do not open the machine. */}
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <StatusToggleCell
                         disabled={flagMutation.isPending}
                         isActive={machine.isActive}
-                        onToggle={() =>
-                          flagMutation.mutate({
-                            body: { isActive: !machine.isActive },
-                            id: machine.id,
-                          })
-                        }
+                        onToggle={() => void toggleMachineStatus(machine)}
                       />
                     </td>
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>

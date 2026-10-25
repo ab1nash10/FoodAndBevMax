@@ -7,7 +7,7 @@ export const HOLD_MINUTES = 15;
 /** After this long ready, a tile turns amber: "n min · collect soon". */
 export const COLLECT_SOON_MINUTES = 10;
 /** How many tiles fit before the last one becomes "+N more". */
-export const READY_SLOTS = 6;
+export const READY_SLOTS = 8;
 export const PREPARING_SLOTS = 9;
 
 const MINUTE = 60_000;

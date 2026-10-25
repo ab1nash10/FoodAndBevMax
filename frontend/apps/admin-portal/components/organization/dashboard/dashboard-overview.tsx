@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { EmptyState, HeroHeader, QuickTiles, type QuickTile } from '@/components/design-system';
+import { useNavCounts } from '@/components/admin-shell/sidebar-content';
 import { useAuth } from '@/components/auth-provider';
 import { useGreeting } from '@/lib/greeting';
 import { createCommands } from '@/components/command-palette';
@@ -16,7 +17,8 @@ import { Button } from '@aahar/ui';
 import { ArrowRightLeft, ChefHat, ClipboardCheck, Gauge, Plus } from 'lucide-react';
 import { canOpenPath } from '@/lib/navigation';
 import { pendingHref } from '@/components/organization/dashboard/format';
-import { AttentionCard, KpiRow, NewKpiRow } from '@/components/organization/dashboard/kpi-row';
+import { CountersRow } from '@/components/organization/dashboard/counters-row';
+import { KpiRow, NewKpiRow } from '@/components/organization/dashboard/kpi-row';
 import { LocationsRow } from '@/components/organization/dashboard/locations-card';
 import {
   MasterDataCard,
@@ -66,10 +68,10 @@ const dashboardTiles: QuickTile[] = [
     tone: 'blue',
   },
   {
-    detail: 'Check and post to stock',
+    detail: 'Check and add to stock',
     href: '/inventory/grns?view=DRAFT',
     icon: ClipboardCheck,
-    title: 'GRNs to verify',
+    title: 'Deliveries to verify',
     tone: 'violet',
   },
   {
@@ -94,6 +96,13 @@ export function DashboardOverview() {
   const { currentUser, hasPermission } = useAuth();
   const [days, setDays] = useUrlParam<PeriodValue>('days', '7', periodValues);
   const stats = useDashboardStats(Number(days) as Period);
+  // The sidebar badges' counts (one shared request): what each tile has waiting right now.
+  const navCounts = useNavCounts(hasPermission);
+  const tileCounts: Record<string, Pick<QuickTile, 'count' | 'countLabel'>> = {
+    '/inventory/grns?view=DRAFT': { count: navCounts.grns, countLabel: 'to verify' },
+    '/kitchen/productions': { count: navCounts.productions, countLabel: 'to post' },
+    [pendingHref]: { count: navCounts.transfers, countLabel: 'waiting' },
+  };
   const { can } = stats;
   const pendingTotal = stats.pending.data?.meta.total ?? 0;
   const showOperations = can.transfers || can.grns || can.productions;
@@ -119,9 +128,14 @@ export function DashboardOverview() {
                 value={days}
               />
             ) : null}
-            {isNew ? (
+            {/* Like the description and the card, the button waits for the mode: "Review pending"
+                on a new workspace would turn into "New transfer" a moment later. */}
+            {!stats.isModeKnown ? null : isNew ? (
               <IfCanOpen href="/inventory/transfers/new">
-                <Button asChild className="px-3.5">
+                <Button
+                  asChild
+                  className="bg-white px-4 text-ds-link shadow-black/20 hover:bg-white/90"
+                >
                   <Link href="/inventory/transfers/new">
                     <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
                     New transfer
@@ -129,12 +143,15 @@ export function DashboardOverview() {
                 </Button>
               </IfCanOpen>
             ) : can.transfers ? (
-              <Button asChild className="px-3.5">
+              <Button
+                asChild
+                className="bg-white px-4 text-ds-link shadow-black/20 hover:bg-white/90"
+              >
                 <Link href={pendingHref}>
                   <ArrowRightLeft aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
                   Review pending
                   {pendingTotal > 0 ? (
-                    <span className="rounded-full bg-white px-[7px] py-px text-[11.5px] font-extrabold tabular-nums text-ds-primary">
+                    <span className="rounded-full bg-ds-primary px-[7px] py-px text-[11.5px] font-extrabold tabular-nums text-white">
                       {pendingTotal}
                     </span>
                   ) : null}
@@ -143,20 +160,22 @@ export function DashboardOverview() {
             ) : null}
           </>
         }
-        // Only once the mode is known: before that it could still turn out a new workspace, which
-        // has no card, and the card would show its skeleton and then vanish.
-        aside={
-          showOperations && stats.isModeKnown && !isNew ? <AttentionCard stats={stats} /> : null
-        }
         description={
-          isNew
-            ? 'Finish setting up, then your day’s work shows here.'
-            : 'What needs you today, how the last days went, and where to start.'
+          !stats.isModeKnown ? (
+            <span
+              aria-hidden="true"
+              className="skeleton inline-block h-[18px] w-[min(26rem,100%)] rounded-md align-middle"
+            />
+          ) : isNew ? (
+            'Finish setting up, then your day’s work shows here.'
+          ) : (
+            'What needs you today, how the last days went, and where to start.'
+          )
         }
         eyebrow={
           <>
             {headerDateFormatter.format(new Date())} · Max Healthcare ·{' '}
-            <span className="text-ds-text-2">
+            <span className="font-semibold text-white">
               {isAllLocations ? 'All locations' : locationLabel}
             </span>
           </>
@@ -165,7 +184,9 @@ export function DashboardOverview() {
       >
         <QuickTiles
           label="Go to"
-          tiles={dashboardTiles.filter((tile) => canOpenPath(tile.href, hasPermission))}
+          tiles={dashboardTiles
+            .filter((tile) => canOpenPath(tile.href, hasPermission))
+            .map((tile) => ({ ...tile, ...tileCounts[tile.href] }))}
         />
       </HeroHeader>
 
@@ -178,6 +199,7 @@ export function DashboardOverview() {
       ) : (
         <>
           <KpiRow stats={stats} />
+          <CountersRow />
           <OutcomeRow stats={stats} />
           <TrendsRow stats={stats} />
           <WorkRow stats={stats} />

@@ -48,6 +48,7 @@ export function EmployeeCreatePageClient() {
       invalidateEmployeeQueries(queryClient);
       showToast({
         action: { href, label: `View ${response.data.employeeName}` },
+        recordId: response.data.id,
         title: 'Employee created',
         variant: 'success',
       });

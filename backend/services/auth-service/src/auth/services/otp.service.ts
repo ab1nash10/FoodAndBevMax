@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../common/redis/redis.service';
+import { MailService } from './mail.service';
 import { SmsService } from './sms.service';
 
 type OtpChannel = 'email' | 'mobile';
@@ -29,6 +30,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export class OtpService {
   constructor(
     private readonly config: ConfigService,
+    private readonly mail: MailService,
     private readonly redis: RedisService,
     private readonly sms: SmsService,
   ) {}
@@ -52,16 +54,18 @@ export class OtpService {
   }
 
   /**
-   * Mobile codes go out by SMS. Without a gateway only development can work, because the code
-   * is printed to the log there; anywhere else the request is refused rather than answering
-   * "OTP sent" for a code nobody will ever receive. Email has no delivery channel yet.
+   * Mobile codes go out by SMS, email codes by Microsoft Graph mail. Without its channel only
+   * development can work, because the code is printed to the log there; anywhere else the
+   * request is refused rather than answering "OTP sent" for a code nobody will ever receive.
    */
   assertCanDeliver(target: OtpTarget): void {
-    const bySms = target.channel === 'mobile' && this.sms.isConfigured();
-
-    if (!bySms && this.config.get<string>('NODE_ENV') !== 'development') {
+    if (!this.canDeliver(target) && this.config.get<string>('NODE_ENV') !== 'development') {
       throw new ServiceUnavailableException('OTP sign-in is not available right now');
     }
+  }
+
+  private canDeliver(target: OtpTarget): boolean {
+    return target.channel === 'mobile' ? this.sms.isConfigured() : this.mail.isConfigured();
   }
 
   /**
@@ -86,9 +90,11 @@ export class OtpService {
     await this.redis.setWithExpiry(this.getOtpKey(target), otp, ttlSeconds);
     await this.redis.delete(this.getAttemptsKey(target));
 
-    if (target.channel === 'mobile' && this.sms.isConfigured()) {
+    if (this.canDeliver(target)) {
       try {
-        await this.sms.sendOtp(target.value, otp);
+        await (target.channel === 'mobile'
+          ? this.sms.sendOtp(target.value, otp)
+          : this.mail.sendOtp(target.value, otp, Math.round(ttlSeconds / 60)));
       } catch (error) {
         // Nothing was delivered: drop the code and the cooldown so the user can retry at once.
         await this.redis.delete(this.getOtpKey(target));

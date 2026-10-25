@@ -70,16 +70,20 @@ const stockTransactionTypes: StockTransactionType[] = [
   'COUNTER_RECEIVE_IN',
   'SALE_OUT',
   'SALE_CANCEL_IN',
+  'DISCARD_OUT',
+  'RESTAURANT_TRANSFER_OUT',
 ];
 
 // The filter's names, which have to tell every type apart.
 const transactionLabels: Partial<Record<StockTransactionType, string>> = {
   COUNTER_RECEIVE_IN: 'Counter receipt',
+  DISCARD_OUT: 'Discarded',
   GRN_IN: 'GRN receipt',
   KITCHEN_PRODUCTION_IN: 'Kitchen production',
   KITCHEN_TRANSFER_OUT: 'Kitchen transfer out',
   RESTAURANT_RECEIVE_IN: 'Restaurant receipt',
   RESTAURANT_TRANSFER_IN: 'Restaurant transfer in',
+  RESTAURANT_TRANSFER_OUT: 'Restaurant transfer out',
   SALE_CANCEL_IN: 'Sale cancelled',
   SALE_OUT: 'Sale',
   STORE_TO_RESTAURANT_OUT: 'Store transfer out',
@@ -89,10 +93,12 @@ const transactionLabels: Partial<Record<StockTransactionType, string>> = {
 // The table's names, one line each: the Location column already says store, kitchen or restaurant.
 const shortTransactionLabels: Partial<Record<StockTransactionType, string>> = {
   COUNTER_RECEIVE_IN: 'Received',
+  DISCARD_OUT: 'Discarded',
   KITCHEN_PRODUCTION_IN: 'Production',
   KITCHEN_TRANSFER_OUT: 'Transfer out',
   RESTAURANT_RECEIVE_IN: 'Received',
   RESTAURANT_TRANSFER_IN: 'Transfer in',
+  RESTAURANT_TRANSFER_OUT: 'Transfer out',
   STORE_TO_RESTAURANT_OUT: 'Transfer out',
   TRANSFER_REJECTED_RETURN_IN: 'Returned',
 };
@@ -291,12 +297,14 @@ export function StockLedgersPageClient() {
             active: !referenceTypeFilter,
             label: 'All entries',
             onSelect: () => showReference(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: referenceTypeFilter === 'GRN',
             label: 'GRN receipts · in',
             onSelect: () => showReference('GRN'),
+            share: stats?.all ? stats.grns / stats.all : undefined,
             tone: 'ok',
             value: stats?.grns ?? '–',
           },
@@ -304,6 +312,7 @@ export function StockLedgersPageClient() {
             active: referenceTypeFilter === 'TRANSFER',
             label: 'Transfers dispatched · out',
             onSelect: () => showReference('TRANSFER'),
+            share: stats?.all ? stats.dispatched / stats.all : undefined,
             tone: 'pending',
             value: stats?.dispatched ?? '–',
           },
@@ -311,6 +320,7 @@ export function StockLedgersPageClient() {
             active: referenceTypeFilter === 'TRANSFER_ACKNOWLEDGEMENT',
             label: 'Transfers acknowledged · in',
             onSelect: () => showReference('TRANSFER_ACKNOWLEDGEMENT'),
+            share: stats?.all ? stats.acknowledged / stats.all : undefined,
             tone: 'ok',
             value: stats?.acknowledged ?? '–',
           },
@@ -488,7 +498,7 @@ export function StockLedgersPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-[1040px] table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-[1040px] table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[16%]')}>Location</th>
@@ -507,6 +517,7 @@ export function StockLedgersPageClient() {
                 ledgers.map((ledger: StockLedger) => (
                   <tr
                     className="border-t border-ds-divider transition-colors hover:bg-ds-selected"
+                    data-record-id={ledger.id}
                     key={ledger.id}
                   >
                     <td className={tableStyles.td}>

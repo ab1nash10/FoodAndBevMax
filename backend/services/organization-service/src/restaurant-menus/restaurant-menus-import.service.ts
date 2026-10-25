@@ -29,10 +29,12 @@ const labels = {
   isActive: 'Status',
   isAvailable: 'Available',
   isDiscountable: 'Discountable',
+  isFeatured: 'Featured',
   isGstInclusive: 'GST inclusive',
   price: 'Price',
   roomPrice: 'In-room price',
   serveAt: 'Serve at',
+  subCode: 'Sub-Code',
 };
 
 // Found from the row's codes, so the DTO's own "must be a UUID" never applies.
@@ -54,6 +56,7 @@ type MenuFields = Pick<
   | 'isActive'
   | 'isAvailable'
   | 'isDiscountable'
+  | 'isFeatured'
   | 'isGstInclusive'
   | 'itemId'
   | 'kitchenId'
@@ -62,6 +65,7 @@ type MenuFields = Pick<
   | 'roomPrice'
   | 'serveAt'
   | 'storeId'
+  | 'subCode'
 >;
 
 export interface MenuImportLookups {
@@ -226,10 +230,12 @@ export async function planMenuImport(
         isActive: cells.status('isActive'),
         isAvailable: cells.yesNo('isAvailable', 'Available'),
         isDiscountable: cells.yesNo('isDiscountable', 'Discountable'),
+        isFeatured: cells.yesNo('isFeatured', 'Featured'),
         isGstInclusive: cells.yesNo('isGstInclusive', 'GST inclusive'),
         price: cells.text('price'),
         roomPrice: cells.text('roomPrice'),
         serveAt,
+        subCode: cells.text('subCode'),
       },
       labels,
       new Set([...cells.failed, ...lookedUp]),
@@ -291,6 +297,7 @@ export async function planMenuImport(
       isActive: dto.isActive,
       isAvailable: dto.isAvailable,
       isDiscountable: dto.isDiscountable,
+      isFeatured: dto.isFeatured,
       isGstInclusive: dto.isGstInclusive,
       itemId: source.itemId,
       kitchenId: source.kitchenId,
@@ -299,6 +306,7 @@ export async function planMenuImport(
       roomPrice,
       serveAt,
       storeId: source.storeId,
+      subCode: dto.subCode?.trim() || undefined,
     };
     const action = match ? (changes(match, data) ? 'update' : 'skip') : 'create';
 
@@ -328,6 +336,7 @@ export async function planMenuImport(
         isActive: data.isActive ?? true,
         isAvailable: data.isAvailable ?? true,
         isDiscountable: data.isDiscountable ?? false,
+        isFeatured: data.isFeatured ?? false,
         isGstInclusive: data.isGstInclusive ?? false,
       });
     } else if (action === 'update' && match) {

@@ -776,6 +776,7 @@ export function ReceiveDeliveryPageClient() {
                         ),
                       )
                     }
+                    className="pointer-coarse:h-11"
                     size="sm"
                     type="button"
                     variant="ghost"

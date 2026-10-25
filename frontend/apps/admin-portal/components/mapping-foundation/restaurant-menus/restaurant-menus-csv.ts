@@ -41,10 +41,12 @@ export const menuColumns: Array<CsvColumn<RestaurantMenu>> = [
   { header: 'Available to', value: (menu) => menu.availableTo },
   { header: 'Days', value: (menu) => menu.daysOfWeek.map(formatEnum).join(', ') },
   { header: 'Add-on', value: (menu) => menu.addOn },
+  { header: 'Sub-Code', value: (menu) => menu.subCode },
   { header: 'Accompaniments', value: (menu) => menu.accompaniments },
   { header: 'Prep time (min)', value: (menu) => menu.preparationTimeMinutes },
   { header: 'Serves', value: (menu) => menu.serves },
   { header: 'Discountable', value: (menu) => yes(menu.isDiscountable) },
+  { header: 'Featured', value: (menu) => yes(menu.isFeatured) },
   { header: 'Available', value: (menu) => yes(menu.isAvailable) },
   { header: 'Status', value: (menu) => (menu.isActive ? 'Active' : 'Inactive') },
 ];

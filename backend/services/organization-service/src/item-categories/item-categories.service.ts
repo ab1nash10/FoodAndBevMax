@@ -12,6 +12,7 @@ import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
 import { CreateItemCategoryDto } from './dto/create-item-category.dto';
 import { ListItemCategoriesQueryDto } from './dto/list-item-categories-query.dto';
+import { ReorderItemCategoriesDto } from './dto/reorder-item-categories.dto';
 import { UpdateItemCategoryDto } from './dto/update-item-category.dto';
 import { ItemCategoriesRepository } from './item-categories.repository';
 
@@ -24,6 +25,7 @@ function toItemCategoryResponse(category: ItemCategory) {
     deletedAt: category.deletedAt,
     id: category.id,
     isActive: category.isActive,
+    sortOrder: category.sortOrder,
     updatedAt: category.updatedAt,
   };
 }
@@ -78,6 +80,11 @@ export class ItemCategoriesService {
         const normalizedName = normalizeMasterName(dto.categoryName);
 
         await this.assertUniqueNormalizedCategoryName(normalizedName, undefined, tx);
+        // A new category goes last on menus until someone rearranges the list.
+        const last = await tx.itemCategory.aggregate({
+          _max: { sortOrder: true },
+          where: { deletedAt: null },
+        });
 
         const category = await this.itemCategories.create(
           {
@@ -85,6 +92,7 @@ export class ItemCategoriesService {
             createdBy: context.actorId,
             isActive: dto.isActive ?? true,
             normalizedName,
+            sortOrder: (last._max.sortOrder ?? 0) + 1,
             updatedBy: context.actorId,
           },
           tx,
@@ -160,6 +168,56 @@ export class ItemCategoriesService {
     } catch (error) {
       this.handlePrismaError(error, 'Item category');
     }
+  }
+
+  /**
+   * Puts the categories in the given order (first = 1). Every id must be a live category; any
+   * live category not listed keeps its place after the listed ones, in its old order.
+   */
+  async reorder(dto: ReorderItemCategoriesDto, context: ActorContext) {
+    await this.itemCategories.transaction(async (tx) => {
+      const live = await tx.itemCategory.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { categoryName: 'asc' }],
+        select: { id: true, sortOrder: true },
+        where: { deletedAt: null },
+      });
+      const known = new Set(live.map((category) => category.id));
+      const unknown = dto.ids.filter((id) => !known.has(id));
+
+      if (unknown.length > 0) {
+        throw new NotFoundException(`Item category not found: ${unknown.join(', ')}`);
+      }
+
+      const listed = new Set(dto.ids);
+      const order = [...dto.ids, ...live.filter((c) => !listed.has(c.id)).map((c) => c.id)];
+      const before = new Map(live.map((category) => [category.id, category.sortOrder]));
+
+      // Only the categories whose place changed are written, each with its own audit entry.
+      for (const [index, id] of order.entries()) {
+        const sortOrder = index + 1;
+        const previous = before.get(id);
+
+        if (previous === sortOrder) continue;
+        await tx.itemCategory.update({
+          data: { sortOrder, updatedBy: context.actorId },
+          where: { id },
+        });
+        await this.auditLog.record(
+          {
+            action: 'ITEM_CATEGORY_REORDER',
+            actorId: context.actorId,
+            entityId: id,
+            entityName: 'item_categories',
+            ipAddress: context.ipAddress,
+            newValue: { sortOrder },
+            oldValue: { sortOrder: previous },
+          },
+          tx,
+        );
+      }
+    });
+
+    return { ids: dto.ids };
   }
 
   async remove(id: string, context: ActorContext) {

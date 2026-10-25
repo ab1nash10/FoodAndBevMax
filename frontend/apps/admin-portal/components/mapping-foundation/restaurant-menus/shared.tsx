@@ -40,6 +40,7 @@ export interface RestaurantMenuFormValues {
   isActive: boolean;
   isAvailable: boolean;
   isDiscountable: boolean;
+  isFeatured: boolean;
   isGstInclusive: boolean;
   itemId: string;
   /** Where it comes from: one of these is set, from the chosen mapping. */
@@ -53,6 +54,7 @@ export interface RestaurantMenuFormValues {
   roomPrice: string;
   serveAt: MenuServeAt;
   serves: string;
+  subCode: string;
 }
 
 export function formatEnum(value: string): string {

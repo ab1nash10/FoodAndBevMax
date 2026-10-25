@@ -45,6 +45,27 @@ function useKitchenStock(kitchenId?: string, businessDate?: string) {
   });
 }
 
+/** A restaurant's ready-made leftovers, to pass on to another restaurant. */
+function useRestaurantStock(restaurantId?: string, businessDate?: string) {
+  return useQuery({
+    enabled: Boolean(restaurantId),
+    queryFn: async () => {
+      const businessDateFilter = optionalValue(businessDate ?? '');
+      const response = await organizationApi.listRestaurantStock({
+        ...(businessDateFilter ? { businessDate: businessDateFilter } : {}),
+        itemType: 'READYMADE',
+        limit: 100,
+        locationId: restaurantId,
+        sortBy: 'lastUpdatedOn',
+        sortOrder: 'desc',
+      });
+
+      return response.data.items.filter((stock) => stock.availableQty > 0);
+    },
+    queryKey: queryKeys.restaurantStock('transfer-source', restaurantId, businessDate ?? ''),
+  });
+}
+
 export function useSourceStock(
   sourceType: InventoryLocationType,
   sourceId?: string,
@@ -55,6 +76,14 @@ export function useSourceStock(
     sourceType === 'KITCHEN' ? sourceId : undefined,
     businessDate,
   );
+  const restaurantStock = useRestaurantStock(
+    sourceType === 'RESTAURANT' ? sourceId : undefined,
+    businessDate,
+  );
 
-  return sourceType === 'KITCHEN' ? kitchenStock : storeStock;
+  return sourceType === 'KITCHEN'
+    ? kitchenStock
+    : sourceType === 'RESTAURANT'
+      ? restaurantStock
+      : storeStock;
 }

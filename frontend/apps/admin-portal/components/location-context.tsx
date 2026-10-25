@@ -15,8 +15,38 @@ import { useAuth } from '@/components/auth-provider';
 import { userApi } from '@/lib/api';
 
 const LOCATION_STORAGE_KEY = 'aahar.location-context';
+/** The last answer to /users/me/access, per user; sign-out clears it with the rest of aahar.*. */
+const ACCESS_STORAGE_KEY = 'aahar.my-access';
 const allLocationsValue = 'all';
 const myAccessQueryKey = ['my-access'] as const;
+
+type MyAccess = Awaited<ReturnType<typeof userApi.getMyAccess>>['data'];
+
+/**
+ * The user's access as last seen on this device, so a reload opens on it at once (the query still
+ * asks the server straight away and replaces it). Only ever the same user's: another user's is
+ * ignored. Storage may be blocked; then there is simply nothing to start from.
+ */
+function readStoredAccess(userId: string): MyAccess | undefined {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(ACCESS_STORAGE_KEY) ?? 'null') as {
+      data: MyAccess;
+      userId: string;
+    } | null;
+
+    return stored?.userId === userId ? stored.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveStoredAccess(userId: string, data: MyAccess): void {
+  try {
+    window.localStorage.setItem(ACCESS_STORAGE_KEY, JSON.stringify({ data, userId }));
+  } catch {
+    // Not remembering it only costs the next reload one wait.
+  }
+}
 
 type LocationSelectionValue = string;
 
@@ -83,7 +113,8 @@ export function formatGlobalLocationLabel(location: HospitalSummary): string {
 }
 
 export function LocationProvider({ children }: Readonly<{ children: ReactNode }>) {
-  const { isAuthenticated, isReady } = useAuth();
+  const { currentUser, isAuthenticated, isReady } = useAuth();
+  const userId = currentUser?.id ?? '';
   const [selectedLocationValue, setSelectedLocationValue] =
     useState<LocationSelectionValue>(allLocationsValue);
   // Pages wait for this before treating the location as settled, so the switch from the
@@ -95,10 +126,20 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
   // all of them together.
   const accessQuery = useQuery({
     enabled: isAuthenticated,
+    // Starts from the copy stored on the last visit (marked stale, so it is fetched at once).
+    initialData: () => (userId ? readStoredAccess(userId) : undefined),
+    initialDataUpdatedAt: 0,
     queryFn: async () => (await userApi.getMyAccess()).data,
-    queryKey: myAccessQueryKey,
+    // Per user, so the stored copy is read for the user now signed in.
+    queryKey: [...myAccessQueryKey, userId],
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    if (userId && accessQuery.data && accessQuery.dataUpdatedAt > 0) {
+      saveStoredAccess(userId, accessQuery.data);
+    }
+  }, [accessQuery.data, accessQuery.dataUpdatedAt, userId]);
   const canSelectAllLocations = accessQuery.data?.locationScope === 'ALL';
   const defaultLocationId = accessQuery.data?.defaultLocationId ?? null;
 

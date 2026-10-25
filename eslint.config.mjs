@@ -85,6 +85,8 @@ export default [
     rules: {
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs['core-web-vitals'].rules,
+      // Ask through useConfirm() (components/confirm-provider), the portal's one confirm dialog.
+      'no-alert': 'error',
     },
   },
   {

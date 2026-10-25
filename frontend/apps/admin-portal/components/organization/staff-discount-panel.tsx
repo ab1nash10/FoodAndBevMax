@@ -1,47 +1,23 @@
 'use client';
 
-import type { EmploymentType, StaffDiscountInput } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
-import { useEffect, useId } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import { ArrowRight, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/components/toast-provider';
-import { Field, Input, Skeleton } from '@/components/ui';
+import { Skeleton } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
-import { applyValidationErrors } from '@/components/organization/shared/utils';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
-const employmentTypeLabels: Record<EmploymentType, string> = {
-  ON_ROLL: 'On-roll employees',
-  OUTSOURCED: 'Outsourced staff',
-};
-const employmentTypes = Object.keys(employmentTypeLabels) as EmploymentType[];
-
-const percentSchema = z
-  .string()
-  .trim()
-  .regex(/^\d+(\.\d{1,2})?$/, 'Enter a percentage with up to 2 decimals.')
-  .transform(Number)
-  .refine((value) => value <= 100, 'Use 100% or less.');
-
-// One flat field per employee type, so a validation error lands on its own input.
-const staffDiscountSchema = z.object({
-  ON_ROLL: percentSchema,
-  OUTSOURCED: percentSchema,
-  staffDiscountApplicable: z.boolean(),
-});
-
-type StaffDiscountFormValues = Record<EmploymentType, string> & {
-  staffDiscountApplicable: boolean;
-};
+const levelLabels = { ON_ROLL: 'On roll', OUTSOURCED: 'Outsourced' } as const;
 
 /**
- * A restaurant's staff discount: whether it gives one, and the % per employee type. The POS
- * takes it off discountable menu items for eligible employees looked up by Employee ID.
+ * A restaurant's staff discount switch, with its live Employee Discount rules. The rules
+ * themselves (%, level, days, timings) are kept in Employee Discounts; the POS applies the best
+ * one to discountable menu items for eligible employees, only while this switch is on.
  */
 export function StaffDiscountPanel({
   onClose,
@@ -51,42 +27,45 @@ export function StaffDiscountPanel({
   /** The restaurant being set; null keeps the panel closed. */
   restaurant: { id: string; restaurantName: string } | null;
 }>) {
-  const formId = useId();
   const { hasPermission } = useAuth();
   const canEdit = hasPermission('RESTAURANT_UPDATE');
+  const canViewRules = hasPermission('EMPLOYEE_DISCOUNT_VIEW');
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const form = useForm<StaffDiscountFormValues>({
-    defaultValues: { ON_ROLL: '0', OUTSOURCED: '0', staffDiscountApplicable: false },
-  });
-  const isApplicable = form.watch('staffDiscountApplicable');
+  const [applicable, setApplicable] = useState(false);
 
   const settingsQuery = useQuery({
     enabled: Boolean(restaurant),
     queryFn: async () => (await organizationApi.getStaffDiscounts(restaurant!.id)).data,
     queryKey: queryKeys.staffDiscounts(restaurant?.id),
   });
+  const rulesQuery = useQuery({
+    enabled: Boolean(restaurant) && canViewRules,
+    queryFn: async () =>
+      (
+        await organizationApi.listEmployeeDiscounts({
+          archived: false,
+          limit: 50,
+          restaurantId: restaurant!.id,
+        })
+      ).data.items,
+    queryKey: queryKeys.employeeDiscounts('restaurant', restaurant?.id),
+  });
 
   useEffect(() => {
-    const settings = settingsQuery.data;
-
-    if (!settings) {
-      return;
-    }
-
-    const rateOf = (type: EmploymentType) =>
-      String(settings.rates.find((rate) => rate.employmentType === type)?.discountPercent ?? 0);
-
-    form.reset({
-      ON_ROLL: rateOf('ON_ROLL'),
-      OUTSOURCED: rateOf('OUTSOURCED'),
-      staffDiscountApplicable: settings.staffDiscountApplicable,
-    });
-  }, [form, settingsQuery.data]);
+    if (settingsQuery.data) setApplicable(settingsQuery.data.staffDiscountApplicable);
+  }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
-    mutationFn: (body: StaffDiscountInput) =>
-      organizationApi.setStaffDiscounts(restaurant!.id, body),
+    // The old per-type rates are sent back unchanged; Employee Discounts replaced them.
+    mutationFn: () =>
+      organizationApi.setStaffDiscounts(restaurant!.id, {
+        rates: settingsQuery.data!.rates.map(({ discountPercent, employmentType }) => ({
+          discountPercent,
+          employmentType,
+        })),
+        staffDiscountApplicable: applicable,
+      }),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
@@ -99,6 +78,7 @@ export function StaffDiscountPanel({
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.staffDiscounts() });
       showToast({
+        recordId: response.data.restaurantId,
         title: `Staff discount saved for ${response.data.restaurantName}`,
         variant: 'success',
       });
@@ -106,22 +86,7 @@ export function StaffDiscountPanel({
     },
   });
 
-  const handleSubmit = form.handleSubmit((values) => {
-    const parsed = staffDiscountSchema.safeParse(values);
-
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
-
-    saveMutation.mutate({
-      rates: employmentTypes.map((employmentType) => ({
-        discountPercent: parsed.data[employmentType],
-        employmentType,
-      })),
-      staffDiscountApplicable: parsed.data.staffDiscountApplicable,
-    });
-  });
+  const rules = rulesQuery.data ?? [];
 
   return (
     <Modal
@@ -134,8 +99,8 @@ export function StaffDiscountPanel({
           {canEdit ? (
             <Button
               disabled={saveMutation.isPending || !settingsQuery.data}
-              form={formId}
-              type="submit"
+              onClick={() => saveMutation.mutate()}
+              type="button"
             >
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Save
@@ -158,49 +123,54 @@ export function StaffDiscountPanel({
           {getApiErrorMessage(settingsQuery.error)}
         </p>
       ) : (
-        <form
-          className="grid gap-5"
-          id={formId}
-          onSubmit={(event) => {
-            void handleSubmit(event);
-          }}
-        >
+        <div className="grid gap-5">
           <Toggle
-            checked={isApplicable}
+            checked={applicable}
             disabled={!canEdit}
             label="Give staff discount at this restaurant"
-            onChange={(checked) =>
-              form.setValue('staffDiscountApplicable', checked, { shouldDirty: true })
-            }
+            onChange={setApplicable}
           />
-          <div className="grid gap-4 sm:grid-cols-2">
-            {employmentTypes.map((type) => (
-              <Field
-                error={form.formState.errors[type]?.message}
-                key={type}
-                label={employmentTypeLabels[type]}
-                name={`${formId}-${type}`}
+          {canViewRules ? (
+            <div className="grid gap-2">
+              <p className="text-sm font-semibold text-ds-text">Discount rules</p>
+              {rulesQuery.isLoading ? (
+                <Skeleton className="h-16" />
+              ) : rules.length > 0 ? (
+                <ul className="divide-y divide-ds-border rounded-lg border border-ds-border">
+                  {rules.map((rule) => (
+                    <li className="flex items-center gap-3 px-3 py-2.5 text-sm" key={rule.id}>
+                      <span className="min-w-0 flex-1 truncate font-medium text-ds-text">
+                        {rule.name}
+                      </span>
+                      <span className="text-ds-muted">
+                        {rule.employmentType ? levelLabels[rule.employmentType] : 'All staff'}
+                        {rule.startTime ? ` · ${rule.startTime}–${rule.endTime}` : ''}
+                      </span>
+                      <span className="font-semibold tabular-nums text-ds-text">
+                        {rule.discountPercent}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-ds-muted">
+                  No rules yet, so staff get no discount here even with the switch on.
+                </p>
+              )}
+              <Link
+                className="inline-flex items-center gap-1 text-sm font-semibold text-ds-link hover:underline"
+                href={`/masters/employee-discounts?restaurant=${restaurant?.id ?? ''}`}
               >
-                <div className="relative">
-                  <Input
-                    className="pr-8"
-                    disabled={!canEdit || !isApplicable}
-                    id={`${formId}-${type}`}
-                    inputMode="decimal"
-                    {...form.register(type)}
-                  />
-                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ds-muted">
-                    %
-                  </span>
-                </div>
-              </Field>
-            ))}
-          </div>
+                Manage in Employee Discounts
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          ) : null}
           <p className="text-sm text-ds-muted">
             Applies to menu items marked discountable, for employees marked eligible in the
             Employees master.
           </p>
-        </form>
+        </div>
       )}
     </Modal>
   );

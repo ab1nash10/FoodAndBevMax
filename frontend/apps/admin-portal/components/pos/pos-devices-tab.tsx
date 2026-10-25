@@ -7,7 +7,8 @@ import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PosDevice, PosDeviceInput } from '@aahar/api-client';
-import { RowAction, tableStyles } from '@/components/design-system';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
+import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Modal, Toggle } from '@/components/ui-controls';
@@ -174,10 +175,11 @@ function PosDeviceForm({
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.posDevices() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.paymentMachinePosDeviceOptions() });
       showToast({
+        recordId: response.data.id,
         title: editingDevice ? 'POS device updated' : 'POS device created',
         variant: 'success',
       });
@@ -390,6 +392,7 @@ export function PosDevicesTab() {
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const query = useQuery({
     queryFn: async () =>
       (
@@ -424,6 +427,24 @@ export function PosDevicesTab() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.paymentMachinePosDeviceOptions() });
     },
   });
+
+  async function toggleDeviceStatus(device: PosDevice) {
+    const isActive = !device.isActive;
+    const confirmed = await confirmStatusChange(confirm, { activate: isActive, name: device.name });
+
+    if (!confirmed) return;
+    flagMutation.mutate(
+      { body: { isActive }, id: device.id },
+      {
+        onSuccess: () =>
+          showToast({
+            recordId: device.id,
+            title: isActive ? 'POS device activated' : 'POS device deactivated',
+            variant: 'success',
+          }),
+      },
+    );
+  }
 
   const openCreateForm = () => {
     setEditingDevice(undefined);
@@ -475,7 +496,7 @@ export function PosDevicesTab() {
           searchPlaceholder="Code, name, hostname or restaurant"
         />
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-250 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-250 table-fixed')}>
             <thead className={cn(tableStyles.head, 'whitespace-nowrap')}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[15%]')}>Name</th>
@@ -496,13 +517,19 @@ export function PosDevicesTab() {
                 items.map((device) => (
                   <tr
                     className={tableStyles.row}
+                    data-record-id={device.id}
                     key={device.id}
                     onClick={() => openEditForm(device)}
                   >
                     {/* The code under the name, as the Locations list shows its codes. */}
                     <td className={tableStyles.td}>
-                      <p className={cn('truncate', tableStyles.title)}>{device.name}</p>
-                      <p className={cn('truncate', tableStyles.code)}>{device.code}</p>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={device.name} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className={cn('truncate', tableStyles.title)}>{device.name}</span>
+                          <span className={cn('truncate', tableStyles.code)}>{device.code}</span>
+                        </span>
+                      </span>
                     </td>
                     <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {device.hospital.hospitalName}
@@ -533,12 +560,7 @@ export function PosDevicesTab() {
                       <StatusToggleCell
                         disabled={flagMutation.isPending}
                         isActive={device.isActive}
-                        onToggle={() =>
-                          flagMutation.mutate({
-                            body: { isActive: !device.isActive },
-                            id: device.id,
-                          })
-                        }
+                        onToggle={() => void toggleDeviceStatus(device)}
                       />
                     </td>
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>

@@ -23,20 +23,38 @@ import type {
   TimeSlotInput,
   TimeSlotListQuery,
 } from './catalog';
-import type { DashboardRecords, DashboardRecordsQuery, DashboardSetup } from './dashboard';
+import type {
+  DashboardNavCounts,
+  DashboardRecords,
+  DashboardRecordsQuery,
+  DashboardSetup,
+  LocationNames,
+} from './dashboard';
 import type {
   BoardFeed,
   OrderStatus,
   PosBill,
   PosBillInput,
+  KioskMenu,
+  KioskOrder,
+  KioskOrderInput,
+  KioskOrderToBill,
+  KioskOrderWaiting,
   PosBillListQuery,
   PosBillSummary,
   PosChannel,
   PosCounter,
   PosDaySummary,
+  PosShift,
+  OnlinePayment,
+  OnlinePaymentInput,
+  OnlinePaymentProvider,
   PosMenu,
   PosEmployee,
   PosStockSummary,
+  EmployeeDiscount,
+  EmployeeDiscountInput,
+  EmployeeDiscountListQuery,
   StaffDiscountInput,
   StaffDiscountSettings,
   RestaurantOrder,
@@ -56,6 +74,7 @@ import type {
   LocationStockLevels,
   LocationStockLevelsQuery,
   StockBalance,
+  StockDiscardInput,
   StockBalanceListQuery,
   StockLedger,
   StockLedgerListQuery,
@@ -326,11 +345,52 @@ export function createOrganizationApi(options: ApiClientOptions) {
     getDashboardSetup(query?: { hospitalId?: string }) {
       return client.request<ApiResponse<DashboardSetup>>('/dashboard/setup', { query });
     },
+    /** The nav badges' three counts in one request. */
+    getDashboardNavCounts(query?: { hospitalId?: string }) {
+      return client.request<ApiResponse<DashboardNavCounts>>('/dashboard/nav-counts', { query });
+    },
+    /** Every active store, kitchen, restaurant and counter: id, name and code only. */
+    getLocationNames() {
+      return client.request<ApiResponse<LocationNames>>('/dashboard/location-names');
+    },
     /** Public: the TV pickup board's feed, with the restaurant's board secret. */
     getBoardFeed(restaurantId: string, token: string) {
       // A query parameter, not a header: a custom header would need a CORS preflight.
       return client.request<ApiResponse<BoardFeed>>(`/order-board/${restaurantId}`, {
         query: { token },
+      });
+    },
+    /** Public: the self-service kiosk's menu, with the restaurant's board secret. */
+    getKioskMenu(restaurantId: string, token: string) {
+      return client.request<ApiResponse<KioskMenu>>(`/kiosk/${restaurantId}/menu`, {
+        query: { token },
+      });
+    },
+    /** Public: a staff member's discount at the kiosk, by their registered mobile. */
+    getKioskStaffDiscount(restaurantId: string, token: string, mobile: string) {
+      return client.request<ApiResponse<{ discountPercent: number }>>(
+        `/kiosk/${restaurantId}/staff`,
+        { query: { mobile, token } },
+      );
+    },
+    /** Public: places a kiosk order, paid at a counter. */
+    createKioskOrder(restaurantId: string, token: string, body: KioskOrderInput) {
+      return client.request<ApiResponse<KioskOrder>>(`/kiosk/${restaurantId}/orders`, {
+        body,
+        method: 'POST',
+        query: { token },
+      });
+    },
+    /** Kiosk orders waiting to be paid at this counter's restaurant, oldest first. */
+    listWaitingKioskOrders(counterId: string) {
+      return client.request<ApiResponse<KioskOrderWaiting[]>>('/pos/kiosk-orders', {
+        query: { counterId },
+      });
+    },
+    /** Today's kiosk order by its number, to load into this counter's till. */
+    getKioskOrderToBill(counterId: string, number: number) {
+      return client.request<ApiResponse<KioskOrderToBill>>(`/pos/kiosk-orders/${number}`, {
+        query: { counterId },
       });
     },
     /** The restaurant's TV board secret, made on first use; regenerate turns the old link off. */
@@ -357,8 +417,11 @@ export function createOrganizationApi(options: ApiClientOptions) {
       );
     },
     /** Counters the signed-in user may bill at. */
-    listPosCounters() {
-      return client.request<ApiResponse<PosCounter[]>>('/pos/counters');
+    /** With the till computer's hostname, only the counters of its POS device. */
+    listPosCounters(host?: string) {
+      return client.request<ApiResponse<PosCounter[]>>('/pos/counters', {
+        query: host ? { host } : undefined,
+      });
     },
     getPosMenu(counterId: string, channel: PosChannel) {
       return client.request<ApiResponse<PosMenu>>('/pos/menu', { query: { channel, counterId } });
@@ -379,6 +442,26 @@ export function createOrganizationApi(options: ApiClientOptions) {
     getPosBill(id: string) {
       return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}`);
     },
+    /** The online UPI providers set up on the server, in the order to offer them. */
+    listOnlinePaymentProviders() {
+      return client.request<ApiResponse<OnlinePaymentProvider[]>>('/pos/online-payments/providers');
+    },
+    startOnlinePayment(body: OnlinePaymentInput) {
+      return client.request<ApiResponse<OnlinePayment>>('/pos/online-payments', {
+        body,
+        method: 'POST',
+      });
+    },
+    /** Asks the provider while pending; PAID means the till can bill with it. */
+    checkOnlinePayment(id: string) {
+      return client.request<ApiResponse<OnlinePayment>>(`/pos/online-payments/${id}`);
+    },
+    cancelOnlinePayment(id: string) {
+      return client.request<ApiResponse<OnlinePayment>>(`/pos/online-payments/${id}/cancel`, {
+        body: {},
+        method: 'POST',
+      });
+    },
     cancelPosBill(id: string, reason: string) {
       return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}/cancel`, {
         body: { reason },
@@ -388,6 +471,27 @@ export function createOrganizationApi(options: ApiClientOptions) {
     lookupPosEmployee(counterId: string, code: string) {
       return client.request<ApiResponse<PosEmployee>>('/pos/employee', {
         query: { code, counterId },
+      });
+    },
+    listEmployeeDiscounts(query?: EmployeeDiscountListQuery) {
+      return client.request<ApiResponse<ApiList<EmployeeDiscount>>>('/employee-discounts', {
+        query,
+      });
+    },
+    createEmployeeDiscount(body: EmployeeDiscountInput) {
+      return client.request<ApiResponse<EmployeeDiscount>>('/employee-discounts', {
+        body,
+        method: 'POST',
+      });
+    },
+    /** Edit a rule, or archive (archived: true) / restore it. */
+    updateEmployeeDiscount(
+      id: string,
+      body: Partial<EmployeeDiscountInput> & { archived?: boolean },
+    ) {
+      return client.request<ApiResponse<EmployeeDiscount>>(`/employee-discounts/${id}`, {
+        body,
+        method: 'PUT',
       });
     },
     getStaffDiscounts(restaurantId: string) {
@@ -405,6 +509,25 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<PosStockSummary>>('/pos/stock-summary', {
         query: { counterId, date },
       });
+    },
+    /** Opens a shift at a counter with the cash in the till; it takes on a waiting handover. */
+    openPosShift(counterId: string, openingCash: number) {
+      return client.request<ApiResponse<PosShift>>('/pos/shifts', {
+        body: { counterId, openingCash },
+        method: 'POST',
+      });
+    },
+    /** Ends a shift with the cash counted: closes it, or hands it over to the next cashier. */
+    endPosShift(id: string, body: { countedCash: number; handover: boolean; note?: string }) {
+      return client.request<ApiResponse<PosShift>>(`/pos/shifts/${id}/end`, {
+        body,
+        method: 'PATCH',
+      });
+    },
+    closePosDay(counterId: string, date?: string) {
+      return client.request<
+        ApiResponse<{ businessDate: string; closedAt: string; closedByName: string | null }>
+      >('/pos/day-closes', { body: { counterId, date }, method: 'POST' });
     },
     getPosDaySummary(counterId: string, date?: string) {
       return client.request<ApiResponse<PosDaySummary>>('/pos/summary', {
@@ -647,6 +770,19 @@ export function createOrganizationApi(options: ApiClientOptions) {
     updateLegalEntity(id: string, body: Partial<LegalEntityInput>) {
       return client.request<ApiResponse<LegalEntity>>(`/legal-entities/${id}`, {
         body,
+        method: 'PUT',
+      });
+    },
+    /** Throws part or all of one batch away (expired, damaged…), where it is held. */
+    discardStock(body: StockDiscardInput) {
+      return client.request<
+        ApiResponse<{ availableQty: number; ledgerId: string; stockBalanceId: string }>
+      >('/stock-discards', { body, method: 'POST' });
+    },
+    /** Every category id, first to last: their order on menus, the till and the kiosk. */
+    reorderItemCategories(ids: string[]) {
+      return client.request<ApiResponse<{ ids: string[] }>>('/item-categories/order', {
+        body: { ids },
         method: 'PUT',
       });
     },

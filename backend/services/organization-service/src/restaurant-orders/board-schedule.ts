@@ -59,7 +59,7 @@ export function siteClock(now: Date): { date: string; minute: number } {
 }
 
 /** `time` on the site's day `date`, plus `addDays`, as an ISO instant. */
-function siteInstant(date: string, time: string, addDays = 0): string {
+export function siteInstant(date: string, time: string, addDays = 0): string {
   const day = new Date(`${date}T${time}:00${SITE_OFFSET}`);
 
   return new Date(day.getTime() + addDays * 24 * 60 * 60 * 1000).toISOString();

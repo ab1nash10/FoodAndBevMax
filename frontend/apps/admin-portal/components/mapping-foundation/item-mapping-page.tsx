@@ -93,6 +93,7 @@ export function ItemMappingPageClient() {
       active: mode === 'store' && status !== 'inactive',
       label: 'Store mappings',
       onSelect: () => show('store', false),
+      share: storeCounts?.all ? 1 : undefined,
       value: storeCounts?.all ?? '–',
     });
   }
@@ -102,6 +103,7 @@ export function ItemMappingPageClient() {
       active: mode === 'kitchen' && status !== 'inactive',
       label: 'Kitchen mappings',
       onSelect: () => show('kitchen', false),
+      share: kitchenCounts?.all ? 1 : undefined,
       value: kitchenCounts?.all ?? '–',
     });
   }
@@ -111,6 +113,7 @@ export function ItemMappingPageClient() {
       active: mode === 'store' && status === 'inactive',
       label: 'Inactive · stores',
       onSelect: () => show('store', true),
+      share: storeCounts?.all ? storeCounts.inactive / storeCounts.all : undefined,
       tone: 'pending',
       value: storeCounts?.inactive ?? '–',
     });
@@ -121,6 +124,7 @@ export function ItemMappingPageClient() {
       active: mode === 'kitchen' && status === 'inactive',
       label: 'Inactive · kitchens',
       onSelect: () => show('kitchen', true),
+      share: kitchenCounts?.all ? kitchenCounts.inactive / kitchenCounts.all : undefined,
       tone: 'pending',
       value: kitchenCounts?.inactive ?? '–',
     });
@@ -135,8 +139,8 @@ export function ItemMappingPageClient() {
     <section className="space-y-4">
       <AppPageHeader
         count={total}
-        description="Map items to stores (they become MRP) and kitchens (they become Readymade), with their category."
-        title="Item Mapping"
+        description="Choose where each item is used: in stores (packaged, sold as it comes) or kitchens (made there), with its category."
+        title="Item Locations"
       />
       {stats.length ? <StatStrip label="Item mappings at a glance" stats={stats} /> : null}
       {mode === 'store' ? (

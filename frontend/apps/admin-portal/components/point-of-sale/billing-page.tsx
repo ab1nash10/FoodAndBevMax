@@ -5,13 +5,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Banknote,
   CheckCircle2,
+  ChevronDown,
   CreditCard,
   Loader2,
   Minus,
+  MonitorSmartphone,
   Plus,
   Printer,
   QrCode,
+  ReceiptText,
   Search,
+  ShoppingBag,
   Trash2,
   Wallet,
   X,
@@ -21,6 +25,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   EmploymentType,
   FoodType,
+  OnlinePaymentInput,
+  OnlinePaymentProvider,
   PaymentMode,
   PosBill,
   PosBillInput,
@@ -33,6 +39,8 @@ import {
   KeyboardHint,
   StatusChip,
 } from '@/components/design-system';
+import { useAuth } from '@/components/auth-provider';
+import { FoodArt } from '@/components/food-art';
 import { useRestaurantOrders } from '@/components/organization/restaurant-orders-page';
 import { useToast } from '@/components/toast-provider';
 import { Input, Label, Panel, Skeleton } from '@/components/ui';
@@ -56,6 +64,9 @@ import {
   UpiQr,
   usePosCounter,
 } from './shared';
+import { OnlinePaymentDialog, providerLabels } from './online-payment-dialog';
+import { ShiftChip, ShiftStartPanel } from './shift-controls';
+import { TillSetup } from './till-setup';
 import { UnsentBillsButton, UnsentBillsDialog, useUnsentBills } from './unsent-bills';
 
 interface CartLine {
@@ -83,6 +94,13 @@ const employmentTypeLabels: Record<EmploymentType, string> = {
 };
 const mobilePattern = /^[6-9]\d{9}$/;
 
+// When a kiosk order was placed, in the site's time (India), e.g. "11:42 am".
+const waitingTime = new Intl.DateTimeFormat('en-IN', {
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'Asia/Kolkata',
+});
+
 function newClientOrderId(): string {
   return crypto.randomUUID();
 }
@@ -96,13 +114,35 @@ function unavailableReason(item: PosMenuItem, inCart: number): string | null {
   return null;
 }
 
+const categoryTones = [
+  'bg-ds-link',
+  'bg-violet-500',
+  'bg-ds-status-bad-fg',
+  'bg-ds-status-ok-fg',
+  'bg-ds-food-egg-dot',
+];
+
+/** A category's colour, the same on its filter and on its items' cards, so it is found by eye. */
+function categoryTone(id: string): string {
+  return id
+    ? categoryTones[
+        [...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % categoryTones.length
+      ]!
+    : 'bg-ds-muted';
+}
+
 /**
  * The till: pick items from the counter's menu, take the customer's details and how they paid,
  * and complete the bill. Prices, GST and stock are checked again by the server; a retry of the
  * same bill (a double tap, a dropped connection) returns the bill already made.
  */
 export function BillingPageClient() {
-  const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
+  const { counter, counters, host, query: countersQuery, setCounterId, setHost } = usePosCounter();
+  const { hasPermission } = useAuth();
+  const canSetUpTill = hasPermission('POS_DEVICE_UPDATE');
+  // Operator access: without these the till bills counter orders only, never complimentary.
+  const canBillRooms = hasPermission('POS_ROOM_ORDER');
+  const canApproveComplimentary = hasPermission('POS_COMPLIMENTARY_APPROVE');
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [channel, setChannel] = useState<PosChannel>('COUNTER');
@@ -124,6 +164,18 @@ export function BillingPageClient() {
   const [complimentaryReason, setComplimentaryReason] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [paymentReference, setPaymentReference] = useState('');
+  // UPI is taken on the restaurant's own QR (OWN) or online, through the provider picked here.
+  const [upiVia, setUpiVia] = useState<'OWN' | OnlinePaymentProvider | null>(null);
+  // The bill waiting for its online payment; it is made once the provider confirms.
+  const [onlinePayment, setOnlinePayment] = useState<{
+    payload: PosBillInput;
+    request: OnlinePaymentInput;
+    summary: string;
+    total: number;
+  } | null>(null);
+  // A kiosk order loaded by its number: billing it links it, so it is never billed twice.
+  const [kioskNumber, setKioskNumber] = useState('');
+  const [kioskOrder, setKioskOrder] = useState<{ id: string; number: number } | null>(null);
   const upiQrRef = useRef<HTMLDivElement>(null);
 
   // The QR sits in the scrolling bill, above the pinned payment buttons: bring it into view
@@ -134,6 +186,12 @@ export function BillingPageClient() {
   const [clientOrderId, setClientOrderId] = useState(newClientOrderId);
   const [completed, setCompleted] = useState<PosBill | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  // The cart line whose kitchen-note box was opened ("Add note"); lines with a note keep theirs.
+  const [noteOpenFor, setNoteOpenFor] = useState<number | null>(null);
+  // An emptied bill (completed, cleared, cancelled) forgets it, so the next bill's first line
+  // never opens a note box and takes the focus from search.
+  if (cart.length === 0 && noteOpenFor !== null) setNoteOpenFor(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [searchMessage, setSearchMessage] = useState('');
   // The line "+", "-" and Delete act on: the item added last.
@@ -153,6 +211,14 @@ export function BillingPageClient() {
     refetchInterval: 60_000,
   });
   const menu = menuQuery.data?.items ?? [];
+  // Kiosk orders waiting to be paid here: a guest walks up, the cashier taps their number.
+  const waitingQuery = useQuery({
+    enabled: Boolean(counter),
+    queryFn: async () => (await organizationApi.listWaitingKioskOrders(counter!.id)).data,
+    queryKey: queryKeys.kioskOrderToBill('waiting', counter?.id),
+    refetchInterval: 10_000,
+  });
+  const waiting = waitingQuery.data ?? [];
   const ordersQuery = useRestaurantOrders(counter?.restaurantId);
   const activeOrders = (ordersQuery.data ?? []).filter((order) => order.source === 'COUNTER');
 
@@ -183,7 +249,7 @@ export function BillingPageClient() {
     cart.filter((line) => line.item.id === menuId).reduce((sum, line) => sum + line.quantity, 0);
 
   const categories = useMemo(() => {
-    const counts = new Map<string, { count: number; id: string; name: string }>();
+    const counts = new Map<string, { count: number; id: string; name: string; order: number }>();
 
     for (const item of menu) {
       const id = item.category?.id ?? '';
@@ -191,12 +257,15 @@ export function BillingPageClient() {
         count: 0,
         id,
         name: item.category?.categoryName ?? 'Other',
+        // Uncategorised items (Other) come last.
+        order: item.category?.sortOrder ?? Number.POSITIVE_INFINITY,
       };
       entry.count += 1;
       counts.set(id, entry);
     }
 
-    return [...counts.values()].sort((a, b) => a.name.localeCompare(b.name));
+    // In the order set on Item Categories, so the till matches the kiosk and the menus.
+    return [...counts.values()].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
   }, [menu]);
 
   const term = search.trim().toLowerCase();
@@ -233,6 +302,19 @@ export function BillingPageClient() {
   );
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const upiId = counter?.restaurant.upiId?.trim();
+  // Asked for only once UPI is picked, so opening the till costs no extra request.
+  const providersQuery = useQuery({
+    enabled: paymentMode === 'UPI',
+    queryFn: async () => (await organizationApi.listOnlinePaymentProviders()).data,
+    queryKey: queryKeys.posPaymentProviders(),
+    staleTime: Infinity,
+  });
+  const upiOptions: Array<'OWN' | OnlinePaymentProvider> = [
+    ...(providersQuery.data ?? []),
+    ...(upiId ? (['OWN'] as const) : []),
+  ];
+  const collectVia = upiVia && upiOptions.includes(upiVia) ? upiVia : (upiOptions[0] ?? 'OWN');
+  const collectsOnline = paymentMode === 'UPI' && !isComplimentary && collectVia !== 'OWN';
   const problems = [
     cart.length === 0 && 'Add at least one item.',
     channel === 'ROOM' && !roomNumber.trim() && 'Enter the room number.',
@@ -242,6 +324,13 @@ export function BillingPageClient() {
       'The Employee ID matches no employee here. Correct it or clear it.',
     isComplimentary && !complimentaryReason.trim() && 'Say why the meal is complimentary.',
   ].filter((problem): problem is string => Boolean(problem));
+  // What the folded "Customer, staff & notes" section holds, shown on its closed row.
+  const extrasFilled = [
+    isComplimentary && 'Complimentary',
+    employeeCode.trim() && 'Staff ID',
+    customerMobile && 'Mobile',
+    instructions.trim() && 'Note',
+  ].filter(Boolean);
 
   function resetBill() {
     setCart([]);
@@ -254,9 +343,43 @@ export function BillingPageClient() {
     setComplimentaryReason('');
     setPaymentMode('CASH');
     setPaymentReference('');
+    setKioskNumber('');
+    setKioskOrder(null);
     setSubmitted(false);
     setClientOrderId(newClientOrderId());
   }
+
+  // The guest's kiosk order into the bill: its items at this counter's prices, and the staff
+  // member's Employee ID when they gave their mobile (check their ID card before the discount).
+  const loadKiosk = useMutation({
+    mutationFn: async (number: number) =>
+      (await organizationApi.getKioskOrderToBill(counter!.id, number)).data,
+    onError: (error) =>
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Kiosk order not loaded',
+        variant: 'error',
+      }),
+    onSuccess: (order) => {
+      const byId = new Map(menu.map((item) => [item.id, item]));
+      const lines = order.lines.flatMap(({ menuId, quantity }) => {
+        const item = byId.get(menuId);
+        return item && !unavailableReason(item, 0) ? [{ item, note: '', quantity }] : [];
+      });
+
+      setCart(lines);
+      setEmployeeCode(order.employeeCode ?? '');
+      setKioskOrder({ id: order.id, number: order.number });
+      setKioskNumber('');
+      if (lines.length < order.lines.length) {
+        showToast({
+          description: 'Tell the guest; the rest of their order is on the bill.',
+          title: `${order.lines.length - lines.length} item(s) not available here now`,
+          variant: 'info',
+        });
+      }
+    },
+  });
 
   function addItem(item: PosMenuItem) {
     if (unavailableReason(item, quantityInCart(item.id))) return;
@@ -332,6 +455,7 @@ export function BillingPageClient() {
     },
     onSuccess: (saved) => {
       invalidatePosBillQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.kioskOrderToBill() });
       setCompleted(saved);
       resetBill();
     },
@@ -339,9 +463,9 @@ export function BillingPageClient() {
 
   function complete() {
     setSubmitted(true);
-    if (problems.length > 0 || bill.isPending) return;
+    if (problems.length > 0 || bill.isPending || onlinePayment) return;
 
-    bill.mutate({
+    const order = {
       payload: {
         bedNumber: channel === 'ROOM' ? bedNumber.trim() || undefined : undefined,
         channel,
@@ -360,10 +484,29 @@ export function BillingPageClient() {
         paymentMode: isComplimentary ? undefined : paymentMode,
         paymentReference: isComplimentary ? undefined : paymentReference.trim() || undefined,
         roomNumber: channel === 'ROOM' ? roomNumber.trim() : undefined,
-      },
+        kioskOrderId: kioskOrder?.id,
+      } satisfies PosBillInput,
       summary: cart.map((line) => `${line.quantity} × ${line.item.itemName}`).join(', '),
       total: totals.grandTotal,
-    });
+    };
+
+    if (collectsOnline) {
+      // The bill is made once the guest has paid, with the provider's payment on it.
+      const { channel: billChannel, counterId, employeeCode: code, lines } = order.payload;
+      setOnlinePayment({
+        ...order,
+        request: {
+          channel: billChannel,
+          counterId,
+          employeeCode: code,
+          lines,
+          provider: collectVia,
+        },
+      });
+      return;
+    }
+
+    bill.mutate(order);
   }
 
   // Billing without the mouse. F2 and F9 work anywhere on the page; "/", "+", "-" and Delete
@@ -398,6 +541,25 @@ export function BillingPageClient() {
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
+  // Billing is for till computers only: one registered as a POS by its hostname, where the user
+  // has the right to bill at its counter. Anyone else sees only why.
+  const tillProblem = !host
+    ? 'This computer is not set up as a till yet.'
+    : countersQuery.isError
+      ? getApiErrorMessage(countersQuery.error)
+      : countersQuery.isSuccess && counters.length === 0
+        ? 'You don’t have access to this till’s counter. Ask an admin to give you access to its location.'
+        : null;
+
+  if (tillProblem) {
+    return (
+      <section className="space-y-4">
+        <AppPageHeader title="Billing" />
+        <TillSetup host={host} onChoose={setHost} problem={tillProblem} />
+      </section>
+    );
+  }
+
   if (!counter) {
     return (
       <section className="space-y-4">
@@ -407,11 +569,43 @@ export function BillingPageClient() {
     );
   }
 
+  // The till opens only once the cashier has started their shift at this counter.
+  if (!counter.shift.open) {
+    return (
+      <section className="space-y-4">
+        <AppPageHeader
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <CounterPicker
+                counter={counter}
+                counters={counters}
+                onChange={(id) => {
+                  setCounterId(id);
+                  resetBill();
+                }}
+              />
+              {/* An admin can point this computer at another till before a shift starts. */}
+              {canSetUpTill ? (
+                <Button onClick={() => setHost('')} size="sm" type="button" variant="ghost">
+                  Change till
+                </Button>
+              ) : null}
+            </div>
+          }
+          description="Start your shift to open the till."
+          title="Billing"
+        />
+        <ShiftStartPanel counter={counter} key={counter.id} />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
       <AppPageHeader
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <ShiftChip counter={counter} />
             <UnsentBillsButton unsent={unsent} />
             <CounterPicker
               counter={counter}
@@ -426,12 +620,12 @@ export function BillingPageClient() {
         description="Pick items, take payment and complete the bill. The kitchen sees it at once."
         title="Billing"
       />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[200px_minmax(0,1fr)_400px]">
-        {/* A column on the left from xl (laptops), scrolling on its own like the bill; below that,
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[200px_minmax(0,1fr)_400px]">
+        {/* A column on the left from 2xl (wide screens, beside the sidebar), scrolling on its own like the bill; below that,
             last, under the menu (not across, where the sticky bill would slide under it). */}
         <Panel
           aria-label="Active orders"
-          className="order-last p-3 xl:sticky xl:top-[calc(var(--app-header-h)+1.5rem)] xl:order-0 xl:max-h-[calc(100dvh-var(--app-header-h)-9.5rem)] xl:self-start xl:overflow-y-auto"
+          className="order-last p-3 2xl:sticky 2xl:top-[calc(var(--app-header-h)+1.5rem)] 2xl:order-0 2xl:max-h-[calc(100dvh-var(--app-header-h)-9.5rem)] 2xl:self-start 2xl:overflow-y-auto"
           role="region"
         >
           <h2 className="text-sm font-semibold text-ds-link">
@@ -445,7 +639,7 @@ export function BillingPageClient() {
           {activeOrders.length === 0 ? (
             <p className="mt-2 text-xs text-ds-muted italic">No active orders right now.</p>
           ) : (
-            <ul className="mt-2 grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-1">
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-1">
               {activeOrders.map((order) => (
                 <li className="rounded-control border border-ds-border p-2" key={order.id}>
                   <div className="flex items-center justify-between gap-2">
@@ -463,15 +657,17 @@ export function BillingPageClient() {
         </Panel>
         <Panel className="min-w-0 space-y-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <SegmentedControl
-              label="Order type"
-              onChange={setChannel}
-              options={[
-                { label: 'Counter', value: 'COUNTER' },
-                { label: 'Room', value: 'ROOM' },
-              ]}
-              value={channel}
-            />
+            {canBillRooms ? (
+              <SegmentedControl
+                label="Order type"
+                onChange={setChannel}
+                options={[
+                  { label: 'Counter', value: 'COUNTER' },
+                  { label: 'Room', value: 'ROOM' },
+                ]}
+                value={channel}
+              />
+            ) : null}
             <div aria-label="Food types shown" className="flex flex-wrap gap-3" role="group">
               {allFoodTypes.map((type) => (
                 <span className="inline-flex items-center gap-2 text-sm font-semibold" key={type}>
@@ -543,20 +739,30 @@ export function BillingPageClient() {
               </span>
             </p>
           </div>
-          <div aria-label="Categories" className="flex flex-wrap gap-1.5" role="group">
+          <div aria-label="Categories" className="flex flex-wrap gap-2" role="group">
             {[{ count: menu.length, id: '', name: 'All' }, ...categories].map((category) => (
               <button
                 aria-pressed={categoryId === category.id}
                 className={cn(
-                  'h-9 rounded-full border px-4 text-[13px] font-semibold transition',
+                  'h-10 rounded-full border px-4 text-[13.5px] font-medium transition-colors duration-150',
                   categoryId === category.id
-                    ? 'border-ds-primary bg-ds-primary text-white'
+                    ? 'border-ds-primary bg-ds-primary text-white shadow-[0_6px_16px_rgb(11_87_164/0.28)]'
                     : 'border-ds-border bg-ds-surface text-ds-text-2 hover:border-ds-primary/40',
                 )}
                 key={category.id || 'all'}
                 onClick={() => setCategoryId(category.id)}
                 type="button"
               >
+                {category.id ? (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'mr-1.5 inline-block h-2 w-2 rounded-full',
+                      categoryTone(category.id),
+                      categoryId === category.id && 'ring-2 ring-white/70',
+                    )}
+                  />
+                ) : null}
                 {category.name}
                 <span className="ml-1.5 tabular-nums opacity-70">{category.count}</span>
               </button>
@@ -585,16 +791,23 @@ export function BillingPageClient() {
                     <button
                       aria-label={`Add ${item.itemName}`}
                       className={cn(
-                        'flex h-full min-h-28 w-full flex-col justify-between gap-3 rounded-[18px] border p-3.5 text-left transition duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary active:scale-[0.98]',
+                        'relative flex h-full min-h-28 w-full flex-col justify-between gap-3 overflow-hidden rounded-[18px] border p-3.5 pt-4 text-left transition duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary active:scale-[0.98]',
                         reason
                           ? 'cursor-not-allowed border-ds-border bg-ds-subtle opacity-60'
                           : 'border-ds-border bg-ds-surface hover:border-ds-primary-border hover:shadow-card-hover motion-safe:hover:-translate-y-0.5',
-                        inCart > 0 && 'border-ds-primary ring-1 ring-ds-primary',
+                        inCart > 0 && 'border-ds-primary ring-1 ring-ds-primary ring-inset',
                       )}
                       disabled={Boolean(reason)}
                       onClick={() => addItem(item)}
                       type="button"
                     >
+                      {/* v3: a band of food art, as on the kiosk, so dishes read at a glance. */}
+                      <FoodArt
+                        category={item.category?.categoryName}
+                        categoryId={item.category?.id}
+                        className="-mx-3.5 -mt-4 h-16"
+                        name={item.itemName}
+                      />
                       <span className="flex items-start justify-between gap-2">
                         <span className="line-clamp-2 text-[14px] leading-snug font-semibold text-ds-text">
                           {item.itemName}
@@ -618,7 +831,11 @@ export function BillingPageClient() {
                           </span>
                         </span>
                         {inCart > 0 ? (
-                          <span className="grid h-8 min-w-8 shrink-0 place-items-center rounded-full bg-ds-primary px-2 font-mono text-[13px] font-semibold text-white">
+                          // Keyed by the count, so each add pops it again.
+                          <span
+                            className="pop grid h-8 min-w-8 shrink-0 place-items-center rounded-full bg-ds-primary px-2 font-mono text-[13px] font-semibold text-white"
+                            key={inCart}
+                          >
                             ×{inCart}
                           </span>
                         ) : reason ? null : (
@@ -661,23 +878,136 @@ export function BillingPageClient() {
           </div>
         ) : null}
         <Panel
-          className="flex scroll-mt-[calc(var(--app-header-h)+1rem)] flex-col gap-4 p-4 pb-24 lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-9.5rem)] lg:self-start lg:overflow-y-auto lg:pb-4"
+          className="flex scroll-mt-[calc(var(--app-header-h)+1rem)] flex-col gap-4 rounded-[24px] p-5 pb-24 shadow-[0_4px_8px_rgb(15_23_42/0.06),0_24px_48px_rgb(15_23_42/0.12)] lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-9.5rem)] lg:self-start lg:overflow-y-auto lg:pb-5"
           id="pos-bill"
         >
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-ds-text">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-ds-text">
+              <span
+                aria-hidden="true"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-ds-primary text-white shadow-md shadow-ds-primary/25"
+              >
+                <ReceiptText className="h-4.5 w-4.5" strokeWidth={2} />
+              </span>
               Current bill
-              <span className="ml-2 text-sm font-normal text-ds-muted">
+              <span
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums',
+                  itemCount ? 'bg-ds-primary-soft text-ds-link' : 'bg-ds-subtle text-ds-muted',
+                )}
+              >
                 {itemCount} item{itemCount === 1 ? '' : 's'}
               </span>
             </h2>
             {cart.length > 0 ? (
-              <Button onClick={() => setCart([])} size="sm" type="button" variant="ghost">
+              <Button
+                className="pointer-coarse:h-11"
+                onClick={() => {
+                  setCart([]);
+                  setKioskOrder(null);
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
                 <Trash2 className="h-4 w-4" />
                 Clear
               </Button>
             ) : null}
           </div>
+
+          {kioskOrder ? (
+            <div className="flex items-center gap-3 rounded-control-lg bg-ds-primary-soft px-3 py-2 text-sm text-ds-text">
+              <MonitorSmartphone aria-hidden="true" className="h-4 w-4 shrink-0 text-ds-link" />
+              <span className="min-w-0 flex-1">
+                Kiosk order <span className="font-semibold">{kioskOrder.number}</span>
+                {employeeCode.trim() ? (
+                  <span className="block text-xs text-ds-muted">
+                    Staff discount: check their staff ID card.
+                  </span>
+                ) : null}
+              </span>
+              <Button
+                className="pointer-coarse:h-11"
+                onClick={() => {
+                  setCart([]);
+                  setEmployeeCode('');
+                  setKioskOrder(null);
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Remove
+              </Button>
+            </div>
+          ) : channel === 'COUNTER' ? (
+            <form
+              className="flex gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const number = Number(kioskNumber);
+                if (Number.isInteger(number) && number > 0) loadKiosk.mutate(number);
+              }}
+            >
+              <Input
+                aria-label="Kiosk order number"
+                className="min-w-0 flex-1"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setKioskNumber(event.target.value.replace(/\D/g, ''))}
+                placeholder="Kiosk order no."
+                value={kioskNumber}
+              />
+              <Button
+                className="pointer-coarse:h-11"
+                disabled={!kioskNumber || loadKiosk.isPending || !menuQuery.data}
+                type="submit"
+                variant="outline"
+              >
+                <MonitorSmartphone aria-hidden="true" className="h-4 w-4" />
+                Load
+              </Button>
+            </form>
+          ) : null}
+
+          {!kioskOrder && channel === 'COUNTER' && waiting.length > 0 ? (
+            <section aria-label="Kiosk orders waiting to pay" className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ds-muted">
+                Waiting to pay · {waiting.length}
+                {cart.length > 0 ? (
+                  <span className="ml-1 font-normal normal-case tracking-normal">
+                    (finish this bill first)
+                  </span>
+                ) : null}
+              </p>
+              <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+                {waiting.map((order) => (
+                  <li key={order.id}>
+                    <button
+                      className="flex w-full items-center gap-3 rounded-control-lg border border-ds-border px-3 py-2 text-left transition hover:bg-ds-subtle disabled:opacity-50 pointer-coarse:min-h-11"
+                      disabled={cart.length > 0 || loadKiosk.isPending || !menuQuery.data}
+                      onClick={() => loadKiosk.mutate(order.number)}
+                      type="button"
+                    >
+                      <span className="grid h-9 min-w-9 place-items-center rounded-control bg-ds-primary-soft px-1.5 text-base font-bold tabular-nums text-ds-link">
+                        {order.number}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-ds-text">
+                          {order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}
+                        </span>
+                        <span className="block text-xs text-ds-muted">
+                          {waitingTime.format(new Date(order.createdAt))}
+                          {order.isStaff ? ' · Staff: check ID card' : ''}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           {channel === 'ROOM' ? (
             <div className="grid grid-cols-2 gap-2">
@@ -707,13 +1037,21 @@ export function BillingPageClient() {
           ) : null}
 
           {cart.length === 0 ? (
-            <p className="rounded-card border border-dashed border-ds-border py-8 text-center text-sm text-ds-muted">
-              Tap an item to add it.
-            </p>
+            <div className="flex shrink-0 items-center gap-3 rounded-card bg-ds-subtle px-4 py-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ds-surface text-ds-link shadow-xs">
+                <ShoppingBag aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ds-text">No items yet</span>
+                <span className="block text-xs text-ds-muted">
+                  Tap a dish on the menu to add it to this bill.
+                </span>
+              </span>
+            </div>
           ) : (
             <ul className="divide-y divide-ds-divider">
               {cart.map((line, index) => (
-                <li className="py-2.5" key={`${line.item.id}-${index}`}>
+                <li className="py-3" key={`${line.item.id}-${index}`}>
                   <div className="flex items-start gap-2">
                     <span className="mt-0.5">
                       <FoodTypeMarker type={line.item.foodType} />
@@ -726,11 +1064,20 @@ export function BillingPageClient() {
                         {formatMoney(line.item.price)} · GST {line.item.gstPercent}%
                         {line.item.isGstInclusive ? ' incl.' : ''}
                       </p>
+                      {line.note || noteOpenFor === index ? null : (
+                        <button
+                          className="mt-0.5 text-xs font-semibold text-ds-link hover:underline pointer-coarse:py-2"
+                          onClick={() => setNoteOpenFor(index)}
+                          type="button"
+                        >
+                          + Add note
+                        </button>
+                      )}
                     </div>
-                    <div className="flex items-center rounded-control border border-ds-border">
+                    <div className="flex items-center rounded-full bg-ds-subtle p-0.5">
                       <button
                         aria-label={`One less ${line.item.itemName}`}
-                        className="grid h-8 w-8 place-items-center text-ds-text-2 hover:bg-ds-subtle"
+                        className="grid h-8 w-8 place-items-center rounded-full text-ds-text-2 hover:bg-ds-surface pointer-coarse:h-11 pointer-coarse:w-11"
                         onClick={() => changeQuantity(index, -1)}
                         type="button"
                       >
@@ -741,7 +1088,7 @@ export function BillingPageClient() {
                       </span>
                       <button
                         aria-label={`One more ${line.item.itemName}`}
-                        className="grid h-8 w-8 place-items-center text-ds-text-2 hover:bg-ds-subtle"
+                        className="grid h-8 w-8 place-items-center rounded-full bg-ds-primary text-white shadow-sm shadow-ds-primary/30 hover:bg-ds-primary-hover pointer-coarse:h-11 pointer-coarse:w-11"
                         onClick={() => changeQuantity(index, 1)}
                         type="button"
                       >
@@ -750,108 +1097,157 @@ export function BillingPageClient() {
                     </div>
                     <button
                       aria-label={`Remove ${line.item.itemName}`}
-                      className="grid h-8 w-8 place-items-center text-ds-muted hover:text-ds-status-bad-fg"
+                      className="grid h-8 w-8 place-items-center text-ds-muted hover:text-ds-status-bad-fg pointer-coarse:h-11 pointer-coarse:w-11"
                       onClick={() => changeQuantity(index, -line.quantity)}
                       type="button"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <Input
-                    aria-label={`Note for ${line.item.itemName}`}
-                    className="mt-1.5 h-8 text-xs"
-                    maxLength={200}
-                    onChange={(event) =>
-                      setCart((lines) =>
-                        lines.map((entry, at) =>
-                          at === index ? { ...entry, note: event.target.value } : entry,
-                        ),
-                      )
-                    }
-                    placeholder="Note for the kitchen (less spicy, no onion…)"
-                    value={line.note}
-                  />
+                  {line.note || noteOpenFor === index ? (
+                    <Input
+                      aria-label={`Note for ${line.item.itemName}`}
+                      // Only on a tap of "Add note", never when a line is added from the menu.
+                      autoFocus={!line.note}
+                      className="mt-1.5 h-8 text-xs"
+                      maxLength={200}
+                      onChange={(event) =>
+                        setCart((lines) =>
+                          lines.map((entry, at) =>
+                            at === index ? { ...entry, note: event.target.value } : entry,
+                          ),
+                        )
+                      }
+                      placeholder="Note for the kitchen (less spicy, no onion…)"
+                      value={line.note}
+                    />
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
 
-          <div>
-            <Label htmlFor="pos-instructions">Instructions</Label>
-            <textarea
-              className="mt-1 min-h-16 w-full rounded-control border border-ds-input bg-ds-surface px-3 py-2 text-sm text-ds-text outline-hidden focus:ring-2 focus:ring-ds-primary"
-              id="pos-instructions"
-              maxLength={200}
-              onChange={(event) => setInstructions(event.target.value)}
-              placeholder="For the whole order"
-              value={instructions}
-            />
-            <p className="text-right text-[11px] text-ds-muted">{instructions.length}/200</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label htmlFor="pos-mobile">Customer mobile</Label>
-              <Input
-                id="pos-mobile"
-                inputMode="numeric"
-                maxLength={10}
-                onChange={(event) => setCustomerMobile(event.target.value.replace(/\D/g, ''))}
-                placeholder="Optional"
-                value={customerMobile}
+          {cart.length > 0 ? (
+            <div className="shrink-0 rounded-card bg-ds-subtle px-3.5 py-3">
+              <BillTotals
+                {...totals}
+                discountPercent={staffDiscount}
+                gstRates={[...new Set(cart.map((line) => line.item.gstPercent))].filter(Boolean)}
               />
             </div>
-            <div>
-              <Label htmlFor="pos-employee">Employee ID</Label>
-              <Input
-                id="pos-employee"
-                maxLength={50}
-                onChange={(event) => setEmployeeCode(event.target.value)}
-                placeholder="Optional"
-                value={employeeCode}
-              />
-            </div>
-          </div>
-          {employee?.data ? (
-            <p className="-mt-2 text-xs text-ds-text-3" role="status">
-              <span className="font-semibold text-ds-text">{employee.data.employeeName}</span>
-              {employee.data.employmentType
-                ? ` · ${employmentTypeLabels[employee.data.employmentType]}`
-                : ''}
-              {' · '}
-              {employee.data.discountPercent && !isComplimentary ? (
-                <span className="font-semibold text-ds-status-ok-fg">
-                  {employee.data.discountPercent}% staff discount
-                </span>
-              ) : (
-                'no staff discount here'
-              )}
-            </p>
-          ) : employee?.isError ? (
-            <p className="-mt-2 text-xs text-ds-status-bad-fg" role="alert">
-              {getApiErrorMessage(employee.error)}
-            </p>
           ) : null}
 
-          <Toggle
-            checked={isComplimentary}
-            label="Complimentary meal"
-            onChange={setIsComplimentary}
-          />
-          {isComplimentary ? (
-            <div>
-              <Label htmlFor="pos-comp-reason">
-                Reason <span className="text-ds-status-bad-fg">*</span>
-              </Label>
-              <Input
-                id="pos-comp-reason"
-                maxLength={200}
-                onChange={(event) => setComplimentaryReason(event.target.value)}
-                placeholder="e.g. Duty doctor, patient attendant"
-                value={complimentaryReason}
+          {/* The optional fields fold away so the items stay the main thing on the bill. Opens
+              itself when Complete order finds a problem, so the messages below have their field. */}
+          <details
+            // The bottom margin clears the payment bar that sticks over the cart's foot.
+            className="group shrink-0 rounded-card border border-ds-border lg:scroll-mb-36"
+            onToggle={(event) => {
+              const { open } = event.currentTarget;
+              setExtrasOpen(open);
+              // On a short screen the fields open below the cart's fold: bring them into view.
+              if (open) event.currentTarget.scrollIntoView({ block: 'nearest' });
+            }}
+            open={extrasOpen || (submitted && problems.length > 0)}
+          >
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-card px-3.5 py-2 text-sm font-semibold text-ds-text transition hover:bg-ds-subtle focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary [&::-webkit-details-marker]:hidden">
+              Customer, staff &amp; notes
+              <span className="ml-auto truncate text-xs font-medium text-ds-muted">
+                {extrasFilled.length ? extrasFilled.join(' · ') : 'Optional'}
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 text-ds-muted transition-transform duration-100 group-open:rotate-180 motion-reduce:transition-none"
               />
+            </summary>
+            <div className="flex flex-col gap-3 border-t border-ds-divider p-3.5">
+              <div>
+                <Label htmlFor="pos-instructions">Instructions</Label>
+                <textarea
+                  className="mt-1 min-h-16 w-full rounded-control border border-ds-input bg-ds-surface px-3 py-2 text-sm text-ds-text outline-hidden focus:ring-2 focus:ring-ds-primary"
+                  id="pos-instructions"
+                  maxLength={200}
+                  onChange={(event) => setInstructions(event.target.value)}
+                  placeholder="For the whole order"
+                  value={instructions}
+                />
+                <p className="text-right text-[11px] text-ds-muted">{instructions.length}/200</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="pos-mobile">Customer mobile</Label>
+                  <Input
+                    id="pos-mobile"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) => setCustomerMobile(event.target.value.replace(/\D/g, ''))}
+                    placeholder="Optional"
+                    value={customerMobile}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pos-employee">Employee ID</Label>
+                  <Input
+                    id="pos-employee"
+                    maxLength={50}
+                    onChange={(event) => setEmployeeCode(event.target.value)}
+                    placeholder="Optional"
+                    value={employeeCode}
+                  />
+                </div>
+              </div>
+              {employee?.data ? (
+                <p className="-mt-1.5 text-xs text-ds-text-3" role="status">
+                  <span className="font-semibold text-ds-text">{employee.data.employeeName}</span>
+                  {employee.data.employmentType
+                    ? ` · ${employmentTypeLabels[employee.data.employmentType]}`
+                    : ''}
+                  {' · '}
+                  {employee.data.discountPercent && !isComplimentary ? (
+                    <span className="font-semibold text-ds-status-ok-fg">
+                      {employee.data.discountPercent}%{' '}
+                      {employee.data.discountName ?? 'staff discount'}
+                    </span>
+                  ) : (
+                    'no staff discount here'
+                  )}
+                </p>
+              ) : employee?.isError ? (
+                <p className="-mt-1.5 text-xs text-ds-status-bad-fg" role="alert">
+                  {getApiErrorMessage(employee.error)}
+                </p>
+              ) : null}
+
+              {canApproveComplimentary ? (
+                <Toggle
+                  checked={isComplimentary}
+                  label="Complimentary meal"
+                  onChange={setIsComplimentary}
+                />
+              ) : null}
+              {isComplimentary ? (
+                <div>
+                  <Label htmlFor="pos-comp-reason">
+                    Reason <span className="text-ds-status-bad-fg">*</span>
+                  </Label>
+                  <Input
+                    id="pos-comp-reason"
+                    maxLength={200}
+                    onChange={(event) => setComplimentaryReason(event.target.value)}
+                    placeholder="e.g. Duty doctor, patient attendant"
+                    value={complimentaryReason}
+                  />
+                </div>
+              ) : null}
             </div>
-          ) : paymentMode === 'UPI' && upiId && totals.grandTotal > 0 ? (
+          </details>
+
+          {!isComplimentary &&
+          paymentMode === 'UPI' &&
+          collectVia === 'OWN' &&
+          upiId &&
+          totals.grandTotal > 0 ? (
             <div
               className="flex items-center gap-3 rounded-card border border-ds-primary-border bg-ds-primary-soft/50 p-3"
               ref={upiQrRef}
@@ -873,12 +1269,17 @@ export function BillingPageClient() {
             </div>
           ) : null}
 
-          {/* Payment, totals and the buttons stay pinned to the panel's foot while the bill
-              scrolls, so how it's paid is always in view beside Complete order. */}
-          <div className="space-y-3 lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:border-ds-divider lg:bg-ds-surface lg:p-4">
+          {/* Payment and the buttons stay pinned to the panel's foot while the bill scrolls, so
+              how it's paid is always in view beside Complete order (which carries the total). The
+              breakdown sits under the items: pinned too, it left a short screen no room for them. */}
+          <div className="space-y-3 lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:border-ds-divider lg:bg-ds-surface lg:px-4 lg:py-3">
             {isComplimentary ? null : (
               <div className="space-y-2">
-                <div aria-label="Payment mode" className="grid grid-cols-4 gap-1.5" role="group">
+                <div
+                  aria-label="Payment mode"
+                  className="grid grid-cols-4 gap-1 rounded-control-lg bg-ds-subtle p-1"
+                  role="group"
+                >
                   {paymentModes.map((mode) => {
                     const Icon = paymentIcons[mode];
 
@@ -886,10 +1287,10 @@ export function BillingPageClient() {
                       <button
                         aria-pressed={paymentMode === mode}
                         className={cn(
-                          'flex h-11 items-center justify-center gap-1.5 rounded-[12px] border text-[13px] font-semibold transition',
+                          'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary pointer-coarse:h-11',
                           paymentMode === mode
-                            ? 'border-ds-primary bg-ds-primary-soft text-ds-link ring-1 ring-ds-primary'
-                            : 'border-ds-border bg-ds-surface text-ds-text-2 hover:border-ds-primary/40',
+                            ? 'bg-ds-primary text-white shadow-md shadow-ds-primary/25'
+                            : 'text-ds-text-2 hover:bg-ds-surface hover:text-ds-text',
                         )}
                         key={mode}
                         onClick={() => setPaymentMode(mode)}
@@ -901,7 +1302,35 @@ export function BillingPageClient() {
                     );
                   })}
                 </div>
-                {paymentMode === 'CASH' ? null : (
+                {paymentMode === 'UPI' && upiOptions.length > 1 ? (
+                  <div
+                    aria-label="Collect UPI via"
+                    className="flex flex-wrap items-center gap-1.5"
+                    role="group"
+                  >
+                    <span className="mr-1 text-xs font-semibold text-ds-text-3">Collect via</span>
+                    {upiOptions.map((option) => (
+                      <button
+                        aria-pressed={collectVia === option}
+                        className={cn(
+                          'flex h-8 items-center gap-1 rounded-full border px-3 text-[12.5px] font-semibold transition pointer-coarse:h-11',
+                          collectVia === option
+                            ? 'border-ds-primary-border bg-ds-primary-soft text-ds-link'
+                            : 'border-ds-border text-ds-text-2 hover:bg-ds-subtle',
+                        )}
+                        key={option}
+                        onClick={() => setUpiVia(option)}
+                        type="button"
+                      >
+                        {collectVia === option ? (
+                          <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
+                        ) : null}
+                        {option === 'OWN' ? 'Own QR' : providerLabels[option]}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {paymentMode === 'CASH' || collectsOnline ? null : (
                   <Input
                     aria-label="Payment reference"
                     className="h-9"
@@ -917,12 +1346,6 @@ export function BillingPageClient() {
                 )}
               </div>
             )}
-            <BillTotals
-              {...totals}
-              discountPercent={staffDiscount}
-              gstRates={[...new Set(cart.map((line) => line.item.gstPercent))].filter(Boolean)}
-            />
-
             {submitted && problems.length > 0 ? (
               <ul className="space-y-0.5 text-sm text-ds-status-bad-fg" role="alert">
                 {problems.map((problem) => (
@@ -933,7 +1356,7 @@ export function BillingPageClient() {
 
             <div className="grid grid-cols-[auto_1fr] gap-2">
               <Button
-                className="h-14 px-4"
+                className="h-[52px] rounded-full px-5"
                 disabled={bill.isPending || cart.length === 0}
                 onClick={resetBill}
                 type="button"
@@ -944,7 +1367,7 @@ export function BillingPageClient() {
               <Button
                 // Label and amount on one line where the bill is wide enough; on a phone the
                 // amount wraps under the label instead of pushing the page sideways.
-                className="h-auto min-h-14 flex-wrap justify-between gap-x-3 gap-y-0 rounded-2xl px-4 py-1.5 text-[15px] shadow-lg shadow-ds-primary/25"
+                className="h-auto min-h-[52px] flex-wrap justify-between gap-x-3 gap-y-0 rounded-full px-5 py-1.5 text-[15px] shadow-[0_6px_16px_rgb(11_87_164/0.28)]"
                 disabled={bill.isPending}
                 id="pos-complete"
                 onClick={complete}
@@ -958,7 +1381,10 @@ export function BillingPageClient() {
                   )}
                   Complete order
                 </span>
-                <span className="font-mono text-base whitespace-nowrap">
+                <span
+                  className="pop inline-block font-mono text-base whitespace-nowrap"
+                  key={totals.grandTotal}
+                >
                   {formatMoney(totals.grandTotal)}
                 </span>
               </Button>
@@ -1013,6 +1439,22 @@ export function BillingPageClient() {
         ) : null}
       </Modal>
       <UnsentBillsDialog unsent={unsent} />
+      <OnlinePaymentDialog
+        onClose={() => setOnlinePayment(null)}
+        onPaid={(paid) => {
+          if (!onlinePayment) return;
+          bill.mutate({
+            ...onlinePayment,
+            payload: {
+              ...onlinePayment.payload,
+              onlinePaymentId: paid.id,
+              paymentReference: paid.paidReference ?? undefined,
+            },
+          });
+          setOnlinePayment(null);
+        }}
+        request={onlinePayment?.request ?? null}
+      />
     </section>
   );
 }

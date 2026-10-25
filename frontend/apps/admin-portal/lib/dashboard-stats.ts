@@ -313,6 +313,31 @@ export function pendingStats(pending: Transfer[], total: number, now: number): P
   };
 }
 
+/**
+ * Transfers waiting on acknowledgement at the end of each bucket (now, for the last one), from
+ * the period's records and the pending queue (deduplicated by id). A pending transfer was sent
+ * at its updatedAt; an acknowledged one at its createdAt (as in ackMinutes, so a draft sent
+ * later counts as waiting early) until its updatedAt. Only drafts can be cancelled, so a
+ * cancelled transfer never waited. One acknowledged within the window but dated before the
+ * records start is missing, so early buckets can read low.
+ */
+export function pendingSeries(transfers: DashboardTransfer[], window: PeriodWindow): number[] {
+  const spans = [...new Map(transfers.map((transfer) => [transfer.id, transfer])).values()].flatMap(
+    (transfer) =>
+      transfer.status === 'PENDING_ACKNOWLEDGEMENT'
+        ? [{ acked: Infinity, sent: Date.parse(transfer.updatedAt) }]
+        : transfer.status === 'ACKNOWLEDGED'
+          ? [{ acked: Date.parse(transfer.updatedAt), sent: Date.parse(transfer.createdAt) }]
+          : [],
+  );
+
+  return window.buckets.map((bucket) => {
+    const at = Math.min(bucket.end, window.end);
+
+    return spans.filter((span) => span.sent <= at && span.acked > at).length;
+  });
+}
+
 export interface WastageStats {
   avgPercent: number | null;
   /** The single worst line in the period. */
@@ -327,6 +352,8 @@ export interface WastageStats {
   kitchens: number;
   /** Posted productions in the period. */
   posted: number;
+  /** Posted productions per bucket. */
+  postedSeries: number[];
   /**
    * Days (weeks, for 90 days) on which some kitchen went over the limit. Counted per kitchen,
    * like the warning insight, since the all-kitchen average can hide one kitchen's bad day.
@@ -351,7 +378,7 @@ export function wastageStats(
   productions: DashboardProduction[],
   window: PeriodWindow,
 ): WastageStats {
-  const buckets = window.buckets.map(() => ({ produced: 0, wasted: 0 }));
+  const buckets = window.buckets.map(() => ({ posted: 0, produced: 0, wasted: 0 }));
   const hospitals = new Map<string, { produced: number; wasted: number }>();
   const kitchenDays = new Map<
     string,
@@ -387,6 +414,7 @@ export function wastageStats(
     posted += 1;
     current.produced += produced;
     current.wasted += wasted;
+    buckets[index]!.posted += 1;
     buckets[index]!.produced += produced;
     buckets[index]!.wasted += wasted;
     kitchens.add(production.kitchenId);
@@ -438,6 +466,7 @@ export function wastageStats(
     hospitals,
     kitchens: kitchens.size,
     posted,
+    postedSeries: buckets.map((bucket) => bucket.posted),
     overLimit: new Set(
       [...kitchenDays.values()]
         .filter((day) => day.percent > WASTAGE_LIMIT)
@@ -585,10 +614,36 @@ export function percentDelta(
 
   const up = change > 0;
 
-  return {
-    text: `${up ? '▲' : '▼'} ${Math.abs(change)}%`,
-    tone: better === 'none' ? 'info' : (better === 'up') === up ? 'good' : 'bad',
-  };
+  return { text: `${up ? '▲' : '▼'} ${Math.abs(change)}%`, tone: deltaTone(up, better) };
+}
+
+const deltaTone = (up: boolean, better: 'down' | 'none' | 'up'): DeltaTone =>
+  better === 'none' ? 'info' : (better === 'up') === up ? 'good' : 'bad';
+
+/**
+ * Which way a sparkline moved within the period: the later half's average against the earlier
+ * half's (nulls skipped), toned like percentDelta. Null with fewer than two values.
+ */
+export function trendOf(
+  values: Array<number | null>,
+  better: 'down' | 'none' | 'up',
+): { direction: 'down' | 'flat' | 'up'; tone: DeltaTone } | null {
+  const defined = values.filter((value): value is number => value !== null);
+  const half = Math.floor(defined.length / 2);
+
+  if (!half) {
+    return null;
+  }
+
+  const earlier = average(defined.slice(0, half))!;
+  const later = average(defined.slice(-half))!;
+  const change = earlier ? Math.round(((later - earlier) / earlier) * 100) : Math.sign(later);
+
+  if (change === 0) {
+    return { direction: 'flat', tone: 'neutral' };
+  }
+
+  return { direction: change > 0 ? 'up' : 'down', tone: deltaTone(change > 0, better) };
 }
 
 /** Change in percentage points (wastage), lower is better. */
@@ -890,7 +945,7 @@ export function setupSteps(
 
   if (firsts.grn !== undefined) {
     steps.push({
-      cta: { href: '/inventory/grns/new', label: 'New GRN' },
+      cta: { href: '/inventory/grns/new', label: 'Receive a delivery' },
       detail: firsts.grn
         ? `${firsts.grn.grnNumber} · ${firsts.grn.store.storeName}`
         : 'Receive goods into a store',

@@ -64,6 +64,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
       locationMasterForm.reset(toHospitalFormDefaults(response.data));
       showToast({
+        recordId: response.data.id,
         title: 'Location updated',
         variant: 'success',
       });

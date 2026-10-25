@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRightLeft, PackagePlus } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
-import { AppPageHeader, EmptyState } from '@/components/design-system';
+import { AppPageHeader, EmptyState, RecordAvatar } from '@/components/design-system';
 import { LoadError } from '@/components/location-empty-states';
 import { useLocationContext } from '@/components/location-context';
 import { IfCanOpen, RecordLink } from '@/components/record-link';
@@ -247,13 +247,16 @@ export function StockLevelsPageClient() {
                       onClick={() => setSelectedKey(rowKey(item))}
                       type="button"
                     >
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate text-sm font-semibold text-ds-text">
-                          {item.itemName}
-                        </span>
-                        <span className="truncate font-mono text-xs text-ds-muted">
-                          {item.itemCode}
-                          {storeId ? null : ` · ${item.storeName}`}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={item.itemName} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-sm font-semibold text-ds-text">
+                            {item.itemName}
+                          </span>
+                          <span className="truncate font-mono text-xs text-ds-muted">
+                            {item.itemCode}
+                            {storeId ? null : ` · ${item.storeName}`}
+                          </span>
                         </span>
                       </span>
                       <span className="hidden md:block">

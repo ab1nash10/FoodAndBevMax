@@ -179,6 +179,8 @@ export class RestaurantsService {
             restaurantCode,
             restaurantName: dto.restaurantName,
             staffDiscountApplicable: dto.staffDiscountApplicable ?? false,
+            shiftMode: dto.shiftMode,
+            shiftTimings: (dto.shiftTimings ?? []) as unknown as Prisma.InputJsonValue,
             storeId: dto.storeId,
             sodexoMid: dto.sodexoMid,
             sodexoTid: dto.sodexoTid,
@@ -357,6 +359,10 @@ export class RestaurantsService {
         if (dto.restaurantName !== undefined) data.restaurantName = dto.restaurantName;
         if (dto.staffDiscountApplicable !== undefined) {
           data.staffDiscountApplicable = dto.staffDiscountApplicable;
+        }
+        if (dto.shiftMode !== undefined) data.shiftMode = dto.shiftMode;
+        if (dto.shiftTimings !== undefined) {
+          data.shiftTimings = dto.shiftTimings as unknown as Prisma.InputJsonValue;
         }
         if (dto.storeId !== undefined) {
           data.store = {

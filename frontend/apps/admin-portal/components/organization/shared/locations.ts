@@ -12,7 +12,7 @@ import type {
 import { optionalValue } from '@/components/organization/shared/utils';
 
 export const freezeServicesMessage =
-  'Turning this off will freeze related services. Existing records will remain visible. Continue?';
+  'Turning this off will freeze related services. Existing records will remain visible.';
 
 export const inactiveLocationMessage =
   'This Location is inactive. Services for this Location are currently frozen.';

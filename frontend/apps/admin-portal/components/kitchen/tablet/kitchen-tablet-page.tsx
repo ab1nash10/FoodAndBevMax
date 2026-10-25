@@ -6,18 +6,23 @@ import { CheckCircle2, ChefHat, Loader2, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { KitchenProduction } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
-import { AppPageHeader, EmptyState } from '@/components/design-system';
+import { EmptyState } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { LoadError } from '@/components/location-empty-states';
+import { glass } from '@/components/order-board/board-header';
 import { useToast } from '@/components/toast-provider';
-import { Input, Panel, Select, Skeleton } from '@/components/ui';
+import { Input, Select, Skeleton } from '@/components/ui';
 import { QuantityStepper } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { invalidateKitchenProductionQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import styles from './tablet.module.css';
 
 const kitchenStorageKey = 'aahar.kitchen-tablet.kitchen';
+
+/** A frosted card on the page's colour, as on the order board. */
+const card = cn('rounded-[24px]', glass);
 
 /** Today in India as YYYY-MM-DD: the kitchen's business day. */
 function todayInIndia(): string {
@@ -250,81 +255,131 @@ export function KitchenTabletPageClient() {
   });
 
   return (
-    <section className="space-y-4">
-      <AppPageHeader
-        action={
-          kitchens.length > 1 ? (
-            <Select
-              aria-label="Kitchen"
-              className="h-11 min-w-56"
-              onChange={(event) => chooseKitchen(event.target.value)}
-              value={kitchen?.id ?? ''}
+    <section className="relative isolate space-y-4">
+      {/* Two soft pools of colour drift behind the glass, as on the order board. Each sits inside
+          the page and fades out before its own edge, so the clip never shows as a line. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      >
+        <div
+          className={`absolute top-0 left-0 h-130 w-[60%] rounded-full ${styles.driftA}`}
+          style={{
+            background: 'radial-gradient(closest-side, rgb(56 189 248 / 0.22), transparent)',
+          }}
+        />
+        <div
+          className={`absolute top-48 right-0 h-155 w-[60%] rounded-full ${styles.driftB}`}
+          style={{
+            background: 'radial-gradient(closest-side, rgb(167 139 250 / 0.2), transparent)',
+          }}
+        />
+      </div>
+
+      <header className={cn('flex flex-wrap items-center gap-x-6 gap-y-4 px-6 py-5', card)}>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-ds-muted">What did you make?</p>
+          <h1 className="mt-0.5 text-[30px] leading-tight font-bold tracking-[-0.03em] text-ds-text sm:text-[36px]">
+            {kitchen?.kitchenName ?? 'Kitchen tablet'}
+          </h1>
+          {kitchen ? (
+            <p className="mt-1 text-[15px] font-medium text-ds-text-3">
+              {[selectedLocation?.hospitalName, dayFormatter.format(now)]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-4">
+          {kitchen && slot ? (
+            <span
+              className={cn(
+                'flex h-11 items-center rounded-full px-4 text-[15px] font-semibold',
+                glass,
+              )}
             >
-              {kitchens.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.kitchenName}
-                </option>
-              ))}
-            </Select>
-          ) : null
-        }
-        description={
-          kitchen
-            ? `${selectedLocation?.hospitalName ?? ''}${selectedLocation ? ' · ' : ''}${dayFormatter.format(now)}${slot ? ` · ${slot}` : ''} · ${timeFormatter.format(now)}`
-            : undefined
-        }
-        eyebrow="What did you make?"
-        title={kitchen?.kitchenName ?? 'Kitchen tablet'}
-      />
+              {slot}
+            </span>
+          ) : null}
+          <time className="text-[44px] leading-none font-light tracking-[-0.04em] text-ds-text tabular-nums">
+            {timeFormatter.format(now)}
+          </time>
+        </div>
+        {kitchen ? (
+          <div className="flex w-full flex-wrap items-center gap-3">
+            <Stat label="Made today" tone="ok" value={totalMade} />
+            <Stat label="Wasted" tone={totalWasted ? 'pending' : 'neutral'} value={totalWasted} />
+            <Stat label={log.length === 1 ? 'Post' : 'Posts'} tone="neutral" value={log.length} />
+            {kitchens.length > 1 ? (
+              <div className="w-full sm:ml-auto sm:w-64">
+                <Select
+                  aria-label="Kitchen"
+                  className="h-14 text-base"
+                  onChange={(event) => chooseKitchen(event.target.value)}
+                  value={kitchen.id}
+                >
+                  {kitchens.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.kitchenName}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </header>
 
       {kitchensQuery.isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-64 w-full rounded-[24px]" />
       ) : kitchensQuery.isError ? (
-        <Panel className="p-8">
+        <div className={cn('p-8', card)}>
           <LoadError error={kitchensQuery.error} />
-        </Panel>
+        </div>
       ) : !kitchen ? (
-        <Panel>
+        <div className={cn('p-2', card)}>
           <EmptyState
             description="Kitchens are set up under Organization → Kitchens."
             icon={ChefHat}
             title="No kitchen at this location"
           />
-        </Panel>
+        </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-3">
-            <p className="text-sm text-ds-muted">
-              Set the batch, then Post. It goes straight into kitchen stock.
-            </p>
-            {(itemsQuery.data?.length ?? 0) > 8 ? (
-              <label className="relative block max-w-md">
-                <span className="sr-only">Find an item</span>
-                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ds-muted" />
-                <Input
-                  className="h-11 pl-9"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Find an item"
-                  value={search}
-                />
-              </label>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[15px] text-ds-text-3">
+                Set the batch, then Post. It goes straight into kitchen stock.
+              </p>
+              {(itemsQuery.data?.length ?? 0) > 8 ? (
+                <label className="relative block w-full sm:max-w-xs">
+                  <span className="sr-only">Find an item</span>
+                  <Search className="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-ds-muted" />
+                  <Input
+                    className="h-14 rounded-full pl-11 text-base"
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Find an item"
+                    value={search}
+                  />
+                </label>
+              ) : null}
+            </div>
             {itemsQuery.isLoading ? (
-              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-48 w-full rounded-[24px]" />
             ) : itemsQuery.isError ? (
-              <Panel className="p-8">
+              <div className={cn('p-8', card)}>
                 <LoadError error={itemsQuery.error} />
-              </Panel>
+              </div>
             ) : items.length === 0 ? (
-              <Panel>
+              <div className={cn('p-2', card)}>
                 <EmptyState
                   description="Map the items this kitchen makes under Item & Menu Setup → Item Mapping."
                   icon={ChefHat}
                   title={term ? 'No item matches' : 'Nothing is mapped to this kitchen'}
                 />
-              </Panel>
+              </div>
             ) : (
-              <ul className="grid gap-3 lg:grid-cols-2">
+              <ul className="grid gap-3 sm:grid-cols-2">
                 {items.map((item) => {
                   const draft = draftOf(item.id);
                   const made = Math.max(0, Number(draft.batch) || 0);
@@ -342,29 +397,34 @@ export function KitchenTabletPageClient() {
 
                   return (
                     <li key={item.id}>
-                      <Panel
+                      {/* A batch being set turns the card blue: the cook sees what is unposted. */}
+                      <div
                         className={cn(
-                          'flex h-full flex-col gap-4 p-4 transition',
-                          made > 0 && 'ring-2 ring-ds-primary/40',
+                          'flex h-full flex-col gap-4 p-5 transition',
+                          card,
+                          made > 0 && 'bg-ds-primary-soft/80 ring-2 ring-ds-primary/50',
                         )}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-lg font-semibold text-ds-text">
+                            <p className="line-clamp-2 text-xl leading-snug font-bold tracking-[-0.01em] text-ds-text">
                               {item.itemName}
                             </p>
-                            <p className="font-mono text-xs text-ds-muted">{item.itemCode}</p>
+                            <p className="mt-0.5 font-mono text-xs text-ds-muted">
+                              {item.itemCode}
+                            </p>
                           </div>
-                          <p className="shrink-0 text-right text-xs text-ds-muted">
+                          <p className="shrink-0 text-right text-xs font-medium text-ds-muted">
                             Made today
-                            <span className="block font-mono text-lg font-semibold text-ds-text">
+                            <span className="mt-1 block text-[28px] leading-none font-bold text-ds-text tabular-nums">
                               {madeToday.get(item.id) ?? 0}
                             </span>
                           </p>
                         </div>
-                        {/* The stepper on its own row, ±10 under it: fits a narrow card. */}
+                        {/* Label and stepper share a row while they fit, and stack when not. */}
                         <div className="space-y-2">
-                          <div className="flex justify-center">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[15px] font-semibold text-ds-text-2">Batch</span>
                             <QuantityStepper
                               label={`${item.itemName} made`}
                               touch
@@ -383,7 +443,7 @@ export function KitchenTabletPageClient() {
                           <div className="grid grid-cols-2 gap-2">
                             <Button
                               aria-label={`Ten fewer ${item.itemName}`}
-                              className="h-12 font-mono text-base"
+                              className="h-14 rounded-control-lg text-lg font-semibold tabular-nums"
                               disabled={made < 10}
                               onClick={() => nudge(-10)}
                               type="button"
@@ -393,7 +453,7 @@ export function KitchenTabletPageClient() {
                             </Button>
                             <Button
                               aria-label={`Ten more ${item.itemName}`}
-                              className="h-12 font-mono text-base"
+                              className="h-14 rounded-control-lg text-lg font-semibold tabular-nums"
                               onClick={() => nudge(10)}
                               type="button"
                               variant="outline"
@@ -402,23 +462,21 @@ export function KitchenTabletPageClient() {
                             </Button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium text-ds-text-2">Wasted</span>
-                          <div className="w-40">
-                            <QuantityStepper
-                              compact
-                              label={`${item.itemName} wasted`}
-                              max={made}
-                              min={0}
-                              onChange={(value) =>
-                                setDraft(item.id, (current) => ({ ...current, waste: value }))
-                              }
-                              value={draft.waste}
-                            />
-                          </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[15px] font-semibold text-ds-text-2">Wasted</span>
+                          <QuantityStepper
+                            label={`${item.itemName} wasted`}
+                            max={made}
+                            min={0}
+                            onChange={(value) =>
+                              setDraft(item.id, (current) => ({ ...current, waste: value }))
+                            }
+                            touch
+                            value={draft.waste}
+                          />
                         </div>
                         <Button
-                          className="mt-auto h-14 text-base"
+                          className="mt-auto h-16 rounded-control-lg text-lg font-semibold"
                           disabled={!canPost || made <= 0 || made === wasted || post.isPending}
                           onClick={() => post.mutate({ itemId: item.id, made, wasted })}
                           title={
@@ -427,13 +485,13 @@ export function KitchenTabletPageClient() {
                           type="button"
                         >
                           {isPosting ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <Loader2 className="h-6 w-6 animate-spin" />
                           ) : (
-                            <CheckCircle2 className="h-5 w-5" />
+                            <CheckCircle2 className="h-6 w-6" />
                           )}
                           Post {made - wasted > 0 ? made - wasted : ''}
                         </Button>
-                      </Panel>
+                      </div>
                     </li>
                   );
                 })}
@@ -441,41 +499,72 @@ export function KitchenTabletPageClient() {
             )}
           </div>
 
-          <Panel
+          <section
             aria-label="Posted today"
-            className="self-start p-4 xl:sticky xl:top-[calc(var(--app-header-h)+1.5rem)]"
-            role="region"
+            className={cn(
+              'self-start p-5 xl:sticky xl:top-[calc(var(--app-header-h)+1.5rem)]',
+              card,
+            )}
           >
-            <h2 className="text-base font-semibold text-ds-text">Posted today</h2>
+            <h2 className="flex items-baseline gap-2 text-lg font-bold text-ds-text">
+              Posted today
+              <span className="font-light text-ds-text-3 tabular-nums">{log.length}</span>
+            </h2>
             <p className="text-sm text-ds-muted">
-              <span className="font-mono font-semibold text-ds-text">{totalMade}</span> made ·{' '}
-              <span className="font-mono">{totalWasted}</span> wasted
+              <span className="font-semibold text-ds-text tabular-nums">{totalMade}</span> made ·{' '}
+              <span className="tabular-nums">{totalWasted}</span> wasted
             </p>
             {log.length === 0 ? (
-              <p className="mt-4 text-sm text-ds-muted italic">Nothing posted yet today.</p>
+              <p className="mt-4 rounded-[18px] border border-dashed border-ds-border px-4 py-6 text-center text-[15px] text-ds-muted">
+                Nothing posted yet today.
+              </p>
             ) : (
               <ol className="mt-3 divide-y divide-ds-divider">
                 {log.map(({ line, production }) => (
-                  <li className="flex gap-3 py-2.5" key={line.id}>
-                    <span className="w-12 shrink-0 font-mono text-sm text-ds-muted">
+                  // Keyed by line, so only a newly posted line rises in.
+                  <li className={cn('flex items-center gap-3 py-3', styles.rise)} key={line.id}>
+                    <span className="w-12 shrink-0 text-sm font-medium text-ds-muted tabular-nums">
                       {timeFormatter.format(new Date(production.productionDate))}
                     </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-ds-text">
-                        {line.item.itemName} · {line.acceptedQty}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-semibold text-ds-text">
+                        {line.item.itemName}
                       </span>
                       <span className="block text-xs text-ds-muted">
                         {production.productionNumber} ·{' '}
                         {line.wastageQty ? `${line.wastageQty} wasted` : 'none wasted'}
                       </span>
                     </span>
+                    <span className="shrink-0 rounded-full bg-ds-status-ok-bg px-3 py-1 text-base font-bold text-ds-status-ok-fg tabular-nums">
+                      {line.acceptedQty}
+                    </span>
                   </li>
                 ))}
               </ol>
             )}
-          </Panel>
+          </section>
         </div>
       )}
     </section>
+  );
+}
+
+const statTones = {
+  neutral: 'bg-ds-primary-soft text-ds-link',
+  ok: 'bg-ds-status-ok-bg text-ds-status-ok-fg',
+  pending: 'bg-ds-status-pending-bg text-ds-status-pending-fg',
+} as const;
+
+/** A count in the header, on a pastel tint. */
+function Stat({
+  label,
+  tone,
+  value,
+}: Readonly<{ label: string; tone: keyof typeof statTones; value: number }>) {
+  return (
+    <p className={cn('flex items-baseline gap-2 rounded-2xl px-4 py-2', statTones[tone])}>
+      <span className="text-[26px] leading-none font-bold tabular-nums">{value}</span>
+      <span className="text-[13px] font-semibold">{label}</span>
+    </p>
   );
 }

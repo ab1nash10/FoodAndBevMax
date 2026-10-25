@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { CommonModule } from '../common/common.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { MailService } from './services/mail.service';
 import { OtpService } from './services/otp.service';
 import { SmsService } from './services/sms.service';
 import { TokenService } from './services/token.service';
@@ -25,6 +26,6 @@ type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y
       }),
     }),
   ],
-  providers: [AuthService, OtpService, SmsService, TokenService],
+  providers: [AuthService, MailService, OtpService, SmsService, TokenService],
 })
 export class AuthModule {}

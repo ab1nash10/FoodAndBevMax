@@ -82,12 +82,56 @@ export interface PosCounter {
     upiId: string | null;
   };
   restaurantId: string;
+  /** The counter's shift now: billing needs an open one. */
+  shift: PosCounterShiftState;
+}
+
+export type PosShiftStatus = 'CLOSED' | 'HANDED_OVER' | 'OPEN';
+
+/** Takings of a set of bills: by payment mode, with complimentary and cancelled kept apart. */
+export interface PosTakings {
+  bills: number;
+  byPaymentMode: Array<{ amount: number; count: number; mode: PaymentMode }>;
+  cancelled: { amount: number; count: number };
+  complimentary: { amount: number; count: number };
+  sales: number;
+}
+
+/** A cashier's turn at a counter, ended by closing it or handing it over to the next cashier. */
+export interface PosShift {
+  closedAt: string | null;
+  closedByName: string | null;
+  counterId: string;
+  countedCash: number | null;
+  /** Opening cash plus the shift's cash bills, worked out when it ended. */
+  expectedCash: number | null;
+  /** The counter's stock when it was handed over. */
+  handoverStock: Array<{ itemId: string; itemName: string; quantity: number }> | null;
+  id: string;
+  /** The fixed shift it opened in, when the restaurant uses fixed shift times. */
+  name: string | null;
+  note: string | null;
+  openedAt: string;
+  openedBy: string;
+  openedByName: string | null;
+  openingCash: number;
+  status: PosShiftStatus;
+  summary: PosTakings | null;
+  takenOverFromId: string | null;
+}
+
+export interface PosCounterShiftState {
+  /** Today's business day is closed here: new bills go on the next day. */
+  dayClosed: boolean;
+  /** A handed-over shift waiting for the next cashier to take on. */
+  handover: PosShift | null;
+  open: PosShift | null;
 }
 
 export interface PosMenuItem {
   availableFrom: string | null;
   availableTo: string | null;
-  category: { categoryName: string; id: string } | null;
+  category: { categoryName: string; id: string; sortOrder: number } | null;
   daysOfWeek: string[];
   foodType: FoodType;
   gstPercent: number;
@@ -138,7 +182,30 @@ export interface PosBillInput {
   paymentReference?: string;
   /** Required for ROOM. */
   roomNumber?: string;
+  /** The kiosk order this bill is for; it can be billed once. */
+  kioskOrderId?: string;
+  /** A paid online UPI payment for exactly this bill; it pays one bill only. */
+  onlinePaymentId?: string;
 }
+
+export type OnlinePaymentProvider = 'PAYU' | 'RAZORPAY';
+
+/** A UPI payment taken online for a bill before it is made: its link is shown as a QR. */
+export interface OnlinePayment {
+  amount: number;
+  id: string;
+  /** The provider's payment id once paid; the bill keeps it as its payment reference. */
+  paidReference: string | null;
+  paymentUrl: string;
+  provider: OnlinePaymentProvider;
+  status: 'CANCELLED' | 'EXPIRED' | 'PAID' | 'PENDING';
+}
+
+/** The bill an online payment is for: the server prices it. */
+export type OnlinePaymentInput = Pick<
+  PosBillInput,
+  'channel' | 'counterId' | 'employeeCode' | 'lines'
+> & { provider: OnlinePaymentProvider };
 
 export interface PosBillLine {
   /** Staff discount on the line; taxableAmount is after it. */
@@ -259,15 +326,14 @@ export interface PosBillListQuery extends ListQuery {
   to?: string;
 }
 
-export interface PosDaySummary {
-  bills: number;
-  byPaymentMode: Array<{ amount: number; count: number; mode: PaymentMode }>;
-  cancelled: { amount: number; count: number };
-  complimentary: { amount: number; count: number };
-  counter: PosCounter;
+export interface PosDaySummary extends PosTakings {
+  counter: Omit<PosCounter, 'shift'>;
   /** YYYY-MM-DD. */
   date: string;
-  sales: number;
+  /** Set once an admin has closed the day at the counter. */
+  dayClose: { closedAt: string; closedByName: string | null } | null;
+  /** The day's shifts, oldest first, and any still open. */
+  shifts: PosShift[];
 }
 
 /** A counter's stock per item for one business day (every menu item, zeros included). */
@@ -292,12 +358,55 @@ export interface PosStockSummary {
 
 /** Who an Employee ID entered at the till belongs to, and the staff discount they get there. */
 export interface PosEmployee {
-  /** 0 when the restaurant gives none, the employee is not eligible, or has no type set. */
+  /** The Employee Discount rule that applies now; null when none does. */
+  discountName: string | null;
+  /** 0 when the restaurant gives none, the employee is not eligible, or no rule applies now. */
   discountPercent: number;
   eligibleForDiscount: boolean;
   employeeCode: string;
   employeeName: string;
   employmentType: EmploymentType | null;
+}
+
+/** One weekday, as restaurant menus and employee discounts store their serve days. */
+export type DayOfWeek =
+  'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+
+/** An Employee Discount rule: % off an eligible employee's bill at one restaurant. */
+export interface EmployeeDiscount {
+  archivedAt: string | null;
+  createdAt: string;
+  /** Serve days; empty is every day. */
+  daysOfWeek: DayOfWeek[];
+  discountPercent: number;
+  /** Employee level; null is every employee. */
+  employmentType: EmploymentType | null;
+  /** Special timings (HH:mm); both null is all day. */
+  endTime: string | null;
+  hospitalId: string;
+  id: string;
+  name: string;
+  restaurant: { id: string; restaurantCode: string; restaurantName: string };
+  restaurantId: string;
+  startTime: string | null;
+  updatedAt: string;
+}
+
+export interface EmployeeDiscountInput {
+  daysOfWeek?: DayOfWeek[];
+  discountPercent: number;
+  employmentType?: EmploymentType | null;
+  endTime?: string | null;
+  name: string;
+  restaurantId: string;
+  startTime?: string | null;
+}
+
+export interface EmployeeDiscountListQuery extends ListQuery {
+  /** true: archived only; default live only. */
+  archived?: boolean;
+  hospitalId?: string;
+  restaurantId?: string;
 }
 
 export interface StaffDiscountSettings {
@@ -310,4 +419,74 @@ export interface StaffDiscountSettings {
 export interface StaffDiscountInput {
   rates: Array<{ discountPercent: number; employmentType: EmploymentType }>;
   staffDiscountApplicable: boolean;
+}
+
+/** What the self-service kiosk sells right now, at the counter price. */
+export interface KioskMenu {
+  /** False while the restaurant has no active counter to pay at: the kiosk takes no orders. */
+  canPay: boolean;
+  items: KioskMenuItem[];
+  locationName: string;
+  restaurantName: string;
+  /** Whether staff get a discount here (they give their registered mobile). */
+  staffDiscount: boolean;
+}
+
+export interface KioskMenuItem {
+  category: { categoryName: string; id: string; sortOrder: number } | null;
+  foodType: FoodType;
+  gstPercent: number;
+  id: string;
+  isDiscountable: boolean;
+  /** Set on the restaurant menu; the kiosk's welcome screen shows these. */
+  isFeatured: boolean;
+  isGstInclusive: boolean;
+  itemName: string;
+  preparationTimeMinutes: number | null;
+  price: number;
+}
+
+export interface KioskOrderInput {
+  /** The kiosk's own id for the order, made once: a retry returns the same order. */
+  clientOrderId: string;
+  lines: Array<{ menuId: string; quantity: number }>;
+  /** A staff member's registered mobile, for their discount. */
+  mobile?: string;
+}
+
+/** A placed kiosk order: the number the guest reads out at the counter, priced by the server. */
+export interface KioskOrder {
+  discountPercent: number;
+  discountTotal: number;
+  grandTotal: number;
+  gstTotal: number;
+  id: string;
+  lines: Array<{
+    itemName: string;
+    lineTotal: number;
+    menuId: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  number: number;
+  roundOff: number;
+  subtotal: number;
+}
+
+/** A kiosk order as the cashier loads it into the till. */
+export interface KioskOrderToBill {
+  employeeCode: string | null;
+  id: string;
+  lines: Array<{ menuId: string; quantity: number }>;
+  number: number;
+}
+
+/** A kiosk order waiting to be paid at the counter, for the till's list. */
+export interface KioskOrderWaiting {
+  createdAt: string;
+  id: string;
+  /** A staff member gave their mobile: check their staff ID card. */
+  isStaff: boolean;
+  items: Array<{ name: string; quantity: number }>;
+  number: number;
 }

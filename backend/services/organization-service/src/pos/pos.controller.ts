@@ -19,6 +19,7 @@ import {
   CreatePosOrderDto,
   EmployeeLookupQueryDto,
   ListPosOrdersQueryDto,
+  PosCountersQueryDto,
   PosMenuQueryDto,
   PosSummaryQueryDto,
   SetMenuAvailabilityDto,
@@ -34,10 +35,12 @@ export class PosController {
 
   @Get('counters')
   @Permissions('POS_ORDER_VIEW')
-  @ApiOperation({ summary: 'Counters the signed-in user may bill at' })
+  @ApiOperation({
+    summary: 'Counters the signed-in user may bill at; with host, only that till computer’s',
+  })
   @ApiOkResponse({ description: 'Counters returned.' })
-  async counters() {
-    return { data: await this.pos.counters(), message: 'Success', success: true };
+  async counters(@Query() query: PosCountersQueryDto) {
+    return { data: await this.pos.counters(query.host), message: 'Success', success: true };
   }
 
   @Get('menu')
@@ -81,6 +84,7 @@ export class PosController {
       data: await this.pos.createOrder(body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
       }),
       message: 'Success',
       success: true,

@@ -9,6 +9,7 @@ import {
   insights,
   locationRows,
   outcomeOf,
+  pendingSeries,
   pendingStats,
   percentDelta,
   periodWindow,
@@ -16,6 +17,7 @@ import {
   setupSteps,
   transferOutcome,
   transferStats,
+  trendOf,
   vendorRows,
   wastageStats,
 } from '../lib/dashboard-stats.ts';
@@ -190,6 +192,31 @@ assert.equal(pending.overHour, 2);
 assert.equal(pending.oldest.id, pendingList[0].id);
 assert.equal(pending.hospitals.get('h1'), 2);
 
+// ---- Pending at the end of each day (now, for today): sent until acknowledged.
+const queued = transfer({ sent: at(1), status: 'PENDING_ACKNOWLEDGEMENT', updated: at(1, 15) });
+assert.deepEqual(
+  pendingSeries(
+    [
+      transfer({ created: at(2, 9), sent: at(2), updated: at(1, 11) }), // waited overnight
+      queued,
+      queued, // in the records and the queue: counted once
+      transfer({ sent: at(20), status: 'PENDING_ACKNOWLEDGEMENT' }), // older than the period
+      transfer({ created: at(0, 9), sent: at(0), updated: at(0, 10) }), // acknowledged by now
+      transfer({ sent: at(3), status: 'DRAFT' }),
+      transfer({ sent: at(3), status: 'CANCELLED' }),
+    ],
+    week,
+  ),
+  [1, 1, 1, 1, 2, 2, 2],
+);
+
+// ---- Trend: the later half against the earlier half, toned like the delta.
+assert.deepEqual(trendOf([1, 1, 3, 3], 'down'), { direction: 'up', tone: 'bad' });
+assert.deepEqual(trendOf([3, null, 1], 'down'), { direction: 'down', tone: 'good' });
+assert.deepEqual(trendOf([0, 0, 2], 'none'), { direction: 'up', tone: 'info' });
+assert.deepEqual(trendOf([2, 2, 2, 2], 'up'), { direction: 'flat', tone: 'neutral' });
+assert.equal(trendOf([5, null], 'up'), null);
+
 // ---- Wastage: weighted by quantity, per bucket, with the limit.
 const production = (
   daysAgo,
@@ -243,6 +270,7 @@ assert.equal(wastage.worstKitchenDay.kitchenName, 'Main Kitchen');
 assert.equal(wastage.worstKitchenDay.percent, 8);
 assert.equal(wastage.kitchens, 1);
 assert.equal(wastage.posted, 2, 'drafts and the previous period are not counted');
+assert.deepEqual(wastage.postedSeries, [0, 0, 0, 0, 1, 0, 1]);
 
 // ---- Vendors: posted GRNs in the period, flagged above 5% rejected.
 const grn = (vendorName, accepted, rejected, daysAgo = 1, status = 'POSTED_TO_STOCK') => ({

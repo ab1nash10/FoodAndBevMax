@@ -13,6 +13,7 @@ import type {
   StoreItemListQuery,
 } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -25,10 +26,9 @@ import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { useAuth } from '@/components/auth-provider';
-import { DateTimeCell, RowAction, tableStyles } from '@/components/design-system';
+import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { cn } from '@/lib/utils';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
-import { useUndoable } from '@/lib/use-undoable';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
@@ -153,9 +153,10 @@ export function StoreItemsPageClient({
         variant: 'error',
       });
     },
-    onSuccess(_response, variables) {
+    onSuccess(response, variables) {
       invalidateStoreItems();
       showToast({
+        recordId: response.data.id,
         title: variables.id ? 'Store item updated' : 'Store item created',
         variant: 'success',
       });
@@ -181,13 +182,16 @@ export function StoreItemsPageClient({
     },
     onSuccess(_response, variables) {
       invalidateStoreItems();
-      // Marking inactive already had its Undo toast.
-      if (variables.isActive) {
-        showToast({ title: 'Store item mapping activated', variant: 'success' });
-      }
+      showToast({
+        recordId: variables.mapping.id,
+        title: variables.isActive
+          ? 'Store item mapping activated'
+          : 'Store item mapping deactivated',
+        variant: 'success',
+      });
     },
   });
-  const undoable = useUndoable();
+  const confirm = useConfirm();
 
   const stores =
     storesQuery.data?.map((store) => ({
@@ -195,10 +199,7 @@ export function StoreItemsPageClient({
       id: store.id,
       name: store.storeName,
     })) ?? [];
-  // A mapping marked inactive shows so at once, while its Undo toast runs.
-  const mappings = (mappingsQuery.data?.items ?? []).map((mapping) =>
-    undoable.isChanged(mapping.id) ? { ...mapping, isActive: false } : mapping,
-  );
+  const mappings = mappingsQuery.data?.items ?? [];
   const meta = mappingsQuery.data?.meta ?? {
     limit: listLimit,
     page,
@@ -258,22 +259,16 @@ export function StoreItemsPageClient({
     setEditingMapping(null);
   }
 
-  function toggleMappingStatus(mapping: StoreItem) {
-    // Switching it back on while the Undo toast runs is the same as Undo.
-    if (undoable.undo(mapping.id)) return;
+  async function toggleMappingStatus(mapping: StoreItem) {
+    const isActive = !mapping.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      effect:
+        'It can’t be used in new GRNs for this store. Existing stock and history stay visible.',
+      name: `${mapping.item.itemName} in ${mapping.store.storeName}`,
+    });
 
-    if (mapping.isActive) {
-      undoable.schedule({
-        commit: () => toggleMappingStatusMutation.mutateAsync({ isActive: false, mapping }),
-        description:
-          'It can’t be used in new GRNs for this store. Existing stock and history stay visible.',
-        id: mapping.id,
-        title: `${mapping.item.itemName} in ${mapping.store.storeName} marked inactive`,
-      });
-      return;
-    }
-
-    toggleMappingStatusMutation.mutate({ isActive: true, mapping });
+    if (confirmed) toggleMappingStatusMutation.mutate({ isActive, mapping });
   }
 
   return (
@@ -281,7 +276,7 @@ export function StoreItemsPageClient({
       {embedded ? null : (
         <PageHeader
           icon={StoreIcon}
-          subtitle="Map MRP items to stores for future sales and stock flows."
+          subtitle="Choose which packaged items each store keeps."
           title="Store Items"
         />
       )}
@@ -450,7 +445,7 @@ export function StoreItemsPageClient({
                 }}
                 value={itemFilter}
               >
-                <option value="">All MRP items</option>
+                <option value="">All packaged items</option>
                 {itemsQuery.data
                   ?.filter((item) => item.itemType === 'MRP')
                   .map((item) => (
@@ -482,7 +477,7 @@ export function StoreItemsPageClient({
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-[900px] table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-[900px] table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[22%]')}>Item</th>
@@ -501,19 +496,23 @@ export function StoreItemsPageClient({
                 mappings.map((mapping) => (
                   <tr
                     className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    data-record-id={mapping.id}
                     key={mapping.id}
                     onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
                   >
                     <td className={tableStyles.td} onClick={keepLinkClicks}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <RecordLink
-                          className={cn('truncate', tableStyles.title)}
-                          href={recordHref('/masters/items', { id: mapping.item.id })}
-                        >
-                          {mapping.item.itemName}
-                        </RecordLink>
-                        <span className={cn('truncate', tableStyles.code)}>
-                          {mapping.item.itemCode}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar foodType={mapping.item.type} name={mapping.item.itemName} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <RecordLink
+                            className={cn('truncate', tableStyles.title)}
+                            href={recordHref('/masters/items', { id: mapping.item.id })}
+                          >
+                            {mapping.item.itemName}
+                          </RecordLink>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {mapping.item.itemCode}
+                          </span>
                         </span>
                       </span>
                     </td>
@@ -556,7 +555,7 @@ export function StoreItemsPageClient({
                         checked={mapping.isActive}
                         disabled={toggleMappingStatusMutation.isPending}
                         offLabel="Inactive"
-                        onChange={() => toggleMappingStatus(mapping)}
+                        onChange={() => void toggleMappingStatus(mapping)}
                         onLabel="Active"
                       />
                     </td>

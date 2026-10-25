@@ -8,6 +8,18 @@ type Query = Record<string, unknown>;
 // answers one page; `total` above the page size marks it truncated.
 function serviceWith(pages: Record<string, { items: unknown[]; total?: number }> = {}) {
   const calls: Record<string, Query> = {};
+  // Each kind's findMany records its arguments and answers one named row.
+  const prisma = Object.fromEntries(
+    ['counter', 'kitchen', 'restaurant', 'store'].map((model) => [
+      model,
+      {
+        findMany: (args: Query) => {
+          calls[model] = args;
+          return Promise.resolve([{ id: `${model}-1` }]);
+        },
+      },
+    ]),
+  );
   const list = (name: string) => ({
     list: (query: Query) => {
       // A DTO instance also has its unset fields, as undefined; compare the ones that are set.
@@ -60,6 +72,7 @@ function serviceWith(pages: Record<string, { items: unknown[]; total?: number }>
       storeItems,
       stores,
       transfers,
+      prisma,
     ] as unknown as ConstructorParameters<typeof DashboardService>),
   );
 
@@ -219,4 +232,55 @@ test('setup: without a permission its count and first record are left out', asyn
   assert.equal(result.counts.items, undefined);
   assert.equal(result.firstGrn, undefined);
   assert.equal(result.firstTransfer, undefined);
+});
+
+test('navCounts: each badge is its list asked for a count only, with the same filters', async () => {
+  const { calls, service } = serviceWith();
+
+  const counts = await service.navCounts({ hospitalId: 'h1' }, [
+    'TRANSFER_VIEW',
+    'GRN_VIEW',
+    'KITCHEN_PRODUCTION_VIEW',
+  ]);
+
+  // The list DTOs default sortOrder, as they do for the list endpoints themselves.
+  const here = { hospitalId: 'h1', limit: 0, page: 1, sortOrder: 'desc' };
+  assert.deepEqual(calls.transfers, { ...here, status: 'PENDING_ACKNOWLEDGEMENT' });
+  assert.deepEqual(calls.grns, { ...here, status: 'DRAFT' });
+  assert.deepEqual(calls.productions, { ...here, status: 'DRAFT' });
+  assert.deepEqual(counts, { grns: 7, productions: 7, transfers: 7 });
+});
+
+test('navCounts: a list the user may not view is not asked and has no count', async () => {
+  const { calls, service } = serviceWith();
+
+  const counts = await service.navCounts({}, ['KITCHEN_TRANSFER_VIEW']);
+
+  assert.deepEqual(counts, { grns: undefined, productions: undefined, transfers: 7 });
+  assert.equal(calls.grns, undefined);
+  assert.equal(calls.productions, undefined);
+});
+
+test('locationNames: one light read per kind the user may list, active and not deleted', async () => {
+  const { calls, service } = serviceWith();
+
+  const names = await service.locationNames(['STORE_VIEW', 'COUNTER_VIEW']);
+
+  assert.deepEqual(names, {
+    counters: [{ id: 'counter-1' }],
+    kitchens: undefined,
+    restaurants: undefined,
+    stores: [{ id: 'store-1' }],
+  });
+  assert.equal(calls.kitchen, undefined);
+  assert.equal(calls.restaurant, undefined);
+  const live = { deletedAt: null, hospital: { deletedAt: null }, isActive: true };
+  assert.deepEqual(calls.store!.where, live);
+  assert.deepEqual(calls.counter!.where, { ...live, restaurant: { deletedAt: null } });
+  assert.deepEqual(calls.store!.select, {
+    hospitalId: true,
+    id: true,
+    storeCode: true,
+    storeName: true,
+  });
 });

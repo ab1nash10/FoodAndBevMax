@@ -2,7 +2,16 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardCheck, Download, Plus } from 'lucide-react';
+import {
+  CircleCheck,
+  CircleX,
+  ClipboardCheck,
+  Download,
+  FilePen,
+  Plus,
+  Truck,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -18,6 +27,7 @@ import {
 import {
   AppPageHeader,
   EmptyState,
+  InlineProgress,
   ListPager,
   StatStrip,
   StatusChip,
@@ -27,8 +37,9 @@ import {
 import { statusPresentation, type StatusTone } from '@/lib/status';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
+import { useConfirm } from '@/components/confirm-provider';
 import { Panel, Select, Skeleton } from '@/components/ui';
-import { BulkActionBar, DetailPanel, FilterSearch } from '@/components/ui-controls';
+import { BulkActionBar, FilterSearch } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
 import { downloadCsv } from '@/lib/csv';
@@ -109,6 +120,28 @@ const outcomeText: Record<StatusTone, string> = {
   pending: 'text-ds-status-pending-fg',
 };
 
+/**
+ * How many of a sent transfer's items arrived, from its own lines (a line counts once anything
+ * of it was accepted). None for drafts and cancelled ones.
+ */
+function transferReceipt(
+  transfer: Transfer,
+): { label: string; tone: 'default' | 'ok' | 'pending'; value: number } | null {
+  const total = transfer.lines.length;
+
+  if (total === 0 || transfer.status === 'DRAFT' || transfer.status === 'CANCELLED') return null;
+  const received =
+    transfer.status === 'ACKNOWLEDGED'
+      ? transfer.lines.filter((line) => line.acceptedQty > 0).length
+      : 0;
+
+  return {
+    label: `${received} of ${total} received`,
+    tone: transfer.status !== 'ACKNOWLEDGED' ? 'default' : received === total ? 'ok' : 'pending',
+    value: received / total,
+  };
+}
+
 function transferSubtext(transfer: Transfer): { className: string; text: string } | null {
   const outcome = transferOutcome(transfer);
 
@@ -135,9 +168,11 @@ function transferSubtext(transfer: Transfer): { className: string; text: string 
 export function TransfersPageClient() {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const { hasPermission } = useAuth();
+  const canAcknowledge = hasPermission(['TRANSFER_ACKNOWLEDGE', 'RESTAURANT_TRANSFER_RECEIVE']);
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   // Filters, view, page and the open record live in the URL so refresh, links and back work.
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
@@ -149,7 +184,7 @@ export function TransfersPageClient() {
   const [sourceTypeFilter, setSourceTypeFilter] = useUrlParam<'' | InventoryLocationType>(
     'from',
     '',
-    ['STORE', 'KITCHEN'],
+    ['STORE', 'KITCHEN', 'RESTAURANT'],
   );
   const [storeFilter, setStoreFilter] = useUrlParam('store');
   const [kitchenFilter, setKitchenFilter] = useUrlParam('kitchen');
@@ -282,19 +317,6 @@ export function TransfersPageClient() {
     );
   }
 
-  // On narrow screens the details sit under the list; bring them into view when opened.
-  useEffect(() => {
-    if (!selectedTransfer) {
-      return;
-    }
-
-    const panel = document.getElementById('transfer-detail-panel');
-
-    if (panel && panel.getBoundingClientRect().top > window.innerHeight * 0.6) {
-      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [selectedTransfer]);
-
   const dispatchMutation = useMutation({
     mutationFn: (id: string) => organizationApi.dispatchTransfer(id),
     onError(error) {
@@ -304,9 +326,9 @@ export function TransfersPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, id) {
       invalidateTransferQueries(queryClient);
-      showToast({ title: 'Transfer dispatched', variant: 'success' });
+      showToast({ recordId: id, title: 'Transfer dispatched', variant: 'success' });
     },
   });
 
@@ -319,9 +341,9 @@ export function TransfersPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, id) {
       invalidateTransferQueries(queryClient);
-      showToast({ title: 'Transfer cancelled', variant: 'success' });
+      showToast({ recordId: id, title: 'Transfer cancelled', variant: 'success' });
     },
   });
 
@@ -412,6 +434,95 @@ export function TransfersPageClient() {
     CANCELLED: 'bad',
     PENDING_ACKNOWLEDGEMENT: 'pending',
   };
+  const statIcons: Partial<Record<TransferStatus, LucideIcon>> = {
+    ACKNOWLEDGED: CircleCheck,
+    CANCELLED: CircleX,
+    DRAFT: FilePen,
+    PENDING_ACKNOWLEDGEMENT: Truck,
+  };
+
+  // An open transfer gets the whole page, as a GRN does; the back link returns to the list.
+  if (selectedTransferId) {
+    if (!selectedTransfer) {
+      return linkedTransferQuery.isError ? (
+        <Panel className="p-6">
+          <EmptyState
+            action={
+              <Button onClick={() => setUrlParams({ id: null })} type="button" variant="outline">
+                Back to transfers
+              </Button>
+            }
+            description="It may have been deleted, or it belongs to a location you can't view."
+            title="Transfer not found"
+          />
+        </Panel>
+      ) : (
+        <section className="space-y-4">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-80 w-full" />
+        </section>
+      );
+    }
+
+    return (
+      <TransferDetails
+        actions={
+          selectedTransfer.status === 'DRAFT' ? (
+            <>
+              <Button
+                className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
+                disabled={cancelMutation.isPending}
+                onClick={() => {
+                  void confirm({
+                    confirmLabel: 'Cancel transfer',
+                    description: 'Nothing was sent yet, so no stock moves. This can’t be undone.',
+                    title: `Cancel ${selectedTransfer.transferNumber}?`,
+                    tone: 'danger',
+                  }).then((ok) => {
+                    if (ok) cancelMutation.mutate(selectedTransfer.id);
+                  });
+                }}
+                type="button"
+                variant="ghost"
+              >
+                Cancel transfer
+              </Button>
+              <Button
+                disabled={dispatchMutation.isPending}
+                onClick={() => dispatchMutation.mutate(selectedTransfer.id)}
+                type="button"
+              >
+                Dispatch
+              </Button>
+            </>
+          ) : selectedTransfer.status === 'PENDING_ACKNOWLEDGEMENT' ? (
+            <Button asChild>
+              <Link
+                href={`/inventory/transfers/${selectedTransfer.id}/acknowledge`}
+                {...prefetchOnIntent(() =>
+                  queryClient.prefetchQuery(transferDetailQuery(selectedTransfer.id)),
+                )}
+              >
+                <ClipboardCheck aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                Acknowledge
+              </Link>
+            </Button>
+          ) : undefined
+        }
+        backHref={hrefWith({ id: null })}
+        destinationHref={locationLink(
+          selectedTransfer.destinationType,
+          selectedTransfer.destinationId,
+        )}
+        destinationName={restaurantName(selectedTransfer)}
+        onBack={closeTransfer}
+        sourceHref={locationLink(selectedTransfer.sourceType, selectedTransfer.sourceId)}
+        sourceName={sourceName(selectedTransfer)}
+        transfer={selectedTransfer}
+      />
+    );
+  }
 
   return (
     <section className="space-y-4">
@@ -439,15 +550,17 @@ export function TransfersPageClient() {
           </>
         }
         count={viewCounts?.['']}
-        description="Stock sent from stores and kitchens to restaurants."
+        description="Stock sent from stores and kitchens to restaurants, and leftovers between restaurants."
         title="Transfers"
       />
 
       {/* One count per status under the list's other filters; the title's count is all of them. */}
       <StatStrip
         label="Transfers by status"
+        rich
         stats={transferStatuses.map((status) => ({
           active: statusFilter === status,
+          icon: statIcons[status],
           label: longStatus(status),
           onSelect: () => showStatus(status),
           tone: statTones[status],
@@ -531,9 +644,10 @@ export function TransfersPageClient() {
                     <option value="">Any source</option>
                     <option value="STORE">Stores</option>
                     <option value="KITCHEN">Kitchens</option>
+                    <option value="RESTAURANT">Restaurants (leftovers)</option>
                   </Select>
                 </FilterField>
-                {sourceTypeFilter && hospitalFilter ? (
+                {sourceTypeFilter && sourceTypeFilter !== 'RESTAURANT' && hospitalFilter ? (
                   <FilterField label={sourceTypeFilter === 'KITCHEN' ? 'Kitchen' : 'Store'}>
                     <Select
                       onChange={(event) =>
@@ -630,6 +744,7 @@ export function TransfersPageClient() {
                           ? 'bg-ds-primary-soft'
                           : 'hover:bg-ds-selected',
                     )}
+                    data-record-id={transfer.id}
                     key={transfer.id}
                     // openRowLink only reads the target and the link inside; it is typed for table rows.
                     onClick={(event) =>
@@ -711,7 +826,7 @@ export function TransfersPageClient() {
             </ul>
           ) : null}
           <div className={cn('overflow-x-auto', transfers.length > 0 && 'hidden sm:block')}>
-            <table className={cn(tableStyles.table, 'min-w-[640px] table-fixed')}>
+            <table className={cn(tableStyles.table, 'min-w-[760px] table-fixed')}>
               <thead className={tableStyles.head}>
                 <tr>
                   <th className={cn(tableStyles.th, 'w-10 pr-0')}>
@@ -733,6 +848,9 @@ export function TransfersPageClient() {
                   <th className={tableStyles.th}>Route</th>
                   <th className={cn(tableStyles.th, 'w-16 text-right')}>Lines</th>
                   <th className={cn(tableStyles.th, 'w-[180px]')}>Status</th>
+                  <th className={cn(tableStyles.th, 'w-[132px]')}>
+                    <span className="sr-only">Next step</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -741,6 +859,7 @@ export function TransfersPageClient() {
                     const isSelected = transfer.id === selectedTransfer?.id;
                     const isChecked = checkedIds.has(transfer.id);
                     const subtext = transferSubtext(transfer);
+                    const receipt = transferReceipt(transfer);
 
                     return (
                       <tr
@@ -748,6 +867,7 @@ export function TransfersPageClient() {
                           tableStyles.row,
                           isSelected ? 'bg-ds-selected' : isChecked && 'bg-ds-primary-soft',
                         )}
+                        data-record-id={transfer.id}
                         key={transfer.id}
                         onClick={openRowLink}
                       >
@@ -809,6 +929,7 @@ export function TransfersPageClient() {
                         </td>
                         <td className={tableStyles.td}>
                           <StatusChip status={transfer.status} />
+                          {receipt ? <InlineProgress {...receipt} /> : null}
                           {subtext ? (
                             <span
                               className={cn(
@@ -821,12 +942,24 @@ export function TransfersPageClient() {
                             </span>
                           ) : null}
                         </td>
+                        <td className={cn(tableStyles.td, 'pr-3 text-right')}>
+                          {/* What the row waits on, in plain view: the receiver acknowledges it. */}
+                          {transfer.status === 'PENDING_ACKNOWLEDGEMENT' && canAcknowledge ? (
+                            <Link
+                              aria-label={`Acknowledge ${transfer.transferNumber}`}
+                              className="inline-flex h-8 items-center rounded-full bg-ds-primary-soft px-3 text-[12.5px] font-semibold whitespace-nowrap text-ds-link transition-colors duration-150 hover:bg-ds-primary hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                              href={`/inventory/transfers/${transfer.id}/acknowledge`}
+                            >
+                              Acknowledge
+                            </Link>
+                          ) : null}
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <QueryState
-                    colSpan={5}
+                    colSpan={6}
                     error={transfersQuery.error}
                     isError={transfersQuery.isError}
                     isLoading={transfersQuery.isLoading}
@@ -845,95 +978,6 @@ export function TransfersPageClient() {
             totalPages={meta.totalPages}
           />
         </Panel>
-
-        {selectedTransferId ? (
-          selectedTransfer ? (
-            <DetailPanel
-              className="min-w-[300px] flex-[0_1_420px]"
-              footer={
-                selectedTransfer.status === 'DRAFT' ? (
-                  <>
-                    <Button
-                      className="flex-[1_1_140px]"
-                      disabled={dispatchMutation.isPending}
-                      onClick={() => dispatchMutation.mutate(selectedTransfer.id)}
-                      type="button"
-                    >
-                      Dispatch
-                    </Button>
-                    <Button
-                      className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
-                      disabled={cancelMutation.isPending}
-                      onClick={() => cancelMutation.mutate(selectedTransfer.id)}
-                      type="button"
-                      variant="ghost"
-                    >
-                      Cancel transfer
-                    </Button>
-                  </>
-                ) : selectedTransfer.status === 'PENDING_ACKNOWLEDGEMENT' ? (
-                  <Button asChild className="flex-1">
-                    <Link
-                      href={`/inventory/transfers/${selectedTransfer.id}/acknowledge`}
-                      {...prefetchOnIntent(() =>
-                        queryClient.prefetchQuery(transferDetailQuery(selectedTransfer.id)),
-                      )}
-                    >
-                      <ClipboardCheck aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                      Acknowledge
-                    </Link>
-                  </Button>
-                ) : undefined
-              }
-              id="transfer-detail-panel"
-              label={`Transfer ${selectedTransfer.transferNumber}`}
-              meta={`Created ${formatWhen(selectedTransfer.createdAt)} · ${selectedTransfer.hospital.hospitalName}`}
-              onClose={closeTransfer}
-              status={
-                <StatusChip
-                  long
-                  status={transferOutcome(selectedTransfer) ?? selectedTransfer.status}
-                />
-              }
-              title={selectedTransfer.transferNumber}
-            >
-              <TransferDetails
-                destinationHref={locationLink(
-                  selectedTransfer.destinationType,
-                  selectedTransfer.destinationId,
-                )}
-                destinationName={restaurantName(selectedTransfer)}
-                sourceHref={locationLink(selectedTransfer.sourceType, selectedTransfer.sourceId)}
-                sourceName={sourceName(selectedTransfer)}
-                transfer={selectedTransfer}
-              />
-            </DetailPanel>
-          ) : (
-            <Panel className="min-w-[300px] flex-[0_1_420px] p-4">
-              {linkedTransferQuery.isError ? (
-                <EmptyState
-                  action={
-                    <Button
-                      onClick={() => setUrlParams({ id: null })}
-                      type="button"
-                      variant="outline"
-                    >
-                      Close
-                    </Button>
-                  }
-                  description="It may have been deleted, or it belongs to a location you can't view."
-                  title="Transfer not found"
-                />
-              ) : (
-                <div className="space-y-3">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-24 w-full" />
-                  <Skeleton className="h-40 w-full" />
-                </div>
-              )}
-            </Panel>
-          )
-        ) : null}
       </div>
     </section>
   );

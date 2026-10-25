@@ -15,8 +15,10 @@ import {
   todayInIndia,
   usePosCounter,
 } from '@/components/point-of-sale/shared';
+import { DayShiftsPanel } from '@/components/point-of-sale/day-shifts-panel';
 import { Input, Panel } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { escapeHtml, printHtml } from '@/lib/print';
 import { queryKeys } from '@/lib/query-keys';
 import { RefreshButton } from '@/components/list-toolbar';
 import { useUrlParam } from '@/lib/use-url-state';
@@ -31,56 +33,25 @@ function modeTotals(summary: PosDaySummary) {
   );
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (char) => ({ '"': '&quot;', '&': '&amp;', "'": '&#39;', '<': '&lt;', '>': '&gt;' })[char]!,
-  );
-}
-
 /** The day's takings on an 80 mm slip, through a hidden frame so the screen stays put. */
 function printSummary(summary: PosDaySummary) {
   const row = (left: string, count: number, amount: number) =>
-    `<tr><td>${left}</td><td class="r">${count}</td><td class="r">${formatMoney(amount)}</td></tr>`;
+    `<tr><td>${left}</td><td class="num">${count}</td><td class="num">${formatMoney(amount)}</td></tr>`;
   const body = `
-<h1>${escapeHtml(summary.counter.restaurant.restaurantName)}</h1>
-<p class="c">${escapeHtml(summary.counter.counterName)}<br>Day summary · ${escapeHtml(summary.date)}</p>
-<hr><table>
+<h1 class="title">${escapeHtml(summary.counter.restaurant.restaurantName)}</h1>
+<p class="c" style="margin-top:2px">${escapeHtml(summary.counter.counterName)}<br><span class="b">Day summary · ${escapeHtml(summary.date)}</span></p>
+<hr><table class="totals"><colgroup><col><col style="width:12mm"><col style="width:30mm"></colgroup>
 ${modeTotals(summary)
   .map((entry) => row(paymentModeLabels[entry.mode], entry.count, entry.amount))
   .join('')}
-<tr class="big"><td>Sales</td><td class="r">${summary.bills}</td><td class="r">${formatMoney(summary.sales)}</td></tr>
-</table><hr><table>
+<tr class="grand"><td>Sales</td><td class="num">${summary.bills}</td><td class="num">${formatMoney(summary.sales)}</td></tr>
+</table><hr><table class="totals"><colgroup><col><col style="width:12mm"><col style="width:30mm"></colgroup>
 ${row('Complimentary', summary.complimentary.count, summary.complimentary.amount)}
 ${row('Cancelled', summary.cancelled.count, summary.cancelled.amount)}
 </table><hr>
-<p class="c">Printed ${formatDateTime(new Date().toISOString())}</p>`;
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
+<p class="fine">Printed ${formatDateTime(new Date().toISOString())}</p>`;
 
-  if (!doc || !frame.contentWindow) {
-    frame.remove();
-    return;
-  }
-
-  doc.open();
-  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Day summary ${escapeHtml(summary.date)}</title>
-<style>
-@page { size: 80mm auto; margin: 3mm; }
-body { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #000; margin: 0; width: 74mm; }
-h1 { font-size: 14px; margin: 0; text-align: center; }
-.c { text-align: center; } .r { text-align: right; }
-hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
-table { width: 100%; border-collapse: collapse; } td { padding: 1px 0; }
-.big { font-size: 14px; font-weight: 700; }
-</style></head><body>${body}</body></html>`);
-  doc.close();
-  frame.contentWindow.focus();
-  frame.contentWindow.print();
-  window.setTimeout(() => frame.remove(), 60_000);
+  printHtml(`Day summary ${summary.date}`, body);
 }
 
 /** One counter's takings for a business day: what the till hands over at close. */
@@ -211,6 +182,7 @@ export function DaySummaryPageClient() {
               </table>
             </Panel>
           </div>
+          {summary ? <DayShiftsPanel counterId={counter.id} date={date} summary={summary} /> : null}
           <div className="flex flex-wrap gap-3">
             <Button
               disabled={!summary}

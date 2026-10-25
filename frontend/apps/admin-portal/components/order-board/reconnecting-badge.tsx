@@ -4,7 +4,7 @@ import { RefreshCw } from 'lucide-react';
 export function ReconnectingBadge() {
   return (
     <p
-      className="absolute bottom-[112px] right-[48px] z-10 flex items-center gap-[12px] rounded-full border-2 border-ds-status-pending-fg/30 bg-ds-status-pending-bg px-[24px] py-[10px] text-[22px] font-bold text-ds-status-pending-fg shadow-lg"
+      className="absolute left-1/2 top-[136px] z-10 flex -translate-x-1/2 items-center gap-[12px] rounded-full bg-ds-status-pending-bg px-[26px] py-[12px] text-[22px] font-bold text-ds-status-pending-fg shadow-[0_18px_40px_-16px_rgb(16_24_40/0.45)] ring-2 ring-ds-status-pending-fg/25"
       role="status"
     >
       <RefreshCw
@@ -12,7 +12,7 @@ export function ReconnectingBadge() {
         className="h-[24px] w-[24px] motion-safe:animate-spin"
         strokeWidth={2.6}
       />
-      Reconnecting…
+      Reconnecting… the numbers shown may be a minute old
     </p>
   );
 }

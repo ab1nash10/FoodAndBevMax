@@ -2,21 +2,25 @@ import { hospitalScopeStorage } from '@aahar/auth';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CounterShiftStatus,
   EmploymentType,
   InventoryLocationType,
   MenuServeAt,
   OrderChannel,
   OrderSource,
   OrderStatus,
+  PaymentMode,
   Prisma,
   StockReferenceType,
   StockTransactionType,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { bestDiscountRule } from '../employee-discounts/employee-discount-rules';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
@@ -33,6 +37,7 @@ import type {
 } from './dto/pos.dto';
 import { itemCount } from '../restaurant-orders/restaurant-orders.service';
 import { isOnSale, priceBill, siteBusinessDate } from './pos-pricing';
+import { shiftStates, shiftsOn, tally, userNames } from './shifts';
 
 type Client = Prisma.TransactionClient | PrismaService;
 
@@ -177,9 +182,12 @@ export class PosService {
     private readonly prisma: PrismaService,
   ) {}
 
-  /** The active counters the user may bill at (reads are already limited to their locations). */
-  async counters() {
-    return this.prisma.counter.findMany({
+  /**
+   * The active counters the user may bill at (reads are already limited to their locations),
+   * each with its shift: the open one, a handover waiting for the next cashier, a closed day.
+   */
+  async counters(host?: string) {
+    const counters = await this.prisma.counter.findMany({
       orderBy: [{ restaurant: { restaurantName: 'asc' } }, { counterName: 'asc' }],
       select: counterSelect,
       where: {
@@ -187,11 +195,60 @@ export class PosService {
         hospital: { deletedAt: null, isActive: true },
         isActive: true,
         restaurant: { deletedAt: null, isActive: true },
+        ...(host ? await this.tillCounters(host) : {}),
       },
     });
+    const states = await shiftStates(
+      this.prisma,
+      counters.map((counter) => counter.id),
+      toDateOnly(siteBusinessDate(new Date())),
+    );
+
+    return counters.map((counter) => ({ ...counter, shift: states.get(counter.id) }));
   }
 
-  private async findCounter(id: string, client: Client = this.prisma) {
+  /**
+   * Which counters a till computer bills at, from its hostname: the active POS device with that
+   * hostname, its counters if any name it, else every counter of the restaurants mapped to it.
+   * Reads stay limited to the user's locations, so a till outside them shows no counter.
+   */
+  private async tillCounters(host: string): Promise<Prisma.CounterWhereInput> {
+    const hostName = host.trim();
+    const device = await hospitalScopeStorage.run(
+      { allowedHospitalIds: null },
+      async () =>
+        await this.prisma.posDevice.findFirst({
+          select: {
+            id: true,
+            restaurants: {
+              select: { restaurantId: true },
+              where: { deletedAt: null, isActive: true },
+            },
+          },
+          where: {
+            deletedAt: null,
+            hostName: { equals: hostName, mode: 'insensitive' },
+            isActive: true,
+          },
+        }),
+    );
+
+    if (!device) {
+      throw new NotFoundException(
+        `This computer (${hostName}) is not registered as a POS. Ask an admin to add its hostname to a POS device under POS & Payment Machines.`,
+      );
+    }
+
+    const named = await this.prisma.counter.count({
+      where: { deletedAt: null, isActive: true, posDeviceId: device.id },
+    });
+
+    return named > 0
+      ? { posDeviceId: device.id }
+      : { restaurantId: { in: device.restaurants.map((entry) => entry.restaurantId) } };
+  }
+
+  async findCounter(id: string, client: Client = this.prisma) {
     const counter = await client.counter.findFirst({
       select: counterSelect,
       where: {
@@ -220,10 +277,15 @@ export class PosService {
     const now = new Date();
     const menus = await this.prisma.restaurantMenu.findMany({
       include: {
-        category: { select: { categoryName: true, id: true } },
+        category: { select: { categoryName: true, id: true, sortOrder: true } },
         item: { select: { itemCode: true, itemName: true, type: true } },
       },
-      orderBy: [{ displayOrder: 'asc' }, { item: { itemName: 'asc' } }],
+      // Categories in their set order (Item Categories), then each item's place in the menu.
+      orderBy: [
+        { category: { sortOrder: 'asc' } },
+        { displayOrder: 'asc' },
+        { item: { itemName: 'asc' } },
+      ],
       where: {
         deletedAt: null,
         isActive: true,
@@ -329,6 +391,15 @@ export class PosService {
    * share one. Sending the same clientOrderId again returns the bill already made.
    */
   async createOrder(dto: CreatePosOrderDto, context: ActorContext) {
+    // Operator access, as the previous system's operator master set it per person.
+    if (dto.channel === OrderChannel.ROOM && !context.permissions?.includes('POS_ROOM_ORDER')) {
+      throw new ForbiddenException('You do not have access to bill room orders.');
+    }
+
+    if (dto.isComplimentary && !context.permissions?.includes('POS_COMPLIMENTARY_APPROVE')) {
+      throw new ForbiddenException('You cannot approve a complimentary meal.');
+    }
+
     const counter = await this.findCounter(dto.counterId);
     const clientOrderId = dto.clientOrderId.trim();
     const existing = await this.findByClientId(counter.id, clientOrderId);
@@ -364,17 +435,19 @@ export class PosService {
     });
   }
 
-  private async billOrder(
-    tx: Prisma.TransactionClient,
+  /**
+   * Prices a bill from the counter's menu: the channel's price, GST, the employee's discount on
+   * discountable items, refusing what is not sold here or not on sale now. Billing and online
+   * payments both use it, so a UPI payment is asked for exactly what the bill will come to.
+   */
+  private async quote(
+    client: Client,
     counter: Awaited<ReturnType<PosService['findCounter']>>,
-    clientOrderId: string,
-    dto: CreatePosOrderDto,
-    context: ActorContext,
-  ): Promise<string> {
-    const now = new Date();
-    const businessDate = toDateOnly(siteBusinessDate(now));
+    dto: Pick<CreatePosOrderDto, 'channel' | 'employeeCode' | 'isComplimentary' | 'lines'>,
+    now: Date,
+  ) {
     const menuIds = [...new Set(dto.lines.map((line) => line.menuId))];
-    const menus = await tx.restaurantMenu.findMany({
+    const menus = await client.restaurantMenu.findMany({
       include: { item: { select: { hsnCode: true, itemName: true } } },
       where: {
         deletedAt: null,
@@ -390,7 +463,7 @@ export class PosService {
     // A complimentary meal is free anyway; a discount only applies to what is paid for.
     const staffDiscount =
       employeeCode && !isComplimentary
-        ? (await this.employeeDiscount(counter, employeeCode, tx)).discountPercent
+        ? (await this.employeeDiscount(counter, employeeCode, client, now)).discountPercent
         : 0;
 
     const priced = dto.lines.map((line) => {
@@ -423,6 +496,94 @@ export class PosService {
       };
     });
     const totals = priceBill(priced);
+
+    return { employeeCode, isComplimentary, priced, staffDiscount, totals };
+  }
+
+  /** What a bill comes to now, for an online payment taken before it is made. */
+  async quoteBill(
+    counter: Awaited<ReturnType<PosService['findCounter']>>,
+    dto: Pick<CreatePosOrderDto, 'channel' | 'employeeCode' | 'lines'>,
+  ) {
+    return (await this.quote(this.prisma, counter, dto, new Date())).totals;
+  }
+
+  /** The paid online payment a bill is made with: this counter's, unused, for its total. */
+  private async paidOnline(
+    tx: Prisma.TransactionClient,
+    counterId: string,
+    id: string,
+    grandTotal: number,
+  ) {
+    const payment = await tx.onlinePayment.findFirst({ where: { counterId, id } });
+
+    if (!payment) {
+      throw new NotFoundException('This UPI payment was not found at this counter.');
+    }
+
+    if (payment.status !== 'PAID') {
+      throw new BadRequestException('This UPI payment has not been received yet.');
+    }
+
+    if (payment.orderId) {
+      throw new ConflictException('This UPI payment is already on another bill.');
+    }
+
+    if (Math.abs(toNumber(payment.amount) - grandTotal) > 0.005) {
+      throw new ConflictException(
+        `₹${toNumber(payment.amount).toFixed(2)} was paid, but the bill now comes to ₹${grandTotal.toFixed(2)}. Put the bill back as it was, or take the difference another way.`,
+      );
+    }
+
+    return payment;
+  }
+
+  private async billOrder(
+    tx: Prisma.TransactionClient,
+    counter: Awaited<ReturnType<PosService['findCounter']>>,
+    clientOrderId: string,
+    dto: CreatePosOrderDto,
+    context: ActorContext,
+  ): Promise<string> {
+    const now = new Date();
+    const today = toDateOnly(siteBusinessDate(now));
+    const [openShift, dayClosed] = await Promise.all([
+      tx.counterShift.findFirst({
+        select: { id: true },
+        where: { counterId: counter.id, status: CounterShiftStatus.OPEN },
+      }),
+      tx.counterDayClose.findFirst({
+        select: { id: true },
+        where: { businessDate: today, counterId: counter.id },
+      }),
+    ]);
+
+    if (!openShift) {
+      throw new BadRequestException('Open a shift at this counter before billing.');
+    }
+
+    // Ending a shift takes this lock to count it, so a bill cannot slip in as it closes.
+    await lockRow(tx, 'counter_shifts', openShift.id);
+    const shift = await tx.counterShift.findUniqueOrThrow({
+      select: { id: true, status: true },
+      where: { id: openShift.id },
+    });
+
+    if (shift.status !== CounterShiftStatus.OPEN) {
+      throw new ConflictException('This shift has just ended. Open a new one and bill again.');
+    }
+
+    // Once the counter's day is closed, later bills belong to the next business day.
+    const businessDate = dayClosed ? new Date(today.getTime() + 86_400_000) : today;
+    const { employeeCode, isComplimentary, priced, staffDiscount, totals } = await this.quote(
+      tx,
+      counter,
+      dto,
+      now,
+    );
+    const online = dto.onlinePaymentId
+      ? await this.paidOnline(tx, counter.id, dto.onlinePaymentId, totals.grandTotal)
+      : null;
 
     // Taking the location's next invoice number locks its row until the bill commits, so bills
     // at the location queue here: no two share a number, and the count below is exact.
@@ -480,12 +641,17 @@ export class PosService {
           })),
         },
         orderNumber: String(ordersToday + 1).padStart(4, '0'),
-        paymentMode: isComplimentary ? null : dto.paymentMode,
-        paymentReference: isComplimentary ? null : optionalText(dto.paymentReference),
+        paymentMode: online ? PaymentMode.UPI : isComplimentary ? null : dto.paymentMode,
+        paymentReference: online
+          ? online.paidReference
+          : isComplimentary
+            ? null
+            : optionalText(dto.paymentReference),
         restaurantId: counter.restaurantId,
         roomNumber: optionalText(dto.roomNumber),
         roundOff: totals.roundOff,
         senderId: counter.id,
+        shiftId: shift.id,
         source: OrderSource.COUNTER,
         status: OrderStatus.PLACED,
         subtotal: totals.subtotal,
@@ -505,6 +671,31 @@ export class PosService {
 
     for (const [itemId, entry] of quantityByItem) {
       await this.takeCounterStock(tx, counter, itemId, entry, order.id, businessDate, now, context);
+    }
+
+    // The payment goes on this bill only, and only once: a second bill with it rolls back here.
+    if (online) {
+      const { count } = await tx.onlinePayment.updateMany({
+        data: { orderId: order.id },
+        where: { id: online.id, orderId: null },
+      });
+
+      if (count === 0) {
+        throw new ConflictException('This UPI payment is already on another bill.');
+      }
+    }
+
+    if (dto.kioskOrderId) {
+      const { count } = await tx.kioskOrder.updateMany({
+        data: { billedOrderId: order.id },
+        where: { billedOrderId: null, id: dto.kioskOrderId, restaurantId: counter.restaurantId },
+      });
+
+      if (count === 0) {
+        throw new ConflictException(
+          'This kiosk order is already billed. Clear it and start again.',
+        );
+      }
     }
 
     await this.auditLog.record(
@@ -628,6 +819,7 @@ export class PosService {
     counter: { restaurantId: string },
     employeeCode: string,
     client: Client = this.prisma,
+    now: Date = new Date(),
   ) {
     const employee = await hospitalScopeStorage.run(
       { allowedHospitalIds: null },
@@ -655,20 +847,33 @@ export class PosService {
       select: { staffDiscountApplicable: true },
       where: { id: counter.restaurantId },
     });
-    const rate =
-      restaurant.staffDiscountApplicable && employee.eligibleForDiscount && employee.employmentType
-        ? await client.restaurantStaffDiscount.findUnique({
-            select: { discountPercent: true },
-            where: {
-              restaurantId_employmentType: {
-                employmentType: employee.employmentType,
-                restaurantId: counter.restaurantId,
-              },
+    // The restaurant's live Employee Discount rules; the best one on now applies (India time).
+    const rules =
+      restaurant.staffDiscountApplicable && employee.eligibleForDiscount
+        ? await client.employeeDiscount.findMany({
+            select: {
+              daysOfWeek: true,
+              discountPercent: true,
+              employmentType: true,
+              endTime: true,
+              id: true,
+              name: true,
+              startTime: true,
             },
+            where: { archivedAt: null, restaurantId: counter.restaurantId },
           })
-        : null;
+        : [];
+    const rule = bestDiscountRule(
+      rules.map((entry) => ({ ...entry, discountPercent: toNumber(entry.discountPercent) })),
+      employee.employmentType,
+      now,
+    );
 
-    return { ...employee, discountPercent: rate ? toNumber(rate.discountPercent) : 0 };
+    return {
+      ...employee,
+      discountName: rule?.name ?? null,
+      discountPercent: rule?.discountPercent ?? 0,
+    };
   }
 
   async lookupEmployee(query: EmployeeLookupQueryDto) {
@@ -927,52 +1132,41 @@ export class PosService {
     };
   }
 
-  /** A counter's takings for a business day: by payment mode, complimentary and cancelled. */
+  /**
+   * A counter's takings for a business day (by payment mode, complimentary and cancelled), its
+   * shifts that day, and who closed the day, once closed.
+   */
   async summary(query: PosSummaryQueryDto) {
     const counter = await this.findCounter(query.counterId);
-    const date = query.date ?? siteBusinessDate(new Date());
-    const orders = await this.prisma.restaurantOrder.findMany({
-      select: { grandTotal: true, isComplimentary: true, paymentMode: true, status: true },
-      where: { businessDate: toDateOnly(date), counterId: counter.id, source: OrderSource.COUNTER },
-    });
-    const byMode = new Map<string, { amount: number; count: number }>();
-    const complimentary = { amount: 0, count: 0 };
-    const cancelled = { amount: 0, count: 0 };
-    let sales = 0;
-    let bills = 0;
-
-    for (const order of orders) {
-      const amount = money(order.grandTotal) ?? 0;
-      const bucket =
-        order.status === OrderStatus.CANCELLED
-          ? cancelled
-          : order.isComplimentary
-            ? complimentary
-            : undefined;
-
-      if (bucket) {
-        bucket.amount += amount;
-        bucket.count += 1;
-        continue;
-      }
-
-      const mode = order.paymentMode ?? 'OTHER';
-      const entry = byMode.get(mode) ?? { amount: 0, count: 0 };
-      entry.amount += amount;
-      entry.count += 1;
-      byMode.set(mode, entry);
-      sales += amount;
-      bills += 1;
-    }
+    const date = query.date?.slice(0, 10) ?? siteBusinessDate(new Date());
+    const [orders, shifts, dayClose] = await Promise.all([
+      this.prisma.restaurantOrder.findMany({
+        select: { grandTotal: true, isComplimentary: true, paymentMode: true, status: true },
+        where: {
+          businessDate: toDateOnly(date),
+          counterId: counter.id,
+          source: OrderSource.COUNTER,
+        },
+      }),
+      shiftsOn(this.prisma, counter.id, date),
+      this.prisma.counterDayClose.findFirst({
+        select: { closedAt: true, closedBy: true },
+        where: { businessDate: toDateOnly(date), counterId: counter.id },
+      }),
+    ]);
+    const names = await userNames(this.prisma, [dayClose?.closedBy ?? null]);
 
     return {
-      bills,
-      byPaymentMode: [...byMode].map(([mode, entry]) => ({ mode, ...entry })),
-      cancelled,
-      complimentary,
+      ...tally(orders),
       counter,
       date,
-      sales,
+      dayClose: dayClose
+        ? {
+            closedAt: dayClose.closedAt,
+            closedByName: dayClose.closedBy ? (names.get(dayClose.closedBy) ?? null) : null,
+          }
+        : null,
+      shifts,
     };
   }
 
@@ -983,12 +1177,26 @@ export class PosService {
   async cancel(id: string, dto: CancelPosOrderDto, context: ActorContext) {
     await this.prisma.$transaction(async (tx) => {
       const order = await tx.restaurantOrder.findFirst({
-        select: { hospitalId: true, id: true, status: true },
+        select: { businessDate: true, counterId: true, hospitalId: true, id: true, status: true },
         where: { id, source: OrderSource.COUNTER },
       });
 
       if (!order) {
         throw new NotFoundException('Bill not found.');
+      }
+
+      // A closed day's takings are final.
+      if (
+        order.counterId &&
+        order.businessDate &&
+        (await tx.counterDayClose.findFirst({
+          select: { id: true },
+          where: { businessDate: order.businessDate, counterId: order.counterId },
+        }))
+      ) {
+        throw new ConflictException(
+          'This bill’s day is closed at its counter, so it can no longer be cancelled.',
+        );
       }
 
       await lockRow(tx, 'restaurant_orders', id);

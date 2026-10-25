@@ -53,7 +53,8 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
       DATABASE_URL: databaseUrl,
       NODE_ENV: 'test',
       REDIS_URL: '',
-      // Blank, so the real gateway is unconfigured even if a .env carries its credentials.
+      // Blank, so the real gateways are unconfigured even if a .env carries their credentials.
+      MAIL_CLIENT_SECRET: '',
       SMS_FEED_ID: '',
       SMS_PASSWORD: '',
       SMS_SENDER_ID: '',

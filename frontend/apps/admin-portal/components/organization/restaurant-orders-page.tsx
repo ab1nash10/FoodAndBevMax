@@ -3,10 +3,11 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OrderSource, OrderStatus, RestaurantOrder } from '@aahar/api-client';
-import { Copy, ExternalLink, RefreshCw, Tv, Undo2 } from 'lucide-react';
+import { Copy, ExternalLink, MonitorSmartphone, RefreshCw, Tv, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
+import { useConfirm } from '@/components/confirm-provider';
 import { AppPageHeader, EmptyState } from '@/components/design-system';
 import { OrderKeyButton } from '@/components/order-key-button';
 import { useToast } from '@/components/toast-provider';
@@ -63,6 +64,7 @@ function useNow(): number {
 function BoardLinkControls({ restaurantId }: Readonly<{ restaurantId: string }>) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const linkQuery = useQuery({
     queryFn: async () =>
       (await organizationApi.getRestaurantBoardLink(restaurantId)).data.boardToken,
@@ -86,6 +88,10 @@ function BoardLinkControls({ restaurantId }: Readonly<{ restaurantId: string }>)
   });
   const url = linkQuery.data
     ? `${window.location.origin}${withBasePath(`/board/${restaurantId}?token=${linkQuery.data}`)}`
+    : null;
+  // The self-service kiosk opens with the same secret as the TV board.
+  const kioskUrl = linkQuery.data
+    ? `${window.location.origin}${withBasePath(`/kiosk/${restaurantId}?token=${linkQuery.data}`)}`
     : null;
 
   return (
@@ -116,16 +122,46 @@ function BoardLinkControls({ restaurantId }: Readonly<{ restaurantId: string }>)
         Copy link
       </Button>
       <Button
-        disabled={!url || resetMutation.isPending}
+        disabled={!kioskUrl}
+        onClick={() => kioskUrl && window.open(kioskUrl, '_blank', 'noopener')}
+        type="button"
+        variant="outline"
+      >
+        <MonitorSmartphone aria-hidden="true" className="h-4 w-4" />
+        Open kiosk
+        <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        aria-label="Copy kiosk link"
+        disabled={!kioskUrl}
         onClick={() => {
-          if (
-            window.confirm(
-              'Make a new TV link? Screens using the current link will stop showing orders.',
-            )
-          ) {
-            resetMutation.mutate();
-          }
+          if (!kioskUrl) return;
+          void navigator.clipboard.writeText(kioskUrl).then(() =>
+            showToast({
+              description: 'Open it full screen in the kiosk’s browser.',
+              title: 'Kiosk link copied',
+            }),
+          );
         }}
+        size="icon"
+        title="Copy kiosk link"
+        type="button"
+        variant="outline"
+      >
+        <Copy aria-hidden="true" className="h-4 w-4" />
+      </Button>
+      <Button
+        disabled={!url || resetMutation.isPending}
+        onClick={() =>
+          void confirm({
+            confirmLabel: 'Make new link',
+            description: 'TV boards and kiosks using the current link will stop working.',
+            title: 'Make a new TV and kiosk link?',
+            tone: 'danger',
+          }).then((confirmed) => {
+            if (confirmed) resetMutation.mutate();
+          })
+        }
         title="Make a new link and turn the current one off"
         type="button"
         variant="ghost"
@@ -152,6 +188,8 @@ function OrderCard({
   onMove: (status: OrderStatus) => void;
   order: RestaurantOrder;
 }>) {
+  const confirm = useConfirm();
+
   return (
     <li className="rounded-md border border-ds-border bg-ds-surface p-3 shadow-sm">
       <div className="flex items-baseline justify-between gap-2">
@@ -215,9 +253,15 @@ function OrderCard({
             // A counter bill is cancelled from Bill History, with a reason and a restock.
             <Button
               disabled={isPending}
-              onClick={() => {
-                if (window.confirm(`Cancel order ${order.orderNumber}?`)) onMove('CANCELLED');
-              }}
+              onClick={() =>
+                void confirm({
+                  confirmLabel: 'Cancel order',
+                  title: `Cancel order ${order.orderNumber}?`,
+                  tone: 'danger',
+                }).then((confirmed) => {
+                  if (confirmed) onMove('CANCELLED');
+                })
+              }
               size="sm"
               type="button"
               variant="ghost"

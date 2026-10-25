@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
+import { PrismaService } from '../common/prisma/prisma.service';
 import { ListEmployeesQueryDto } from '../employees/dto/list-employees-query.dto';
 import { EmployeesService } from '../employees/employees.service';
 import { ListGrnsQueryDto } from '../grns/dto/list-grns-query.dto';
@@ -28,6 +29,17 @@ import { DashboardRecordsQueryDto, DashboardSetupQueryDto } from './dto/dashboar
 
 /** ponytail: one read of up to 5,000 records per source; aggregate in SQL if a period outgrows it. */
 export const DASHBOARD_RECORDS_CAP = 5000;
+
+/** ponytail: names only, so 1,000 per kind is light; page through if a group outgrows it. */
+export const LOCATION_NAMES_CAP = 1000;
+
+/** A list's total when the user may see the list (a count only: limit 0), else undefined. */
+async function totalIf(
+  allowed: boolean,
+  list: () => Promise<{ meta: { total: number } }>,
+): Promise<number | undefined> {
+  return allowed ? (await list()).meta.total : undefined;
+}
 
 type TransferRow = Awaited<ReturnType<TransfersService['list']>>['items'][number];
 type ProductionRow = Awaited<ReturnType<KitchenProductionsService['list']>>['items'][number];
@@ -101,7 +113,88 @@ export class DashboardService {
     private readonly storeItems: StoreItemsService,
     private readonly stores: StoresService,
     private readonly transfers: TransfersService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * The nav badges' three counts in one request instead of three: transfers waiting for
+   * acknowledgement, draft GRNs and draft productions, each the total its own list endpoint
+   * gives for the same filters, and only when the user may view that list.
+   */
+  async navCounts(query: DashboardSetupQueryDto, permissions: readonly string[]) {
+    const can = (...any: string[]) => any.some((permission) => permissions.includes(permission));
+    const here = { hospitalId: query.hospitalId, limit: 0, page: 1 };
+    const [transfers, grns, productions] = await Promise.all([
+      totalIf(can('TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW'), () =>
+        this.transfers.list(
+          plainToInstance(ListTransfersQueryDto, { ...here, status: 'PENDING_ACKNOWLEDGEMENT' }),
+        ),
+      ),
+      totalIf(can('GRN_VIEW'), () =>
+        this.grns.list(plainToInstance(ListGrnsQueryDto, { ...here, status: 'DRAFT' })),
+      ),
+      totalIf(can('KITCHEN_PRODUCTION_VIEW'), () =>
+        this.productions.list(
+          plainToInstance(ListKitchenProductionsQueryDto, { ...here, status: 'DRAFT' }),
+        ),
+      ),
+    ]);
+
+    return { grns, productions, transfers };
+  }
+
+  /**
+   * Every active store, kitchen, restaurant and counter the user may list, with only what the
+   * portal needs to turn a location id into a name or a link: one light request instead of four
+   * full lists. Each kind needs its list's view permission and matches that list's filters
+   * (active, not deleted, its location not deleted); reads are narrowed to the user's locations
+   * by the Prisma scope extension, as the lists are.
+   */
+  async locationNames(permissions: readonly string[]) {
+    const can = (permission: string) => permissions.includes(permission);
+    const live = { deletedAt: null, hospital: { deletedAt: null }, isActive: true };
+    const [stores, kitchens, restaurants, counters] = await Promise.all([
+      can('STORE_VIEW')
+        ? this.prisma.store.findMany({
+            orderBy: { storeName: 'asc' },
+            select: { hospitalId: true, id: true, storeCode: true, storeName: true },
+            take: LOCATION_NAMES_CAP,
+            where: live,
+          })
+        : undefined,
+      can('KITCHEN_VIEW')
+        ? this.prisma.kitchen.findMany({
+            orderBy: { kitchenName: 'asc' },
+            select: { hospitalId: true, id: true, kitchenCode: true, kitchenName: true },
+            take: LOCATION_NAMES_CAP,
+            where: live,
+          })
+        : undefined,
+      can('RESTAURANT_VIEW')
+        ? this.prisma.restaurant.findMany({
+            orderBy: { restaurantName: 'asc' },
+            select: { hospitalId: true, id: true, restaurantCode: true, restaurantName: true },
+            take: LOCATION_NAMES_CAP,
+            where: live,
+          })
+        : undefined,
+      can('COUNTER_VIEW')
+        ? this.prisma.counter.findMany({
+            orderBy: { counterName: 'asc' },
+            select: {
+              counterName: true,
+              hospitalId: true,
+              id: true,
+              restaurant: { select: { restaurantName: true } },
+            },
+            take: LOCATION_NAMES_CAP,
+            where: { ...live, restaurant: { deletedAt: null } },
+          })
+        : undefined,
+    ]);
+
+    return { counters, kitchens, restaurants, stores };
+  }
 
   /** Transfers, posted productions and posted GRNs from `fromDate`, newest first. */
   async records(query: DashboardRecordsQueryDto, permissions: readonly string[]) {
@@ -153,10 +246,7 @@ export class DashboardService {
     // limit 0: each total is one count, without loading a row and its related records.
     const one = { limit: 0, page: 1 };
     const here = { ...one, hospitalId };
-    const total = async (
-      allowed: boolean,
-      list: () => Promise<{ meta: { total: number } }>,
-    ): Promise<number | undefined> => (allowed ? (await list()).meta.total : undefined);
+    const total = totalIf;
     const first = { hospitalId, limit: 1, page: 1, sortBy: 'createdAt', sortOrder: 'asc' };
 
     const [

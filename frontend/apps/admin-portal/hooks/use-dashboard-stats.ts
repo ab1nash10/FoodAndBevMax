@@ -43,7 +43,10 @@ const iso = (time: number) => new Date(time).toISOString();
  * are derived with useMemo from the fetched records.
  */
 export function useDashboardStats(period: Period) {
-  const { scopedHospitalId } = useLocationContext();
+  const { isLoadingLocations, scopedHospitalId } = useLocationContext();
+  // Nothing is asked for until the header location is known: before that the scope reads as
+  // "all", whose numbers would show and then be replaced (a live layout flipping to setup).
+  const ready = !isLoadingLocations;
   const { hasPermission } = useAuth();
   const scope = scopedHospitalId ?? 'all';
   const hospitalId = scopedHospitalId;
@@ -69,7 +72,7 @@ export function useDashboardStats(period: Period) {
   // transfers, posted productions and posted GRNs the user may view, with only the fields the
   // numbers below read.
   const recordsQuery = useQuery({
-    enabled: can.transfers || can.productions || can.grns,
+    enabled: ready && (can.transfers || can.productions || can.grns),
     queryFn: async () => {
       const window = periodWindow(period, new Date());
 
@@ -84,7 +87,7 @@ export function useDashboardStats(period: Period) {
 
   // ---- Right now: the work queue (oldest first), recent activity and expiring stock.
   const pendingTransfersQuery = useQuery({
-    enabled: can.transfers,
+    enabled: ready && can.transfers,
     queryFn: async () =>
       (
         await organizationApi.listTransfers({
@@ -98,7 +101,7 @@ export function useDashboardStats(period: Period) {
     queryKey: queryKeys.dashboardQueue('transfers', scope),
   });
   const grnsToVerifyQuery = useQuery({
-    enabled: can.grns,
+    enabled: ready && can.grns,
     queryFn: async () =>
       (
         await organizationApi.listGrns({
@@ -113,7 +116,7 @@ export function useDashboardStats(period: Period) {
     queryKey: queryKeys.dashboardQueue('grns-to-verify', scope),
   });
   const draftProductionsQuery = useQuery({
-    enabled: can.productions,
+    enabled: ready && can.productions,
     queryFn: async () =>
       (
         await organizationApi.listKitchenProductions({
@@ -128,7 +131,7 @@ export function useDashboardStats(period: Period) {
   });
   // TODO(api): no audit-log endpoint yet, so activity shows what changed but not who changed it.
   const activityQuery = useQuery({
-    enabled: can.transfers || can.grns || can.productions,
+    enabled: ready && (can.transfers || can.grns || can.productions),
     queryFn: async () => {
       const recent = { hospitalId, limit: 6, sortBy: 'updatedAt', sortOrder: 'desc' } as const;
       const [transfers, grns, productions] = await Promise.all([
@@ -144,7 +147,7 @@ export function useDashboardStats(period: Period) {
     queryKey: queryKeys.dashboardActivity(scope),
   });
   const expiringQuery = useQuery({
-    enabled: can.stock,
+    enabled: ready && can.stock,
     queryFn: async () =>
       (
         await organizationApi.listStockBalances({
@@ -164,7 +167,7 @@ export function useDashboardStats(period: Period) {
   // ---- Master data totals and the setup checklist: one request with every count the user may
   // see (each counted by its list endpoint) and the first posted GRN and acknowledged transfer.
   const setupQuery = useQuery({
-    enabled: Object.values(can).some(Boolean),
+    enabled: ready && Object.values(can).some(Boolean),
     queryFn: async () => (await organizationApi.getDashboardSetup({ hospitalId })).data,
     queryKey: queryKeys.dashboardSetup('counts', scope),
   });
@@ -172,7 +175,7 @@ export function useDashboardStats(period: Period) {
   // Shaped like the queries the Master data card used to get, one per count.
   const countOf = (key: keyof DashboardSetup['counts'], allowed: boolean) => ({
     data: allowed ? setup?.counts[key] : undefined,
-    isLoading: allowed && setupQuery.isLoading,
+    isLoading: allowed && (!ready || setupQuery.isLoading),
   });
   const masters = {
     employees: countOf('employees', can.employees),
@@ -230,7 +233,7 @@ export function useDashboardStats(period: Period) {
     [pending, period, transfers, vendors, wastage],
   );
 
-  const setupLoading = setupQuery.isLoading;
+  const setupLoading = !ready || setupQuery.isLoading;
   const steps = useMemo(() => {
     const count = (key: keyof DashboardSetup['counts'], allowed: boolean) =>
       allowed ? setup?.counts[key] : undefined;
@@ -271,34 +274,39 @@ export function useDashboardStats(period: Period) {
     setup,
   ]);
   // The mode is known once the period's transfers and the setup counts are in.
-  const isModeKnown = !can.transfers || (Boolean(transfers) && !setupLoading);
+  const isModeKnown = ready && (!can.transfers || (Boolean(transfers) && !setupLoading));
   const mode = dashboardMode({
     canSeeTransfers: can.transfers && Boolean(transfers),
     steps,
     transfersInPeriod: transfers?.count ?? 0,
   });
 
+  // A part not yet asked for (location still loading) reads as loading, so cards keep their
+  // skeletons rather than flash zeros.
+  const loading = <Query extends { isLoading: boolean }>(query: Query): Query =>
+    ready ? query : { ...query, isLoading: true };
+
   return {
-    activity: activityQuery,
+    activity: loading(activityQuery),
     can,
-    expiring: expiringQuery,
-    grns: { ...recordsQuery, truncated: records?.grns?.truncated ?? false },
+    expiring: loading(expiringQuery),
+    grns: { ...loading(recordsQuery), truncated: records?.grns?.truncated ?? false },
     insights: cards,
     isModeKnown,
     locations,
     masters,
     mode,
-    pending: { ...pendingTransfersQuery, stats: pending },
+    pending: { ...loading(pendingTransfersQuery), stats: pending },
     period,
-    productions: { ...recordsQuery, truncated: records?.productions?.truncated ?? false },
+    productions: { ...loading(recordsQuery), truncated: records?.productions?.truncated ?? false },
     queue: {
-      grns: grnsToVerifyQuery,
-      productions: draftProductionsQuery,
-      transfers: pendingTransfersQuery,
+      grns: loading(grnsToVerifyQuery),
+      productions: loading(draftProductionsQuery),
+      transfers: loading(pendingTransfersQuery),
     },
     setup: { isLoading: setupLoading, steps },
     transfers: {
-      ...recordsQuery,
+      ...loading(recordsQuery),
       stats: transfers,
       truncated: records?.transfers?.truncated ?? false,
     },

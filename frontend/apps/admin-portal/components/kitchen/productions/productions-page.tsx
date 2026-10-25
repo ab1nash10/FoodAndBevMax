@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { MouseEvent } from 'react';
 import type { KitchenProduction, KitchenProductionStatus, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -38,7 +39,6 @@ import {
   useUrlParam,
   useUrlSearchParam,
 } from '@/lib/use-url-state';
-import { useUndoable } from '@/lib/use-undoable';
 import { canOpenPath, locationHref, recordHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { invalidateKitchenProductionQueries } from '@/lib/query-invalidation';
@@ -208,6 +208,7 @@ export function KitchenProductionsPageClient() {
       invalidateKitchenProductionQueries(queryClient);
       showToast({
         description: response.data.productionNumber,
+        recordId: response.data.id,
         title: 'Production posted',
         variant: 'success',
       });
@@ -223,14 +224,15 @@ export function KitchenProductionsPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_response, id) {
       invalidateKitchenProductionQueries(queryClient);
-      showToast({ title: 'Production cancelled', variant: 'success' });
+      showToast({ recordId: id, title: 'Production cancelled', variant: 'success' });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => organizationApi.deleteKitchenProduction(id),
+    mutationFn: (production: KitchenProduction) =>
+      organizationApi.deleteKitchenProduction(production.id),
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
@@ -238,16 +240,14 @@ export function KitchenProductionsPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
-      // The Undo toast already said it was deleted.
+    onSuccess(_response, production) {
       invalidateKitchenProductionQueries(queryClient);
+      showToast({ title: `${production.productionNumber} deleted`, variant: 'success' });
     },
   });
-  const undoable = useUndoable();
+  const confirm = useConfirm();
 
-  const productions = (productionsQuery.data?.items ?? []).filter(
-    (production) => !undoable.isChanged(production.id),
-  );
+  const productions = productionsQuery.data?.items ?? [];
   const meta = productionsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(searchInput || hospitalParam || kitchenFilter || statusFilter);
 
@@ -259,13 +259,28 @@ export function KitchenProductionsPageClient() {
     setPage(1);
   }
 
-  // Only a draft can be deleted, and nothing of it is in stock yet, so it can wait for Undo.
-  function deleteProduction(production: KitchenProduction) {
-    undoable.schedule({
-      commit: () => deleteMutation.mutateAsync(production.id),
-      id: production.id,
-      title: `${production.productionNumber} deleted`,
+  // Only a draft can be deleted; nothing of it is in stock yet.
+  async function deleteProduction(production: KitchenProduction) {
+    const confirmed = await confirm({
+      confirmLabel: 'Delete',
+      description: 'The draft and its lines are removed. This can’t be undone.',
+      title: `Delete ${production.productionNumber}?`,
+      tone: 'danger',
     });
+
+    if (confirmed) deleteMutation.mutate(production);
+  }
+
+  // Asks as the production's own page does.
+  async function cancelProduction(production: KitchenProduction) {
+    const confirmed = await confirm({
+      confirmLabel: 'Cancel production',
+      description: 'Nothing is added to stock.',
+      title: `Cancel ${production.productionNumber}?`,
+      tone: 'danger',
+    });
+
+    if (confirmed) cancelMutation.mutate(production.id);
   }
 
   const visibleColumns = productionColumns.filter(
@@ -312,12 +327,14 @@ export function KitchenProductionsPageClient() {
             active: !statusFilter,
             label: 'All productions',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           ...productionColumns.map((column) => ({
             active: statusFilter === column.status,
             label: column.label,
             onSelect: () => showStatus(column.status),
+            share: stats?.all ? stats[column.status] / stats.all : undefined,
             tone: column.tone,
             value: stats?.[column.status] ?? '–',
           })),
@@ -393,15 +410,17 @@ export function KitchenProductionsPageClient() {
             return (
               <section
                 aria-label={`${column.label} productions`}
-                className="flex w-75 shrink-0 flex-col rounded-card bg-ds-subtle p-3 nav:w-auto nav:min-w-0"
+                className="flex w-75 shrink-0 flex-col self-start rounded-[20px] bg-ds-border/70 px-3 py-3.5 nav:w-auto nav:min-w-0"
                 key={column.status}
               >
-                {/* Its total is in the stat strip above, so the header only names the column. */}
-                <header className="px-1 pb-3">
-                  <h2 className="flex items-center gap-2 text-[13.5px] font-semibold text-ds-text">
-                    <span aria-hidden="true" className={cn('h-2.5 w-2.5 rounded-xs', column.dot)} />
-                    {column.label}
-                  </h2>
+                <header className="flex items-center gap-2 px-1 pb-3">
+                  <span aria-hidden="true" className={cn('h-2 w-2 rounded-full', column.dot)} />
+                  <h2 className="flex-1 text-base font-semibold text-ds-text">{column.label}</h2>
+                  {productionsQuery.isLoading ? null : (
+                    <span className="rounded-full bg-ds-surface px-2 py-px text-xs text-ds-text-2 tabular-nums">
+                      {columnProductions.length}
+                    </span>
+                  )}
                 </header>
                 <div className="space-y-3">
                   {productionsQuery.isLoading ? (
@@ -417,7 +436,8 @@ export function KitchenProductionsPageClient() {
                       return (
                         // The whole card opens the production; its links and buttons do their own.
                         <article
-                          className="cursor-pointer rounded-tile border border-ds-border bg-ds-surface p-4 shadow-card transition hover:border-ds-primary/40"
+                          className="cursor-pointer rounded-2xl bg-ds-surface px-4 py-3.5 shadow-card ring-1 ring-ds-text/5 transition-shadow duration-150 hover:shadow-card-hover"
+                          data-record-id={production.id}
                           key={production.id}
                           onClick={(event) => {
                             if (!isInnerControl(event)) {
@@ -501,7 +521,7 @@ export function KitchenProductionsPageClient() {
                               </span>
                             </span>
                             {production.status === 'POSTED' ? (
-                              <StatusChip label="Posted to stock" status="POSTED" />
+                              <StatusChip label="Added to stock" status="POSTED" />
                             ) : production.status === 'CANCELLED' ? (
                               <StatusChip status="CANCELLED" />
                             ) : null}
@@ -517,7 +537,7 @@ export function KitchenProductionsPageClient() {
                               </Button>
                               <Button
                                 disabled={cancelMutation.isPending}
-                                onClick={() => cancelMutation.mutate(production.id)}
+                                onClick={() => void cancelProduction(production)}
                                 type="button"
                                 variant="outline"
                               >
@@ -528,7 +548,7 @@ export function KitchenProductionsPageClient() {
                                 disabled={deleteMutation.isPending}
                                 icon={Trash2}
                                 label={`Delete ${production.productionNumber}`}
-                                onClick={() => deleteProduction(production)}
+                                onClick={() => void deleteProduction(production)}
                               />
                             </div>
                           ) : null}
@@ -536,7 +556,7 @@ export function KitchenProductionsPageClient() {
                       );
                     })
                   ) : (
-                    <p className="rounded-tile border border-dashed border-ds-border px-4 py-8 text-center text-sm text-ds-muted">
+                    <p className="rounded-2xl border border-dashed border-ds-muted/35 px-4 py-8 text-center text-sm text-ds-muted">
                       No {column.label.toLowerCase()} productions
                     </p>
                   )}

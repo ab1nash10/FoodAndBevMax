@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -12,7 +13,13 @@ import {
 import { invalidateKitchenQueries } from '@/lib/query-invalidation';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import { DateTimeCell, RowAction, StatStrip, tableStyles } from '@/components/design-system';
+import {
+  DateTimeCell,
+  RecordAvatar,
+  RowAction,
+  StatStrip,
+  tableStyles,
+} from '@/components/design-system';
 import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -55,6 +62,7 @@ export function KitchensPageClient() {
   const canEdit = hasPermission('KITCHEN_UPDATE');
   const [editingKitchen, setEditingKitchen] = useState<Kitchen | null>(null);
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
@@ -123,9 +131,9 @@ export function KitchensPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(_, variables) {
       invalidateKitchenQueries(queryClient);
-      showToast({ title: 'Kitchen updated', variant: 'success' });
+      showToast({ recordId: variables.id, title: 'Kitchen updated', variant: 'success' });
       setEditingKitchen(null);
     },
   });
@@ -146,6 +154,7 @@ export function KitchensPageClient() {
     onSuccess(_, variables) {
       invalidateKitchenQueries(queryClient);
       showToast({
+        recordId: variables.id,
         title: variables.isActive ? 'Kitchen activated' : 'Kitchen deactivated',
         variant: 'success',
       });
@@ -171,7 +180,7 @@ export function KitchensPageClient() {
     setPage(1);
   }
 
-  function toggleKitchenStatus(kitchen: Kitchen) {
+  async function toggleKitchenStatus(kitchen: Kitchen) {
     const nextIsActive = !kitchen.isActive;
 
     if (nextIsActive && !kitchen.hospital.isActive) {
@@ -183,7 +192,13 @@ export function KitchensPageClient() {
       return;
     }
 
-    if (!nextIsActive && !window.confirm(freezeServicesMessage)) {
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: nextIsActive,
+      effect: freezeServicesMessage,
+      name: kitchen.kitchenName,
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -221,6 +236,7 @@ export function KitchensPageClient() {
             active: !activeFilter,
             label: 'All kitchens',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
@@ -228,6 +244,7 @@ export function KitchensPageClient() {
             label: 'Active',
             onSelect: () => showStatus('active'),
             tone: 'ok',
+            share: stats?.all ? stats.active / stats.all : undefined,
             value: stats?.active ?? '–',
           },
           {
@@ -235,6 +252,7 @@ export function KitchensPageClient() {
             label: 'Inactive',
             onSelect: () => showStatus('inactive'),
             tone: 'pending',
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             value: stats?.inactive ?? '–',
           },
         ]}
@@ -303,7 +321,7 @@ export function KitchensPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-160 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-160 table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[32%]')}>Kitchen</th>
@@ -320,12 +338,22 @@ export function KitchensPageClient() {
                 items.map((kitchen) => (
                   <tr
                     className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                    data-record-id={kitchen.id}
                     key={kitchen.id}
                     onClick={canEdit ? () => setEditingKitchen(kitchen) : undefined}
                   >
                     <td className={tableStyles.td}>
-                      <p className={cn('truncate', tableStyles.title)}>{kitchen.kitchenName}</p>
-                      <p className={cn('truncate', tableStyles.code)}>{kitchen.kitchenCode}</p>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={kitchen.kitchenName} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className={cn('truncate', tableStyles.title)}>
+                            {kitchen.kitchenName}
+                          </span>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {kitchen.kitchenCode}
+                          </span>
+                        </span>
+                      </span>
                     </td>
                     <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {getLocationDisplayName(kitchen.hospital)}
@@ -335,7 +363,7 @@ export function KitchensPageClient() {
                       <StatusToggleCell
                         disabled={statusMutation.isPending && statusUpdatingId === kitchen.id}
                         isActive={kitchen.isActive}
-                        onToggle={() => toggleKitchenStatus(kitchen)}
+                        onToggle={() => void toggleKitchenStatus(kitchen)}
                         showFrozenMessage={!kitchen.hospital.isActive}
                       />
                     </td>

@@ -1,15 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ShiftMode } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 import { GSTIN_PATTERN } from '../../legal-entities/legal-entity-guards';
@@ -18,6 +23,23 @@ const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 // Indian formats, checked once a code is trimmed and in capitals (@CodeCase runs first).
 const panPattern = /^[A-Z]{5}\d{4}[A-Z]$/;
 const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+/** One fixed shift, e.g. Morning 07:00–15:00 (one ending before it starts runs past midnight). */
+export class ShiftTimingDto {
+  @ApiProperty({ maxLength: 40 })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(40)
+  name!: string;
+
+  @ApiProperty({ example: '07:00' })
+  @Matches(timePattern, { message: 'Shift times use HH:mm.' })
+  startTime!: string;
+
+  @ApiProperty({ example: '15:00' })
+  @Matches(timePattern, { message: 'Shift times use HH:mm.' })
+  endTime!: string;
+}
 
 export class CreateRestaurantDto {
   @ApiProperty()
@@ -161,6 +183,19 @@ export class CreateRestaurantDto {
   @IsBoolean()
   @IsOptional()
   staffDiscountApplicable?: boolean;
+
+  @ApiPropertyOptional({ default: ShiftMode.CASHIER, enum: ShiftMode })
+  @IsEnum(ShiftMode)
+  @IsOptional()
+  shiftMode?: ShiftMode;
+
+  @ApiPropertyOptional({ type: [ShiftTimingDto] })
+  @IsArray()
+  @ArrayMaxSize(6)
+  @ValidateNested({ each: true })
+  @Type(() => ShiftTimingDto)
+  @IsOptional()
+  shiftTimings?: ShiftTimingDto[];
 
   @ApiPropertyOptional({ default: false })
   @IsBoolean()

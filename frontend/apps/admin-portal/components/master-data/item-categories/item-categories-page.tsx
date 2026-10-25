@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus } from 'lucide-react';
+import { ArrowUpDown, Loader2, Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -16,6 +16,7 @@ import type {
 } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
   activeStatus,
   CsvImportExport,
@@ -34,6 +35,7 @@ import {
 import {
   AppPageHeader,
   DateTimeCell,
+  RecordAvatar,
   RowAction,
   StatStrip,
   tableStyles,
@@ -44,8 +46,8 @@ import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { IfCanOpen } from '@/components/record-link';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
-import { useUndoable } from '@/lib/use-undoable';
 import { invalidateItemCategoryQueries } from '@/lib/query-invalidation';
+import { ArrangeCategories } from '@/components/master-data/item-categories/arrange-categories';
 import {
   CategoryFormFields,
   categorySchema,
@@ -130,9 +132,11 @@ export function ItemCategoriesPageClient() {
     'active',
     'inactive',
   ]);
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  // In menu order by default: the order the till, the kiosk and the menus show them in.
+  const [sortBy, setSortBy] = useState('sortOrder');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
+  const [isArranging, setIsArranging] = useState(false);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { hasPermission } = useAuth();
@@ -175,9 +179,10 @@ export function ItemCategoriesPageClient() {
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       invalidateItemCategoryQueries(queryClient);
       showToast({
+        recordId: response.data.id,
         title: editingCategory ? 'Category updated' : 'Category created',
         variant: 'success',
       });
@@ -201,11 +206,14 @@ export function ItemCategoriesPageClient() {
     },
     onSuccess(_response, variables) {
       invalidateItemCategoryQueries(queryClient);
-      // Marking inactive already had its Undo toast.
-      if (variables.isActive) showToast({ title: 'Category activated', variant: 'success' });
+      showToast({
+        recordId: variables.category.id,
+        title: variables.isActive ? 'Category activated' : 'Category deactivated',
+        variant: 'success',
+      });
     },
   });
-  const undoable = useUndoable();
+  const confirm = useConfirm();
 
   // The strip's counts: under the list's own key, so every save refreshes them too.
   const statsQuery = useQuery({
@@ -221,10 +229,7 @@ export function ItemCategoriesPageClient() {
   const stats = statsQuery.data;
   const canEditCategories = hasPermission('ITEM_CATEGORY_UPDATE');
 
-  // A category marked inactive shows so at once, while its Undo toast runs.
-  const items = (categoriesQuery.data?.items ?? []).map((category) =>
-    undoable.isChanged(category.id) ? { ...category, isActive: false } : category,
-  );
+  const items = categoriesQuery.data?.items ?? [];
   const meta = categoriesQuery.data?.meta ?? {
     limit: listLimit,
     page,
@@ -276,21 +281,15 @@ export function ItemCategoriesPageClient() {
     });
   }
 
-  function toggleCategoryStatus(category: ItemCategory) {
-    // Switching it back on while the Undo toast runs is the same as Undo.
-    if (undoable.undo(category.id)) return;
+  async function toggleCategoryStatus(category: ItemCategory) {
+    const isActive = !category.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: isActive,
+      effect: 'It can’t be used for new items. Existing records stay visible.',
+      name: category.categoryName,
+    });
 
-    if (category.isActive) {
-      undoable.schedule({
-        commit: () => toggleCategoryStatusMutation.mutateAsync({ category, isActive: false }),
-        description: 'It can’t be used for new items. Existing records stay visible.',
-        id: category.id,
-        title: `${category.categoryName} marked inactive`,
-      });
-      return;
-    }
-
-    toggleCategoryStatusMutation.mutate({ category, isActive: true });
+    if (confirmed) toggleCategoryStatusMutation.mutate({ category, isActive });
   }
 
   return (
@@ -317,6 +316,12 @@ export function ItemCategoriesPageClient() {
               onImported={() => invalidateItemCategoryQueries(queryClient)}
               startImport={hasPermission('ITEM_CATEGORY_CREATE') ? startCategoryImport : undefined}
             />
+            {hasPermission('ITEM_CATEGORY_UPDATE') ? (
+              <Button onClick={() => setIsArranging(true)} type="button" variant="outline">
+                <ArrowUpDown className="h-4 w-4" />
+                Arrange order
+              </Button>
+            ) : null}
             <IfCanOpen href="/masters/item-categories/new">
               <Button asChild>
                 <Link href="/masters/item-categories/new">
@@ -339,12 +344,14 @@ export function ItemCategoriesPageClient() {
             active: !activeFilter,
             label: 'All categories',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: activeFilter === 'active',
             label: 'Active',
             onSelect: () => showStatus('active'),
+            share: stats?.all ? stats.active / stats.all : undefined,
             tone: 'ok',
             value: stats?.active ?? '–',
           },
@@ -352,6 +359,7 @@ export function ItemCategoriesPageClient() {
             active: activeFilter === 'inactive',
             label: 'Inactive',
             onSelect: () => showStatus('inactive'),
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             tone: 'pending',
             value: stats?.inactive ?? '–',
           },
@@ -386,6 +394,8 @@ export function ItemCategoriesPageClient() {
         </form>
       </Modal>
 
+      <ArrangeCategories onClose={() => setIsArranging(false)} open={isArranging} />
+
       <Panel aria-label="Item category list" className="overflow-hidden" role="region">
         <ListToolbar>
           <SearchInput
@@ -418,6 +428,7 @@ export function ItemCategoriesPageClient() {
               setPage(1);
             }}
             options={[
+              { label: 'Menu order', value: 'sortOrder' },
               { label: 'Created date', value: 'createdAt' },
               { label: 'Category name', value: 'categoryName' },
               { label: 'Updated date', value: 'updatedAt' },
@@ -430,7 +441,7 @@ export function ItemCategoriesPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-[720px] table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-[720px] table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[38%]')}>Category</th>
@@ -447,11 +458,15 @@ export function ItemCategoriesPageClient() {
                 items.map((category) => (
                   <tr
                     className={cn(tableStyles.row, !canEditCategories && 'cursor-default')}
+                    data-record-id={category.id}
                     key={category.id}
                     onClick={canEditCategories ? () => startEditingCategory(category) : undefined}
                   >
-                    <td className={cn(tableStyles.td, tableStyles.title, 'truncate')}>
-                      {category.categoryName}
+                    <td className={cn(tableStyles.td, tableStyles.title)}>
+                      <span className="flex min-w-0 items-center gap-3">
+                        <RecordAvatar name={category.categoryName} />
+                        <span className="truncate">{category.categoryName}</span>
+                      </span>
                     </td>
                     <td className={tableStyles.td}>
                       <DateTimeCell value={category.createdAt} />
@@ -466,7 +481,7 @@ export function ItemCategoriesPageClient() {
                           ariaLabel={`${category.categoryName} active`}
                           checked={category.isActive}
                           disabled={toggleCategoryStatusMutation.isPending}
-                          onChange={() => toggleCategoryStatus(category)}
+                          onChange={() => void toggleCategoryStatus(category)}
                         />
                         <span
                           className={cn(

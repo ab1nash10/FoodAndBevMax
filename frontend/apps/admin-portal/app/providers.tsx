@@ -3,6 +3,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { AuthProvider } from '@/components/auth-provider';
+import { ConfirmProvider } from '@/components/confirm-provider';
 import { LocationProvider } from '@/components/location-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ToastProvider } from '@/components/toast-provider';
@@ -35,9 +36,11 @@ export function Providers({ children }: Readonly<{ children: ReactNode }>) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <ToastProvider>
-          <AuthProvider>
-            <LocationProvider>{children}</LocationProvider>
-          </AuthProvider>
+          <ConfirmProvider>
+            <AuthProvider>
+              <LocationProvider>{children}</LocationProvider>
+            </AuthProvider>
+          </ConfirmProvider>
         </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>

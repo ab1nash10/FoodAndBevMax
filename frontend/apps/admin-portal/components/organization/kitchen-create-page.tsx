@@ -67,6 +67,7 @@ export function KitchenCreatePageClient() {
       invalidateKitchenQueries(queryClient);
       showToast({
         action: { href, label: `View ${response.data.kitchenName}` },
+        recordId: response.data.id,
         title: 'Kitchen created',
         variant: 'success',
       });

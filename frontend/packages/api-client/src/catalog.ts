@@ -13,6 +13,8 @@ export interface ItemCategory {
   deletedAt: string | null;
   id: string;
   isActive: boolean;
+  /** Its place on menus, the till and the kiosk, lowest first. */
+  sortOrder: number;
   updatedAt: string;
 }
 
@@ -238,6 +240,8 @@ export interface RestaurantMenu {
   isActive: boolean;
   isAvailable: boolean;
   isDiscountable: boolean;
+  /** Shown first on the kiosk. */
+  isFeatured: boolean;
   isGstInclusive: boolean;
   item: ItemSummary;
   itemId: string;
@@ -255,6 +259,8 @@ export interface RestaurantMenu {
   /** Where it comes from, with kitchen: the store that stocks it (a packaged item). */
   store: Pick<Store, 'id' | 'isActive' | 'storeCode' | 'storeName'> | null;
   storeId: string | null;
+  /** A second code for the item, as the previous menu master kept it. */
+  subCode: string | null;
   updatedAt: string;
 }
 
@@ -270,8 +276,10 @@ export interface RestaurantMenuInput {
   isActive?: boolean;
   isAvailable?: boolean;
   isDiscountable?: boolean;
+  isFeatured?: boolean;
   isGstInclusive?: boolean;
   itemId: string;
+  subCode?: string | null;
   kitchenId?: string | null;
   positionType?: RestaurantMenuPositionType;
   preparationTimeMinutes?: number | null;

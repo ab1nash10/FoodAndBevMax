@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
-import { RowAction, StatStrip, tableStyles } from '@/components/design-system';
+import { RecordAvatar, RowAction, StatStrip, tableStyles } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
   FilterField,
   FiltersMenu,
@@ -72,11 +73,7 @@ function RestaurantThumbnail({ restaurant }: Readonly<{ restaurant: Restaurant }
     );
   }
 
-  return (
-    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-tile bg-ds-tile-locations-bg text-ds-tile-locations-fg">
-      <Utensils className="h-6 w-6" />
-    </span>
-  );
+  return <RecordAvatar name={restaurant.restaurantName} />;
 }
 
 export function RestaurantsPageClient() {
@@ -84,6 +81,7 @@ export function RestaurantsPageClient() {
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
@@ -161,6 +159,7 @@ export function RestaurantsPageClient() {
     onSuccess(_, variables) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
       showToast({
+        recordId: variables.id,
         title: variables.nextIsOnline ? 'Online ordering turned on' : 'Online ordering turned off',
         variant: 'success',
       });
@@ -182,6 +181,7 @@ export function RestaurantsPageClient() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantOptions() });
       showToast({
+        recordId: variables.id,
         title: variables.isActive ? 'Restaurant activated' : 'Restaurant deactivated',
         variant: 'success',
       });
@@ -201,10 +201,15 @@ export function RestaurantsPageClient() {
     setPage(1);
   }
 
-  function toggleRestaurantStatus(restaurant: Restaurant) {
+  async function toggleRestaurantStatus(restaurant: Restaurant) {
     const nextIsActive = !restaurant.isActive;
+    const confirmed = await confirmStatusChange(confirm, {
+      activate: nextIsActive,
+      effect: freezeServicesMessage,
+      name: restaurant.restaurantName,
+    });
 
-    if (!nextIsActive && !window.confirm(freezeServicesMessage)) {
+    if (!confirmed) {
       return;
     }
 
@@ -225,12 +230,26 @@ export function RestaurantsPageClient() {
     { label: 'Status', value: 'isActive' },
   ];
 
-  const handleOnlineToggle = (restaurant: Restaurant) => {
+  const handleOnlineToggle = async (restaurant: Restaurant) => {
+    const nextIsOnline = !allowsOnlineOrdering(restaurant);
+    const confirmed = await confirm(
+      nextIsOnline
+        ? {
+            confirmLabel: 'Turn on',
+            description: 'Customers can place online orders straight away.',
+            title: `Turn on online ordering for ${restaurant.restaurantName}?`,
+          }
+        : {
+            confirmLabel: 'Turn off',
+            description: 'Customers can’t place online orders until it is turned on again.',
+            title: `Turn off online ordering for ${restaurant.restaurantName}?`,
+            tone: 'danger',
+          },
+    );
+
+    if (!confirmed) return;
     setOnlineUpdatingId(restaurant.id);
-    onlineToggleMutation.mutate({
-      id: restaurant.id,
-      nextIsOnline: !allowsOnlineOrdering(restaurant),
-    });
+    onlineToggleMutation.mutate({ id: restaurant.id, nextIsOnline });
   };
 
   return (
@@ -258,6 +277,7 @@ export function RestaurantsPageClient() {
             active: !activeFilter,
             label: 'All restaurants',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
@@ -265,6 +285,7 @@ export function RestaurantsPageClient() {
             label: 'Active',
             onSelect: () => showStatus('active'),
             tone: 'ok',
+            share: stats?.all ? stats.active / stats.all : undefined,
             value: stats?.active ?? '–',
           },
           {
@@ -272,6 +293,7 @@ export function RestaurantsPageClient() {
             label: 'Inactive · offline',
             onSelect: () => showStatus('inactive'),
             tone: 'pending',
+            share: stats?.all ? stats.inactive / stats.all : undefined,
             value: stats?.inactive ?? '–',
           },
         ]}
@@ -315,7 +337,7 @@ export function RestaurantsPageClient() {
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'min-w-215 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-215 table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-[34%]')}>Restaurant</th>
@@ -344,6 +366,7 @@ export function RestaurantsPageClient() {
                   return (
                     <tr
                       className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      data-record-id={restaurant.id}
                       key={restaurant.id}
                       onClick={canEdit ? () => router.push(editHref) : undefined}
                       onMouseEnter={canEdit ? prefetchDetail.onMouseEnter : undefined}
@@ -380,7 +403,7 @@ export function RestaurantsPageClient() {
                             ariaLabel={`${restaurant.restaurantName} online ordering`}
                             checked={isOnline}
                             disabled={isOnlineUpdating || !isOpen}
-                            onChange={() => handleOnlineToggle(restaurant)}
+                            onChange={() => void handleOnlineToggle(restaurant)}
                           />
                           <span
                             className={cn(
@@ -398,7 +421,7 @@ export function RestaurantsPageClient() {
                             ariaLabel={`${restaurant.restaurantName} restaurant availability`}
                             checked={restaurant.isActive}
                             disabled={statusMutation.isPending}
-                            onChange={() => toggleRestaurantStatus(restaurant)}
+                            onChange={() => void toggleRestaurantStatus(restaurant)}
                           />
                           <span
                             className={cn(

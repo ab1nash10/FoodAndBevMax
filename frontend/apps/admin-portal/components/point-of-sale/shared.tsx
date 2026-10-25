@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Loader2, Printer, Receipt } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useCallback, useEffect, useState } from 'react';
-import type { PaymentMode, PosBill, PosCounter } from '@aahar/api-client';
+import { ApiClientError, type PaymentMode, type PosBill, type PosCounter } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { StatusChip } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
@@ -13,6 +13,7 @@ import { useToast } from '@/components/toast-provider';
 import { Field, Input, Select, Skeleton } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { escapeHtml, printHtml } from '@/lib/print';
 import { invalidatePosBillQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
@@ -45,9 +46,7 @@ export function formatDateTime(value: string): string {
 }
 
 /** Today in India as YYYY-MM-DD: the POS business day. */
-export function todayInIndia(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-}
+export { todayInIndia } from '@/lib/today-in-india';
 
 const counterStorageKey = 'aahar.pos.counter';
 
@@ -59,18 +58,61 @@ function readStoredCounter(): string {
   }
 }
 
+const tillHostKey = 'aahar.pos.host';
+
 /**
- * The counters the user may bill at (within the location picked in the header), and the one
- * this till works at. The choice is remembered on this device: a till stays at its counter.
+ * This computer's hostname when it is a till, empty anywhere else. A browser cannot read the
+ * hostname, so the till's launcher opens AAHAR with ?host=%COMPUTERNAME%; the device remembers
+ * it from then on, so the till keeps its counter however AAHAR is opened later.
+ */
+function readTillHost(canSetUpTill: boolean): string {
+  if (typeof window === 'undefined') return '';
+
+  // Only someone who may set up tills can point this computer at one by address; for anyone
+  // else ?host= is ignored, so a cashier cannot move a till to another counter.
+  const fromUrl = canSetUpTill
+    ? (new URLSearchParams(window.location.search).get('host')?.trim() ?? '')
+    : '';
+
+  try {
+    if (fromUrl) window.localStorage.setItem(tillHostKey, fromUrl);
+    return fromUrl || (window.localStorage.getItem(tillHostKey) ?? '');
+  } catch {
+    // Private windows may refuse storage: the address alone names the till for this visit.
+    return fromUrl;
+  }
+}
+
+/**
+ * The counters the user may bill at, and the one this till works at. On a till computer (one
+ * with a hostname) only the counters of its POS device, whatever location the header shows;
+ * elsewhere those within the header's location. The choice among several is remembered here.
  */
 export function usePosCounter() {
   const { scopedHospitalId } = useLocationContext();
+  // Read at once rather than in an effect, so the till never flashes "no counter" first. The
+  // server renders the loading state either way.
+  const canSetUpTill = useAuth().hasPermission('POS_DEVICE_UPDATE');
+  const [host, setHostState] = useState(() => readTillHost(canSetUpTill));
+  // An admin sets this computer up as a till (or clears it): remembered on this browser.
+  const setHost = useCallback((hostName: string) => {
+    setHostState(hostName);
+    try {
+      if (hostName) window.localStorage.setItem(tillHostKey, hostName);
+      else window.localStorage.removeItem(tillHostKey);
+    } catch {
+      // Private windows may refuse storage; the choice then lasts for this visit only.
+    }
+  }, []);
   const query = useQuery({
-    queryFn: async () => (await organizationApi.listPosCounters()).data,
-    queryKey: queryKeys.posCounters(),
+    queryFn: async () => (await organizationApi.listPosCounters(host || undefined)).data,
+    queryKey: host ? queryKeys.posCounters(host) : queryKeys.posCounters(),
+    // An unregistered till is an answer, not a hiccup: say so at once.
+    retry: (count, error) =>
+      !(error instanceof ApiClientError && error.status === 404) && count < 2,
   });
   const counters = (query.data ?? []).filter(
-    (counter) => !scopedHospitalId || counter.hospitalId === scopedHospitalId,
+    (counter) => Boolean(host) || !scopedHospitalId || counter.hospitalId === scopedHospitalId,
   );
   const [storedId, setStoredId] = useState('');
 
@@ -88,7 +130,7 @@ export function usePosCounter() {
     }
   }, []);
 
-  return { counter, counters, query, setCounterId };
+  return { counter, counters, host, query, setCounterId, setHost };
 }
 
 export function counterLabel(counter: Pick<PosCounter, 'counterName' | 'restaurant'>): string {
@@ -156,48 +198,8 @@ function billIssuer(bill: PosBill) {
   };
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (char) => ({ '"': '&quot;', '&': '&amp;', "'": '&#39;', '<': '&lt;', '>': '&gt;' })[char]!,
-  );
-}
-
-/** Prints through a hidden frame, so the till keeps its screen and the printer gets 80 mm. */
-function printHtml(title: string, body: string) {
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
-
-  if (!doc || !frame.contentWindow) {
-    frame.remove();
-    return;
-  }
-
-  doc.open();
-  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style>
-@page { size: 80mm auto; margin: 3mm; }
-/* Centred on the paper: the full 74 mm on an 80 mm roll, narrower where the printer prints less
-   (72 mm heads), and in the middle of anything wider (A4, a PDF). */
-body { font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #000; margin: 0 auto; max-width: 74mm; }
-h1 { font-size: 14px; margin: 0; text-align: center; }
-.c { text-align: center; } .r { text-align: right; } .b { font-weight: 700; }
-hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
-table { width: 100%; border-collapse: collapse; } td { vertical-align: top; padding: 1px 2px 1px 0; }
-.items { table-layout: fixed; font-size: 11px; } .items td { overflow-wrap: anywhere; }
-.big { font-size: 16px; font-weight: 700; }
-</style></head><body>${body}</body></html>`);
-  doc.close();
-  frame.contentWindow.focus();
-  frame.contentWindow.print();
-  window.setTimeout(() => frame.remove(), 60_000);
-}
-
 function row(left: string, right: string, className = '') {
-  return `<tr class="${className}"><td>${escapeHtml(left)}</td><td class="r">${escapeHtml(right)}</td></tr>`;
+  return `<tr class="${className}"><td>${escapeHtml(left)}</td><td class="num">${escapeHtml(right)}</td></tr>`;
 }
 
 const siteTime = new Intl.DateTimeFormat('en-IN', {
@@ -216,12 +218,14 @@ const siteDate = new Intl.DateTimeFormat('en-GB', {
 const amount = (value: number) =>
   value.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
-/** "Label: value" lines under the invoice heading, skipping the empty ones. */
+/** Label | value rows under the invoice heading, skipping the empty ones. */
 function facts(entries: Array<[string, string | null | undefined]>): string {
-  return entries
+  const rows = entries
     .filter((entry): entry is [string, string] => Boolean(entry[1]))
-    .map(([label, value]) => `${escapeHtml(label)}: ${escapeHtml(value)}<br>`)
+    .map(([label, value]) => `<tr><td>${escapeHtml(label)}:</td><td>${escapeHtml(value)}</td></tr>`)
     .join('');
+
+  return `<table class="facts">${rows}</table>`;
 }
 
 /** GST by rate, as CGST and SGST halves (every line's GST is an even number of paise). */
@@ -320,15 +324,16 @@ export async function printBill(
     .map((line, index) => {
       const listPrice = line.taxableAmount + line.discountAmount;
 
-      return `<tr><td>${index + 1}.</td><td>${escapeHtml(line.itemName)}${line.isDiscountable ? '' : '*'} x ${line.quantity}${line.note ? `<br><small>${escapeHtml(line.note)}</small>` : ''}</td><td>${escapeHtml(line.hsnCode ?? '')}</td><td class="r">${amount(listPrice / line.quantity)}</td><td class="r">${amount(listPrice)}</td></tr>`;
+      return `<tr><td>${index + 1}.</td><td><span class="name">${escapeHtml(line.itemName)}${line.isDiscountable ? '' : '*'}</span> x ${line.quantity}${line.note ? `<small>${escapeHtml(line.note)}</small>` : ''}</td><td>${escapeHtml(line.hsnCode ?? '')}</td><td class="num">${amount(listPrice / line.quantity)}</td><td class="num">${amount(listPrice)}</td></tr>`;
     })
     .join('');
   const taxes = gstByRate(bill)
     .map(
       ({ amount, rate }) =>
-        `${row(`CGST (${rate / 2}%)`, formatMoney(amount / 2))}${row(`SGST (${rate / 2}%)`, formatMoney(amount / 2))}`,
+        `${row(`CGST (${rate / 2}%)`, formatMoney(amount / 2), 'tax')}${row(`SGST (${rate / 2}%)`, formatMoney(amount / 2), 'tax')}`,
     )
     .join('');
+  const separator = '<tr class="sep"><td colspan="2"></td></tr>';
   const rates = gstByRate(bill).map(({ rate }) => `${rate}%`);
   const payment = bill.isComplimentary
     ? null
@@ -336,14 +341,15 @@ export async function printBill(
       ? paymentModeLabels[bill.paymentMode]
       : null;
   const body = `
-${qr ? `<p class="c"><img alt="" src="${qr}" style="width:42mm;height:42mm"><br><small>Scan to pay by UPI</small></p>` : ''}
-${duplicate ? '<p class="c">Duplicate Bill</p>' : ''}
-<h1>${bill.isComplimentary ? 'COMPLIMENTARY BILL' : 'TAX INVOICE'}</h1>
-${bill.status === 'CANCELLED' ? '<p class="c b">*** CANCELLED ***</p>' : ''}
-<p class="c">${escapeHtml(issuer.name)}${issuer.address ? `, ${escapeHtml(issuer.address)}` : ''}
-${issuer.gstNumber ? `<br>GSTIN: ${escapeHtml(issuer.gstNumber)}` : ''}${bill.restaurant.fssaiNumber ? `<br>FSSAI License: ${escapeHtml(bill.restaurant.fssaiNumber)}` : ''}
-<br><span class="b">${escapeHtml(bill.restaurant.restaurantName)}</span></p>
-<p><span class="b">Invoice #${escapeHtml(bill.billNumber)}</span><br><span class="b">Order #${escapeHtml(bill.orderNumber)}</span><br>
+${qr ? `<div class="qr"><img alt="" src="${qr}"><small>Scan to pay by UPI</small></div>` : ''}
+${duplicate ? '<p class="c" style="margin-bottom:5px"><span class="tag">Duplicate Bill</span></p>' : ''}
+<h1 class="title">${bill.isComplimentary ? 'COMPLIMENTARY BILL' : 'TAX INVOICE'}</h1>
+${bill.status === 'CANCELLED' ? '<p class="c" style="margin-top:4px"><span class="tag">*** CANCELLED ***</span></p>' : ''}
+<p class="issuer">${escapeHtml(issuer.name)}${issuer.address ? `, ${escapeHtml(issuer.address)}` : ''}
+${issuer.gstNumber ? `<br><span class="b">GSTIN: ${escapeHtml(issuer.gstNumber)}</span>` : ''}${bill.restaurant.fssaiNumber ? `<br>FSSAI License: ${escapeHtml(bill.restaurant.fssaiNumber)}` : ''}
+<span class="brand">${escapeHtml(bill.restaurant.restaurantName)}</span></p>
+<hr>
+<p class="ids">Invoice #${escapeHtml(bill.billNumber)}<br>Order #${escapeHtml(bill.orderNumber)}</p>
 ${facts([
   ['Time', siteTime.format(placed).toUpperCase()],
   ['Date', siteDate.format(placed)],
@@ -360,20 +366,21 @@ ${facts([
   ['Txn Id', bill.isComplimentary ? null : bill.paymentReference],
   ['Complimentary', bill.isComplimentary ? (bill.complimentaryReason ?? '-') : null],
   ['Place of Supply', bill.hospital.state],
-])}</p>
+])}
 <hr>
-<table class="items"><colgroup><col style="width:8%"><col style="width:38%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup><tr class="b"><td>SN</td><td>ITEM x QTY</td><td>HSN/ SAC</td><td class="r">RATE</td><td class="r">PRICE</td></tr>${lines}</table>
+<table class="items"><colgroup><col style="width:8%"><col style="width:38%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>SN</th><th>ITEM x QTY</th><th>HSN/ SAC</th><th class="num">RATE</th><th class="num">PRICE</th></tr></thead><tbody>${lines}</tbody></table>
 <hr>
-<table>
+<table class="totals">
 ${row('SUBTOTAL', formatMoney(bill.subtotal), 'b')}
 ${bill.discountTotal ? `${row(`Staff discount (${bill.discountPercent ?? 0}%)`, `-${formatMoney(bill.discountTotal)}`)}${row('Taxable value', formatMoney(bill.subtotal - bill.discountTotal))}` : ''}
-${taxes}
+${taxes ? `${separator}${taxes}` : ''}
 ${rates.length ? row(`GST TOTAL (${rates.join(' + ')})`, formatMoney(bill.gstTotal), 'b') : ''}
 ${bill.roundOff ? row('Round off', formatMoney(bill.roundOff)) : ''}
-${row('GRAND TOTAL', formatMoney(bill.grandTotal), 'big')}
+${row('GRAND TOTAL', formatMoney(bill.grandTotal), 'grand')}
 </table>
-<p class="c">Thanks &amp; Visit Again<br>Please mail us for feedback</p>
-<p class="c"><small>This invoice is system-generated and does not require any signature, and food items marked with "*" are not eligible for discounts.</small></p>`;
+${bill.channel === 'COUNTER' && bill.status !== 'CANCELLED' ? `<div class="order-no" style="margin-top:8px"><span>Watch the board for</span><strong>${escapeHtml(bill.orderNumber)}</strong></div>` : ''}
+<p class="footer">Thanks &amp; Visit Again<br>Please mail us for feedback</p>
+<p class="fine">This invoice is system-generated and does not require any signature, and food items marked with "*" are not eligible for discounts.</p>`;
 
   printHtml(bill.billNumber, body);
 }
@@ -384,22 +391,22 @@ export function printKot(bill: PosBill) {
   const lines = bill.lines
     .map(
       (line) =>
-        `<p class="b">${line.quantity} x ${escapeHtml(line.itemName)}${line.note ? `<br><span style="font-weight:400">— ${escapeHtml(line.note)}</span>` : ''}</p>`,
+        `<div class="kot-line"><span class="qty">${line.quantity} x</span><span>${escapeHtml(line.itemName)}${line.note ? `<span class="note">— ${escapeHtml(line.note)}</span>` : ''}</span></div>`,
     )
     .join('');
   const body = `
-<p class="c">POS: ${escapeHtml(bill.counter.counterName)}</p>
-<p class="big c">Your Order No. is<br><span style="font-size:24px">${escapeHtml(bill.orderNumber)}</span></p>
-${bill.roomNumber ? `<p class="big c">ROOM ${escapeHtml(bill.roomNumber)}${bill.bedNumber ? ` / BED ${escapeHtml(bill.bedNumber)}` : ''}</p>` : ''}
-<p>${facts([
-    ['Time', siteTime.format(placed).toUpperCase()],
-    ['Date', siteDate.format(placed)],
-    ['KOT No', bill.kotNumber],
-    ['Bill No', bill.billNumber],
-    ['Operator ID', bill.cashierCode],
-  ])}</p>
+<p class="c b">POS: ${escapeHtml(bill.counter.counterName)}</p>
+<div class="order-no"><span>Your Order No. is</span><strong>${escapeHtml(bill.orderNumber)}</strong></div>
+${bill.roomNumber ? `<p class="service">ROOM ${escapeHtml(bill.roomNumber)}${bill.bedNumber ? ` / BED ${escapeHtml(bill.bedNumber)}` : ''}</p>` : ''}
+${facts([
+  ['Time', siteTime.format(placed).toUpperCase()],
+  ['Date', siteDate.format(placed)],
+  ['KOT No', bill.kotNumber],
+  ['Bill No', bill.billNumber],
+  ['Operator ID', bill.cashierCode],
+])}
 <hr>${lines}
-${bill.instructions ? `<hr><p class="b">Note: ${escapeHtml(bill.instructions)}</p>` : ''}`;
+${bill.instructions ? `<p class="kot-note">Note: ${escapeHtml(bill.instructions)}</p>` : ''}`;
 
   printHtml(`Order ${bill.orderNumber}`, body);
 }
@@ -546,9 +553,9 @@ export function BillTotals({
           <dd className="font-mono">{formatMoney(roundOff)}</dd>
         </div>
       ) : null}
-      <div className="flex justify-between border-t border-ds-divider pt-2 text-base font-semibold text-ds-text">
+      <div className="flex items-baseline justify-between border-t border-ds-border pt-2 text-base font-bold text-ds-text">
         <dt>Grand total</dt>
-        <dd className="font-mono">{formatMoney(grandTotal)}</dd>
+        <dd className="font-mono text-xl">{formatMoney(grandTotal)}</dd>
       </div>
     </dl>
   );

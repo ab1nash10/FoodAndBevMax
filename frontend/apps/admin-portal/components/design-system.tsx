@@ -4,21 +4,10 @@ import { statusPresentation, type StatusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import type { FoodType, InventoryLocationType } from '@aahar/api-client';
 import type { LucideIcon } from 'lucide-react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  Check,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Inbox,
-  Layers,
-  X,
-} from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Inbox, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 interface BrandMarkProps {
   collapsed?: boolean;
@@ -90,19 +79,18 @@ export function AppPageHeader({ action, count, description, eyebrow, title }: Ap
   return (
     // No `isolate`: a dialog opened from `action` must not be trapped under the page below.
     <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div aria-hidden="true" className="page-art" />
       <div className="min-w-0">
-        {eyebrow ? <p className="text-[13px] text-ds-muted">{eyebrow}</p> : null}
-        <h1 className="mt-0.5 flex items-center gap-3 text-[28px] font-semibold leading-tight tracking-[-0.025em] text-ds-text sm:text-[32px]">
+        {eyebrow ? <p className="text-[13px] font-medium text-ds-muted">{eyebrow}</p> : null}
+        <h1 className="mt-0.5 flex items-center gap-2.5 text-[28px] font-semibold leading-[34px] tracking-[-0.015em] text-ds-text">
           {title}
           {count === undefined ? null : (
-            <span className="rounded-full bg-ds-primary-soft px-2.5 py-0.5 font-mono text-[13px] font-medium tracking-normal text-ds-link">
+            <span className="rounded-full bg-ds-primary-soft px-[9px] py-0.5 text-xs font-medium tracking-normal text-ds-link tabular-nums">
               {count}
             </span>
           )}
         </h1>
         {description ? (
-          <p className="mt-1 max-w-2xl text-sm leading-5 text-ds-muted">{description}</p>
+          <p className="mt-1.5 max-w-2xl text-[14px] leading-5 text-ds-text-2">{description}</p>
         ) : null}
       </div>
       {action ? <div className="flex shrink-0 flex-wrap items-center gap-3">{action}</div> : null}
@@ -117,42 +105,56 @@ export function AppPageHeader({ action, count, description, eyebrow, title }: Ap
  */
 export function HeroHeader({
   action,
-  aside,
   children,
   description,
   eyebrow,
   title,
 }: Readonly<{
   action?: ReactNode;
-  aside?: ReactNode;
+  /** The hero's right side: its quick tiles. */
   children?: ReactNode;
   description?: ReactNode;
   eyebrow?: ReactNode;
   title: string;
 }>) {
   return (
-    <section className="relative isolate overflow-hidden rounded-[28px] border border-ds-border bg-ds-surface px-6 py-8 shadow-card sm:px-10 sm:py-10">
-      <div aria-hidden="true" className="hero-art" />
-      <div className="relative flex flex-col gap-7 lg:flex-row lg:items-start lg:justify-between">
+    // The Dashboard's hero: brand blue easing into violet, two soft circles for depth.
+    <section className="relative isolate overflow-hidden rounded-[28px] bg-[linear-gradient(105deg,#0b57a4_0%,#327ad9_60%,#8c80fa_100%)] px-5 py-5 text-white shadow-[0_30px_60px_-30px_rgb(11_87_164/0.6)] sm:px-9 sm:py-8">
+      <span
+        aria-hidden="true"
+        className="absolute left-[62%] top-[-120px] -z-10 h-[300px] w-[300px] rounded-full bg-white/10"
+      />
+      <span
+        aria-hidden="true"
+        className="absolute bottom-[-110px] right-[-40px] -z-10 h-[220px] w-[220px] rounded-full bg-white/8"
+      />
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 max-w-2xl">
-          {eyebrow ? <p className="text-[13px] font-medium text-ds-muted">{eyebrow}</p> : null}
+          {eyebrow ? (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-white/85">
+              {eyebrow}
+            </p>
+          ) : null}
           {/* The full title always shows: a long name wraps, it is never cut off. */}
-          <h1 className="mt-2 text-[34px] font-semibold leading-[1.08] tracking-[-0.035em] text-ds-text wrap-anywhere sm:text-[48px]">
+          <h1 className="mt-2 text-[24px] font-semibold leading-[1.2] tracking-[-0.02em] text-white wrap-anywhere sm:mt-2.5 sm:text-[40px] sm:leading-[1.15]">
             {title}
           </h1>
           {description ? (
-            <p className="mt-3 text-[15px] leading-6 text-ds-text-3">{description}</p>
+            <p className="mt-2.5 text-[15px] leading-6 text-white/90">{description}</p>
           ) : null}
-          {action ? <div className="mt-6 flex flex-wrap items-center gap-2.5">{action}</div> : null}
+          {action ? <div className="mt-5 flex flex-wrap items-center gap-2.5">{action}</div> : null}
         </div>
-        {aside ? <div className="w-full shrink-0 lg:w-[380px]">{aside}</div> : null}
+        {children ? <div className="min-w-0 lg:shrink-0">{children}</div> : null}
       </div>
-      {children ? <div className="relative mt-8">{children}</div> : null}
     </section>
   );
 }
 
 export interface QuickTile {
+  /** Work waiting there now: a badge ("2 waiting"), or "All done" at 0. Undefined: no badge. */
+  count?: number;
+  /** What the count is, e.g. "to verify"; "waiting" by default. */
+  countLabel?: string;
   detail: string;
   href: string;
   icon: LucideIcon;
@@ -164,7 +166,7 @@ export interface QuickTile {
 export function QuickTiles({ label, tiles }: Readonly<{ label: string; tiles: QuickTile[] }>) {
   return (
     <nav aria-label={label}>
-      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 lg:*:w-[150px] 2xl:grid-cols-4">
         {tiles.map((tile) => {
           const Icon = tile.icon;
 
@@ -172,13 +174,25 @@ export function QuickTiles({ label, tiles }: Readonly<{ label: string; tiles: Qu
             <li key={tile.href}>
               <Link
                 className={cn(
-                  'group flex h-full min-h-[108px] flex-col justify-between gap-3 rounded-2xl p-4 text-ds-text ring-1 ring-ds-text/5 transition duration-200 hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link motion-safe:hover:-translate-y-0.5',
+                  'group flex h-full min-h-[118px] flex-col justify-between gap-4 rounded-[20px] p-4 text-ds-text ring-1 ring-ds-text/5 transition duration-150 hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link motion-safe:hover:-translate-y-0.5',
                   `tile-${tile.tone}`,
                 )}
                 href={tile.href}
               >
-                <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-ds-surface/75 text-ds-link shadow-xs">
-                  <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.9} />
+                <span className="flex items-start justify-between gap-2">
+                  <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-ds-surface text-ds-link shadow-xs">
+                    <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.9} />
+                  </span>
+                  {tile.count ? (
+                    <span className="rounded-full bg-ds-status-pending-bg px-2 py-0.5 text-xs font-bold tabular-nums whitespace-nowrap text-ds-status-pending-fg">
+                      {tile.count} {tile.countLabel ?? 'waiting'}
+                    </span>
+                  ) : tile.count === 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-ds-surface/75 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-ds-status-ok-fg">
+                      <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
+                      All done
+                    </span>
+                  ) : null}
                 </span>
                 <span>
                   <span className="block text-sm font-semibold leading-snug">{tile.title}</span>
@@ -186,7 +200,7 @@ export function QuickTiles({ label, tiles }: Readonly<{ label: string; tiles: Qu
                     {tile.detail}
                     <ArrowRight
                       aria-hidden="true"
-                      className="h-3 w-3 transition-transform duration-200 group-hover:translate-x-0.5"
+                      className="h-3 w-3 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5"
                     />
                   </span>
                 </span>
@@ -202,6 +216,8 @@ export function QuickTiles({ label, tiles }: Readonly<{ label: string; tiles: Qu
 export interface Stat {
   /** Marks the stat whose filter the list shows now. */
   active?: boolean;
+  /** Its icon on a `rich` card. */
+  icon?: LucideIcon;
   label: string;
   /** Picking the stat filters the list to it. */
   onSelect?: () => void;
@@ -218,105 +234,114 @@ const statDot: Record<NonNullable<Stat['tone']>, string> = {
   pending: 'bg-ds-status-pending-fg',
 };
 
-// From sm up a stat shows its tone as an icon in a tinted chip; phones keep the dot.
-const statIcon: Record<NonNullable<Stat['tone']>, LucideIcon> = {
-  bad: AlertTriangle,
-  default: Layers,
-  ok: CheckCircle2,
-  pending: Clock3,
-};
-
-const statChip: Record<NonNullable<Stat['tone']>, string> = {
-  bad: 'text-ds-status-bad-fg',
-  default: 'text-ds-link',
-  ok: 'text-ds-status-ok-fg',
-  pending: 'text-ds-status-pending-fg',
-};
-
-// The same pastel washes as the Dashboard's quick tiles, one per tone.
-const statTile: Record<NonNullable<Stat['tone']>, string> = {
-  bad: 'tile-rose',
-  default: 'tile-blue',
-  ok: 'tile-green',
-  pending: 'tile-violet',
+const richTile: Record<NonNullable<Stat['tone']>, string> = {
+  bad: 'bg-ds-status-bad-bg text-ds-status-bad-fg',
+  default: 'bg-ds-primary-soft text-ds-link',
+  ok: 'bg-ds-status-ok-bg text-ds-status-ok-fg',
+  pending: 'bg-ds-status-pending-bg text-ds-status-pending-fg',
 };
 
 /**
- * The numbers a list is about, above it, as pastel tiles: what is in it at a glance, and a
- * one-click filter to each part. Values load as dashes so the strip never jumps. `rich` adds a
- * soft glow in each tile's tone and a bar for each stat's `share` (being tried on Items).
+ * The numbers a list is about, above it, as one slim row of filter pills: each part of the
+ * list with its count, a click away. They look like what they are (buttons) and leave the list
+ * near the top. Values load as dashes so the row never jumps. `rich`: stage cards instead (icon,
+ * big number, label), for a list whose stages are the point (Transfers). `share` is kept for
+ * callers but no longer drawn.
  */
 export function StatStrip({
   label,
   rich = false,
   stats,
 }: Readonly<{ label: string; rich?: boolean; stats: Stat[] }>) {
+  if (rich) {
+    return (
+      <div aria-label={label} className="flex flex-wrap gap-3" role="group">
+        {stats.map((stat) => {
+          const tone = stat.tone ?? 'default';
+          const Icon = stat.icon;
+          const body = (
+            <>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
+                  richTile[tone],
+                )}
+              >
+                {Icon ? (
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                ) : (
+                  <span className={cn('h-2.5 w-2.5 rounded-full', statDot[tone])} />
+                )}
+              </span>
+              <span className="flex min-w-0 flex-col text-left">
+                <span className="text-[28px] font-semibold leading-[34px] tabular-nums text-ds-text">
+                  {stat.value}
+                </span>
+                <span className="text-[13px] leading-4 text-ds-text-2">{stat.label}</span>
+              </span>
+            </>
+          );
+          const box = cn(
+            'flex min-w-[150px] flex-1 items-center gap-3 rounded-[18px] border bg-ds-surface py-3 pl-3 pr-3 shadow-card sm:pr-5 transition-colors duration-150 sm:flex-none',
+            stat.active
+              ? 'border-ds-primary ring-1 ring-inset ring-ds-primary'
+              : 'border-ds-border',
+          );
+
+          return stat.onSelect ? (
+            <button
+              aria-pressed={stat.active ?? false}
+              className={cn(
+                box,
+                'cursor-pointer hover:border-ds-primary-border focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link',
+              )}
+              key={stat.label}
+              onClick={stat.onSelect}
+              type="button"
+            >
+              {body}
+            </button>
+          ) : (
+            <div className={box} key={stat.label}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
-    // As many columns as stats from md up, so three or four cards always fill the row.
     <div
       aria-label={label}
-      className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(var(--stats),minmax(0,1fr))] md:gap-4"
+      className="inline-flex max-w-full flex-wrap gap-1 rounded-[22px] bg-ds-subtle p-1 ring-1 ring-ds-border"
       role="group"
-      style={{ '--stats': stats.length } as CSSProperties}
     >
       {stats.map((stat) => {
         const tone = stat.tone ?? 'default';
-        const Icon = statIcon[tone];
         const body = (
           <>
-            <span className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-ds-text-2 sm:gap-2.5">
-              <span
-                aria-hidden="true"
-                className={cn('h-1.5 w-1.5 shrink-0 rounded-full sm:hidden', statDot[tone])}
-              />
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'hidden h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-ds-surface/80 shadow-xs sm:grid',
-                  statChip[tone],
-                )}
-              >
-                <Icon className="h-4 w-4" strokeWidth={2} />
-              </span>
-              {stat.label}
-            </span>
-            {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø" this large. */}
-            <span className="text-[22px] font-semibold leading-none tracking-[-0.03em] text-ds-text tabular-nums sm:text-[30px]">
+            <span
+              aria-hidden="true"
+              className={cn('h-2 w-2 shrink-0 rounded-full', statDot[tone])}
+            />
+            <span className="whitespace-nowrap">{stat.label}</span>
+            {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø". */}
+            <span
+              className={cn(
+                'min-w-6 rounded-full px-1.5 text-center text-xs font-medium tabular-nums',
+                stat.active ? 'bg-ds-primary-soft text-ds-link' : 'text-ds-muted',
+              )}
+            >
               {stat.value}
             </span>
-            {rich && stat.share !== undefined ? (
-              <span
-                aria-hidden="true"
-                className="hidden h-1 rounded-full bg-ds-surface/70 sm:block"
-              >
-                <span
-                  className={cn(
-                    'block h-full rounded-full transition-[width] duration-500',
-                    statDot[tone],
-                  )}
-                  style={{ width: `${Math.round(Math.min(Math.max(stat.share, 0), 1) * 100)}%` }}
-                />
-              </span>
-            ) : null}
-            {rich ? (
-              // A pool of the tile's tone in its corner; behind the text, never over it.
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'pointer-events-none absolute -top-10 -right-10 -z-10 h-32 w-32 rounded-full bg-current opacity-20 blur-2xl',
-                  statChip[tone],
-                )}
-              />
-            ) : null}
           </>
         );
-        // Phones: one short row, the number before its label, so the list starts higher up.
         const box = cn(
-          'flex flex-row-reverse items-center justify-end gap-2.5 rounded-2xl px-3 py-2.5 text-left transition duration-200 sm:min-h-[112px] sm:flex-col sm:items-stretch sm:justify-between sm:gap-4 sm:px-[18px] sm:py-4',
-          statTile[tone],
-          rich && 'relative isolate overflow-hidden',
+          'inline-flex h-9 items-center gap-2 rounded-full pl-3 pr-2 text-[13.5px] font-medium transition-[background-color,box-shadow,color] duration-150',
           // ds-link, not ds-primary: a primary ring would vanish on the dark theme's blue tiles.
-          stat.active ? 'ring-2 ring-ds-link shadow-card-hover' : 'ring-1 ring-ds-text/5',
+          stat.active ? 'bg-ds-surface text-ds-text shadow-card' : 'text-ds-text-2',
         );
 
         return stat.onSelect ? (
@@ -324,7 +349,7 @@ export function StatStrip({
             aria-pressed={stat.active ?? false}
             className={cn(
               box,
-              'hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link motion-safe:hover:-translate-y-0.5',
+              'cursor-pointer hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link pointer-coarse:h-11',
             )}
             key={stat.label}
             onClick={stat.onSelect}
@@ -348,15 +373,16 @@ export function StatStrip({
  */
 export const tableStyles = {
   code: 'font-mono text-[12px] text-ds-muted',
-  head: 'sticky top-0 z-10 border-b border-ds-divider bg-ds-surface text-left text-[12.5px] text-ds-muted',
+  // v3: a tinted header band, so the columns read at a glance.
+  head: 'sticky top-0 z-10 border-y border-ds-border bg-ds-subtle text-left text-[12px] text-ds-muted',
   num: 'font-mono tabular-nums',
   /** A secondary column left out on phones, so the ones that matter fit without scrolling. */
   phoneHidden: 'hidden sm:table-cell',
   /** A row the whole of which opens the record. */
-  row: 'group cursor-pointer border-t border-ds-divider transition-colors hover:bg-ds-selected',
+  row: 'row-accent group cursor-pointer border-t border-ds-divider transition-colors duration-150 hover:bg-ds-subtle',
   table: 'w-full text-[13.5px]',
-  td: 'px-4 py-3.5 align-middle',
-  th: 'px-4 py-3 font-semibold',
+  td: 'px-4 py-3.5 align-middle first:pl-6',
+  th: 'px-4 py-2.5 font-medium first:pl-6',
   title: 'font-semibold text-ds-text',
 };
 
@@ -572,14 +598,24 @@ export function FoodTypeMarker({ type }: Readonly<{ type: FoodType }>) {
   );
 }
 
-const avatarTiles: Record<FoodType, string> = {
-  EGGETARIAN: 'tile-amber text-ds-food-egg',
-  NON_VEG: 'tile-rose text-ds-status-bad-fg',
-  VEG: 'tile-green text-ds-status-ok-fg',
-};
+// The pastel washes of the stat tiles, each with a readable ink.
+const avatarTiles = [
+  'tile-blue text-ds-link',
+  'tile-violet text-violet-700 dark:text-violet-300',
+  'tile-rose text-ds-status-bad-fg',
+  'tile-green text-ds-status-ok-fg',
+  'tile-amber text-ds-food-egg',
+];
 
-/** A record's picture where it has none: its initials on a pastel tile, the food mark on its corner. */
-export function RecordAvatar({ foodType, name }: Readonly<{ foodType?: FoodType; name: string }>) {
+/**
+ * A record's picture where it has none: its initials on a pastel tile picked by its name (so a
+ * record keeps its colour everywhere), the food mark on its corner.
+ */
+export function RecordAvatar({
+  foodType,
+  name,
+  size = 'md',
+}: Readonly<{ foodType?: FoodType; name: string; size?: 'md' | 'sm' }>) {
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -591,8 +627,12 @@ export function RecordAvatar({ foodType, name }: Readonly<{ foodType?: FoodType;
     // Only the initials are hidden from screen readers: the food mark still reads "Veg" etc.
     <span
       className={cn(
-        'relative grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[13px] font-semibold ring-1 ring-ds-text/5',
-        foodType ? avatarTiles[foodType] : 'tile-blue text-ds-link',
+        'record-avatar relative grid shrink-0 place-items-center font-semibold ring-1 ring-ds-text/5 transition-transform duration-150',
+        // sm: beside a second line in a busy row (a GRN's store and vendor, a transfer's ends).
+        size === 'sm' ? 'h-8 w-8 rounded-[10px] text-[11.5px]' : 'h-10 w-10 rounded-xl text-[13px]',
+        avatarTiles[
+          [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % avatarTiles.length
+        ],
       )}
     >
       <span aria-hidden="true">{initials || '?'}</span>
@@ -602,6 +642,78 @@ export function RecordAvatar({ foodType, name }: Readonly<{ foodType?: FoodType;
         </span>
       ) : null}
     </span>
+  );
+}
+
+const progressTones = {
+  bad: 'bg-ds-status-bad-fg',
+  default: 'bg-ds-link',
+  ok: 'bg-ds-status-ok-fg',
+  pending: 'bg-ds-status-pending-fg',
+} as const;
+
+/**
+ * How far along a record is, inside its list row: a short line of text over a thin bar ("97%
+ * accepted", "4 of 6 received", "12 days left"). `value` is 0–1. From data the row already has,
+ * so it costs no request.
+ */
+export function InlineProgress({
+  label,
+  tone = 'default',
+  value,
+}: Readonly<{ label: string; tone?: keyof typeof progressTones; value: number }>) {
+  const percent = Math.round(Math.min(Math.max(value, 0), 1) * 100);
+
+  return (
+    <span className="mt-1.5 block w-full max-w-36">
+      <span className="block text-[11.5px] leading-4 text-ds-muted tabular-nums">{label}</span>
+      <span
+        aria-hidden="true"
+        className="mt-1 block h-1 overflow-hidden rounded-full bg-ds-divider"
+      >
+        <span
+          className={cn('block h-full rounded-full', progressTones[tone])}
+          style={{ width: `${percent}%` }}
+        />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A row's "Open ›": shows when the row is hovered or it has focus (always on touch screens, which
+ * have no hover), so a list reads clean but its next step is one obvious click.
+ */
+export function RowOpen({
+  className,
+  label,
+  nextStep = false,
+  text = 'Open',
+  ...props
+}: Readonly<
+  Omit<ComponentPropsWithoutRef<'button'>, 'children'> & {
+    label: string;
+    /** The row is waiting on the user ("Verify", "Acknowledge"): always shown, filled. */
+    nextStep?: boolean;
+    text?: string;
+  }
+>) {
+  return (
+    <button
+      aria-label={label}
+      className={cn(
+        'inline-flex h-8 items-center gap-0.5 rounded-full px-2.5 text-[12.5px] font-semibold whitespace-nowrap transition-[opacity,background-color] duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+        nextStep
+          ? 'bg-ds-primary-soft text-ds-link hover:bg-ds-primary hover:text-white'
+          : 'text-ds-link opacity-0 group-hover:opacity-100 hover:bg-ds-primary-soft focus-visible:opacity-100 pointer-coarse:opacity-100',
+        className,
+      )}
+      type="button"
+      {...props}
+    >
+      {text}
+      <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </button>
   );
 }
 
@@ -616,15 +728,83 @@ export function EmptyState({ action, description, icon: Icon = Inbox, title }: E
   return (
     <div className="grid min-h-40 place-items-center rounded-card border border-dashed border-ds-border bg-ds-subtle-2 p-6 text-center">
       <div>
-        <span className="tile-blue mx-auto grid h-12 w-12 place-items-center rounded-2xl text-ds-link">
-          <Icon aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />
+        {/* A small blue-and-white scene (a blank card on a soft pool, the page's icon on its
+            corner) instead of a bare icon; drawn from the theme's colours, so it suits both. */}
+        <span aria-hidden="true" className="relative mx-auto block h-[84px] w-[120px]">
+          <svg className="h-full w-full" viewBox="0 0 120 84">
+            <ellipse className="fill-ds-primary-soft" cx="60" cy="48" rx="54" ry="32" />
+            <rect
+              className="fill-ds-surface stroke-ds-border"
+              height="40"
+              rx="8"
+              strokeWidth="1.5"
+              transform="rotate(-7 60 40)"
+              width="58"
+              x="28"
+              y="18"
+            />
+            <rect
+              className="fill-ds-surface stroke-ds-primary-border"
+              height="40"
+              rx="8"
+              strokeWidth="1.5"
+              width="58"
+              x="34"
+              y="24"
+            />
+            <rect className="fill-ds-primary-border" height="5" rx="2.5" width="24" x="42" y="33" />
+            <rect className="fill-ds-divider" height="4" rx="2" width="38" x="42" y="43" />
+            <rect className="fill-ds-divider" height="4" rx="2" width="28" x="42" y="51" />
+            <circle className="fill-ds-link" cx="100" cy="18" opacity="0.35" r="3" />
+            <circle className="fill-ds-food-egg-dot" cx="16" cy="60" opacity="0.45" r="2.5" />
+            <circle className="fill-ds-link" cx="22" cy="24" opacity="0.25" r="2" />
+          </svg>
+          <span className="absolute right-1 bottom-0 grid h-9 w-9 place-items-center rounded-full bg-ds-primary text-white shadow-md ring-4 ring-ds-subtle-2">
+            <Icon className="h-4 w-4" strokeWidth={2} />
+          </span>
         </span>
-        <h3 className="mt-3.5 text-[15px] font-semibold text-ds-text">{title}</h3>
+        <h3 className="mt-3 text-[15px] font-semibold text-ds-text">{title}</h3>
         {description ? <p className="mt-1 text-sm text-ds-muted">{description}</p> : null}
         {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
       </div>
     </div>
   );
+}
+
+/**
+ * A list's loading rows, shaped like its real ones (an avatar and two lines, then a short bar per
+ * column), so nothing jumps when the data arrives. `cells` are the other columns' classes, e.g.
+ * `tableStyles.phoneHidden` for a column phones leave out; `avatar` for lists whose rows have one.
+ */
+export function TableSkeletonRows({
+  avatar = false,
+  cells,
+  rows = 6,
+}: Readonly<{ avatar?: boolean; cells: Array<string | undefined>; rows?: number }>) {
+  return Array.from({ length: rows }, (_, row) => (
+    <tr aria-hidden="true" className="border-t border-ds-divider" key={`skeleton-${row}`}>
+      <td className="px-4 py-3">
+        <span className="flex items-center gap-3">
+          {avatar ? <Skeleton className="h-10 w-10 shrink-0 rounded-xl" /> : null}
+          <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <Skeleton
+              className="h-3.5 rounded-full"
+              style={{ width: `${55 + ((row * 17) % 35)}%` }}
+            />
+            <Skeleton className="h-3 w-20 rounded-full" />
+          </span>
+        </span>
+      </td>
+      {cells.map((className, column) => (
+        <td className={cn('px-4 py-3', className)} key={column}>
+          <Skeleton
+            className="h-3.5 rounded-full"
+            style={{ width: `${40 + (((row + column) * 23) % 45)}%` }}
+          />
+        </td>
+      ))}
+    </tr>
+  ));
 }
 
 export function LoadingSkeleton({ rows = 5 }: Readonly<{ rows?: number }>) {
@@ -651,7 +831,7 @@ export function DataTableWrapper({
 }: DataTableWrapperProps) {
   return (
     <Panel className={cn('overflow-hidden', className)} {...props}>
-      {toolbar ? <div className="border-b border-ds-divider p-4">{toolbar}</div> : null}
+      {toolbar ? <div className="px-5 py-4">{toolbar}</div> : null}
       <div className="overflow-x-auto">{children}</div>
       {footer ? <div className="border-t border-ds-divider p-4">{footer}</div> : null}
     </Panel>

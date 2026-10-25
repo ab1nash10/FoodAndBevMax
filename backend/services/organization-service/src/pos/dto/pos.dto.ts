@@ -1,5 +1,11 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EmploymentType, OrderChannel, OrderStatus, PaymentMode } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
+import {
+  EmploymentType,
+  OnlinePaymentProvider,
+  OrderChannel,
+  OrderStatus,
+  PaymentMode,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -22,6 +28,17 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { toOptionalBoolean } from '../../common/values';
+
+export class PosCountersQueryDto {
+  @ApiPropertyOptional({
+    description: 'The till computer’s hostname: only the counters of its POS device.',
+    example: 'SMART-POS-01',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  host?: string;
+}
 
 export class PosMenuQueryDto {
   @ApiProperty()
@@ -127,6 +144,30 @@ export class CreatePosOrderDto {
   @IsString()
   @MaxLength(100)
   paymentReference?: string;
+
+  @ApiPropertyOptional({ description: 'The kiosk order this bill is for: it can be billed once.' })
+  @IsOptional()
+  @IsUUID()
+  kioskOrderId?: string;
+
+  @ApiPropertyOptional({
+    description: 'A paid online UPI payment (Razorpay, PayU) for exactly this bill: used once.',
+  })
+  @IsOptional()
+  @IsUUID()
+  onlinePaymentId?: string;
+}
+
+/** The bill an online UPI payment is for: priced on the server, never by the till. */
+export class StartOnlinePaymentDto extends PickType(CreatePosOrderDto, [
+  'channel',
+  'counterId',
+  'employeeCode',
+  'lines',
+] as const) {
+  @ApiProperty({ enum: OnlinePaymentProvider })
+  @IsEnum(OnlinePaymentProvider)
+  provider!: OnlinePaymentProvider;
 }
 
 export const posOrderSortFields = ['billNumber', 'grandTotal', 'placedAt'] as const;

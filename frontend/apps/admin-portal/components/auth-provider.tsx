@@ -106,6 +106,14 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         return;
       }
 
+      // A still-valid access token opens the portal at once, and the session is renewed behind it
+      // (refreshStoredSession is shared, so a request renewing too waits on the same one). Only an
+      // expired token holds the shell until the renewal answers.
+      if (!isExpired && isMounted) {
+        setAuth(storedAuth);
+        setIsReady(true);
+      }
+
       // While the auth service is starting, keep trying (the shell shows its loading state)
       // rather than end a session that is still good.
       async function refreshWhileStarting(): Promise<string | null> {

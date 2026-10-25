@@ -164,6 +164,13 @@ export const menuImport: ImportDefinition = {
     { example: '5', field: 'gstPercent', header: 'GST %', hint: '0, 5, 12 or 18.' },
     { example: 'No', field: 'isGstInclusive', header: 'GST inclusive', hint: 'Yes or No.' },
     { example: 'No', field: 'isDiscountable', header: 'Discountable', hint: 'Yes or No.' },
+    {
+      example: 'No',
+      field: 'isFeatured',
+      header: 'Featured',
+      hint: 'Yes or No: shown first on the kiosk.',
+    },
+    { example: '', field: 'subCode', header: 'Sub-Code', hint: 'A second code for the item.' },
     { example: 'Yes', field: 'isAvailable', header: 'Available', hint: 'Yes or No.' },
     status,
   ],

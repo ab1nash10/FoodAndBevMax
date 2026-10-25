@@ -9,9 +9,6 @@ const key =
 export const queryKeys = {
   // Inventory: GRNs, stock and transfers
   grns: key('grns'),
-  inventoryAllKitchens: key('inventory-all-kitchens'),
-  inventoryAllRestaurants: key('inventory-all-restaurants'),
-  inventoryAllStores: key('inventory-all-stores'),
   inventoryHospitals: key('inventory-hospitals'),
   inventoryItems: key('inventory-items'),
   inventoryKitchens: key('inventory-kitchens'),
@@ -53,6 +50,8 @@ export const queryKeys = {
   restaurant: key('restaurant'),
   restaurantOptions: key('restaurant-options'),
   orderBoard: key('order-board'),
+  kioskMenu: key('kiosk-menu'),
+  kioskOrderToBill: key('kiosk-order-to-bill'),
   restaurantBoardLink: key('restaurant-board-link'),
   restaurantOrders: key('restaurant-orders'),
   restaurants: key('restaurants'),
@@ -61,9 +60,11 @@ export const queryKeys = {
   stores: key('stores'),
 
   // Catalog: items, prices, time slots, mappings and menus
+  employeeDiscounts: key('employee-discounts'),
   employees: key('employees'),
   itemCategories: key('item-categories'),
   itemCategoryOptions: key('item-category-options'),
+  timeSlots: key('time-slots'),
   itemMappings: key('item-mappings'),
   itemOptions: key('item-options'),
   items: key('items'),
@@ -76,6 +77,8 @@ export const queryKeys = {
   posBill: key('pos-bill'),
   posBills: key('pos-bills'),
   posCounters: key('pos-counters'),
+  posPaymentProviders: key('pos-payment-providers'),
+  reports: key('reports'),
   posEmployee: key('pos-employee'),
   posMenu: key('pos-menu'),
   posSummary: key('pos-summary'),
@@ -97,6 +100,8 @@ export const queryKeys = {
   dashboardActivity: key('dashboard', 'activity'),
   dashboardExpiring: key('dashboard', 'expiring'),
   dashboardNavCounts: key('dashboard', 'nav-counts'),
+  // Every active store, kitchen, restaurant and counter's name (components/inventory/use-locations.ts).
+  locationNames: key('location-names'),
   dashboardQueue: key('dashboard', 'queue'),
   dashboardSetup: key('dashboard', 'setup'),
   dashboardStats: key('dashboard', 'stats'),

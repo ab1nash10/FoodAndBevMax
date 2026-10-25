@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Printer,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useEffect, useRef, useState } from 'react';
@@ -115,6 +116,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
       invalidateGrnQueries(queryClient);
       showToast({
         description: saved.grnNumber,
+        recordId: saved.id,
         title: saved.status === 'POSTED_TO_STOCK' ? 'GRN posted to stock' : 'Verification saved',
         variant: 'success',
       });
@@ -133,6 +135,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
       invalidateGrnQueries(queryClient);
       showToast({
         description: response.data.grnNumber,
+        recordId: response.data.id,
         title: 'GRN rejected',
         variant: 'success',
       });
@@ -237,7 +240,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
     },
     {
       detail: grn.status === 'POSTED_TO_STOCK' ? formatWhen(grn.updatedAt) : 'Adds to store stock',
-      label: 'Posted to stock',
+      label: 'Added to stock',
       state: grn.status === 'POSTED_TO_STOCK' ? 'done' : 'todo',
     },
   ];
@@ -328,7 +331,6 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
       </Link>
       {/* The record's header card: number, status, who and where, its actions and its steps. */}
       <div className="relative isolate space-y-6 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6">
-        <div aria-hidden="true" className="page-art" />
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -342,36 +344,51 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
               {formatWhen(grn.receivedDate)} by {grn.receivedBy}
             </p>
           </div>
-          {canSave ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
-                disabled={isBusy}
-                onClick={() => setConfirming('reject')}
-                type="button"
-                variant="outline"
-              >
-                Reject GRN
-              </Button>
-              <Button disabled={isBusy} onClick={() => save(false)} type="button" variant="outline">
-                Save verification
-              </Button>
-              {canPost ? (
-                <Button disabled={isBusy} onClick={() => save(true)} type="button">
-                  {saveMutation.isPending ? (
-                    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Check aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                  )}
-                  {totalAccepted <= 0
-                    ? 'Post (nothing accepted)'
-                    : totalRejected > 0
-                      ? 'Accept partially & post'
-                      : 'Accept & post to stock'}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => void import('./grn-print').then(({ printGrn }) => printGrn(grn))}
+              type="button"
+              variant="outline"
+            >
+              <Printer aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+              Print
+            </Button>
+            {canSave ? (
+              <>
+                <Button
+                  className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
+                  disabled={isBusy}
+                  onClick={() => setConfirming('reject')}
+                  type="button"
+                  variant="outline"
+                >
+                  Reject GRN
                 </Button>
-              ) : null}
-            </div>
-          ) : null}
+                <Button
+                  disabled={isBusy}
+                  onClick={() => save(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Save verification
+                </Button>
+                {canPost ? (
+                  <Button disabled={isBusy} onClick={() => save(true)} type="button">
+                    {saveMutation.isPending ? (
+                      <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                    )}
+                    {totalAccepted <= 0
+                      ? 'Post (nothing accepted)'
+                      : totalRejected > 0
+                        ? 'Accept partially & post'
+                        : 'Accept & post to stock'}
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
 
         <Stepper label="GRN progress" steps={steps} />

@@ -13,16 +13,17 @@ export const buttonVariants = cva(
     },
     variants: {
       size: {
-        default: 'h-10 px-5',
-        icon: 'h-10 w-10',
+        default: 'h-11 px-5.5',
+        icon: 'h-11 w-11',
         sm: 'h-9 px-4',
       },
       variant: {
         default:
-          'bg-ds-primary text-white shadow-sm shadow-ds-primary/25 hover:bg-ds-primary-hover hover:shadow-md hover:shadow-ds-primary/25',
+          // The fill is the logo-blue gradient (globals.css), lifted by a soft blue glow.
+          'bg-ds-primary text-white shadow-lg shadow-ds-primary/30 hover:bg-ds-primary-hover hover:shadow-xl hover:shadow-ds-primary/30',
         ghost: 'text-ds-text-2 hover:bg-ds-subtle hover:text-ds-text',
         outline:
-          'border border-ds-border bg-ds-surface text-ds-text shadow-xs hover:border-ds-input hover:bg-ds-subtle',
+          'border border-ds-border bg-ds-surface text-ds-text shadow-sm hover:border-ds-primary-border hover:bg-ds-primary-soft hover:text-ds-link',
         secondary:
           'bg-brand-navy text-white shadow-xs shadow-slate-900/10 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white',
       },

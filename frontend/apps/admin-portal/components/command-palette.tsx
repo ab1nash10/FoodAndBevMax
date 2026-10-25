@@ -62,7 +62,7 @@ export const createCommands: Array<Command & { permissions: string[] }> = [
     hint: 'Receive goods into a store',
     href: '/inventory/grns/new',
     keys: 'N G',
-    label: 'New GRN',
+    label: 'Receive a delivery (GRN)',
     permissions: routePermissions('/inventory/grns/new'),
     tone: 'stores',
   },
@@ -160,6 +160,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
     employees: hasPermission('EMPLOYEE_VIEW'),
     grns: hasPermission('GRN_VIEW'),
     items: hasPermission('ITEM_VIEW'),
+    productions: hasPermission('KITCHEN_PRODUCTION_VIEW'),
     kitchens: hasPermission('KITCHEN_VIEW'),
     restaurants: hasPermission('RESTAURANT_VIEW'),
     stores: hasPermission('STORE_VIEW'),
@@ -171,7 +172,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
       const base = { hospitalId: scopedHospitalId, limit: 3, search: term };
       // Masters are looked up by name more than worked through, so fewer of each.
       const masters = { ...base, limit: 2 };
-      const [bills, transfers, grns, items, employees, stores, kitchens, restaurants] =
+      const [bills, transfers, grns, productions, items, employees, stores, kitchens, restaurants] =
         await Promise.all([
           // The bill list also matches order no., mobile, employee code and room.
           listIf(canSee.bills, () =>
@@ -179,6 +180,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
           ),
           listIf(canSee.transfers, () => organizationApi.listTransfers(base)),
           listIf(canSee.grns, () => organizationApi.listGrns(base)),
+          listIf(canSee.productions, () => organizationApi.listKitchenProductions(base)),
           listIf(canSee.items, () => organizationApi.listItems({ limit: 3, search: term })),
           listIf(canSee.employees, () => organizationApi.listEmployees(masters)),
           listIf(canSee.stores, () => organizationApi.listStores(masters)),
@@ -221,6 +223,17 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
             hint: `${status.label} · ${grn.vendorName ?? grn.store.storeName}`,
             href: `/inventory/grns?id=${grn.id}`,
             label: grn.grnNumber,
+            tone: status.tone,
+          };
+        }),
+        ...productions.map((production): Command => {
+          const status = statusPresentation(production.status);
+
+          return {
+            abbr: 'KP',
+            hint: `${status.label} · ${production.kitchen.kitchenName}`,
+            href: `/kitchen/productions?id=${production.id}`,
+            label: production.productionNumber,
             tone: status.tone,
           };
         }),

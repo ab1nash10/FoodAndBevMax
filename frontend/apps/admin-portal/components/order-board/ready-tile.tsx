@@ -1,38 +1,39 @@
 import type { ReadyTileView } from '@/lib/order-board/rules';
+import styles from './board.module.css';
 import { ServiceIcon, serviceLabels } from './service-type';
 
-/** A ready order: teal, or amber with "collect soon" once it has waited too long. */
+/** A ready order: how long it has waited, outlined amber with "Collect soon" once that is long. */
 export function ReadyTile({ order }: Readonly<{ order: ReadyTileView }>) {
   return (
     <li
-      className={`flex min-w-0 flex-col justify-center rounded-[22px] border-2 px-[28px] ${
+      className={`flex min-w-0 flex-col justify-center gap-[12px] rounded-[28px] border-2 px-[24px] ${styles.rise} ${
         order.collectSoon
-          ? 'border-ds-status-pending-fg/40 bg-ds-status-pending-bg'
-          : 'border-ds-teal-border bg-ds-teal-soft'
+          ? 'border-ds-status-pending-fg bg-ds-status-pending-bg'
+          : 'border-ds-teal-border bg-ds-status-ok-bg'
       }`}
     >
-      <p className="truncate text-[80px] font-extrabold leading-[1.2] tabular-nums text-ds-teal-text">
+      <p className="truncate text-[74px] font-extrabold leading-[0.95] tracking-[-0.045em] tabular-nums text-ds-text">
         {order.orderNumber}
       </p>
-      <p className="mt-[12px] flex min-w-0 items-center gap-[10px] text-[22px] font-semibold text-ds-teal-text">
-        {order.counterName ? <span className="truncate">{order.counterName}</span> : null}
-        {order.counterName && order.serviceType ? <span aria-hidden="true">·</span> : null}
+      {/* Two short lines, so neither is cut off: how long it has waited, then eat here / take
+          away (the counter shows on the "Now ready" card). */}
+      <div className="flex flex-col gap-[4px] text-[18px] font-semibold">
+        <p className={order.collectSoon ? 'text-ds-status-pending-fg' : 'text-ds-teal-text'}>
+          {order.collectSoon
+            ? 'Collect soon'
+            : order.readyMinutes === 0
+              ? 'Ready just now'
+              : `Ready ${order.readyMinutes} min ago`}
+        </p>
         {order.serviceType ? (
-          <span className="flex shrink-0 items-center gap-[6px]">
-            <ServiceIcon className="h-[22px] w-[22px]" type={order.serviceType} />
-            {serviceLabels[order.serviceType]}
-          </span>
+          <p className="flex min-w-0 items-center gap-[6px] text-ds-text-3">
+            <ServiceIcon className="h-[20px] w-[20px] shrink-0" type={order.serviceType} />
+            <span className="truncate">{serviceLabels[order.serviceType]}</span>
+          </p>
+        ) : order.counterName ? (
+          <p className="truncate text-ds-text-3">{order.counterName}</p>
         ) : null}
-      </p>
-      {order.collectSoon ? (
-        <p className="mt-[8px] self-start rounded-full bg-ds-status-pending-fg/15 px-[14px] py-[4px] text-[20px] font-bold text-ds-status-pending-fg">
-          {order.readyMinutes} min · collect soon
-        </p>
-      ) : (
-        <p className="mt-[8px] text-[20px] font-medium text-ds-muted">
-          {order.readyMinutes === 0 ? 'Ready just now' : `Ready ${order.readyMinutes} min ago`}
-        </p>
-      )}
+      </div>
     </li>
   );
 }

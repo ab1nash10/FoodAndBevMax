@@ -65,3 +65,31 @@ export interface DashboardSetup {
   firstGrn?: Grn | null;
   firstTransfer?: Transfer | null;
 }
+
+/** The nav badges' counts (GET /dashboard/nav-counts); a count is missing when the user may not view its list. */
+export interface DashboardNavCounts {
+  grns?: number;
+  productions?: number;
+  transfers?: number;
+}
+
+/**
+ * Every active location the user may list, by kind, with only what turns an id into a name or a
+ * link (GET /dashboard/location-names). A kind is missing when the user may not view its list.
+ */
+export interface LocationNames {
+  counters?: Array<{
+    counterName: string;
+    hospitalId: string;
+    id: string;
+    restaurant: { restaurantName: string };
+  }>;
+  kitchens?: Array<{ hospitalId: string; id: string; kitchenCode: string; kitchenName: string }>;
+  restaurants?: Array<{
+    hospitalId: string;
+    id: string;
+    restaurantCode: string;
+    restaurantName: string;
+  }>;
+  stores?: Array<{ hospitalId: string; id: string; storeCode: string; storeName: string }>;
+}

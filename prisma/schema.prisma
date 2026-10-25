@@ -113,6 +113,37 @@ enum OrderSource {
   COUNTER
 }
 
+/// Who takes an online UPI payment at the till: the cashier picks one that is set up.
+enum OnlinePaymentProvider {
+  RAZORPAY
+  PAYU
+}
+
+enum OnlinePaymentStatus {
+  /// The guest has the QR; the till keeps checking with the provider.
+  PENDING
+  PAID
+  /// The cashier gave up on it before it was paid.
+  CANCELLED
+  /// The provider closed the link unpaid.
+  EXPIRED
+}
+
+/// How a restaurant's counters run shifts.
+enum ShiftMode {
+  /// Each cashier opens and closes their own shift.
+  CASHIER
+  /// Shifts follow the restaurant's shift timings; each is named after the one it opens in.
+  FIXED
+}
+
+/// A cashier's turn at a counter: closed (sales end there) or handed over to the next cashier.
+enum CounterShiftStatus {
+  OPEN
+  CLOSED
+  HANDED_OVER
+}
+
 enum TransferAcknowledgementStatus {
   ACCEPTED_FULL
   ACCEPTED_PARTIAL
@@ -161,6 +192,10 @@ enum StockTransactionType {
   /// Sold on a counter bill, and put back when the bill is cancelled.
   SALE_OUT
   SALE_CANCEL_IN
+  /// Thrown away from a batch (expired, damaged, spoilt…); the reason is in the ledger remarks.
+  DISCARD_OUT
+  /// Ready-made leftovers sent from one restaurant to another.
+  RESTAURANT_TRANSFER_OUT
 }
 
 enum StockReferenceType {
@@ -353,6 +388,10 @@ model Hospital {
   stockLedgers             StockLedger[]
   stores                   Store[]
   timeSlots                TimeSlot[]
+  employeeDiscounts        EmployeeDiscount[]
+  counterShifts            CounterShift[]
+  counterDayCloses         CounterDayClose[]
+  onlinePayments           OnlinePayment[]
   transferAcknowledgements TransferAcknowledgement[]
   transfers                Transfer[]
   users                    User[]
@@ -499,6 +538,10 @@ model Restaurant {
   closingTime              String?   @map("closing_time") @db.VarChar(5)
   normalDiscountApplicable Boolean   @default(false) @map("normal_discount_applicable")
   staffDiscountApplicable  Boolean   @default(false) @map("staff_discount_applicable")
+  /// How its counters run shifts: each cashier opens and closes their own, or fixed times.
+  shiftMode                ShiftMode @default(CASHIER) @map("shift_mode")
+  /// [{ name, startTime, endTime }] (HH:mm) for fixed shifts; a shift takes the one it opens in.
+  shiftTimings             Json      @default("[]") @map("shift_timings")
   onlineOrderingEnabled    Boolean   @default(false) @map("online_ordering_enabled")
   inRoomDiningEnabled      Boolean   @default(false) @map("in_room_dining_enabled")
   b2cQrEnabled             Boolean   @default(false) @map("b2c_qr_enabled")
@@ -542,7 +585,9 @@ model Restaurant {
   restaurantMenus    RestaurantMenu[]
   restaurantKitchens RestaurantKitchen[]
   orders             RestaurantOrder[]
+  kioskOrders        KioskOrder[]
   staffDiscounts     RestaurantStaffDiscount[]
+  employeeDiscounts  EmployeeDiscount[]
   hospital           Hospital                  @relation(fields: [hospitalId], references: [id])
   kitchen            Kitchen?                  @relation(fields: [kitchenId], references: [id])
   legalEntity        LegalEntity?              @relation(fields: [legalEntityId], references: [id])
@@ -563,6 +608,39 @@ model Restaurant {
 /// The staff discount a restaurant gives each type of employee (on roll, outsourced), applied
 /// at the till when an eligible employee's ID is entered and the restaurant has staff discount
 /// switched on. Items the menu marks as not discountable are billed at full price.
+/// An employee discount rule (Employee Discounts): a percentage off an eligible employee's bill
+/// at one restaurant, for every employment type or one, on chosen days and, with special timings,
+/// only inside a time window. At the till the best matching rule applies; archived ones never do.
+model EmployeeDiscount {
+  id              String          @id @default(uuid()) @db.Uuid
+  hospitalId      String          @map("hospital_id") @db.Uuid
+  restaurantId    String          @map("restaurant_id") @db.Uuid
+  name            String
+  discountPercent Decimal         @map("discount_percent") @db.Decimal(5, 2)
+  /// The employee level it is for; null means every employee.
+  employmentType  EmploymentType? @map("employment_type")
+  /// Special timings, as HH:mm; both empty means all day. One that ends before it starts runs
+  /// past midnight.
+  startTime       String?         @map("start_time") @db.VarChar(5)
+  endTime         String?         @map("end_time") @db.VarChar(5)
+  /// Serve days (MONDAY…SUNDAY, as on restaurant menus); empty means every day.
+  daysOfWeek      String[]        @default([]) @map("days_of_week")
+  archivedAt      DateTime?       @map("archived_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  updatedBy       String?         @map("updated_by") @db.Uuid
+
+  hospital   Hospital   @relation(fields: [hospitalId], references: [id])
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@index([hospitalId])
+  @@index([restaurantId, archivedAt])
+  @@map("employee_discounts")
+}
+
+/// Replaced by EmployeeDiscount (2026-10-23): its rates were copied in as rules and nothing reads
+/// it any more. Kept until that has been live a while, then dropped.
 model RestaurantStaffDiscount {
   id              String         @id @default(uuid()) @db.Uuid
   restaurantId    String         @map("restaurant_id") @db.Uuid
@@ -615,9 +693,12 @@ model Counter {
   updatedBy        String?   @map("updated_by") @db.Uuid
   deletedAt        DateTime? @map("deleted_at")
 
-  hospital   Hospital          @relation(fields: [hospitalId], references: [id])
-  restaurant Restaurant        @relation(fields: [restaurantId], references: [id])
-  orders     RestaurantOrder[]
+  hospital       Hospital          @relation(fields: [hospitalId], references: [id])
+  restaurant     Restaurant        @relation(fields: [restaurantId], references: [id])
+  orders         RestaurantOrder[]
+  shifts         CounterShift[]
+  dayCloses      CounterDayClose[]
+  onlinePayments OnlinePayment[]
 
   @@unique([restaurantId, counterCode])
   @@index([hospitalId])
@@ -716,19 +797,140 @@ model RestaurantOrder {
   cancelReason        String?       @map("cancel_reason")
   cancelledAt         DateTime?     @map("cancelled_at")
   createdBy           String?       @map("created_by") @db.Uuid
+  /// The cashier's shift it was billed in.
+  shiftId             String?       @map("shift_id") @db.Uuid
 
-  counter    Counter?              @relation(fields: [counterId], references: [id], onDelete: Restrict)
-  hospital   Hospital              @relation(fields: [hospitalId], references: [id])
-  lines      RestaurantOrderLine[]
-  posDevice  PosDevice?            @relation(fields: [posDeviceId], references: [id], onDelete: Restrict)
-  restaurant Restaurant            @relation(fields: [restaurantId], references: [id])
+  counter       Counter?              @relation(fields: [counterId], references: [id], onDelete: Restrict)
+  shift         CounterShift?         @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  onlinePayment OnlinePayment?
+  hospital      Hospital              @relation(fields: [hospitalId], references: [id])
+  lines         RestaurantOrderLine[]
+  posDevice     PosDevice?            @relation(fields: [posDeviceId], references: [id], onDelete: Restrict)
+  restaurant    Restaurant            @relation(fields: [restaurantId], references: [id])
 
   @@unique([senderId, externalOrderId])
   @@unique([hospitalId, billNumber])
   @@index([hospitalId])
   @@index([restaurantId, status, placedAt])
   @@index([counterId, businessDate])
+  @@index([shiftId])
   @@map("restaurant_orders")
+}
+
+/// An order placed on the restaurant's self-service kiosk, paid at a counter: the cashier loads
+/// it into the till by its number and bills it as usual. Billing it links the bill, once.
+model KioskOrder {
+  id            String   @id @default(uuid()) @db.Uuid
+  restaurantId  String   @map("restaurant_id") @db.Uuid
+  businessDate  DateTime @map("business_date") @db.Date
+  /// What the guest reads out at the counter: the restaurant's kiosk count for the day.
+  number        Int
+  /// The kiosk's own id for the order: a retry returns the same order, never a second one.
+  clientOrderId String   @map("client_order_id")
+  /// [{ menuId, quantity }] as picked; prices are taken when it is billed.
+  lines         Json
+  /// The employee whose registered mobile was given, for the staff discount.
+  employeeCode  String?  @map("employee_code")
+  createdAt     DateTime @default(now()) @map("created_at")
+  /// The counter bill made from it.
+  billedOrderId String?  @unique @map("billed_order_id") @db.Uuid
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@unique([restaurantId, businessDate, number])
+  @@unique([restaurantId, clientOrderId])
+  @@map("kiosk_orders")
+}
+
+/// A cashier's shift at a counter, at most one open per counter. It ends with the cash counted
+/// against what the bills say, and is either closed or handed over: the next cashier there then
+/// takes on its cash and sees the counter's stock it passed on.
+model CounterShift {
+  id              String             @id @default(uuid()) @db.Uuid
+  hospitalId      String             @map("hospital_id") @db.Uuid
+  counterId       String             @map("counter_id") @db.Uuid
+  /// The fixed shift it opened in (ShiftMode FIXED), e.g. "Morning".
+  name            String?
+  status          CounterShiftStatus @default(OPEN)
+  openedBy        String             @map("opened_by") @db.Uuid
+  openedAt        DateTime           @default(now()) @map("opened_at")
+  openingCash     Decimal            @default(0) @map("opening_cash") @db.Decimal(12, 2)
+  /// The handed-over shift this one took on.
+  takenOverFromId String?            @unique @map("taken_over_from_id") @db.Uuid
+  closedBy        String?            @map("closed_by") @db.Uuid
+  closedAt        DateTime?          @map("closed_at")
+  /// Opening cash plus the shift's cash bills, when it ended.
+  expectedCash    Decimal?           @map("expected_cash") @db.Decimal(12, 2)
+  countedCash     Decimal?           @map("counted_cash") @db.Decimal(12, 2)
+  /// The shift's takings when it ended: { bills, sales, byPaymentMode, complimentary, cancelled }.
+  summary         Json?
+  /// [{ itemId, itemName, quantity }]: the counter's stock when it was handed over.
+  handoverStock   Json?              @map("handover_stock")
+  note            String?
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  counter       Counter           @relation(fields: [counterId], references: [id])
+  hospital      Hospital          @relation(fields: [hospitalId], references: [id])
+  orders        RestaurantOrder[]
+  takenOverFrom CounterShift?     @relation("ShiftHandover", fields: [takenOverFromId], references: [id])
+  takenOverBy   CounterShift?     @relation("ShiftHandover")
+
+  @@index([counterId, status])
+  @@index([hospitalId])
+  @@map("counter_shifts")
+}
+
+/// A UPI payment taken online at a counter before its bill is made: the till shows the
+/// provider's link as a QR and checks it until paid, then bills with it, once. The amount is the
+/// bill's, priced on the server, and the bill must still come to it.
+model OnlinePayment {
+  id            String                @id @default(uuid()) @db.Uuid
+  hospitalId    String                @map("hospital_id") @db.Uuid
+  counterId     String                @map("counter_id") @db.Uuid
+  provider      OnlinePaymentProvider
+  status        OnlinePaymentStatus   @default(PENDING)
+  amount        Decimal               @db.Decimal(12, 2)
+  /// The provider's link: Razorpay's plink id, PayU's invoice number.
+  providerRef   String                @map("provider_ref")
+  /// What the QR holds: the page the guest pays on.
+  paymentUrl    String                @map("payment_url")
+  /// The provider's payment id once paid; the bill keeps it as its payment reference.
+  paidReference String?               @map("paid_reference")
+  paidAt        DateTime?             @map("paid_at")
+  /// The bill made with it.
+  orderId       String?               @unique @map("order_id") @db.Uuid
+  createdBy     String?               @map("created_by") @db.Uuid
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  counter  Counter          @relation(fields: [counterId], references: [id])
+  hospital Hospital         @relation(fields: [hospitalId], references: [id])
+  order    RestaurantOrder? @relation(fields: [orderId], references: [id])
+
+  @@unique([provider, providerRef])
+  @@index([counterId, status])
+  @@index([hospitalId])
+  @@map("online_payments")
+}
+
+/// A counter's business day, closed by an admin once its shifts have ended. Bills after that go
+/// on the next day, and the closed day's bills can no longer be cancelled.
+model CounterDayClose {
+  id           String   @id @default(uuid()) @db.Uuid
+  hospitalId   String   @map("hospital_id") @db.Uuid
+  counterId    String   @map("counter_id") @db.Uuid
+  businessDate DateTime @map("business_date") @db.Date
+  closedBy     String?  @map("closed_by") @db.Uuid
+  closedAt     DateTime @default(now()) @map("closed_at")
+  /// The day's takings when it was closed, as the Day Summary showed them.
+  summary      Json
+
+  counter  Counter  @relation(fields: [counterId], references: [id])
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@unique([counterId, businessDate])
+  @@index([hospitalId])
+  @@map("counter_day_closes")
 }
 
 /// One line of a counter bill, priced from the restaurant menu when it was billed.
@@ -820,6 +1022,9 @@ model ItemCategory {
   id             String    @id @default(uuid()) @db.Uuid
   categoryName   String    @unique @map("category_name")
   normalizedName String    @map("normalized_name")
+  /// Where the category comes on menus, the till and the kiosk (lowest first); set by arranging
+  /// the list on Item Categories. A new category goes last.
+  sortOrder      Int       @default(0) @map("sort_order")
   isActive       Boolean   @default(true) @map("is_active")
   createdAt      DateTime  @default(now()) @map("created_at")
   createdBy      String?   @map("created_by") @db.Uuid
@@ -835,6 +1040,7 @@ model ItemCategory {
   @@index([deletedAt])
   @@index([isActive])
   @@index([normalizedName])
+  @@index([sortOrder])
   @@map("item_categories")
 }
 
@@ -1015,6 +1221,10 @@ model RestaurantMenu {
   isActive               Boolean     @default(true) @map("is_active")
   isDiscountable         Boolean     @default(false) @map("is_discountable")
   addOn                  String?     @map("add_on")
+  /// A second code for the item, as the previous menu master kept it.
+  subCode                String?     @map("sub_code")
+  /// Shown first on the kiosk welcome screen.
+  isFeatured             Boolean     @default(false) @map("is_featured")
   preparationTimeMinutes Int?        @map("preparation_time_minutes")
   serves                 Int?
   accompaniments         String?

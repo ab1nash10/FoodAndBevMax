@@ -3,6 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation } from '@tanstack/react-query';
 import { Copy, KeyRound } from 'lucide-react';
+import { useConfirm } from '@/components/confirm-provider';
 import { RowAction } from '@/components/design-system';
 import { useState } from 'react';
 import { useToast } from '@/components/toast-provider';
@@ -27,6 +28,7 @@ export function OrderKeyButton({
   usage: string;
 }>) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const mutation = useMutation({
     mutationFn: issue,
@@ -40,14 +42,16 @@ export function OrderKeyButton({
     onSuccess: setApiKey,
   });
 
-  const confirmIssue = () => {
-    if (
-      window.confirm(
-        `Issue a new order key for ${name}? Whatever sends its orders must then use the new key; any earlier key stops working.`,
-      )
-    ) {
-      mutation.mutate();
-    }
+  const confirmIssue = async () => {
+    const confirmed = await confirm({
+      confirmLabel: 'Issue new key',
+      description:
+        'Whatever sends its orders must then use the new key; any earlier key stops working.',
+      title: `Issue a new order key for ${name}?`,
+      tone: 'danger',
+    });
+
+    if (confirmed) mutation.mutate();
   };
 
   return (
@@ -57,7 +61,7 @@ export function OrderKeyButton({
         <Button
           aria-label={`Order key for ${name}`}
           disabled={mutation.isPending}
-          onClick={confirmIssue}
+          onClick={() => void confirmIssue()}
           title={`Order key: ${usage}`}
           type="button"
           variant="outline"
@@ -70,7 +74,7 @@ export function OrderKeyButton({
           disabled={mutation.isPending}
           icon={KeyRound}
           label={`Order key for ${name}`}
-          onClick={confirmIssue}
+          onClick={() => void confirmIssue()}
         />
       )}
       <Modal

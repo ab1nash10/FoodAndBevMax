@@ -43,9 +43,13 @@ export function RestaurantAccessibilityModal({
         variant: 'error',
       });
     },
-    onSuccess() {
+    onSuccess(response) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.posDevices() });
-      showToast({ title: 'Restaurant accessibility updated', variant: 'success' });
+      showToast({
+        recordId: response.data.id,
+        title: 'Restaurant accessibility updated',
+        variant: 'success',
+      });
       onClose();
     },
   });

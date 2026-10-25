@@ -94,6 +94,8 @@ export function toRestaurantResponse(restaurant: RestaurantWithRelations) {
     restaurantCode: restaurant.restaurantCode,
     restaurantName: restaurant.restaurantName,
     staffDiscountApplicable: restaurant.staffDiscountApplicable,
+    shiftMode: restaurant.shiftMode,
+    shiftTimings: restaurant.shiftTimings,
     store: restaurant.store
       ? {
           id: restaurant.store.id,

@@ -80,7 +80,7 @@ assert.equal(
       [id]: 'GRN000123',
     }),
   ),
-  '[Inventory] › GRNs(/inventory/grns) › GRN000123',
+  '[Inventory] › Deliveries (GRN)(/inventory/grns) › GRN000123',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/items', params(`id=${id}`), all, { [id]: 'Masala chai' })),
@@ -125,7 +125,10 @@ assert.equal(
   '[Inventory] › Transfers(/inventory/transfers) › Details',
 );
 // A trailing slash is the same page.
-assert.equal(show(getBreadcrumbTrail('/inventory/grns/', null, all)), '[Inventory] › GRNs');
+assert.equal(
+  show(getBreadcrumbTrail('/inventory/grns/', null, all)),
+  '[Inventory] › Deliveries (GRN)',
+);
 
 // Without permission a page crumb is plain text, and so is a named record on it.
 assert.equal(
@@ -137,7 +140,7 @@ assert.equal(
 const onlyGrns = (permission) => [permission].flat().includes('GRN_VIEW');
 assert.equal(
   show(getBreadcrumbTrail('/inventory/grns/new', null, onlyGrns)),
-  '[Inventory] › GRNs(/inventory/grns) › Receive a delivery',
+  '[Inventory] › Deliveries (GRN)(/inventory/grns) › Receive a delivery',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/stores/abc/def', null, none)),

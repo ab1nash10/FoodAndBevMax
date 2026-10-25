@@ -68,6 +68,7 @@ export function StoreCreatePageClient() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.storeOptions() });
       showToast({
         action: { href, label: `View ${response.data.storeName}` },
+        recordId: response.data.id,
         title: 'Store created',
         variant: 'success',
       });

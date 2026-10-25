@@ -61,6 +61,7 @@ export function SidebarActions({ onOpenPalette }: Readonly<{ onOpenPalette: () =
 
 /** Who is signed in, at the foot of the sidebar: preferences, theme and sign out. */
 export function AccountMenu({
+  below = false,
   compact = false,
   displayName,
   initials,
@@ -68,6 +69,8 @@ export function AccountMenu({
   onPreferences,
   roleLabel,
 }: Readonly<{
+  /** The top bar: the avatar alone, its menu dropping below it. */
+  below?: boolean;
   /** The collapsed rail: the avatar alone, its menu opening beside it. */
   compact?: boolean;
   displayName: string;
@@ -92,7 +95,7 @@ export function AccountMenu({
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-xs font-semibold text-ds-link">
           {initials || 'AU'}
         </span>
-        {compact ? null : (
+        {compact || below ? null : (
           <>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[13px] font-semibold text-ds-text">{displayName}</span>
@@ -105,10 +108,20 @@ export function AccountMenu({
       <div
         className={cn(
           'absolute z-50 min-w-56 rounded-card border border-ds-border bg-ds-surface p-1.5 shadow-xl shadow-black/30',
-          compact ? 'bottom-0 left-full ml-2' : 'bottom-full left-0 mb-2 w-full',
+          below
+            ? 'right-0 top-full mt-2'
+            : compact
+              ? 'bottom-0 left-full ml-2'
+              : 'bottom-full left-0 mb-2 w-full',
         )}
         role="menu"
       >
+        {below ? (
+          <div className="border-b border-ds-divider px-2.5 pb-2 pt-1.5">
+            <p className="truncate text-[13px] font-semibold text-ds-text">{displayName}</p>
+            <p className="truncate text-[12px] text-ds-muted">{roleLabel}</p>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
           <span className="text-[12px] text-ds-muted">Theme</span>
           <ThemeToggle />
@@ -126,7 +139,7 @@ export function AccountMenu({
           Preferences
         </button>
         <button
-          className={cn(row, 'text-red-200 hover:bg-ds-subtle hover:text-white', focusRing)}
+          className={cn(row, 'text-ds-status-bad-fg hover:bg-ds-status-bad-bg', focusRing)}
           onClick={onLogout}
           role="menuitem"
           type="button"

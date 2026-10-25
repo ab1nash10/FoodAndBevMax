@@ -26,6 +26,35 @@ export class DashboardController {
     };
   }
 
+  @Get('nav-counts')
+  @ApiOperation({
+    summary: "Get the nav badges' counts: transfers to acknowledge, draft GRNs and productions",
+  })
+  @ApiOkResponse({ description: 'Dashboard nav counts returned successfully.' })
+  async navCounts(
+    @Query() query: DashboardSetupQueryDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+  ) {
+    return {
+      data: await this.dashboard.navCounts(query, user?.permissions ?? []),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Get('location-names')
+  @ApiOperation({
+    summary: 'Get the id, name and code of every active store, kitchen, restaurant and counter',
+  })
+  @ApiOkResponse({ description: 'Location names returned successfully.' })
+  async locationNames(@CurrentUser() user: JwtRequestUser | undefined) {
+    return {
+      data: await this.dashboard.locationNames(user?.permissions ?? []),
+      message: 'Success',
+      success: true,
+    };
+  }
+
   @Get('setup')
   @ApiOperation({ summary: "Get the dashboard setup checklist's counts" })
   @ApiOkResponse({ description: 'Dashboard setup returned successfully.' })

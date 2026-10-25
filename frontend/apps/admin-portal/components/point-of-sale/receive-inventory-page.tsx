@@ -102,7 +102,7 @@ export function ReceiveInventoryPageClient() {
             <RefreshButton onClick={() => void transfersQuery.refetch()} />
           </ListToolbar>
           <div className="overflow-x-auto">
-            <table className={cn(tableStyles.table, 'min-w-200 table-fixed')}>
+            <table className={cn(tableStyles.table, 'phone-cards min-w-200 table-fixed')}>
               <thead className={tableStyles.head}>
                 <tr>
                   <th className={cn(tableStyles.th, 'w-[16%]')}>Reference no</th>
@@ -116,7 +116,11 @@ export function ReceiveInventoryPageClient() {
               <tbody>
                 {items.length > 0 ? (
                   items.map((transfer) => (
-                    <tr className="border-t border-ds-divider" key={transfer.id}>
+                    <tr
+                      className="border-t border-ds-divider"
+                      data-record-id={transfer.id}
+                      key={transfer.id}
+                    >
                       <td className={tableStyles.td}>
                         <p className={cn('truncate font-mono', tableStyles.title)}>
                           {transfer.transferNumber}
@@ -343,6 +347,7 @@ function ReceivePanel({
       invalidateTransferQueries(queryClient);
       showToast({
         description: `${transfer!.transferNumber} is now counter stock.`,
+        recordId: transfer!.id,
         title: 'Stock received',
         variant: 'success',
       });

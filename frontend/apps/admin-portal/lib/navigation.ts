@@ -1,12 +1,15 @@
 import {
   ArrowRightLeft,
+  BadgePercent,
   BookOpenText,
   Boxes,
   Building2,
+  Clock3,
   ChefHat,
   ClipboardList,
   CookingPot,
   CreditCard,
+  FileSpreadsheet,
   Gauge,
   Gift,
   History,
@@ -51,7 +54,8 @@ export type NavGroupLabel =
   | 'Kitchen Operations'
   | 'Organization'
   | 'Overview'
-  | 'Point of Sale';
+  | 'Point of Sale'
+  | 'Reports';
 
 export interface NavPage {
   /** Hidden pages highlight this sidebar entry instead (same screen under another URL). */
@@ -144,6 +148,12 @@ export const navigationGroups: NavGroup[] = [
         permissions: ['EMPLOYEE_VIEW'],
       },
       {
+        href: '/masters/employee-discounts',
+        icon: BadgePercent,
+        label: 'Employee Discounts',
+        permissions: ['EMPLOYEE_DISCOUNT_VIEW'],
+      },
+      {
         href: '/masters/pos',
         icon: CreditCard,
         label: 'POS & Payment Machines',
@@ -173,7 +183,7 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/masters/item-mapping',
         icon: Link2,
-        label: 'Item Mapping',
+        label: 'Item Locations',
         permissions: ['STORE_ITEM_VIEW', 'KITCHEN_ITEM_VIEW'],
       },
       {
@@ -181,6 +191,12 @@ export const navigationGroups: NavGroup[] = [
         icon: Utensils,
         label: 'Restaurant Menus',
         permissions: ['RESTAURANT_MENU_VIEW'],
+      },
+      {
+        href: '/masters/time-slots',
+        icon: Clock3,
+        label: 'Time Slots',
+        permissions: ['TIME_SLOT_VIEW'],
       },
     ],
     label: 'Item & Menu Setup',
@@ -256,7 +272,7 @@ export const navigationGroups: NavGroup[] = [
         badge: 'grns',
         href: '/inventory/grns',
         icon: ClipboardList,
-        label: 'GRNs',
+        label: 'Deliveries (GRN)',
         permissions: ['GRN_VIEW'],
         record: 'id',
       },
@@ -283,7 +299,12 @@ export const navigationGroups: NavGroup[] = [
         href: '/inventory/transfers',
         icon: ArrowRightLeft,
         label: 'Transfers',
-        permissions: ['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW'],
+        permissions: [
+          'TRANSFER_VIEW',
+          'KITCHEN_TRANSFER_VIEW',
+          'RESTAURANT_TRANSFER_SEND',
+          'RESTAURANT_TRANSFER_RECEIVE',
+        ],
         record: 'id',
       },
       {
@@ -324,6 +345,30 @@ export const navigationGroups: NavGroup[] = [
     section: 'Operations',
   },
   {
+    icon: FileSpreadsheet,
+    items: [
+      {
+        href: '/reports',
+        icon: FileSpreadsheet,
+        label: 'Reports',
+        permissions: [
+          'REPORT_SALES',
+          'REPORT_SALES_ADMIN',
+          'REPORT_APC',
+          'REPORT_ITEM_SALES',
+          'REPORT_ITEM_SUMMARY',
+          'REPORT_TAX',
+          'REPORT_CANCELLED',
+          'REPORT_IHC',
+          'REPORT_UNPAID',
+          'REPORT_ERP',
+        ],
+      },
+    ],
+    label: 'Reports',
+    section: 'Operations',
+  },
+  {
     icon: ShieldCheck,
     items: [
       { href: '/users', icon: UsersRound, label: 'Users / Roles', permissions: ['USER_VIEW'] },
@@ -361,14 +406,15 @@ export const subRoutes: SubRoute[] = [
     label: 'New transfer',
     parent: '/inventory/transfers',
     pattern: '/inventory/transfers/new',
-    permissions: ['TRANSFER_CREATE', 'KITCHEN_TRANSFER_CREATE'],
+    permissions: ['TRANSFER_CREATE', 'KITCHEN_TRANSFER_CREATE', 'RESTAURANT_TRANSFER_SEND'],
   },
   {
     label: 'Acknowledge',
     parent: '/inventory/transfers',
     pattern: '/inventory/transfers/[id]/acknowledge',
-    // The page reads the transfer like the list does; acknowledging needs TRANSFER_ACKNOWLEDGE.
-    permissions: ['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW'],
+    // The page reads the transfer like the list does; acknowledging needs TRANSFER_ACKNOWLEDGE
+    // (or RESTAURANT_TRANSFER_RECEIVE for another restaurant's leftovers).
+    permissions: ['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW', 'RESTAURANT_TRANSFER_RECEIVE'],
   },
   {
     label: 'Receive a delivery',
@@ -447,6 +493,12 @@ export const subRoutes: SubRoute[] = [
     parent: '/masters/item-categories',
     pattern: '/masters/item-categories/new',
     permissions: ['ITEM_CATEGORY_CREATE'],
+  },
+  {
+    label: 'New time slot',
+    parent: '/masters/time-slots',
+    pattern: '/masters/time-slots/new',
+    permissions: ['TIME_SLOT_CREATE'],
   },
   {
     label: 'New item',

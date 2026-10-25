@@ -28,11 +28,15 @@ export function getAllowedHospitalIds(): string[] | null | undefined {
 /** Models that carry a hospital_id column and are therefore scopable. */
 export const HOSPITAL_SCOPED_MODELS = new Set([
   'Counter',
+  'CounterDayClose',
+  'CounterShift',
+  'EmployeeDiscount',
   'Grn',
   'ItemPrice',
   'Kitchen',
   'KitchenProduction',
   'Location',
+  'OnlinePayment',
   'PaymentMachine',
   'PosDevice',
   'Restaurant',

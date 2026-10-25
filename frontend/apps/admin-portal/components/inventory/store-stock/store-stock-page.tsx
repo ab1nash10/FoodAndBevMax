@@ -18,7 +18,20 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { RowAction, StatStrip, StatusChip, tableStyles } from '@/components/design-system';
+import {
+  InlineProgress,
+  RecordAvatar,
+  RowAction,
+  StatStrip,
+  StatusChip,
+  tableStyles,
+} from '@/components/design-system';
+import { todayInIndia } from '@/lib/today-in-india';
+import {
+  DiscardBatchButton,
+  DiscardStockDialog,
+  type DiscardableBatch,
+} from '@/components/inventory/discard-stock-dialog';
 import { useLocationContext } from '@/components/location-context';
 import { Input, Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
@@ -55,6 +68,33 @@ import { cn } from '@/lib/utils';
 
 const stockItemTypes: ItemType[] = ['MRP', 'READYMADE', 'LIVE'];
 
+/** Days over which the expiry bar runs from full to empty. */
+const expiryWindowDays = 30;
+
+/**
+ * Days left before the nearest batch expires, as a bar that runs down over a month: green, then
+ * amber inside a week, red inside three days or once expired.
+ */
+function ExpiryProgress({ date }: Readonly<{ date: string }>) {
+  const days = Math.round(
+    (Date.parse(date.slice(0, 10)) - Date.parse(todayInIndia())) / 86_400_000,
+  );
+
+  return (
+    <InlineProgress
+      label={
+        days < 0
+          ? 'Expired'
+          : days === 0
+            ? 'Expires today'
+            : `${days} day${days === 1 ? '' : 's'} left`
+      }
+      tone={days <= 3 ? 'bad' : days <= 7 ? 'pending' : 'ok'}
+      value={Math.max(days, 0) / expiryWindowDays}
+    />
+  );
+}
+
 export function StoreStockPageClient() {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   // Phones show four of the nine columns; a row that spans them all has to say so.
@@ -62,6 +102,7 @@ export function StoreStockPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
+  const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [storeFilter, setStoreFilter] = useState('');
   const [itemFilter, setItemFilter] = useState('');
@@ -186,6 +227,7 @@ export function StoreStockPageClient() {
 
   return (
     <section className="space-y-4">
+      <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
       <PageHeader
         count={stats?.all}
         subtitle="Current store stock summarized by store and item, with batch details on expand."
@@ -198,12 +240,14 @@ export function StoreStockPageClient() {
             active: !statusFilter,
             label: 'All items',
             onSelect: () => showStatus(''),
+            share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
             active: statusFilter === 'NEAR_EXPIRY',
             label: 'Expiring in 30 days',
             onSelect: () => showStatus('NEAR_EXPIRY'),
+            share: stats?.all ? stats.nearExpiry / stats.all : undefined,
             tone: 'pending',
             value: stats?.nearExpiry ?? '–',
           },
@@ -211,6 +255,7 @@ export function StoreStockPageClient() {
             active: statusFilter === 'EXPIRED',
             label: 'Expired',
             onSelect: () => showStatus('EXPIRED'),
+            share: stats?.all ? stats.expired / stats.all : undefined,
             tone: 'bad',
             value: stats?.expired ?? '–',
           },
@@ -218,6 +263,7 @@ export function StoreStockPageClient() {
             active: statusFilter === 'OUT_OF_STOCK',
             label: 'Out of stock',
             onSelect: () => showStatus('OUT_OF_STOCK'),
+            share: stats?.all ? stats.outOfStock / stats.all : undefined,
             tone: 'bad',
             value: stats?.outOfStock ?? '–',
           },
@@ -385,6 +431,7 @@ export function StoreStockPageClient() {
                       {/* The whole row shows its batches; the store and item links go to those. */}
                       <tr
                         className={cn(tableStyles.row, isExpanded && 'bg-ds-subtle')}
+                        data-record-id={rowKey}
                         onClick={(event) => {
                           if (!(event.target as HTMLElement).closest('a, button')) {
                             toggleSummary(summary);
@@ -400,28 +447,38 @@ export function StoreStockPageClient() {
                           />
                         </td>
                         <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
-                          <RecordLink
-                            className={cn('block truncate', tableStyles.title)}
-                            href={locationHref('STORE', summary.storeCode || summary.storeName)}
-                          >
-                            {summary.storeName}
-                          </RecordLink>
-                          <p className={cn('truncate', tableStyles.code)}>
-                            {summary.storeCode ?? '—'}
-                          </p>
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <RecordAvatar name={summary.storeName} size="sm" />
+                            <span className="min-w-0">
+                              <RecordLink
+                                className={cn('block truncate', tableStyles.title)}
+                                href={locationHref('STORE', summary.storeCode || summary.storeName)}
+                              >
+                                {summary.storeName}
+                              </RecordLink>
+                              <p className={cn('truncate', tableStyles.code)}>
+                                {summary.storeCode ?? '—'}
+                              </p>
+                            </span>
+                          </span>
                         </td>
                         <td className={tableStyles.td}>
-                          <RecordLink
-                            className={cn('block break-words sm:truncate', tableStyles.title)}
-                            href={recordHref('/masters/items', { id: summary.itemId })}
-                          >
-                            {summary.itemName}
-                          </RecordLink>
-                          <p className={cn('truncate', tableStyles.code)}>{summary.itemCode}</p>
-                          {/* Phones have no Store column. */}
-                          <p className="truncate text-[12px] text-ds-muted sm:hidden">
-                            {summary.storeName}
-                          </p>
+                          <span className="flex items-start gap-3">
+                            <RecordAvatar name={summary.itemName} />
+                            <span className="min-w-0 flex-1">
+                              <RecordLink
+                                className={cn('block break-words sm:truncate', tableStyles.title)}
+                                href={recordHref('/masters/items', { id: summary.itemId })}
+                              >
+                                {summary.itemName}
+                              </RecordLink>
+                              <p className={cn('truncate', tableStyles.code)}>{summary.itemCode}</p>
+                              {/* Phones have no Store column. */}
+                              <p className="truncate text-[12px] text-ds-muted sm:hidden">
+                                {summary.storeName}
+                              </p>
+                            </span>
+                          </span>
                         </td>
                         <td
                           className={cn(
@@ -468,6 +525,9 @@ export function StoreStockPageClient() {
                           )}
                         >
                           {formatDateOnly(summary.nearestExpiryDate)}
+                          {summary.nearestExpiryDate ? (
+                            <ExpiryProgress date={summary.nearestExpiryDate} />
+                          ) : null}
                         </td>
                         <td className={tableStyles.td}>
                           <StatusChip status={summary.status} />
@@ -496,6 +556,9 @@ export function StoreStockPageClient() {
                                       </th>
                                       <th className={cn(tableStyles.th, 'text-right')}>Reserved</th>
                                       <th className={tableStyles.th}>Status</th>
+                                      <th className={tableStyles.th}>
+                                        <span className="sr-only">Actions</span>
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -528,6 +591,19 @@ export function StoreStockPageClient() {
                                         </td>
                                         <td className="px-4 py-2.5">
                                           <StatusChip status={batch.status} />
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          <DiscardBatchButton
+                                            batch={{
+                                              availableQty: batch.availableQty,
+                                              batchNumber: batch.batchNumber,
+                                              expiryDate: batch.expiryDate,
+                                              itemName: summary.itemName,
+                                              locationName: summary.storeName,
+                                              stockBalanceId: batch.stockBalanceId,
+                                            }}
+                                            onDiscard={setDiscarding}
+                                          />
                                         </td>
                                       </tr>
                                     ))}
