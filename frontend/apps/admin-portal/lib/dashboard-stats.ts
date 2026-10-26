@@ -858,7 +858,7 @@ export interface SetupStep {
 const added = (count: number) => `${count} added`;
 
 /**
- * The "Finish setting up AAHAR" checklist from real counts. A step the user cannot see (its
+ * The setup steps from real counts (they decide the dashboard's mode). A step the user cannot see (its
  * count is undefined) is left out; a call to action shows only where `canOpen` allows it.
  */
 export function setupSteps(

@@ -4,6 +4,7 @@ import type { SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { FilterSelect } from '@/components/ui-controls';
 import { sortChoices } from '@/lib/sort-choices';
 
@@ -39,25 +40,42 @@ export function FiltersMenu({
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
-  // Wherever the button sits, keep the open panel at least 8px inside the window.
+  // The panel lives on <body> (a list card clips what overflows it), fixed under the button:
+  // right edges lined up on wider screens, left edges on phones, flipped above when there is
+  // more room there, at least 8px inside the window, and scrolling when taller than the room.
   useLayoutEffect(() => {
+    const button = rootRef.current;
     const panel = panelRef.current;
 
-    if (!isOpen || !panel) {
-      return;
+    if (!isOpen || !button || !panel) {
+      return undefined;
     }
 
-    panel.style.transform = '';
-    const margin = 8;
-    const { left, right } = panel.getBoundingClientRect();
-    const shift =
-      right > window.innerWidth - margin
-        ? window.innerWidth - margin - right
-        : left < margin
-          ? margin - left
-          : 0;
+    const place = () => {
+      const margin = 8;
+      const gap = 8;
+      const anchor = button.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const preferred = window.innerWidth >= 640 ? anchor.right - width : anchor.left;
+      const below = window.innerHeight - anchor.bottom - gap - margin;
+      const above = anchor.top - gap - margin;
+      const flip = below < 240 && above > below;
 
-    panel.style.transform = shift ? `translateX(${Math.round(shift)}px)` : '';
+      panel.style.left = `${Math.max(margin, Math.min(preferred, window.innerWidth - margin - width))}px`;
+      panel.style.top = flip ? '' : `${anchor.bottom + gap}px`;
+      panel.style.bottom = flip ? `${window.innerHeight - anchor.top + gap}px` : '';
+      panel.style.maxHeight = `${flip ? above : below}px`;
+    };
+
+    place();
+    panel.querySelector<HTMLElement>('select, input, button, [tabindex]')?.focus();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, { capture: true, passive: true });
+
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, { capture: true });
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -66,7 +84,9 @@ export function FiltersMenu({
     }
 
     const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
@@ -104,19 +124,20 @@ export function FiltersMenu({
           </span>
         ) : null}
       </Button>
-      {isOpen ? (
-        <div
-          aria-label="Filters"
-          // Opens inwards from the button's right edge on wider screens; the effect above
-          // nudges it back inside the window wherever it would overflow.
-          className="absolute left-0 top-full z-30 mt-2 grid sm:left-auto sm:right-0 w-[min(20rem,calc(100vw-2rem))] gap-3 rounded-tile border border-ds-border bg-ds-surface p-4 shadow-xl shadow-black/10"
-          id={panelId}
-          ref={panelRef}
-          role="dialog"
-        >
-          {children}
-        </div>
-      ) : null}
+      {isOpen
+        ? createPortal(
+            <div
+              aria-label="Filters"
+              className="fixed z-40 grid w-[min(20rem,calc(100vw-1rem))] content-start gap-3 overflow-y-auto overscroll-contain rounded-tile border border-ds-border bg-ds-surface p-4 shadow-xl shadow-black/10"
+              id={panelId}
+              ref={panelRef}
+              role="dialog"
+            >
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

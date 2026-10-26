@@ -55,7 +55,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     // Authority is the database, not the token's frozen claims, so a revoked right stops
     // working on the next request instead of surviving until the token expires.
-    const access = await this.access.resolve(payload.sub);
+    let access = await this.access.resolve(payload.sub);
+
+    // Session versions only go up, so a token newer than the cached access means the user just
+    // signed in again: the cache is stale. Without this a fresh sign-in was refused for up to
+    // ACCESS_CACHE_MS and the new browser was sent back to the login page.
+    if (access && (payload.sv ?? 0) > access.sessionVersion) {
+      this.access.forget(payload.sub);
+      access = await this.access.resolve(payload.sub);
+    }
 
     if (!access) {
       throw new UnauthorizedException('User is not registered or active');

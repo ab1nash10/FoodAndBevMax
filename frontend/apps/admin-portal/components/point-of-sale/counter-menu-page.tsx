@@ -7,6 +7,7 @@ import type { FoodType, PosChannel, PosMenuItem } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { useConfirm } from '@/components/confirm-provider';
 import { AppPageHeader, RecordAvatar, StatStrip, tableStyles } from '@/components/design-system';
+import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { QueryState } from '@/components/location-empty-states';
 import {
@@ -334,6 +335,14 @@ export function CounterMenuPageClient() {
                 </FilterField>
               </FiltersMenu>
               <RefreshButton onClick={() => void menuQuery.refetch()} />
+              <ClearFiltersButton
+                active={Boolean(search || categoryFilter || foodTypeFilter)}
+                onClear={() => {
+                  setSearch('');
+                  setCategoryFilter('');
+                  setFoodTypeFilter('');
+                }}
+              />
             </ListToolbar>
             <div className="overflow-x-auto">
               <table className={cn(tableStyles.table, 'phone-cards min-w-240 table-fixed')}>

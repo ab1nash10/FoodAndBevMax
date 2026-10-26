@@ -9,7 +9,6 @@ import { createCommands } from '@/components/command-palette';
 import { useLocationContext } from '@/components/location-context';
 import { IfCanOpen } from '@/components/record-link';
 import { SegmentedControl } from '@/components/ui-controls';
-import { SetupChecklist } from '@/components/dashboard/setup-checklist';
 import { useDashboardStats, type DashboardStats } from '@/hooks/use-dashboard-stats';
 import type { Period } from '@/lib/dashboard-stats';
 import { useUrlParam } from '@/lib/use-url-state';
@@ -166,8 +165,6 @@ export function DashboardOverview() {
               aria-hidden="true"
               className="skeleton inline-block h-[18px] w-[min(26rem,100%)] rounded-md align-middle"
             />
-          ) : isNew ? (
-            'Finish setting up, then your day’s work shows here.'
           ) : (
             'What needs you today, how the last days went, and where to start.'
           )
@@ -192,7 +189,6 @@ export function DashboardOverview() {
 
       {isNew ? (
         <>
-          <SetupChecklist steps={stats.setup.steps} />
           <NewKpiRow stats={stats} />
           <NewWorkspaceRow stats={stats} />
         </>

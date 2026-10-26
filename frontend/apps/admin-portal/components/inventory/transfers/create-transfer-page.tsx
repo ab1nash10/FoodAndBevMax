@@ -1037,7 +1037,11 @@ export function CreateTransferPageClient() {
               </label>
             </Panel>
           ) : step === 1 ? (
-            <Panel aria-labelledby="transfer-items" className="overflow-hidden" role="region">
+            <Panel
+              aria-labelledby="transfer-items"
+              // Not clipped: the item search's list drops below the card (the table rounds its own corners).
+              role="region"
+            >
               <div className="flex flex-col gap-3 px-[18px] pb-3 pt-[18px]">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                   <h2 className="text-[15px] font-extrabold text-ds-text" id="transfer-items">
@@ -1201,7 +1205,7 @@ export function CreateTransferPageClient() {
                   <LoadingSkeleton rows={Math.min(lines.length, 5)} />
                 </div>
               ) : lines.length > 0 ? (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-b-card">
                   <table className="w-full min-w-[700px] table-fixed text-[13px]">
                     <thead className="border-y border-ds-divider bg-ds-subtle text-left text-xs text-ds-muted">
                       <tr>
