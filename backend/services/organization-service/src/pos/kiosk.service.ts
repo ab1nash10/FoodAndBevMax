@@ -8,7 +8,7 @@ import { MenuServeAt, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { toDateOnly, toNumber } from '../common/values';
 import type { CreateKioskOrderDto } from './dto/kiosk.dto';
-import { isOnSale, priceBill, siteBusinessDate } from './pos-pricing';
+import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { PosService } from './pos.service';
 
 /** A kiosk sells what the counter sells, at the counter price. */
@@ -78,7 +78,7 @@ export class KioskService {
       where: {
         deletedAt: null,
         isActive: true,
-        item: { deletedAt: null, isActive: true },
+        ...sellableMenu,
         price: { not: null },
         restaurantId: restaurant.id,
         serveAt: { in: counterServed },
@@ -134,21 +134,25 @@ export class KioskService {
     return { discountPercent: employee.discountPercent };
   }
 
-  /** Prices the kiosk's lines as the counter will bill them. */
+  /**
+   * Prices the kiosk's lines as the counter will bill them. An order already taken is not
+   * checked for sale again, so a resend still gets its number after an item goes off.
+   */
   private async priced(
     restaurant: Awaited<ReturnType<KioskService['restaurant']>>,
     lines: readonly KioskLine[],
     discountPercent: number,
+    taken = false,
   ) {
     const now = new Date();
     const menus = await this.prisma.restaurantMenu.findMany({
       include: { item: { select: { itemName: true } } },
       where: {
-        deletedAt: null,
         id: { in: [...new Set(lines.map((line) => line.menuId))] },
-        isActive: true,
         restaurantId: restaurant.id,
-        serveAt: { in: counterServed },
+        ...(taken
+          ? {}
+          : { deletedAt: null, isActive: true, ...sellableMenu, serveAt: { in: counterServed } }),
       },
     });
     const byId = new Map(menus.map((menu) => [menu.id, menu]));
@@ -159,7 +163,7 @@ export class KioskService {
         throw new BadRequestException('An item in this order is not on the menu.');
       }
 
-      if (!isOnSale(menu, now)) {
+      if (!taken && !isOnSale(menu, now)) {
         throw new BadRequestException(`${menu.item.itemName} is not available right now.`);
       }
 
@@ -275,7 +279,7 @@ export class KioskService {
     return {
       id: order.id,
       number: order.number,
-      ...(await this.priced(restaurant, order.lines as KioskLine[], discountPercent)),
+      ...(await this.priced(restaurant, order.lines as KioskLine[], discountPercent, true)),
     };
   }
 

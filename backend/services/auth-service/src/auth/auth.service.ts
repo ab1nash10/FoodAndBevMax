@@ -69,8 +69,8 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException(
         target.channel === 'mobile'
-          ? 'This mobile number is not registered. Please contact your administrator.'
-          : 'This email is not registered. Please contact your administrator.',
+          ? 'This mobile number is not registered. Please contact your IT team for access rights.'
+          : 'This email is not registered. Please contact your IT team for access rights.',
       );
     }
 
@@ -85,7 +85,7 @@ export class AuthService {
   async verifyOtp(dto: VerifyOtpDto, context: AuthContext): Promise<AuthTokens> {
     const target = await this.otp.verify(dto);
     const user = await this.findLoginUser(target);
-    const tokens = await this.tokens.issueTokens(this.toTokenUser(user));
+    const tokens = await this.startSession(user);
 
     await this.auditLog.record({
       action: 'AUTH_LOGIN',
@@ -124,7 +124,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const tokens = await this.tokens.issueTokens(this.toTokenUser(user));
+    const tokens = await this.startSession(user);
 
     await this.auditLog.record({
       action: 'AUTH_LOGIN',
@@ -184,6 +184,27 @@ export class AuthService {
     return {
       loggedOut: true,
     };
+  }
+
+  /**
+   * One browser at a time: a sign-in moves the session version on, so the tokens of any earlier
+   * sign-in are refused from then on and that browser is sent back to the login page. Raw SQL
+   * keeps updated_at as it is.
+   */
+  private async startSession(user: Awaited<ReturnType<AuthService['findUserById']>>) {
+    const [session] = await this.prisma.$queryRaw<Array<{ sessionVersion: number }>>`
+      UPDATE users SET session_version = session_version + 1
+      WHERE id = ${user.id}::uuid
+      RETURNING session_version AS "sessionVersion"`;
+
+    if (!session) {
+      throw new UnauthorizedException('User is not registered or active');
+    }
+
+    return this.tokens.issueTokens({
+      ...this.toTokenUser(user),
+      sessionVersion: session.sessionVersion,
+    });
   }
 
   private async findLoginUser(target: { channel: 'email' | 'mobile'; value: string }) {

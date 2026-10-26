@@ -9,6 +9,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { superAdminForRun } from './testing/super-admin-for-run.js';
 
 type Body = Record<string, unknown>;
 interface Batch {
@@ -193,7 +194,9 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     process.env.JWT_REFRESH_SECRET ||= 'characterisation-refresh-secret-0123456789';
 
     // Imported here: ConfigModule reads the environment when app.module is first evaluated.
-    const { configureSecurityBaseline } = await import('@aahar/auth');
+    const { configureSecurityBaseline, getSharedRedis } = await import('@aahar/auth');
+    // Caches "no Redis" while REDIS_URL is still blank: ConfigModule refills it from .env.
+    getSharedRedis();
     const { ConfigService } = await import('@nestjs/config');
     const { NestFactory } = await import('@nestjs/core');
     const { AppModule } = await import('./app.module.js');
@@ -214,18 +217,11 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     rawQuery = <T>(sql: string, ...values: unknown[]) =>
       prisma.$queryRawUnsafe<T[]>(sql, ...values);
 
-    const superAdmin = await nest.get(PrismaService).user.findFirst({
-      where: {
-        deletedAt: null,
-        roles: { some: { deletedAt: null, role: { deletedAt: null, name: 'Super Admin' } } },
-        status: 'ACTIVE',
-      },
-    });
-    if (!superAdmin) throw new Error('DATABASE_URL_TEST needs the seed: no active Super Admin');
+    const superAdmin = await superAdminForRun(prisma, 'sf');
     signFor = (user) => signAccessToken(config.getOrThrow<string>('JWT_ACCESS_SECRET'), user);
     token = signFor(superAdmin);
 
-    const kitchen = await first('/kitchens?limit=1&isActive=true');
+    const kitchen = await first('/kitchens?limit=1&isActive=true&sortBy=createdAt&sortOrder=asc');
     fx.hospitalId = kitchen.hospitalId as string;
     fx.kitchenId = idOf(kitchen);
     fx.storeId = idOf(await first(`/stores?limit=1&isActive=true&hospitalId=${fx.hospitalId}`));
@@ -906,7 +902,7 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       400,
       'Open a shift at this counter before billing.',
     ]);
-    await ok('POST', '/pos/shifts', { counterId, openingCash: 0 });
+    const till = await ok('POST', '/pos/shifts', { counterId, openingCash: 0 });
     const created = await api('POST', '/pos/orders', bill);
     expect(created.status).toBe(201);
     expect(created.data).toMatchObject({
@@ -1098,6 +1094,8 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     } finally {
       token = admin;
     }
+    // One open shift per user: close this till so the next tests can open their own.
+    await ok('PATCH', `/pos/shifts/${idOf(till)}/end`, { countedCash: 0, handover: false });
   });
 
   it('shifts: count the cash, hand over, close; a closed day bills on the next one', async () => {

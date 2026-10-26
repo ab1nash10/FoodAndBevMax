@@ -1,6 +1,6 @@
 # Quality gates on every pull request: the same install, generate, lint, typecheck, test and build
 # Jenkins runs, plus a throwaway Postgres so the integration suites (skipped without
-# DATABASE_URL_TEST) characterise the stock, money and sign-in paths against a seeded database.
+# DATABASE_URL_TEST) characterise every module's API over HTTP against a seeded database.
 name: CI
 
 on:

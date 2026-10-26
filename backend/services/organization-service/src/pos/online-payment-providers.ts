@@ -32,6 +32,20 @@ type Json = Record<string, unknown>;
 const text = (value: unknown) =>
   typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 
+/** A new link's url and id; a reply missing either is refused rather than saved as "undefined". */
+function link(provider: OnlinePaymentProvider, paymentUrl: unknown, providerRef: unknown) {
+  if (!text(paymentUrl) || !text(providerRef)) {
+    throw new BadGatewayException(
+      `${providerLabels[provider]} did not send a payment link. Try again, or take the payment another way.`,
+    );
+  }
+
+  return { paymentUrl: text(paymentUrl), providerRef: text(providerRef) };
+}
+
+// PayU statuses that end a link; anything else (or no status) keeps it open for the next check.
+const payuClosedStatuses = new Set(['cancelled', 'deactivated', 'expired', 'inactive']);
+
 /** One provider call: a timeout, and its own error message passed on to the cashier. */
 async function call(provider: OnlinePaymentProvider, url: string, init: RequestInit = {}) {
   const label = providerLabels[provider];
@@ -83,7 +97,7 @@ function razorpay(keyId: string, keySecret: string): PaymentProvider {
         method: 'POST',
       });
 
-      return { paymentUrl: String(body.short_url), providerRef: String(body.id) };
+      return link('RAZORPAY', body.short_url, body.id);
     },
     async read(providerRef) {
       const body = await call('RAZORPAY', `${base}/${providerRef}`, { headers });
@@ -150,10 +164,7 @@ function payu(settings: {
 
       const result = (body.result ?? {}) as Json;
 
-      return {
-        paymentUrl: String(result.paymentLink),
-        providerRef: String(result.invoiceNumber),
-      };
+      return link('PAYU', result.paymentLink, result.invoiceNumber);
     },
     async read(providerRef) {
       const body = await call('PAYU', `${settings.baseUrl}/payment-links/${providerRef}`, {
@@ -163,7 +174,7 @@ function payu(settings: {
       const paid = Number(result.dueAmount) === 0 && Number(result.totalAmountCollected) > 0;
 
       return {
-        closed: !paid && result.status !== 'active',
+        closed: !paid && payuClosedStatuses.has(text(result.status).toLowerCase()),
         paid,
         reference: paid ? text(result.transactionId) || providerRef : null,
       };

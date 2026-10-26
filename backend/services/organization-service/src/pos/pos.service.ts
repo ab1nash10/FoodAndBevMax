@@ -36,7 +36,7 @@ import type {
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
 import { itemCount } from '../restaurant-orders/restaurant-orders.service';
-import { isOnSale, priceBill, siteBusinessDate } from './pos-pricing';
+import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { shiftStates, shiftsOn, tally, userNames } from './shifts';
 
 type Client = Prisma.TransactionClient | PrismaService;
@@ -289,7 +289,7 @@ export class PosService {
       where: {
         deletedAt: null,
         isActive: true,
-        item: { deletedAt: null, isActive: true },
+        ...sellableMenu,
         restaurantId: counter.restaurantId,
         serveAt: { in: servedOn(query.channel) },
       },
@@ -453,6 +453,7 @@ export class PosService {
         deletedAt: null,
         id: { in: menuIds },
         isActive: true,
+        ...sellableMenu,
         restaurantId: counter.restaurantId,
       },
     });
@@ -460,11 +461,11 @@ export class PosService {
     const served = servedOn(dto.channel);
     const isComplimentary = dto.isComplimentary === true;
     const employeeCode = optionalText(dto.employeeCode);
-    // A complimentary meal is free anyway; a discount only applies to what is paid for.
-    const staffDiscount =
-      employeeCode && !isComplimentary
-        ? (await this.employeeDiscount(counter, employeeCode, client, now)).discountPercent
-        : 0;
+    // Checked on every bill; a complimentary meal is free anyway, so it takes no discount.
+    const staff = employeeCode
+      ? await this.employeeDiscount(counter, employeeCode, client, now)
+      : undefined;
+    const staffDiscount = staff && !isComplimentary ? staff.discountPercent : 0;
 
     const priced = dto.lines.map((line) => {
       const menu = menuById.get(line.menuId);

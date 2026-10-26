@@ -168,89 +168,98 @@ export class TransferAcknowledgementsService {
   }
 
   async create(dto: CreateTransferAcknowledgementDto, context: ActorContext) {
-    return this.acknowledgements.transaction(async (tx) => {
-      const transfer = await this.findTransferForAcknowledgement(dto.transferId, tx, context);
-      const existing = await this.acknowledgements.findExistingForTransfer(dto.transferId, tx);
+    return this.acknowledgements
+      .transaction(async (tx) => {
+        const transfer = await this.findTransferForAcknowledgement(dto.transferId, tx, context);
+        const existing = await this.acknowledgements.findExistingForTransfer(dto.transferId, tx);
 
-      if (existing) {
-        throw new BadRequestException('Transfer has already been acknowledged');
-      }
+        if (existing) {
+          throw new BadRequestException('Transfer has already been acknowledged');
+        }
 
-      const lines = this.prepareLines(dto.items, transfer);
-      const status = getAcknowledgementStatus(lines);
-      const acknowledgement = await this.acknowledgements.create(
-        {
-          createdBy: context.actorId,
-          hospitalId: transfer.hospitalId,
-          remarks: optionalText(dto.remarks),
-          status,
-          transferId: transfer.id,
-          updatedBy: context.actorId,
-        },
-        tx,
-      );
-
-      for (const line of lines) {
-        await this.acknowledgements.createLine(
+        const lines = this.prepareLines(dto.items, transfer);
+        const status = getAcknowledgementStatus(lines);
+        const acknowledgement = await this.acknowledgements.create(
           {
-            acceptedQty: line.acceptedQty,
-            acknowledgementId: acknowledgement.id,
-            batchNumber: line.transferLine.batchNumber,
             createdBy: context.actorId,
-            expiryDate: line.transferLine.expiryDate,
-            itemId: line.transferLine.itemId,
-            rejectedQty: line.rejectedQty,
-            rejectionReason: line.rejectionReason,
-            remarks: line.remarks,
-            sentQty: toNumber(line.transferLine.sentQty),
-            transferLineId: line.transferLine.id,
+            hospitalId: transfer.hospitalId,
+            remarks: optionalText(dto.remarks),
+            status,
+            transferId: transfer.id,
             updatedBy: context.actorId,
           },
           tx,
         );
 
-        await this.acknowledgements.updateTransferLine(
-          line.transferLine.id,
+        for (const line of lines) {
+          await this.acknowledgements.createLine(
+            {
+              acceptedQty: line.acceptedQty,
+              acknowledgementId: acknowledgement.id,
+              batchNumber: line.transferLine.batchNumber,
+              createdBy: context.actorId,
+              expiryDate: line.transferLine.expiryDate,
+              itemId: line.transferLine.itemId,
+              rejectedQty: line.rejectedQty,
+              rejectionReason: line.rejectionReason,
+              remarks: line.remarks,
+              sentQty: toNumber(line.transferLine.sentQty),
+              transferLineId: line.transferLine.id,
+              updatedBy: context.actorId,
+            },
+            tx,
+          );
+
+          await this.acknowledgements.updateTransferLine(
+            line.transferLine.id,
+            {
+              acceptedQty: line.acceptedQty,
+              rejectedQty: line.rejectedQty,
+              rejectionReason: line.rejectionReason,
+              updatedBy: context.actorId,
+            },
+            tx,
+          );
+
+          await this.postAcceptedStock(transfer, acknowledgement.id, line, context, tx);
+          await this.postRejectedReturn(transfer, acknowledgement.id, line, context, tx);
+        }
+
+        await this.acknowledgements.updateTransfer(
+          transfer.id,
           {
-            acceptedQty: line.acceptedQty,
-            rejectedQty: line.rejectedQty,
-            rejectionReason: line.rejectionReason,
+            status: TransferStatus.ACKNOWLEDGED,
             updatedBy: context.actorId,
           },
           tx,
         );
 
-        await this.postAcceptedStock(transfer, acknowledgement.id, line, context, tx);
-        await this.postRejectedReturn(transfer, acknowledgement.id, line, context, tx);
-      }
+        const created = await this.findActiveAcknowledgement(acknowledgement.id, tx);
+        const newValue = toAcknowledgementResponse(created);
 
-      await this.acknowledgements.updateTransfer(
-        transfer.id,
-        {
-          status: TransferStatus.ACKNOWLEDGED,
-          updatedBy: context.actorId,
-        },
-        tx,
-      );
+        await this.auditLog.record(
+          {
+            action: 'TRANSFER_ACKNOWLEDGE',
+            actorId: context.actorId,
+            entityId: acknowledgement.id,
+            entityName: 'transfer_acknowledgements',
+            hospitalId: acknowledgement.hospitalId,
+            ipAddress: context.ipAddress,
+            newValue,
+          },
+          tx,
+        );
 
-      const created = await this.findActiveAcknowledgement(acknowledgement.id, tx);
-      const newValue = toAcknowledgementResponse(created);
+        return newValue;
+      })
+      .catch((error: unknown) => {
+        // Two people receiving at once: the second one hits the unique transfer, not the check above.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new BadRequestException('Transfer has already been acknowledged');
+        }
 
-      await this.auditLog.record(
-        {
-          action: 'TRANSFER_ACKNOWLEDGE',
-          actorId: context.actorId,
-          entityId: acknowledgement.id,
-          entityName: 'transfer_acknowledgements',
-          hospitalId: acknowledgement.hospitalId,
-          ipAddress: context.ipAddress,
-          newValue,
-        },
-        tx,
-      );
-
-      return newValue;
-    });
+        throw error;
+      });
   }
 
   private async findActiveAcknowledgement(

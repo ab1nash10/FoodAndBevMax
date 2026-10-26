@@ -65,17 +65,6 @@ export class ItemCategoriesRepository {
     return this.prisma.itemCategory.findMany(args);
   }
 
-  async hasActiveItems(categoryId: string, client: ItemCategoryClient): Promise<boolean> {
-    const count = await client.item.count({
-      where: {
-        categoryId,
-        deletedAt: null,
-      },
-    });
-
-    return count > 0;
-  }
-
   async update(
     id: string,
     data: Prisma.ItemCategoryUpdateInput,

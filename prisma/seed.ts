@@ -55,7 +55,6 @@ const defaultPermissions = [
   ['ITEM_CATEGORY_CREATE', 'ITEM_CATEGORY', 'CREATE', 'Create item categories'],
   ['ITEM_CATEGORY_VIEW', 'ITEM_CATEGORY', 'VIEW', 'View item categories'],
   ['ITEM_CATEGORY_UPDATE', 'ITEM_CATEGORY', 'UPDATE', 'Update item categories'],
-  ['ITEM_CATEGORY_DELETE', 'ITEM_CATEGORY', 'DELETE', 'Disable item categories'],
   ['ITEM_CREATE', 'ITEM', 'CREATE', 'Create items'],
   ['ITEM_VIEW', 'ITEM', 'VIEW', 'View items'],
   ['ITEM_UPDATE', 'ITEM', 'UPDATE', 'Update items'],

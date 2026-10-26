@@ -201,9 +201,9 @@ test('setup: counts what each list totals, here or everywhere as the dashboard d
   assert.equal(result.firstTransfer, null);
   // Totals are counts only (limit 0: no rows loaded); locations and items are not limited to the
   // location. The first GRN and transfer still read one row.
-  assert.deepEqual(calls.stores, { hospitalId: 'h1', limit: 0, page: 1, sortOrder: 'desc' });
-  assert.deepEqual(calls.hospitals, { limit: 0, page: 1, sortOrder: 'desc' });
-  assert.deepEqual(calls.items, { limit: 0, page: 1, sortOrder: 'desc' });
+  assert.deepEqual(calls.stores, { hospitalId: 'h1', limit: 0, page: 1 });
+  assert.deepEqual(calls.hospitals, { limit: 0, page: 1 });
+  assert.deepEqual(calls.items, { limit: 0, page: 1 });
   assert.deepEqual(calls.grns, {
     hospitalId: 'h1',
     limit: 1,
@@ -243,8 +243,8 @@ test('navCounts: each badge is its list asked for a count only, with the same fi
     'KITCHEN_PRODUCTION_VIEW',
   ]);
 
-  // The list DTOs default sortOrder, as they do for the list endpoints themselves.
-  const here = { hospitalId: 'h1', limit: 0, page: 1, sortOrder: 'desc' };
+  // Built as the list endpoints build their queries (sortOrder left to each list's default).
+  const here = { hospitalId: 'h1', limit: 0, page: 1 };
   assert.deepEqual(calls.transfers, { ...here, status: 'PENDING_ACKNOWLEDGEMENT' });
   assert.deepEqual(calls.grns, { ...here, status: 'DRAFT' });
   assert.deepEqual(calls.productions, { ...here, status: 'DRAFT' });

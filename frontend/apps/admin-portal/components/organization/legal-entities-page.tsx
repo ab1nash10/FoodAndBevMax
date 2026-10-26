@@ -50,9 +50,11 @@ const emptyEntity: EntityFormValues = {
 };
 
 export function LegalEntitiesPageClient() {
-  const { hasPermission } = useAuth();
-  const canCreate = hasPermission('HOSPITAL_CREATE');
-  const canEdit = hasPermission('HOSPITAL_UPDATE');
+  const { hasPermission, roles } = useAuth();
+  // As the server: an entity heads its locations' GST invoices, so only a Super Admin changes one.
+  const isSuperAdmin = roles.includes('Super Admin');
+  const canCreate = isSuperAdmin && hasPermission('HOSPITAL_CREATE');
+  const canEdit = isSuperAdmin && hasPermission('HOSPITAL_UPDATE');
   const [page, setPage] = useUrlNumberParam('page');
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [

@@ -61,26 +61,6 @@ export class TimeSlotsRepository {
     return this.prisma.timeSlot.findMany({ ...args, include: timeSlotInclude });
   }
 
-  /** Restaurant menus outside `hospitalId` that offer the slot. */
-  async countMenusOutside(id: string, hospitalId: string, client: TimeSlotClient): Promise<number> {
-    return client.restaurantMenu.count({
-      where: { deletedAt: null, hospitalId: { not: hospitalId }, timeSlotIds: { has: id } },
-    });
-  }
-
-  async hasActiveRestaurantMenus(id: string, client: TimeSlotClient): Promise<boolean> {
-    const count = await client.restaurantMenu.count({
-      where: {
-        deletedAt: null,
-        timeSlotIds: {
-          has: id,
-        },
-      },
-    });
-
-    return count > 0;
-  }
-
   async update(
     id: string,
     data: Prisma.TimeSlotUpdateInput,

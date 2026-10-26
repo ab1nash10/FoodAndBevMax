@@ -43,20 +43,21 @@ function toItemPriceResponse(itemPrice: ItemPriceWithRelations) {
   };
 }
 
+// Both days count, so From = To is a one-day price.
 function validateDateRange(effectiveFrom: Date, effectiveTo: Date | null): void {
-  if (effectiveTo && effectiveTo <= effectiveFrom) {
-    throw new BadRequestException('Effective To must be greater than Effective From');
+  if (effectiveTo && effectiveTo < effectiveFrom) {
+    throw new BadRequestException('Effective To cannot be before Effective From');
   }
 }
 
-function validateGstPercent(gstPercent: number | undefined, isTaxInclusive: boolean): void {
+function validateGstPercent(gstPercent: number | null | undefined, isTaxInclusive: boolean): void {
   const validGstPercentages = [0, 5, 12, 18];
 
-  if (isTaxInclusive && gstPercent === undefined) {
+  if (isTaxInclusive && gstPercent == null) {
     throw new BadRequestException('GST Percentage is required when Tax Inclusive is enabled.');
   }
 
-  if (gstPercent !== undefined && !validGstPercentages.includes(gstPercent)) {
+  if (gstPercent != null && !validGstPercentages.includes(gstPercent)) {
     throw new BadRequestException('GST Percentage must be one of 0, 5, 12, or 18.');
   }
 }
@@ -168,7 +169,7 @@ export class ItemPricesService {
             createdBy: context.actorId,
             effectiveFrom,
             effectiveTo,
-            gstPercent: dto.gstPercent === undefined ? null : new Prisma.Decimal(dto.gstPercent),
+            gstPercent: dto.gstPercent == null ? null : new Prisma.Decimal(dto.gstPercent),
             hospitalId: dto.hospitalId,
             isActive: dto.isActive ?? true,
             isTaxInclusive,
@@ -290,7 +291,8 @@ export class ItemPricesService {
         }
 
         if (dto.gstPercent !== undefined) {
-          data.gstPercent = new Prisma.Decimal(dto.gstPercent);
+          // null clears the rate.
+          data.gstPercent = dto.gstPercent === null ? null : new Prisma.Decimal(dto.gstPercent);
         }
 
         if (dto.itemId !== undefined) {

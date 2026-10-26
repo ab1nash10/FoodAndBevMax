@@ -70,7 +70,9 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
     });
 
     // Imported here: ConfigModule reads the environment when app.module is first evaluated.
-    const { configureSecurityBaseline } = await import('@aahar/auth');
+    const { configureSecurityBaseline, getSharedRedis } = await import('@aahar/auth');
+    // Caches "no Redis" while REDIS_URL is still blank: ConfigModule refills it from .env.
+    getSharedRedis();
     const { ConfigService } = await import('@nestjs/config');
     const { NestFactory } = await import('@nestjs/core');
     const { AppModule } = await import('../app.module.js');
@@ -112,12 +114,19 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
       email,
       mobile,
       sub: userId,
-      sv: 0,
+      sv: 1,
     });
 
     // Case-insensitive on the email, case-sensitive on the password.
     const upper = await post('/auth/login-with-password', { email: email.toUpperCase(), password });
     expect(upper.status).toBe(201);
+    // One browser at a time: signing in again ends the first session.
+    expect(claimsOf(upper.data.accessToken)).toMatchObject({ sv: 2 });
+    const ended = await post('/auth/refresh', { refreshToken: signedIn.data.refreshToken });
+    expect([ended.status, ended.body.message]).toEqual([
+      401,
+      'Your account was updated. Please sign in again.',
+    ]);
     for (const attempt of [
       { email, password: password.toLowerCase() },
       { email: `nobody-${run}@characterisation.test`, password },
@@ -133,7 +142,7 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
     const unknown = await post('/auth/send-otp', { mobile: '5000000000' });
     expect([unknown.status, unknown.body.message]).toEqual([
       404,
-      'This mobile number is not registered. Please contact your administrator.',
+      'This mobile number is not registered. Please contact your IT team for access rights.',
     ]);
     expect(sent).toEqual([]);
 
@@ -163,7 +172,7 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
     const verified = await post('/auth/verify-otp', { mobile, otp: code });
     expect(verified.status).toBe(201);
     expect(shape(verified.body)).toMatchSnapshot('tokens');
-    expect(claimsOf(verified.data.accessToken)).toMatchObject({ mobile, sub: userId, sv: 0 });
+    expect(claimsOf(verified.data.accessToken)).toMatchObject({ mobile, sub: userId, sv: 3 });
 
     const reused = await post('/auth/verify-otp', { mobile, otp: code });
     expect([reused.status, reused.body.message]).toEqual([401, 'Invalid or expired OTP']);

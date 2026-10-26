@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { uniqueViolationTarget } from '@aahar/auth';
 import { ItemCategory, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
@@ -218,43 +213,6 @@ export class ItemCategoriesService {
     });
 
     return { ids: dto.ids };
-  }
-
-  async remove(id: string, context: ActorContext) {
-    const existing = await this.findActiveItemCategory(id);
-
-    await this.itemCategories.transaction(async (tx) => {
-      const hasActiveItems = await this.itemCategories.hasActiveItems(id, tx);
-
-      if (hasActiveItems) {
-        throw new BadRequestException('Item category is assigned to active items');
-      }
-
-      await this.itemCategories.update(
-        id,
-        {
-          deletedAt: new Date(),
-          isActive: false,
-          updatedBy: context.actorId,
-        },
-        tx,
-      );
-      await this.auditLog.record(
-        {
-          action: 'ITEM_CATEGORY_DELETE',
-          actorId: context.actorId,
-          entityId: id,
-          entityName: 'item_categories',
-          ipAddress: context.ipAddress,
-          oldValue: toItemCategoryResponse(existing),
-        },
-        tx,
-      );
-    });
-
-    return {
-      id,
-    };
   }
 
   private async assertUniqueNormalizedCategoryName(

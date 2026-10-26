@@ -184,6 +184,13 @@ export class StoresService {
               id: dto.locationId,
             },
           };
+        } else if (
+          dto.hospitalId !== undefined &&
+          dto.hospitalId !== existing.hospitalId &&
+          existing.locationId
+        ) {
+          // The old area belongs to the old hospital.
+          data.location = { disconnect: true };
         }
 
         if (dto.storeCode !== undefined) {

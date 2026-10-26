@@ -531,12 +531,11 @@ export class KitchenProductionsService {
       const wastageQty = line.wastageQty ?? 0;
       const acceptedQty = line.acceptedQty ?? Number((line.producedQty - wastageQty).toFixed(3));
 
+      // The query returns READYMADE items only, and mapping an item to a kitchen makes it READYMADE.
       if (!item) {
-        throw new BadRequestException(`${lineLabel}: This kitchen item mapping is inactive.`);
-      }
-
-      if (item.itemType !== ItemType.READYMADE) {
-        throw new BadRequestException(`${lineLabel}: only READYMADE items can be produced`);
+        throw new BadRequestException(
+          `${lineLabel}: This item is not mapped to this kitchen, or its mapping is inactive.`,
+        );
       }
 
       if (line.producedQty <= 0) {

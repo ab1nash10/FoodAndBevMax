@@ -35,5 +35,6 @@ export class PaginationQueryDto {
   @ApiPropertyOptional({ default: 'desc', enum: sortOrders })
   @IsIn(sortOrders)
   @IsOptional()
-  sortOrder?: SortOrder = 'desc';
+  // No initialiser: each list's own default (getOrderBy) applies when it is left out.
+  sortOrder?: SortOrder;
 }

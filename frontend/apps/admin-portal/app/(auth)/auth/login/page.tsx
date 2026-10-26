@@ -95,8 +95,10 @@ export default function LoginPage() {
     }
 
     showToast({
-      description: 'Please login again to continue.',
-      title: 'Session expired',
+      // One browser at a time: signing in elsewhere ends this browser's session too.
+      description:
+        'You signed in on another browser, or your session ran out. Please login again to continue.',
+      title: 'Signed out',
       variant: 'info',
     });
     setHasShownSessionNotice(true);

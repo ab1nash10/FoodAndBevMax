@@ -290,11 +290,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'DELETE',
       });
     },
-    deleteItemCategory(id: string) {
-      return client.request<ApiResponse<{ id: string }>>(`/item-categories/${id}`, {
-        method: 'DELETE',
-      });
-    },
     deleteItemPrice(id: string) {
       return client.request<ApiResponse<{ id: string }>>(`/item-prices/${id}`, {
         method: 'DELETE',

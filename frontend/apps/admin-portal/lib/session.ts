@@ -27,7 +27,10 @@ function decodeBase64Url(value: string): string {
     '=',
   );
 
-  return window.atob(paddedValue);
+  // atob gives one char per byte; decode the bytes as UTF-8 so non-ASCII names survive.
+  return new TextDecoder().decode(
+    Uint8Array.from(window.atob(paddedValue), (char) => char.charCodeAt(0)),
+  );
 }
 
 function decodeJwtPayload(token: string): JwtSessionPayload | null {

@@ -1,4 +1,11 @@
+import type { Prisma } from '@prisma/client';
 import { isWithin, siteClock } from '../restaurant-orders/board-schedule';
+
+/** A menu entry whose item, and category if it has one, are switched on. */
+export const sellableMenu = {
+  item: { deletedAt: null, isActive: true },
+  OR: [{ categoryId: null }, { category: { deletedAt: null, isActive: true } }],
+} satisfies Prisma.RestaurantMenuWhereInput;
 
 export interface PricedInput {
   /** Staff discount on this line, 0 when the item is not discountable. */

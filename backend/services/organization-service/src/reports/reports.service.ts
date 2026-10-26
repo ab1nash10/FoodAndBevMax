@@ -172,6 +172,10 @@ export class ReportsService {
       throw new NotFoundException('Location not found.');
     }
 
+    if (restaurantIds?.length && !restaurants.length) {
+      throw new NotFoundException('Restaurant not found.');
+    }
+
     const where = [hospital.city, [hospital.state, hospital.postalCode].filter(Boolean).join('-')]
       .filter(Boolean)
       .join(', ');
@@ -364,8 +368,9 @@ export class ReportsService {
     const userIds = [
       ...new Set(orders.flatMap((order) => [order.createdBy, order.updatedBy]).filter(Boolean)),
     ] as string[];
+    // Bills keep the code as typed; employee codes are saved upper case.
     const employeeCodes = [
-      ...new Set(orders.map((order) => order.employeeCode).filter(Boolean)),
+      ...new Set(orders.map((order) => order.employeeCode?.toUpperCase()).filter(Boolean)),
     ] as string[];
     const [users, employees] = await Promise.all([
       userIds.length

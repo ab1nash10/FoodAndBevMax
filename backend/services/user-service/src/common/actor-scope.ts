@@ -99,6 +99,20 @@ export function assertCanGrantScope(
   }
 }
 
+/** A role reaching more locations than the actor may only be changed by someone reaching as far. */
+export function assertRoleWithinScope(
+  role: { locationScope: LocationScopeName; name: string },
+  actor: JwtRequestUser | undefined,
+) {
+  const current = requireActor(actor);
+
+  if (SCOPE_RANK[role.locationScope] > SCOPE_RANK[current.locationScope]) {
+    throw new ForbiddenException(
+      `The ${role.name} role reaches more locations than you do, so you cannot change it`,
+    );
+  }
+}
+
 /** Nobody but a Super Admin may grant a permission they do not hold themselves. */
 export function assertHoldsPermissions(codes: string[], actor: JwtRequestUser | undefined) {
   const current = requireActor(actor);

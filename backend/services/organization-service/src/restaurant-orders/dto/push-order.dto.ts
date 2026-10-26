@@ -17,6 +17,14 @@ import {
 } from 'class-validator';
 import { CodeCase } from '../../common/display-name.decorator';
 
+/** What a channel may send: COUNTER is a bill made in AAHAR's own till, never pushed in. */
+const channelSources = [
+  OrderSource.POS,
+  OrderSource.KIOSK,
+  OrderSource.QR,
+  OrderSource.OTHER,
+] as const;
+
 export class PosOrderItemDto {
   @ApiProperty({ example: 'Masala Dosa' })
   @IsString()
@@ -59,11 +67,11 @@ export class PushOrderDto {
   @ApiPropertyOptional({
     description:
       'Where the order was placed. A POS key always records POS; otherwise OTHER if left out.',
-    enum: OrderSource,
+    enum: channelSources,
   })
   @IsOptional()
-  @IsEnum(OrderSource)
-  source?: OrderSource;
+  @IsIn(channelSources)
+  source?: (typeof channelSources)[number];
 
   @ApiProperty({
     description: "The sender's own unique id for the order.",

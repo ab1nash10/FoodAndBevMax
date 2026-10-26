@@ -10,13 +10,17 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { DisplayName } from '../../common/display-name.decorator';
 
+// Left out = unchanged; null is checked like any value (only designation may be null).
+const Optional = () => ValidateIf((_, value) => value !== undefined);
+
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'John Doe' })
-  @IsOptional()
+  @Optional()
   @IsNotEmpty()
   @IsString()
   @MaxLength(120)
@@ -24,17 +28,17 @@ export class UpdateUserDto {
   name?: string;
 
   @ApiPropertyOptional({ example: '9999999999' })
-  @IsOptional()
+  @Optional()
   @Matches(/^\d{10}$/)
   mobile?: string;
 
   @ApiPropertyOptional({ example: 'john@test.com' })
   @IsEmail()
-  @IsOptional()
+  @Optional()
   email?: string;
 
   @ApiPropertyOptional({ format: 'password', minLength: 8 })
-  @IsOptional()
+  @Optional()
   @IsString()
   @MaxLength(128)
   @Matches(/(?=.*[A-Za-z])(?=.*\d).{8,}/, {
@@ -46,18 +50,18 @@ export class UpdateUserDto {
     description: 'Required to change your own password, email or mobile.',
     format: 'password',
   })
-  @IsOptional()
+  @Optional()
   @IsString()
   @MaxLength(128)
   currentPassword?: string;
 
   @ApiPropertyOptional({ enum: UserStatus })
   @IsEnum(UserStatus)
-  @IsOptional()
+  @Optional()
   status?: UserStatus;
 
   @ApiPropertyOptional()
-  @IsOptional()
+  @Optional()
   @IsUUID()
   roleId?: string;
 
@@ -68,7 +72,7 @@ export class UpdateUserDto {
   designation?: string | null;
 
   @ApiPropertyOptional({ description: 'Path returned by the avatar upload endpoint.' })
-  @IsOptional()
+  @Optional()
   @IsString()
   @MaxLength(500)
   // Rendered as an image source: the upload path or https, never javascript: or data: URLs.
@@ -79,7 +83,7 @@ export class UpdateUserDto {
     description: 'Replaces the locations this user may operate in.',
     type: [String],
   })
-  @IsOptional()
+  @Optional()
   @ArrayMaxSize(500)
   @IsArray()
   @IsUUID(undefined, { each: true })

@@ -28,9 +28,20 @@ export async function newSession(): Promise<{ accessToken: string; refreshToken:
   return ((await response.json()) as { data: { accessToken: string; refreshToken: string } }).data;
 }
 
-export default async function signIn(config: FullConfig) {
+/**
+ * Saves a fresh session for the specs that use e2e/.auth.json. A user is signed in on one browser
+ * at a time, so a spec signing in on its own ends the saved one: those specs call this again in
+ * beforeAll, before their pages open.
+ */
+export default async function signIn(config?: FullConfig) {
   const data = await newSession();
-  const origin = new URL(String(config.projects[0]?.use.baseURL)).origin;
+  const origin = new URL(
+    String(
+      config?.projects[0]?.use.baseURL ??
+        process.env.E2E_BASE_URL ??
+        'http://localhost:3000/fandb/',
+    ),
+  ).origin;
 
   writeFileSync(
     'e2e/.auth.json',

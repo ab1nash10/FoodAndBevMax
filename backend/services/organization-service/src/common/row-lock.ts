@@ -6,7 +6,8 @@ type LockableTable =
   | 'grns'
   | 'kitchen_productions'
   | 'restaurant_orders'
-  | 'transfers';
+  | 'transfers'
+  | 'users';
 
 /**
  * Holds the document's row lock until the transaction ends.

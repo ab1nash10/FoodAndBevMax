@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import signIn from './sign-in';
+
+// The saved session may have been ended by another spec signing in (one browser at a time).
+test.beforeAll(() => signIn());
 
 /**
  * Every record (item, category, employee, location, store, kitchen, restaurant, mapping, menu

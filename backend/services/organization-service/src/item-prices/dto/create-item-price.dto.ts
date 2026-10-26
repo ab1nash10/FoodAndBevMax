@@ -49,14 +49,15 @@ export class CreateItemPriceDto {
   isTaxInclusive?: boolean;
 
   @ApiPropertyOptional({
-    description: 'GST percentage used when tax inclusive pricing is enabled.',
+    description: 'GST percentage used when tax inclusive pricing is enabled. null clears it.',
     enum: [0, 5, 12, 18],
     example: 5,
+    nullable: true,
   })
   @IsIn([0, 5, 12, 18])
   @IsOptional()
   @Type(() => Number)
-  gstPercent?: number;
+  gstPercent?: number | null;
 
   @ApiProperty({ example: '2026-01-01' })
   @IsDateString()

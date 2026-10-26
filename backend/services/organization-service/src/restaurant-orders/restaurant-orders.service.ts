@@ -98,6 +98,25 @@ export class RestaurantOrdersService {
       quantity,
       ...(note?.trim() ? { note: note.trim() } : {}),
     }));
+    const where = { senderId_externalOrderId: { externalOrderId, senderId: sender.id } };
+
+    // A channel's cancel follows the kitchen screen's rules: a collected order stays collected.
+    if (dto.status) {
+      const existing = await this.prisma.restaurantOrder.findUnique({
+        select: { status: true },
+        where,
+      });
+
+      if (
+        existing &&
+        existing.status !== dto.status &&
+        !NEXT_STATUSES[existing.status].includes(dto.status)
+      ) {
+        throw new ConflictException(
+          `An order that is ${existing.status} cannot be marked ${dto.status}.`,
+        );
+      }
+    }
 
     // A resend never moves the kitchen's progress back; only a cancel changes the status.
     return this.prisma.restaurantOrder.upsert({
@@ -120,7 +139,7 @@ export class RestaurantOrdersService {
         ...(dto.items ? { items } : {}),
         ...(dto.status ? { status: dto.status } : {}),
       },
-      where: { senderId_externalOrderId: { externalOrderId, senderId: sender.id } },
+      where,
     });
   }
 

@@ -105,7 +105,14 @@ export class RestaurantMenusService {
     const { limit, page } = getPagination(query);
     const where: Prisma.RestaurantMenuWhereInput = {
       deletedAt: null,
-      ...(query.dayOfWeek ? { daysOfWeek: { has: query.dayOfWeek } } : {}),
+      // No days set means every day.
+      ...(query.dayOfWeek
+        ? {
+            AND: [
+              { OR: [{ daysOfWeek: { has: query.dayOfWeek } }, { daysOfWeek: { isEmpty: true } }] },
+            ],
+          }
+        : {}),
       ...(query.hospitalId ? { hospitalId: query.hospitalId } : {}),
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.isAvailable !== undefined ? { isAvailable: query.isAvailable } : {}),

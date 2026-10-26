@@ -48,12 +48,18 @@ export class ShiftsService {
 
     const now = new Date();
     const shift = await this.prisma.$transaction(async (tx) => {
-      // One open shift per counter: the counter's row lock queues two cashiers opening at once.
+      // One open shift per counter and per cashier: the counter's row lock queues two cashiers
+      // opening at once, the cashier's own row one cashier opening at two counters at once.
       await lockRow(tx, 'counters', counter.id);
-      const [open, handover, restaurant] = await Promise.all([
+      await lockRow(tx, 'users', actorId);
+      const [open, mine, handover, restaurant] = await Promise.all([
         tx.counterShift.findFirst({
           select: { id: true },
           where: { counterId: counter.id, status: CounterShiftStatus.OPEN },
+        }),
+        tx.counterShift.findFirst({
+          select: { counter: { select: { counterName: true } } },
+          where: { openedBy: actorId, status: CounterShiftStatus.OPEN },
         }),
         tx.counterShift.findFirst({
           orderBy: { closedAt: 'desc' },
@@ -72,6 +78,12 @@ export class ShiftsService {
 
       if (open) {
         throw new ConflictException('A shift is already open at this counter. End it first.');
+      }
+
+      if (mine) {
+        throw new ConflictException(
+          `You already have a shift open at ${mine.counter.counterName}. End it before opening another.`,
+        );
       }
 
       const created = await tx.counterShift.create({

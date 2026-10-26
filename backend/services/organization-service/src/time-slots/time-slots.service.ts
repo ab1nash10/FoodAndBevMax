@@ -9,7 +9,6 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import {
   assertActiveHospital,
   assertMayChangeShared,
-  assertNotUsedElsewhere,
   sharedOrAt,
 } from '../common/location-masters';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
@@ -170,10 +169,6 @@ export class TimeSlotsService {
 
           if (hospitalId) {
             await assertActiveHospital(tx, hospitalId);
-            assertNotUsedElsewhere(
-              await this.timeSlots.countMenusOutside(id, hospitalId, tx),
-              'time slot',
-            );
           }
 
           data.hospital = hospitalId ? { connect: { id: hospitalId } } : { disconnect: true };
@@ -244,13 +239,8 @@ export class TimeSlotsService {
 
     assertMayChangeShared(existing.hospitalId, 'time slots');
 
+    // Menus keep their own on-sale times, so no menu holds a slot back.
     await this.timeSlots.transaction(async (tx) => {
-      const hasMenus = await this.timeSlots.hasActiveRestaurantMenus(id, tx);
-
-      if (hasMenus) {
-        throw new BadRequestException('Time slot is assigned to active restaurant menu mappings');
-      }
-
       await this.timeSlots.update(
         id,
         {

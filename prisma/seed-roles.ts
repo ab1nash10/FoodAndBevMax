@@ -22,7 +22,7 @@ export const OPERATIONAL_ROLES: Array<{
   permissionCodes: string[];
 }> = [
   {
-    description: 'Billing, POS orders and payments at an assigned counter',
+    description: 'Billing, POS orders and payments at any counter of their location',
     locationScope: LocationScope.SINGLE,
     name: 'POS Cashier',
     // Bills, receives stock at the counter and switches menu items on or off there, and passes

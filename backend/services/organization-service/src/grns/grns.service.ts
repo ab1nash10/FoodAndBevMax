@@ -492,12 +492,11 @@ export class GrnsService {
       const item = mappedItems.get(line.itemId);
       const lineLabel = `Line ${index + 1}`;
 
+      // The query returns MRP items only, and mapping an item to a store makes it MRP.
       if (!item) {
-        throw new BadRequestException(`${lineLabel}: This store item mapping is inactive.`);
-      }
-
-      if (item.itemType !== ItemType.MRP) {
-        throw new BadRequestException(`${lineLabel}: only MRP items can be added to GRN`);
+        throw new BadRequestException(
+          `${lineLabel}: This item is not mapped to this store, or its mapping is inactive.`,
+        );
       }
 
       if (!quantitiesMatch(line.receivedQty, line.acceptedQty + line.rejectedQty)) {

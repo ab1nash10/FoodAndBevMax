@@ -27,10 +27,13 @@ export function applyValidationErrors<TValues extends FieldValues>(
   error: ZodError,
 ) {
   form.clearErrors();
+  // The first issue per field is the one to show ("is required" before "must include a letter").
+  const seen = new Set<string>();
   error.issues.forEach((issue) => {
     const fieldName = issue.path[0];
 
-    if (typeof fieldName === 'string') {
+    if (typeof fieldName === 'string' && !seen.has(fieldName)) {
+      seen.add(fieldName);
       form.setError(fieldName as Path<TValues>, { message: issue.message });
     }
   });

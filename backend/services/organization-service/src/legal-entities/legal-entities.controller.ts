@@ -1,4 +1,4 @@
-import { CurrentUser, Permissions } from '@aahar/auth';
+import { CurrentUser, Permissions, Roles } from '@aahar/auth';
 import type { JwtRequestUser } from '@aahar/auth';
 import {
   Body,
@@ -27,6 +27,7 @@ import { UpdateLegalEntityDto } from './dto/update-legal-entity.dto';
 import { LegalEntitiesService } from './legal-entities.service';
 
 // Entities are set up with the locations they belong to, so they share the location permissions.
+// Each heads the GST invoices of every location under it, so only a Super Admin changes one.
 @ApiBearerAuth('access-token')
 @ApiTags('legal-entities')
 @Controller('legal-entities')
@@ -52,6 +53,7 @@ export class LegalEntitiesController {
 
   @Post()
   @Permissions('HOSPITAL_CREATE')
+  @Roles('Super Admin')
   @ApiBody({ type: CreateLegalEntityDto })
   @ApiOperation({ summary: 'Create legal entity' })
   @ApiOkResponse({ description: 'Legal entity created successfully.' })
@@ -72,6 +74,7 @@ export class LegalEntitiesController {
 
   @Put(':id')
   @Permissions('HOSPITAL_UPDATE')
+  @Roles('Super Admin')
   @ApiBody({ type: UpdateLegalEntityDto })
   @ApiOperation({ summary: 'Update legal entity' })
   @ApiParam({ name: 'id' })
@@ -94,6 +97,7 @@ export class LegalEntitiesController {
 
   @Delete(':id')
   @Permissions('HOSPITAL_DELETE')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Delete legal entity' })
   @ApiParam({ name: 'id' })
   @ApiOkResponse({ description: 'Legal entity deleted successfully.' })
