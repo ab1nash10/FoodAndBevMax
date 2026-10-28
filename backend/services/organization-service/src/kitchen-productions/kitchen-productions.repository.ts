@@ -80,6 +80,10 @@ export class KitchenProductionsRepository {
     return this.prisma.kitchenProduction.count(args);
   }
 
+  async countByStatus(where: Prisma.KitchenProductionWhereInput) {
+    return this.prisma.kitchenProduction.groupBy({ _count: { _all: true }, by: ['status'], where });
+  }
+
   async create(
     data: Prisma.KitchenProductionUncheckedCreateInput,
     client: KitchenProductionClient,

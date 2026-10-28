@@ -7,6 +7,13 @@ export interface PageMeta {
   totalPages: number;
 }
 
+/** A list's `groupBy({ by: ['status'] })` rows as `{ [status]: count }`, for its status tabs. */
+export function toStatusCounts(
+  rows: ReadonlyArray<{ _count: { _all: number }; status: string }>,
+): Record<string, number> {
+  return Object.fromEntries(rows.map((row) => [row.status, row._count._all]));
+}
+
 export function getPagination(query: PaginationQueryDto): { limit: number; page: number } {
   return {
     limit: query.limit ?? 20,

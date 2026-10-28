@@ -13,8 +13,13 @@ test('master data lists stay fresh 5 minutes, live queues 15 s, everything else 
   expect(staleTimeOf(queryKeys.dashboardQueue('transfers', 'all'))).toBe(15_000);
   expect(staleTimeOf(queryKeys.transfersViewCounts('7d'))).toBe(15_000);
   expect(staleTimeOf(queryKeys.transfers({ page: 1 }))).toBe(30_000);
-  // Not invalidated when the masters change, so not lengthened.
-  expect(staleTimeOf(queryKeys.inventoryStores())).toBe(30_000);
+  // The inventory and kitchen screens' pickers are master data too (refreshed on master edits).
+  expect(staleTimeOf(queryKeys.storeOptions('inventory', 'hospital-1'))).toBe(300_000);
+  expect(staleTimeOf(queryKeys.kitchenOptions('kitchen', 'hospital-1'))).toBe(300_000);
+});
+
+test("a till's counters stay fresh 2 minutes: every shift action refreshes them anyway", () => {
+  expect(staleTimeOf(queryKeys.posCounters('till-1'))).toBe(120_000);
 });
 
 test('lists keep their rows while the next page loads; records never show another record', () => {

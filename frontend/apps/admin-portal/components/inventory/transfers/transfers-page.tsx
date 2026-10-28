@@ -274,18 +274,17 @@ export function TransfersPageClient() {
     queryKey: queryKeys.transfers(page, ...filterKey, statusFilter, sortOrder),
   });
 
-  // One count per saved view, under the same filters.
+  // One count per saved view, under the same filters: one request answers every tab.
   const viewCountsQuery = useQuery({
     queryFn: async () => {
-      const counts = await Promise.all(
-        (['', ...transferStatuses] as TransferView[]).map((status) =>
-          organizationApi
-            .listTransfers({ ...listFilters, limit: 0, status: status || undefined })
-            .then((response) => [status, response.data.meta.total] as const),
-        ),
-      );
+      const { meta } = (
+        await organizationApi.listTransfers({ ...listFilters, limit: 0, statusCounts: true })
+      ).data;
 
-      return Object.fromEntries(counts) as Record<TransferView, number>;
+      return Object.fromEntries([
+        ['', meta.total],
+        ...transferStatuses.map((status) => [status, meta.statusCounts?.[status] ?? 0]),
+      ]) as Record<TransferView, number>;
     },
     queryKey: queryKeys.transfersViewCounts(...filterKey),
   });

@@ -84,7 +84,7 @@ function useItems(itemType?: ItemType) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.kitchenStockItems(itemType ?? 'all'),
+    queryKey: queryKeys.itemOptions('kitchen-stock', itemType ?? 'all'),
   });
 }
 
@@ -156,24 +156,23 @@ export function KitchenStockPageClient() {
   // Every status's total at the chosen location and kitchen, whatever the list shows now.
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (status?: StockBalanceStatus) =>
-        (
-          await organizationApi.listKitchenStock({
-            hospitalId: hospitalFilter,
-            itemType: 'READYMADE',
-            limit: 0,
-            locationId: kitchenFilter,
-            status,
-          })
-        ).data.meta.total;
-      const [all, available, low, out] = await Promise.all([
-        count(),
-        count('AVAILABLE'),
-        count('LOW_STOCK'),
-        count('OUT_OF_STOCK'),
-      ]);
+      const { meta } = (
+        await organizationApi.listKitchenStock({
+          hospitalId: hospitalFilter,
+          itemType: 'READYMADE',
+          limit: 0,
+          locationId: kitchenFilter,
+          statusCounts: true,
+        })
+      ).data;
+      const count = (status: StockBalanceStatus) => meta.statusCounts?.[status] ?? 0;
 
-      return { all, AVAILABLE: available, LOW_STOCK: low, OUT_OF_STOCK: out };
+      return {
+        all: meta.total,
+        AVAILABLE: count('AVAILABLE'),
+        LOW_STOCK: count('LOW_STOCK'),
+        OUT_OF_STOCK: count('OUT_OF_STOCK'),
+      };
     },
     queryKey: queryKeys.kitchenStock('stats', hospitalFilter, kitchenFilter),
   });

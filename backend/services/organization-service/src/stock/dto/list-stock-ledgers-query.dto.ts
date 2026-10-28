@@ -5,8 +5,18 @@ import {
   StockTransactionType,
 } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { toOptionalBoolean } from '../../common/values';
 
 export const stockLedgerSortFields = ['businessDate', 'createdAt', 'transactionDateTime'] as const;
 
@@ -72,6 +82,16 @@ export class ListStockLedgersQueryDto extends PaginationQueryDto {
   @IsEnum(StockReferenceType)
   @IsOptional()
   referenceType?: StockReferenceType;
+
+  @ApiPropertyOptional({
+    description:
+      'true adds meta.referenceTypeCounts: the count per reference type under the other filters, for the tabs.',
+    type: Boolean,
+  })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => toOptionalBoolean(value))
+  referenceTypeCounts?: boolean;
 
   @ApiPropertyOptional({ default: 'transactionDateTime', enum: stockLedgerSortFields })
   @IsIn(stockLedgerSortFields)

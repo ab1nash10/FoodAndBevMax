@@ -36,6 +36,9 @@ const serviceEnvSchema = z.object({
   PAYU_CLIENT_SECRET: z.string().optional(),
   PAYU_MERCHANT_ID: z.string().optional(),
   PAYU_TOKEN_URL: z.string().url().optional(),
+  // Card payments on a counter's Pine Labs machine: the Plutus Cloud API, UAT in test and live in
+  // production. Each machine's merchant id, IMEI, store POS code and token are set on the machine.
+  PINELABS_BASE_URL: z.string().url().optional(),
   PORT: z.coerce.number().int().min(1).max(65535),
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),

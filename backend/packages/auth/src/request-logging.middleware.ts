@@ -10,6 +10,17 @@ export function loggedPath(request: { originalUrl?: string; url?: string }): str
   return (request.originalUrl || request.url || '').split('?')[0]!;
 }
 
+/** A request this slow is logged even when it succeeds. */
+const SLOW_REQUEST_MS = 500;
+
+/**
+ * Only failed or slow requests are logged: a line for every request took ~12% of the
+ * organization service's CPU under load. While counting queries (dev), every request is.
+ */
+export function shouldLogRequest(statusCode: number, durationMs: number, counting = false) {
+  return counting || statusCode >= 400 || durationMs >= SLOW_REQUEST_MS;
+}
+
 export function requestLoggingMiddleware(serviceName: string) {
   return (request: Request, response: Response, next: NextFunction) => {
     const startedAt = process.hrtime.bigint();
@@ -17,6 +28,7 @@ export function requestLoggingMiddleware(serviceName: string) {
 
     response.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      if (!shouldLogRequest(response.statusCode, durationMs, Boolean(queryCount))) return;
       const path = loggedPath(request);
 
       console.info(

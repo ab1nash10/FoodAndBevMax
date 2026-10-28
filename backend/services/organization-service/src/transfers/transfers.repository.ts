@@ -66,6 +66,10 @@ export class TransfersRepository {
     return this.prisma.transfer.count(args);
   }
 
+  async countByStatus(where: Prisma.TransferWhereInput) {
+    return this.prisma.transfer.groupBy({ _count: { _all: true }, by: ['status'], where });
+  }
+
   async create(
     data: Prisma.TransferUncheckedCreateInput,
     client: TransferClient,

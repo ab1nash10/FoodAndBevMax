@@ -1,14 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InventoryLocationType, ItemType, Prisma } from '@prisma/client';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
-import { ListStockBalancesQueryDto, StockBalanceStatus } from './dto/list-stock-balances-query.dto';
+import {
+  ListStockBalancesQueryDto,
+  StockBalanceStatus,
+  stockBalanceStatuses,
+} from './dto/list-stock-balances-query.dto';
 import { ListStockLedgersQueryDto } from './dto/list-stock-ledgers-query.dto';
 import {
   LocationLevelsQueryDto,
   StoreLevelsQueryDto,
   StoreMovementsQueryDto,
 } from './dto/store-levels-query.dto';
-import { StockLedgerWithRelations, StockRepository } from './stock.repository';
+import {
+  StockBalanceWithRelations,
+  StockLedgerWithRelations,
+  StockRepository,
+} from './stock.repository';
 import { siteClock } from '../restaurant-orders/board-schedule';
 
 /** The window an item's daily issue is averaged over, and the cover that counts as low. */
@@ -59,6 +67,23 @@ import {
   getSummaryStatus,
 } from './stock.helpers';
 
+/** Per state, how many store-item groups hold at least one batch in it. */
+function summaryStatusCounts(balances: StockBalanceWithRelations[]): Record<string, number> {
+  const states = new Map<string, Set<StockBalanceStatus>>();
+
+  for (const balance of balances) {
+    const key = `${balance.locationId}:${balance.itemId}`;
+    states.set(key, (states.get(key) ?? new Set()).add(getBalanceStatus(balance)));
+  }
+
+  const counts: Record<string, number> = {};
+  for (const set of states.values()) {
+    for (const state of set) counts[state] = (counts[state] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
 @Injectable()
 export class StockService {
   constructor(private readonly stock: StockRepository) {}
@@ -105,7 +130,7 @@ export class StockService {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
+    const [items, total, stateCounts] = await Promise.all([
       this.stock.findBalances({
         orderBy: getOrderBy(query, 'lastUpdatedOn'),
         skip: (page - 1) * limit,
@@ -113,6 +138,14 @@ export class StockService {
         where,
       }),
       this.stock.countBalances({ where }),
+      // Every state's tab at once: the other filters, whichever tab is open.
+      query.statusCounts
+        ? Promise.all(
+            stockBalanceStatuses.map((status) =>
+              this.stock.countBalances({ where: { ...where, AND: [getStatusWhere(status)] } }),
+            ),
+          )
+        : undefined,
     ]);
     const stores = await this.stock.findStoresByIds(getStoreLocationIds(items));
     const restaurants = await this.stock.findRestaurantsByIds(getRestaurantLocationIds(items));
@@ -153,7 +186,16 @@ export class StockService {
         status: getBalanceStatus(item),
         updatedAt: item.updatedAt,
       })),
-      meta: getPageMeta(page, limit, total),
+      meta: {
+        ...getPageMeta(page, limit, total),
+        ...(stateCounts
+          ? {
+              statusCounts: Object.fromEntries(
+                stockBalanceStatuses.map((status, index) => [status, stateCounts[index]!]),
+              ),
+            }
+          : {}),
+      },
     };
   }
 
@@ -322,10 +364,17 @@ export class StockService {
     });
 
     const total = summaries.length;
+    // Each tab lists an item when one of its batches is in that state: count them from one load
+    // (this one, unless a tab narrowed it).
+    const statusCounts = query.statusCounts
+      ? summaryStatusCounts(
+          query.status ? await this.stock.findBalances({ where: { ...where, AND: [] } }) : balances,
+        )
+      : undefined;
 
     return {
       items: summaries.slice((page - 1) * limit, page * limit),
-      meta: getPageMeta(page, limit, total),
+      meta: { ...getPageMeta(page, limit, total), ...(statusCounts ? { statusCounts } : {}) },
     };
   }
 
@@ -379,7 +428,7 @@ export class StockService {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
+    const [items, total, byReferenceType] = await Promise.all([
       this.stock.findLedgers({
         orderBy: getOrderBy(query, 'transactionDateTime'),
         skip: (page - 1) * limit,
@@ -387,6 +436,10 @@ export class StockService {
         where,
       }),
       this.stock.countLedgers({ where }),
+      // Every reference type's tab at once: the other filters, whichever tab is open.
+      query.referenceTypeCounts
+        ? this.stock.countLedgersByReferenceType({ ...where, referenceType: undefined })
+        : undefined,
     ]);
     const stores = await this.stock.findStoresByIds(getStoreLocationIds(items));
     const restaurants = await this.stock.findRestaurantsByIds(getRestaurantLocationIds(items));
@@ -434,7 +487,19 @@ export class StockService {
         transactionType: item.transactionType,
         updatedAt: item.updatedAt,
       })),
-      meta: getPageMeta(page, limit, total),
+      meta: {
+        ...getPageMeta(page, limit, total),
+        ...(byReferenceType
+          ? {
+              referenceTypeCounts: Object.fromEntries(
+                // A ledger line without a reference type is under no tab.
+                byReferenceType.flatMap((row) =>
+                  row.referenceType ? [[row.referenceType, row._count._all] as const] : [],
+                ),
+              ),
+            }
+          : {}),
+      },
     };
   }
 

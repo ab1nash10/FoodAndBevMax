@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { Hospital, Kitchen } from '@aahar/api-client';
+import type { HospitalSummary, Kitchen } from '@aahar/api-client';
 import { AppPageHeader } from '@/components/design-system';
 import { Select } from '@/components/ui';
 
@@ -23,7 +23,7 @@ export function HospitalSelect({
   value,
 }: Readonly<{
   disabled?: boolean;
-  hospitals: Hospital[];
+  hospitals: HospitalSummary[];
   onChange: (value: string) => void;
   value: string;
 }>) {

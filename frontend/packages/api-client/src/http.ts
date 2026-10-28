@@ -11,6 +11,12 @@ export interface ApiResponse<TData = unknown> {
 export interface ApiListMeta {
   limit: number;
   page: number;
+  /** With `statusCounts: true` (transfers, GRNs, productions): the count per status, other filters applied. */
+  statusCounts?: Partial<Record<string, number>>;
+  /** Stock ledgers with `referenceTypeCounts: true`: the count per reference type. */
+  referenceTypeCounts?: Partial<Record<string, number>>;
+  /** Bills with `statusCounts: true`: how many are complimentary, other filters applied. */
+  complimentaryCount?: number;
   total: number;
   totalPages: number;
 }
@@ -234,7 +240,11 @@ function friendlyErrorMessage(status: number, message?: string, requestId?: stri
 
   if (status >= 500) {
     return messageWithRequestId(
-      'Something went wrong. Please try again. If the issue continues, contact support.',
+      // 503 is a service saying on purpose what it cannot do now ("Could not send the OTP");
+      // any other 5xx is a crash, whose text is not for users.
+      status === 503 && canUseBackendMessage
+        ? backendMessage
+        : 'Something went wrong. Please try again. If the issue continues, contact support.',
       requestId,
     );
   }

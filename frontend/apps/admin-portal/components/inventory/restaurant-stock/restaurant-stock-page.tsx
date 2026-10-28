@@ -158,22 +158,21 @@ export function RestaurantStockPageClient() {
   // The strip's numbers: every restaurant batch at the location, then each that needs a look.
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (status?: StockBalanceStatus) =>
-        (
-          await organizationApi.listRestaurantStock({
-            hospitalId: hospitalFilter,
-            limit: 0,
-            status,
-          })
-        ).data.meta.total;
-      const [all, nearExpiry, expired, outOfStock] = await Promise.all([
-        count(),
-        count('NEAR_EXPIRY'),
-        count('EXPIRED'),
-        count('OUT_OF_STOCK'),
-      ]);
+      const { meta } = (
+        await organizationApi.listRestaurantStock({
+          hospitalId: hospitalFilter,
+          limit: 0,
+          statusCounts: true,
+        })
+      ).data;
+      const count = (status: StockBalanceStatus) => meta.statusCounts?.[status] ?? 0;
 
-      return { all, expired, nearExpiry, outOfStock };
+      return {
+        all: meta.total,
+        expired: count('EXPIRED'),
+        nearExpiry: count('NEAR_EXPIRY'),
+        outOfStock: count('OUT_OF_STOCK'),
+      };
     },
     queryKey: queryKeys.restaurantStock('stats', hospitalFilter),
   });

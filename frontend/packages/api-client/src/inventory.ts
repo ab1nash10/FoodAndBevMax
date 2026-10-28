@@ -124,6 +124,8 @@ export interface GrnInput {
 }
 
 export interface GrnListQuery extends ListQuery {
+  /** Adds meta.statusCounts: every status tab's count in the same request. */
+  statusCounts?: boolean;
   fromDate?: string;
   hospitalId?: string;
   status?: GrnStatus;
@@ -303,6 +305,8 @@ export interface StockLedger {
 }
 
 export interface StockBalanceListQuery extends ListQuery {
+  /** Adds meta.statusCounts: every tab's count in the same request. */
+  statusCounts?: boolean;
   batchNumber?: string;
   businessDate?: string;
   expiryDate?: string;
@@ -315,6 +319,8 @@ export interface StockBalanceListQuery extends ListQuery {
 }
 
 export interface StockLedgerListQuery extends ListQuery {
+  /** Adds meta.referenceTypeCounts: every reference type tab's count in the same request. */
+  referenceTypeCounts?: boolean;
   batchNumber?: string;
   businessDate?: string;
   expiryDate?: string;
@@ -390,6 +396,8 @@ export interface TransferInput {
 }
 
 export interface TransferListQuery extends ListQuery {
+  /** Adds meta.statusCounts: every status tab's count in the same request. */
+  statusCounts?: boolean;
   destinationId?: string;
   destinationType?: InventoryLocationType;
   fromDate?: string;

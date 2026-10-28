@@ -10,7 +10,8 @@ export interface ErpBill extends Bill {
   /** The day the bill is counted on (the next day once the day was closed). */
   businessDate: Date | null;
   discountPercent: number | null;
-  onlineProvider: 'PAYU' | 'RAZORPAY' | null;
+  /** A Pine Labs payment is a card bill (paidVia CARD), so only UPI's providers pick an account. */
+  onlineProvider: 'PAYU' | 'PINELABS' | 'RAZORPAY' | null;
   paymentReference: string | null;
 }
 

@@ -26,18 +26,19 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { StatusCountsQueryDto } from '../../common/dto/status-counts-query.dto';
 import { toOptionalBoolean } from '../../common/values';
 
 export class PosCountersQueryDto {
   @ApiPropertyOptional({
-    description: 'The till computer’s hostname: only the counters of its POS device.',
-    example: 'SMART-POS-01',
+    description:
+      'Only the counters of the till the calling computer is (by its DNS name); 404 when it is not mapped to a POS device.',
+    type: Boolean,
   })
+  @IsBoolean()
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  host?: string;
+  @Transform(({ value }) => toOptionalBoolean(value))
+  till?: boolean;
 }
 
 export class PosMenuQueryDto {
@@ -172,7 +173,7 @@ export class StartOnlinePaymentDto extends PickType(CreatePosOrderDto, [
 
 export const posOrderSortFields = ['billNumber', 'grandTotal', 'placedAt'] as const;
 
-export class ListPosOrdersQueryDto extends PaginationQueryDto {
+export class ListPosOrdersQueryDto extends StatusCountsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

@@ -2,7 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InventoryLocationType, Prisma, StockReferenceType, TransferStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { stockItemType } from '../common/item-classification';
-import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import {
+  getDocumentOrderBy,
+  getPageMeta,
+  getPagination,
+  toStatusCounts,
+} from '../common/pagination';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
 import { CreateTransferDto, CreateTransferLineDto } from './dto/create-transfer.dto';
@@ -71,7 +76,7 @@ export class TransfersService {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
+    const [items, total, byStatus] = await Promise.all([
       this.transfers.findMany({
         orderBy: getDocumentOrderBy(query, 'transferNumber', 'createdAt'),
         skip: (page - 1) * limit,
@@ -79,11 +84,18 @@ export class TransfersService {
         where,
       }),
       this.transfers.count({ where }),
+      // Every status tab's count at once: the other filters, whichever tab is open.
+      query.statusCounts
+        ? this.transfers.countByStatus({ ...where, status: undefined })
+        : undefined,
     ]);
 
     return {
       items: await this.withCreatorNames(items.map(toTransferResponse)),
-      meta: getPageMeta(page, limit, total),
+      meta: {
+        ...getPageMeta(page, limit, total),
+        ...(byStatus ? { statusCounts: toStatusCounts(byStatus) } : {}),
+      },
     };
   }
 

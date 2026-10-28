@@ -1,7 +1,7 @@
 import { InventoryLocationType, TransferStatus } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { StatusCountsQueryDto } from '../../common/dto/status-counts-query.dto';
 
 export const transferSortFields = [
   'createdAt',
@@ -13,7 +13,7 @@ export const transferSortFields = [
 
 export type TransferSortField = (typeof transferSortFields)[number];
 
-export class ListTransfersQueryDto extends PaginationQueryDto {
+export class ListTransfersQueryDto extends StatusCountsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

@@ -1,9 +1,17 @@
 import 'reflect-metadata';
+import tls from 'node:tls';
 import { configureSecurityBaseline } from '@aahar/auth';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+
+// Payment providers are called over HTTPS. Trust the computer's own certificate store too, not only
+// Node's bundled list: on Max's network a proxy re-signs some sites (Pine Labs' Plutus, seen
+// 2026-10-28) with Max's own root, which Windows trusts and Node alone does not.
+tls.setDefaultCACertificates([
+  ...new Set([...tls.getCACertificates('default'), ...tls.getCACertificates('system')]),
+]);
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

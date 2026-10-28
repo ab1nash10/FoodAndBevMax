@@ -10,9 +10,10 @@ import {
   saveStoredAuth,
   type StoredAuth,
 } from '@/lib/auth-storage';
-import { authApi, refreshStoredSession, setApiSessionExpiredHandler } from '@/lib/api';
+import { authApi, refreshStoredSession, setApiSessionExpiredHandler, userApi } from '@/lib/api';
 import { isServiceUnavailable, serviceRetries, serviceRetryDelay } from '@/lib/query-client';
 import { isAccessTokenExpired, sessionUserFromAccessToken, type SessionUser } from '@/lib/session';
+import { watchSession } from '@/lib/session-watch';
 import { useQueryClient } from '@tanstack/react-query';
 import { LogIn } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -200,6 +201,18 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       window.removeEventListener('storage', handleStorageEvent);
     };
   }, [queryClient]);
+
+  // A sign-in on another browser ends this session. Ask the server now and then (a 401 that the
+  // refresh cannot fix lands on the login page), so this browser leaves without waiting for a click.
+  const isSignedIn = Boolean(auth?.accessToken);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      return undefined;
+    }
+
+    return watchSession(() => void userApi.getMyAccess().catch(() => undefined));
+  }, [isSignedIn]);
 
   const signIn = useCallback(
     (tokens: AuthTokens) => {

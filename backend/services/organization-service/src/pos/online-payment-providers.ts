@@ -16,13 +16,15 @@ export interface ProviderState {
 }
 
 export interface PaymentProvider {
-  cancel(providerRef: string): Promise<void>;
+  /** amount: what the payment was for, in rupees (Pine Labs needs it to clear the machine). */
+  cancel(providerRef: string, amount: number): Promise<void>;
   create(input: { amount: number; description: string; reference: string }): Promise<ProviderLink>;
   read(providerRef: string): Promise<ProviderState>;
 }
 
 export const providerLabels: Record<OnlinePaymentProvider, string> = {
   PAYU: 'PayU',
+  PINELABS: 'Pine Labs',
   RAZORPAY: 'Razorpay',
 };
 
@@ -179,6 +181,92 @@ function payu(settings: {
         reference: paid ? text(result.transactionId) || providerRef : null,
       };
     },
+  };
+}
+
+/** A counter's Pine Labs card machine, as set up under POS & Payment Machines. */
+export interface PinelabsMachine {
+  imei: string;
+  merchantId: string;
+  merchantStorePosCode: string;
+  securityToken: string;
+}
+
+// Plutus statuses that end a payment unpaid. Anything else not approved (a plain "ERROR", say)
+// keeps it waiting on the machine, so a hiccup never closes a payment the guest may be making.
+const plutusClosed = /CANCEL|DECLIN|EXPIR|FAIL|REJECT|VOID/i;
+
+/**
+ * Pine Labs Plutus Cloud: the bill's amount is sent to the counter's card machine, where the guest
+ * pays by card; the till then reads its status. Amounts are in paise. Plutus answers HTTP 200 even
+ * when it refuses, with ResponseCode 0 for success.
+ */
+export function pinelabs(baseUrl: string, machine: PinelabsMachine): PaymentProvider {
+  const credentials = {
+    IMEI: machine.imei,
+    MerchantID: machine.merchantId,
+    MerchantStorePosCode: machine.merchantStorePosCode,
+    SecurityToken: machine.securityToken,
+  };
+  const post = (path: string, body: Json) =>
+    call('PINELABS', `${baseUrl}/${path}`, {
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+  const status = async (providerRef: string) => {
+    const body = await post('GetCloudBasedTxnStatus', {
+      ...credentials,
+      PlutusTransactionReferenceID: Number(providerRef),
+    });
+    const message = text(body.ResponseMessage);
+    const paid = body.ResponseCode === 0 && /APPROVED/i.test(message);
+    const data = Array.isArray(body.TransactionData) ? (body.TransactionData as Json[]) : [];
+    const tag = (name: string) => text(data.find((entry) => entry.Tag === name)?.Value);
+
+    return {
+      closed: !paid && plutusClosed.test(message),
+      paid,
+      reference: paid ? tag('RRN') || tag('ApprovalCode') || providerRef : null,
+    };
+  };
+
+  return {
+    async cancel(providerRef, amount) {
+      const body = await post('CancelTransaction', {
+        ...credentials,
+        Amount: Math.round(amount * 100),
+        PlutusTransactionReferenceID: Number(providerRef),
+        TakeToHomeScreen: true,
+      });
+
+      // Refused: paid already means the cancel failed; anything else is gone from the machine.
+      if (body.ResponseCode !== 0 && (await status(providerRef)).paid) {
+        throw new BadGatewayException('Pine Labs refused the cancel: the guest has paid.');
+      }
+    },
+    async create({ amount, reference }) {
+      const body = await post('UploadBilledTransaction', {
+        ...credentials,
+        AllowedPaymentMode: '1',
+        Amount: Math.round(amount * 100),
+        AutoCancelDurationInMinutes: 5,
+        SequenceNumber: 1,
+        // Our payment's id, short: Plutus refuses long bill numbers.
+        TransactionNumber: reference.replaceAll('-', '').slice(0, 20),
+        UserID: '',
+      });
+
+      const providerRef = Number(body.PlutusTransactionReferenceID);
+
+      if (body.ResponseCode !== 0 || !(providerRef > 0)) {
+        throw new BadGatewayException(`Pine Labs refused it: ${text(body.ResponseMessage)}`);
+      }
+
+      // No page to open: the amount is waiting on the machine.
+      return { paymentUrl: '', providerRef: String(providerRef) };
+    },
+    read: status,
   };
 }
 

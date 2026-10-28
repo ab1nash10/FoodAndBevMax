@@ -228,22 +228,22 @@ export function StockLedgersPageClient() {
   // The strip's numbers: every entry at the location, then the documents that move stock most.
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (referenceType?: StockReferenceType) =>
-        (
-          await organizationApi.listStockLedgers({
-            hospitalId: hospitalFilter,
-            limit: 0,
-            referenceType,
-          })
-        ).data.meta.total;
-      const [all, grns, dispatched, acknowledged] = await Promise.all([
-        count(),
-        count('GRN'),
-        count('TRANSFER'),
-        count('TRANSFER_ACKNOWLEDGEMENT'),
-      ]);
+      const { meta } = (
+        await organizationApi.listStockLedgers({
+          hospitalId: hospitalFilter,
+          limit: 0,
+          referenceTypeCounts: true,
+        })
+      ).data;
+      const count = (referenceType: StockReferenceType) =>
+        meta.referenceTypeCounts?.[referenceType] ?? 0;
 
-      return { acknowledged, all, dispatched, grns };
+      return {
+        acknowledged: count('TRANSFER_ACKNOWLEDGEMENT'),
+        all: meta.total,
+        dispatched: count('TRANSFER'),
+        grns: count('GRN'),
+      };
     },
     queryKey: queryKeys.stockLedgers('stats', hospitalFilter),
   });

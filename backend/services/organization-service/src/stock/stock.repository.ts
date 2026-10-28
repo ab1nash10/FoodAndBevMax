@@ -78,6 +78,21 @@ export class StockRepository {
     return this.prisma.stockLedger.count(args);
   }
 
+  async countLedgersByReferenceType(
+    where: Prisma.StockLedgerWhereInput,
+  ): Promise<Array<{ _count: { _all: number }; referenceType: StockReferenceType | null }>> {
+    const rows = await this.prisma.stockLedger.groupBy({
+      _count: { _all: true },
+      by: ['referenceType'],
+      where,
+    });
+
+    return rows.map((row) => ({
+      _count: { _all: row._count._all },
+      referenceType: row.referenceType,
+    }));
+  }
+
   async findBalances(args: Prisma.StockBalanceFindManyArgs): Promise<StockBalanceWithRelations[]> {
     return this.prisma.stockBalance.findMany({
       ...args,

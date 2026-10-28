@@ -68,3 +68,12 @@ void test('a body over the size limit is a 413, as Nest answers without this fil
     status: 413,
   });
 });
+
+void test('no database connection free in time is a 503 "busy", so people retry instead of reporting a crash', () => {
+  // What node-postgres's pool throws when every connection stays busy past connect_timeout.
+  assert.deepEqual(send(new Error('timeout exceeded when trying to connect')), {
+    errors: [],
+    message: 'The server is busy right now. Please try again in a moment.',
+    status: 503,
+  });
+});

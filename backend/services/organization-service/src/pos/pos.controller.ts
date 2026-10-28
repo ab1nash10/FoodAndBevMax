@@ -25,6 +25,7 @@ import {
   SetMenuAvailabilityDto,
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
+import { deviceHost } from './device-host';
 import { PosService } from './pos.service';
 
 @ApiBearerAuth('access-token')
@@ -39,8 +40,27 @@ export class PosController {
     summary: 'Counters the signed-in user may bill at; with host, only that till computer’s',
   })
   @ApiOkResponse({ description: 'Counters returned.' })
-  async counters(@Query() query: PosCountersQueryDto) {
-    return { data: await this.pos.counters(query.host), message: 'Success', success: true };
+  async counters(@Query() query: PosCountersQueryDto, @Req() request: RequestContextLike) {
+    return {
+      data: await this.pos.counters(query.till ? (getIpAddress(request) ?? '') : undefined),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  // Any signed-in user: it only tells the caller about their own computer, and every POS screen
+  // (whatever permission it needs) asks it first.
+  @Get('whoami')
+  @ApiOperation({
+    summary: 'The calling computer: its address, DNS name, and the registered till it is, if any',
+  })
+  @ApiOkResponse({ description: 'Address, hostname and till returned.' })
+  async whoami(@Req() request: RequestContextLike) {
+    const device = await deviceHost(getIpAddress(request));
+    const access = device.ip
+      ? await this.pos.tillAccess(device.ip)
+      : { allowed: false, restaurants: [], till: null };
+    return { data: { ...device, ...access }, message: 'Success', success: true };
   }
 
   @Get('menu')

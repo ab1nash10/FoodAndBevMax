@@ -8,7 +8,12 @@ import {
   StockTransactionType,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
-import { getDocumentOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import {
+  getDocumentOrderBy,
+  getPageMeta,
+  getPagination,
+  toStatusCounts,
+} from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
@@ -60,7 +65,7 @@ export class GrnsService {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
+    const [items, total, byStatus] = await Promise.all([
       this.grns.findMany({
         orderBy: getDocumentOrderBy(query, 'grnNumber', 'createdAt'),
         skip: (page - 1) * limit,
@@ -68,11 +73,16 @@ export class GrnsService {
         where,
       }),
       this.grns.count({ where }),
+      // Every status tab's count at once: the other filters, whichever tab is open.
+      query.statusCounts ? this.grns.countByStatus({ ...where, status: undefined }) : undefined,
     ]);
 
     return {
       items: items.map(toGrnResponse),
-      meta: getPageMeta(page, limit, total),
+      meta: {
+        ...getPageMeta(page, limit, total),
+        ...(byStatus ? { statusCounts: toStatusCounts(byStatus) } : {}),
+      },
     };
   }
 

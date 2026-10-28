@@ -85,6 +85,9 @@ export function createQueryClient(): QueryClient {
     client.setQueryDefaults(queryKey, { staleTime: 5 * 60_000 }),
   );
   liveQueueKeys.forEach((queryKey) => client.setQueryDefaults(queryKey, { staleTime: 15_000 }));
+  // Asked by every POS screen (8 queries each); opening, handing over or ending a shift
+  // refreshes it, so only another till's shift change can show up to 2 minutes late.
+  client.setQueryDefaults(queryKeys.posCounters(), { staleTime: 2 * 60_000 });
   // Every matching prefix applies in this order, so the record keys undo the list default.
   listKeys.forEach((queryKey) =>
     client.setQueryDefaults(queryKey, { placeholderData: keepPreviousData }),

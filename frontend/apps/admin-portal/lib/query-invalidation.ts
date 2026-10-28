@@ -27,9 +27,7 @@ export function invalidateKitchenQueries(queryClient: QueryClient): void {
   invalidate(queryClient, [
     queryKeys.kitchens(),
     queryKeys.kitchenOptions(),
-    queryKeys.inventoryKitchens(),
     queryKeys.locationNames(),
-    queryKeys.kitchenKitchens(),
   ]);
 }
 

@@ -113,10 +113,12 @@ enum OrderSource {
   COUNTER
 }
 
-/// Who takes an online UPI payment at the till: the cashier picks one that is set up.
+/// Who takes an online payment at the till: Razorpay or PayU for UPI, as the cashier picks one
+/// that is set up; Pine Labs for a card on the counter's card machine.
 enum OnlinePaymentProvider {
   RAZORPAY
   PAYU
+  PINELABS
 }
 
 enum OnlinePaymentStatus {
@@ -884,28 +886,31 @@ model CounterShift {
 /// provider's link as a QR and checks it until paid, then bills with it, once. The amount is the
 /// bill's, priced on the server, and the bill must still come to it.
 model OnlinePayment {
-  id            String                @id @default(uuid()) @db.Uuid
-  hospitalId    String                @map("hospital_id") @db.Uuid
-  counterId     String                @map("counter_id") @db.Uuid
-  provider      OnlinePaymentProvider
-  status        OnlinePaymentStatus   @default(PENDING)
-  amount        Decimal               @db.Decimal(12, 2)
+  id               String                @id @default(uuid()) @db.Uuid
+  hospitalId       String                @map("hospital_id") @db.Uuid
+  counterId        String                @map("counter_id") @db.Uuid
+  provider         OnlinePaymentProvider
+  status           OnlinePaymentStatus   @default(PENDING)
+  amount           Decimal               @db.Decimal(12, 2)
   /// The provider's link: Razorpay's plink id, PayU's invoice number.
-  providerRef   String                @map("provider_ref")
+  providerRef      String                @map("provider_ref")
   /// What the QR holds: the page the guest pays on.
-  paymentUrl    String                @map("payment_url")
+  paymentUrl       String                @map("payment_url")
   /// The provider's payment id once paid; the bill keeps it as its payment reference.
-  paidReference String?               @map("paid_reference")
-  paidAt        DateTime?             @map("paid_at")
+  paidReference    String?               @map("paid_reference")
+  paidAt           DateTime?             @map("paid_at")
   /// The bill made with it.
-  orderId       String?               @unique @map("order_id") @db.Uuid
-  createdBy     String?               @map("created_by") @db.Uuid
-  createdAt     DateTime              @default(now()) @map("created_at")
-  updatedAt     DateTime              @updatedAt @map("updated_at")
+  orderId          String?               @unique @map("order_id") @db.Uuid
+  /// Pine Labs only: the card machine it was sent to, asked again for its status and cancel.
+  paymentMachineId String?               @map("payment_machine_id") @db.Uuid
+  createdBy        String?               @map("created_by") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
 
-  counter  Counter          @relation(fields: [counterId], references: [id])
-  hospital Hospital         @relation(fields: [hospitalId], references: [id])
-  order    RestaurantOrder? @relation(fields: [orderId], references: [id])
+  counter        Counter          @relation(fields: [counterId], references: [id])
+  hospital       Hospital         @relation(fields: [hospitalId], references: [id])
+  order          RestaurantOrder? @relation(fields: [orderId], references: [id])
+  paymentMachine PaymentMachine?  @relation(fields: [paymentMachineId], references: [id])
 
   @@unique([provider, providerRef])
   @@index([counterId, status])
@@ -1007,8 +1012,9 @@ model PaymentMachine {
   updatedBy                   String?             @map("updated_by") @db.Uuid
   deletedAt                   DateTime?           @map("deleted_at")
 
-  hospital  Hospital  @relation(fields: [hospitalId], references: [id])
-  posDevice PosDevice @relation(fields: [posDeviceId], references: [id])
+  hospital       Hospital        @relation(fields: [hospitalId], references: [id])
+  posDevice      PosDevice       @relation(fields: [posDeviceId], references: [id])
+  onlinePayments OnlinePayment[]
 
   @@index([hospitalId])
   @@index([posDeviceId])
@@ -1290,7 +1296,7 @@ model Employee {
 }
 
 model Grn {
-  id            String    @id @default(uuid()) @db.Uuid
+  id            String    @id @default(uuid()) @map("grn_id") @db.Uuid
   grnNumber     String    @unique @default(dbgenerated("('GRN'::text || regexp_replace(lpad((nextval('grn_number_seq'::regclass))::text, 20, '0'::text), '^0{0,14}'::text, ''::text))")) @map("grn_number")
   hospitalId    String    @map("hospital_id") @db.Uuid
   storeId       String    @map("store_id") @db.Uuid
@@ -1321,7 +1327,7 @@ model Grn {
 }
 
 model GrnLine {
-  id              String    @id @default(uuid()) @db.Uuid
+  id              String    @id @default(uuid()) @map("grn_line_id") @db.Uuid
   grnId           String    @map("grn_id") @db.Uuid
   itemId          String    @map("item_id") @db.Uuid
   orderedQty      Decimal?  @map("ordered_qty") @db.Decimal(12, 3)
@@ -1347,7 +1353,7 @@ model GrnLine {
 }
 
 model GrnBatch {
-  id                String    @id @default(uuid()) @db.Uuid
+  id                String    @id @default(uuid()) @map("grn_batch_id") @db.Uuid
   grnLineId         String    @map("grn_line_id") @db.Uuid
   itemId            String    @map("item_id") @db.Uuid
   batchNumber       String    @map("batch_number")
@@ -1375,7 +1381,7 @@ model GrnBatch {
 }
 
 model KitchenProduction {
-  id               String                  @id @default(uuid()) @db.Uuid
+  id               String                  @id @default(uuid()) @map("kitchen_production_id") @db.Uuid
   productionNumber String                  @unique @default(dbgenerated("('PRD'::text || regexp_replace(lpad((nextval('kitchen_production_number_seq'::regclass))::text, 20, '0'::text), '^0{0,16}'::text, ''::text))")) @map("production_number")
   hospitalId       String                  @map("hospital_id") @db.Uuid
   kitchenId        String                  @map("kitchen_id") @db.Uuid
@@ -1406,8 +1412,8 @@ model KitchenProduction {
 }
 
 model KitchenProductionLine {
-  id           String    @id @default(uuid()) @db.Uuid
-  productionId String    @map("production_id") @db.Uuid
+  id           String    @id @default(uuid()) @map("kitchen_production_line_id") @db.Uuid
+  productionId String    @map("kitchen_production_id") @db.Uuid
   itemId       String    @map("item_id") @db.Uuid
   producedQty  Decimal   @map("produced_qty") @db.Decimal(12, 3)
   wastageQty   Decimal   @default(0) @map("wastage_qty") @db.Decimal(12, 3)
@@ -1429,7 +1435,7 @@ model KitchenProductionLine {
 }
 
 model Transfer {
-  id              String                @id @default(uuid()) @db.Uuid
+  id              String                @id @default(uuid()) @map("transfer_id") @db.Uuid
   transferNumber  String                @unique @default(dbgenerated("('TRF'::text || regexp_replace(lpad((nextval('transfer_number_seq'::regclass))::text, 20, '0'::text), '^0{0,16}'::text, ''::text))")) @map("transfer_number")
   hospitalId      String                @map("hospital_id") @db.Uuid
   sourceType      InventoryLocationType @map("source_type")
@@ -1462,7 +1468,7 @@ model Transfer {
 }
 
 model TransferLine {
-  id              String    @id @default(uuid()) @db.Uuid
+  id              String    @id @default(uuid()) @map("transfer_line_id") @db.Uuid
   transferId      String    @map("transfer_id") @db.Uuid
   itemId          String    @map("item_id") @db.Uuid
   batchNumber     String?   @map("batch_number")
@@ -1491,7 +1497,7 @@ model TransferLine {
 }
 
 model TransferAcknowledgement {
-  id                  String                        @id @default(uuid()) @db.Uuid
+  id                  String                        @id @default(uuid()) @map("transfer_acknowledgement_id") @db.Uuid
   transferId          String                        @unique @map("transfer_id") @db.Uuid
   hospitalId          String                        @map("hospital_id") @db.Uuid
   acknowledgementDate DateTime                      @default(now()) @map("acknowledgement_date")
@@ -1515,8 +1521,8 @@ model TransferAcknowledgement {
 }
 
 model TransferAcknowledgementLine {
-  id                String    @id @default(uuid()) @db.Uuid
-  acknowledgementId String    @map("acknowledgement_id") @db.Uuid
+  id                String    @id @default(uuid()) @map("transfer_acknowledgement_line_id") @db.Uuid
+  acknowledgementId String    @map("transfer_acknowledgement_id") @db.Uuid
   transferLineId    String    @map("transfer_line_id") @db.Uuid
   itemId            String    @map("item_id") @db.Uuid
   batchNumber       String?   @map("batch_number")
@@ -1546,7 +1552,7 @@ model TransferAcknowledgementLine {
 }
 
 model StockLedger {
-  id                  String                @id @default(uuid()) @db.Uuid
+  id                  String                @id @default(uuid()) @map("stock_ledger_id") @db.Uuid
   hospitalId          String                @map("hospital_id") @db.Uuid
   locationType        InventoryLocationType @map("location_type")
   locationId          String                @map("location_id") @db.Uuid
@@ -1588,7 +1594,7 @@ model StockLedger {
 }
 
 model StockBalance {
-  id            String                @id @default(uuid()) @db.Uuid
+  id            String                @id @default(uuid()) @map("stock_balance_id") @db.Uuid
   hospitalId    String                @map("hospital_id") @db.Uuid
   locationType  InventoryLocationType @map("location_type")
   locationId    String                @map("location_id") @db.Uuid

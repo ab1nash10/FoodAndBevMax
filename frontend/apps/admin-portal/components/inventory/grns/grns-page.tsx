@@ -123,17 +123,17 @@ export function GrnsPageClient() {
   // The strip's numbers: every GRN at the location, then each status a GRN actually reaches.
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (status?: GrnStatus) =>
-        (await organizationApi.listGrns({ hospitalId: hospitalFilter, limit: 0, status })).data.meta
-          .total;
-      const [all, drafts, posted, cancelled] = await Promise.all([
-        count(),
-        count('DRAFT'),
-        count('POSTED_TO_STOCK'),
-        count('CANCELLED'),
-      ]);
+      const { meta } = (
+        await organizationApi.listGrns({ hospitalId: hospitalFilter, limit: 0, statusCounts: true })
+      ).data;
+      const count = (status: GrnStatus) => meta.statusCounts?.[status] ?? 0;
 
-      return { all, cancelled, drafts, posted };
+      return {
+        all: meta.total,
+        cancelled: count('CANCELLED'),
+        drafts: count('DRAFT'),
+        posted: count('POSTED_TO_STOCK'),
+      };
     },
     queryKey: queryKeys.grns('stats', hospitalFilter),
   });

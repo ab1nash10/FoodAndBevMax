@@ -20,9 +20,23 @@ export class OnlinePaymentsController {
     return { data: this.payments.available(), message: 'Success', success: true };
   }
 
+  @Get('card-machine/:counterId')
+  @Permissions('POS_ORDER_CREATE')
+  @ApiOperation({ summary: "The counter's Pine Labs card machine, or null when it has none" })
+  @ApiOkResponse({ description: 'Card machine returned.' })
+  async cardMachine(@Param('counterId', ParseUUIDPipe) counterId: string) {
+    return {
+      data: await this.payments.cardMachine(counterId),
+      message: 'Success',
+      success: true,
+    };
+  }
+
   @Post()
   @Permissions('POS_ORDER_CREATE')
-  @ApiOperation({ summary: "Start a UPI payment for a bill: the provider's link for its QR" })
+  @ApiOperation({
+    summary: "Start a bill's payment: a UPI provider's link for its QR, or a card on Pine Labs",
+  })
   @ApiOkResponse({ description: 'Payment started.' })
   async start(
     @Body() body: StartOnlinePaymentDto,

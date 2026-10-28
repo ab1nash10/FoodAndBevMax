@@ -3,24 +3,25 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowLeft,
   Banknote,
   CheckCircle2,
-  ChevronDown,
   CreditCard,
+  History,
+  ListOrdered,
   Loader2,
+  Maximize,
   Minus,
   MonitorSmartphone,
   Plus,
   Printer,
   QrCode,
-  ReceiptText,
   Search,
-  ShoppingBag,
-  Trash2,
   Wallet,
   X,
   type LucideIcon,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   EmploymentType,
@@ -33,18 +34,11 @@ import type {
   PosChannel,
   PosMenuItem,
 } from '@aahar/api-client';
-import {
-  AppPageHeader,
-  FoodTypeMarker,
-  KeyboardHint,
-  StatusChip,
-} from '@/components/design-system';
+import { AppPageHeader, FoodTypeMarker } from '@/components/design-system';
 import { useAuth } from '@/components/auth-provider';
-import { FoodArt } from '@/components/food-art';
-import { useRestaurantOrders } from '@/components/organization/restaurant-orders-page';
 import { useToast } from '@/components/toast-provider';
 import { Input, Label, Panel, Skeleton } from '@/components/ui';
-import { Modal, SegmentedControl, Toggle } from '@/components/ui-controls';
+import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { isNetworkError } from '@/lib/pos-offline-queue';
 import { previewBill } from '@/lib/pos-pricing';
@@ -65,8 +59,9 @@ import {
   usePosCounter,
 } from './shared';
 import { OnlinePaymentDialog, providerLabels } from './online-payment-dialog';
+import { onlineProvider, type CardVia } from './payment-collection';
 import { ShiftChip, ShiftStartPanel } from './shift-controls';
-import { TillSetup } from './till-setup';
+import { PosClosed } from './pos-gate';
 import { UnsentBillsButton, UnsentBillsDialog, useUnsentBills } from './unsent-bills';
 
 interface CartLine {
@@ -114,22 +109,10 @@ function unavailableReason(item: PosMenuItem, inCart: number): string | null {
   return null;
 }
 
-const categoryTones = [
-  'bg-ds-link',
-  'bg-violet-500',
-  'bg-ds-status-bad-fg',
-  'bg-ds-status-ok-fg',
-  'bg-ds-food-egg-dot',
-];
-
-/** A category's colour, the same on its filter and on its items' cards, so it is found by eye. */
-function categoryTone(id: string): string {
-  return id
-    ? categoryTones[
-        [...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % categoryTones.length
-      ]!
-    : 'bg-ds-muted';
-}
+// The menu's "All items" tile; '' is the uncategorised items' own category (Other).
+const ALL_ITEMS = '*';
+// The notes and coins a guest hands over, tapped to add up what was received.
+const cashNotes = [1, 2, 5, 10, 20, 50, 100, 200, 500];
 
 /**
  * The till: pick items from the counter's menu, take the customer's details and how they paid,
@@ -137,9 +120,8 @@ function categoryTone(id: string): string {
  * same bill (a double tap, a dropped connection) returns the bill already made.
  */
 export function BillingPageClient() {
-  const { counter, counters, host, query: countersQuery, setCounterId, setHost } = usePosCounter();
+  const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
   const { hasPermission } = useAuth();
-  const canSetUpTill = hasPermission('POS_DEVICE_UPDATE');
   // Operator access: without these the till bills counter orders only, never complimentary.
   const canBillRooms = hasPermission('POS_ROOM_ORDER');
   const canApproveComplimentary = hasPermission('POS_COMPLIMENTARY_APPROVE');
@@ -147,7 +129,8 @@ export function BillingPageClient() {
   const queryClient = useQueryClient();
   const [channel, setChannel] = useState<PosChannel>('COUNTER');
   const [search, setSearch] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  // null: the category tiles; ALL_ITEMS or a category's id: its items.
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [foodTypes, setFoodTypes] = useState<ReadonlySet<FoodType>>(() => new Set(allFoodTypes));
   const [cart, setCart] = useState<CartLine[]>([]);
   const cartRef = useRef(cart);
@@ -164,8 +147,12 @@ export function BillingPageClient() {
   const [complimentaryReason, setComplimentaryReason] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [paymentReference, setPaymentReference] = useState('');
+  // Cash the guest handed over, for the change due; never sent with the bill.
+  const [cashReceived, setCashReceived] = useState(0);
   // UPI is taken on the restaurant's own QR (OWN) or online, through the provider picked here.
   const [upiVia, setUpiVia] = useState<'OWN' | OnlinePaymentProvider | null>(null);
+  // A card goes to the counter's Pine Labs machine when it has one, or is keyed in by hand.
+  const [cardVia, setCardVia] = useState<CardVia>('MACHINE');
   // The bill waiting for its online payment; it is made once the provider confirms.
   const [onlinePayment, setOnlinePayment] = useState<{
     payload: PosBillInput;
@@ -186,7 +173,6 @@ export function BillingPageClient() {
   const [clientOrderId, setClientOrderId] = useState(newClientOrderId);
   const [completed, setCompleted] = useState<PosBill | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [extrasOpen, setExtrasOpen] = useState(false);
   // The cart line whose kitchen-note box was opened ("Add note"); lines with a note keep theirs.
   const [noteOpenFor, setNoteOpenFor] = useState<number | null>(null);
   // An emptied bill (completed, cleared, cancelled) forgets it, so the next bill's first line
@@ -212,15 +198,16 @@ export function BillingPageClient() {
   });
   const menu = menuQuery.data?.items ?? [];
   // Kiosk orders waiting to be paid here: a guest walks up, the cashier taps their number.
+  // Only where the restaurant's kiosk took orders lately (the counter says so); elsewhere a
+  // number can still be looked up by hand. Every open till asked: 12-15% of all requests under load.
   const waitingQuery = useQuery({
-    enabled: Boolean(counter),
+    enabled: Boolean(counter?.kioskInUse),
     queryFn: async () => (await organizationApi.listWaitingKioskOrders(counter!.id)).data,
     queryKey: queryKeys.kioskOrderToBill('waiting', counter?.id),
-    refetchInterval: 10_000,
+    // A guest takes longer than this to walk from the kiosk.
+    refetchInterval: 30_000,
   });
   const waiting = waitingQuery.data ?? [];
-  const ordersQuery = useRestaurantOrders(counter?.restaurantId);
-  const activeOrders = (ordersQuery.data ?? []).filter((order) => order.source === 'COUNTER');
 
   // The cart follows the menu it was picked from: switching Counter / Room re-prices it at that
   // channel's prices, and a refresh carries new prices, availability and stock.
@@ -269,9 +256,14 @@ export function BillingPageClient() {
   }, [menu]);
 
   const term = search.trim().toLowerCase();
+  // A search looks through the whole menu; otherwise the tiles show until one is opened.
+  const browsing = categoryId === null && !term;
   const shown = menu.filter(
     (item) =>
-      (!categoryId || (item.category?.id ?? '') === categoryId) &&
+      (term ||
+        categoryId === null ||
+        categoryId === ALL_ITEMS ||
+        (item.category?.id ?? '') === categoryId) &&
       foodTypes.has(item.foodType) &&
       (!term ||
         item.itemName.toLowerCase().includes(term) ||
@@ -314,7 +306,22 @@ export function BillingPageClient() {
     ...(upiId ? (['OWN'] as const) : []),
   ];
   const collectVia = upiVia && upiOptions.includes(upiVia) ? upiVia : (upiOptions[0] ?? 'OWN');
-  const collectsOnline = paymentMode === 'UPI' && !isComplimentary && collectVia !== 'OWN';
+  // Like the UPI providers, asked for only once Card is picked.
+  const cardMachineQuery = useQuery({
+    enabled: paymentMode === 'CARD' && Boolean(counter),
+    queryFn: async () => (await organizationApi.getCardMachine(counter!.id)).data,
+    queryKey: ['pos-card-machine', counter?.id],
+    staleTime: 5 * 60_000,
+  });
+  const cardMachine = cardMachineQuery.data ?? null;
+  const onlineVia = onlineProvider({
+    cardMachine: Boolean(cardMachine),
+    cardVia,
+    isComplimentary,
+    paymentMode,
+    upiVia: collectVia,
+  });
+  const collectsOnline = onlineVia !== null;
   const problems = [
     cart.length === 0 && 'Add at least one item.',
     channel === 'ROOM' && !roomNumber.trim() && 'Enter the room number.',
@@ -324,13 +331,7 @@ export function BillingPageClient() {
       'The Employee ID matches no employee here. Correct it or clear it.',
     isComplimentary && !complimentaryReason.trim() && 'Say why the meal is complimentary.',
   ].filter((problem): problem is string => Boolean(problem));
-  // What the folded "Customer, staff & notes" section holds, shown on its closed row.
-  const extrasFilled = [
-    isComplimentary && 'Complimentary',
-    employeeCode.trim() && 'Staff ID',
-    customerMobile && 'Mobile',
-    instructions.trim() && 'Note',
-  ].filter(Boolean);
+  const takesCash = paymentMode === 'CASH' && !isComplimentary;
 
   function resetBill() {
     setCart([]);
@@ -343,6 +344,7 @@ export function BillingPageClient() {
     setComplimentaryReason('');
     setPaymentMode('CASH');
     setPaymentReference('');
+    setCashReceived(0);
     setKioskNumber('');
     setKioskOrder(null);
     setSubmitted(false);
@@ -490,7 +492,7 @@ export function BillingPageClient() {
       total: totals.grandTotal,
     };
 
-    if (collectsOnline) {
+    if (onlineVia) {
       // The bill is made once the guest has paid, with the provider's payment on it.
       const { channel: billChannel, counterId, employeeCode: code, lines } = order.payload;
       setOnlinePayment({
@@ -500,7 +502,7 @@ export function BillingPageClient() {
           counterId,
           employeeCode: code,
           lines,
-          provider: collectVia,
+          provider: onlineVia,
         },
       });
       return;
@@ -541,21 +543,19 @@ export function BillingPageClient() {
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
-  // Billing is for till computers only: one registered as a POS by its hostname, where the user
-  // has the right to bill at its counter. Anyone else sees only why.
-  const tillProblem = !host
-    ? 'This computer is not set up as a till yet.'
-    : countersQuery.isError
-      ? getApiErrorMessage(countersQuery.error)
-      : countersQuery.isSuccess && counters.length === 0
-        ? 'You don’t have access to this till’s counter. Ask an admin to give you access to its location.'
-        : null;
+  // The POS gate has already found this computer mapped to a till; the user still needs the
+  // right to bill at its counter.
+  const tillProblem = countersQuery.isError
+    ? getApiErrorMessage(countersQuery.error)
+    : countersQuery.isSuccess && counters.length === 0
+      ? 'You don’t have access to this till’s counter. Ask an admin to give you access to its location.'
+      : null;
 
   if (tillProblem) {
     return (
       <section className="space-y-4">
         <AppPageHeader title="Billing" />
-        <TillSetup host={host} onChoose={setHost} problem={tillProblem} />
+        <PosClosed problem={tillProblem} />
       </section>
     );
   }
@@ -584,12 +584,6 @@ export function BillingPageClient() {
                   resetBill();
                 }}
               />
-              {/* An admin can point this computer at another till before a shift starts. */}
-              {canSetUpTill ? (
-                <Button onClick={() => setHost('')} size="sm" type="button" variant="ghost">
-                  Change till
-                </Button>
-              ) : null}
             </div>
           }
           description="Start your shift to open the till."
@@ -600,13 +594,49 @@ export function BillingPageClient() {
     );
   }
 
+  // The item's last line on the bill: the "−" on its menu card takes one off that.
+  const lastLineOf = (menuId: string) => cart.map((line) => line.item.id).lastIndexOf(menuId);
+  const openCategory =
+    categoryId === ALL_ITEMS
+      ? 'All items'
+      : categories.find((category) => category.id === categoryId)?.name;
+  const noteLine = noteOpenFor === null ? undefined : cart[noteOpenFor];
+  const cashPending = Math.max(totals.grandTotal - cashReceived, 0);
+  const cashChange = Math.max(cashReceived - totals.grandTotal, 0);
+
   return (
-    <section className="space-y-4">
+    <section className="space-y-3">
       <AppPageHeader
         action={
           <div className="flex flex-wrap items-center gap-2">
             <ShiftChip counter={counter} />
             <UnsentBillsButton unsent={unsent} />
+            {/* The browser's own full screen: no tabs or address bar on the till. Esc leaves it. */}
+            <Button
+              onClick={() =>
+                void (document.fullscreenElement
+                  ? document.exitFullscreen()
+                  : document.documentElement.requestFullscreen())
+              }
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Maximize className="h-4 w-4" />
+              Full screen
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/pos/history">
+                <History className="h-4 w-4" />
+                History
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/pos/orders">
+                <ListOrdered className="h-4 w-4" />
+                Orders
+              </Link>
+            </Button>
             <CounterPicker
               counter={counter}
               counters={counters}
@@ -617,245 +647,253 @@ export function BillingPageClient() {
             />
           </div>
         }
-        description="Pick items, take payment and complete the bill. The kitchen sees it at once."
         title="Billing"
       />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[200px_minmax(0,1fr)_400px]">
-        {/* A column on the left from 2xl (wide screens, beside the sidebar), scrolling on its own like the bill; below that,
-            last, under the menu (not across, where the sticky bill would slide under it). */}
-        <Panel
-          aria-label="Active orders"
-          className="order-last p-3 2xl:sticky 2xl:top-[calc(var(--app-header-h)+1.5rem)] 2xl:order-0 2xl:max-h-[calc(100dvh-var(--app-header-h)-9.5rem)] 2xl:self-start 2xl:overflow-y-auto"
-          role="region"
-        >
-          <h2 className="text-sm font-semibold text-ds-link">
-            Active orders
-            {activeOrders.length > 0 ? (
-              <span className="ml-1.5 font-normal text-ds-muted tabular-nums">
-                {activeOrders.length}
-              </span>
-            ) : null}
-          </h2>
-          {activeOrders.length === 0 ? (
-            <p className="mt-2 text-xs text-ds-muted italic">No active orders right now.</p>
-          ) : (
-            <ul className="mt-2 grid gap-2 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-1">
-              {activeOrders.map((order) => (
-                <li className="rounded-control border border-ds-border p-2" key={order.id}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-sm font-bold">#{order.orderNumber}</span>
-                    <StatusChip status={order.status} />
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-ds-text-3">
-                    {order.roomNumber ? `Room ${order.roomNumber} · ` : ''}
-                    {order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-        <Panel className="min-w-0 space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {canBillRooms ? (
-              <SegmentedControl
-                label="Order type"
-                onChange={setChannel}
-                options={[
-                  { label: 'Counter', value: 'COUNTER' },
-                  { label: 'Room', value: 'ROOM' },
-                ]}
-                value={channel}
-              />
-            ) : null}
-            <div aria-label="Food types shown" className="flex flex-wrap gap-3" role="group">
-              {allFoodTypes.map((type) => (
-                <span className="inline-flex items-center gap-2 text-sm font-semibold" key={type}>
-                  <FoodTypeMarker type={type} />
-                  {foodTypeLabels[type]}
-                  <Toggle
-                    ariaLabel={`Show ${foodTypeLabels[type]}`}
-                    checked={foodTypes.has(type)}
-                    onChange={(checked) =>
-                      setFoodTypes((current) => {
-                        const next = new Set(current);
-                        if (checked) next.add(type);
-                        else next.delete(type);
-                        return next;
-                      })
-                    }
-                  />
-                </span>
-              ))}
-            </div>
-            <label className="relative ml-auto min-w-48 flex-1 sm:max-w-72">
-              <span className="sr-only">Search the menu</span>
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ds-muted" />
-              <Input
-                className="pl-9"
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setSearchMessage('');
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    addFromSearch();
-                  } else if (event.key === 'Escape') {
-                    setSearch('');
-                    setSearchMessage('');
-                  }
-                }}
-                placeholder="Search item or code"
-                ref={searchRef}
-                value={search}
-              />
-            </label>
-          </div>
-          {/* Keys are for a till with a keyboard: the hints show from laptop width. */}
+
+      {/* One strip for what shapes the menu: order type, the room, food types and search. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-card bg-ds-primary px-3 py-2.5 text-white shadow-md shadow-ds-primary/20">
+        {canBillRooms ? (
           <div
-            className={cn(
-              'flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs',
-              searchMessage ? 'flex' : 'hidden lg:flex',
-            )}
+            aria-label="Order type"
+            className="flex rounded-control bg-white/15 p-0.5"
+            role="group"
           >
-            {searchMessage ? (
-              <p className="text-ds-status-bad-fg" role="status">
-                {searchMessage}
-              </p>
-            ) : null}
-            <p className="ml-auto hidden items-center gap-3 text-ds-muted lg:flex">
-              <span>
-                <KeyboardHint keys={['Enter']} /> adds
-              </span>
-              <span>
-                <KeyboardHint keys={['F9']} /> completes
-              </span>
-              <span>
-                <KeyboardHint keys={['F2']} /> search
-              </span>
-              <span>
-                <KeyboardHint keys={['+', '−', 'Del']} /> last item
-              </span>
-            </p>
-          </div>
-          <div aria-label="Categories" className="flex flex-wrap gap-2" role="group">
-            {[{ count: menu.length, id: '', name: 'All' }, ...categories].map((category) => (
+            {(['COUNTER', 'ROOM'] as const).map((value) => (
               <button
-                aria-pressed={categoryId === category.id}
+                aria-pressed={channel === value}
                 className={cn(
-                  'h-10 rounded-full border px-4 text-[13.5px] font-medium transition-colors duration-150',
-                  categoryId === category.id
-                    ? 'border-ds-primary bg-ds-primary text-white shadow-[0_6px_16px_rgb(11_87_164/0.28)]'
-                    : 'border-ds-border bg-ds-surface text-ds-text-2 hover:border-ds-primary/40',
+                  'h-9 rounded-control px-3.5 text-sm font-semibold transition-colors duration-150',
+                  channel === value ? 'bg-white text-ds-link' : 'text-white/85 hover:text-white',
                 )}
-                key={category.id || 'all'}
-                onClick={() => setCategoryId(category.id)}
+                key={value}
+                onClick={() => setChannel(value)}
                 type="button"
               >
-                {category.id ? (
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      'mr-1.5 inline-block h-2 w-2 rounded-full',
-                      categoryTone(category.id),
-                      categoryId === category.id && 'ring-2 ring-white/70',
-                    )}
-                  />
-                ) : null}
-                {category.name}
-                <span className="ml-1.5 tabular-nums opacity-70">{category.count}</span>
+                {value === 'COUNTER' ? 'Counter' : 'Room'}
               </button>
             ))}
           </div>
+        ) : null}
+        {channel === 'ROOM' ? (
+          <div className="flex gap-2">
+            <Input
+              aria-label="Room number"
+              className="h-9 w-32"
+              id="pos-room"
+              maxLength={20}
+              onChange={(event) => setRoomNumber(event.target.value)}
+              placeholder="Room no. *"
+              value={roomNumber}
+            />
+            <Input
+              aria-label="Bed number"
+              className="h-9 w-24"
+              id="pos-bed"
+              maxLength={20}
+              onChange={(event) => setBedNumber(event.target.value)}
+              placeholder="Bed"
+              value={bedNumber}
+            />
+          </div>
+        ) : null}
+        {/* Green when on, as the blue of a switch would vanish into the strip. */}
+        <div
+          aria-label="Food types shown"
+          className="flex flex-wrap gap-4 [&_[role=switch][aria-checked=true]]:border-emerald-400 [&_[role=switch][aria-checked=true]]:bg-emerald-500 [&_[role=switch][aria-checked=true]]:bg-none"
+          role="group"
+        >
+          {allFoodTypes.map((type) => (
+            <span className="inline-flex items-center gap-2 text-sm font-semibold" key={type}>
+              {foodTypeLabels[type]}
+              <Toggle
+                ariaLabel={`Show ${foodTypeLabels[type]}`}
+                checked={foodTypes.has(type)}
+                onChange={(checked) =>
+                  setFoodTypes((current) => {
+                    const next = new Set(current);
+                    if (checked) next.add(type);
+                    else next.delete(type);
+                    return next;
+                  })
+                }
+              />
+            </span>
+          ))}
+        </div>
+        <label className="relative ml-auto min-w-48 flex-1 sm:max-w-80">
+          <span className="sr-only">Search the menu</span>
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ds-muted" />
+          <Input
+            className="h-9 pl-9"
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setSearchMessage('');
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addFromSearch();
+              } else if (event.key === 'Escape') {
+                setSearch('');
+                setSearchMessage('');
+              }
+            }}
+            placeholder="Search food items or code"
+            ref={searchRef}
+            value={search}
+          />
+        </label>
+      </div>
+      {searchMessage ? (
+        <p className="text-sm text-ds-status-bad-fg" role="status">
+          {searchMessage}
+        </p>
+      ) : null}
+
+      {/* The menu and the bill take the whole width; the till's orders are a tap away (Orders). */}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px]">
+        <Panel className="min-w-0 bg-ds-subtle p-3">
           {menuQuery.isLoading ? (
             <Skeleton className="h-72 w-full" />
           ) : menuQuery.isError ? (
             <p className="py-10 text-center text-sm text-ds-status-bad-fg">
               {getApiErrorMessage(menuQuery.error)}
             </p>
-          ) : shown.length === 0 ? (
+          ) : menu.length === 0 ? (
             <p className="py-10 text-center text-sm text-ds-muted">
-              {menu.length === 0
-                ? `Nothing on this restaurant's menu is sold for ${channel === 'ROOM' ? 'rooms' : 'the counter'}.`
-                : 'No item matches.'}
+              {`Nothing on this restaurant's menu is sold for ${channel === 'ROOM' ? 'rooms' : 'the counter'}.`}
             </p>
-          ) : (
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
-              {shown.map((item) => {
-                const inCart = quantityInCart(item.id);
-                const reason = unavailableReason(item, inCart);
-
-                return (
-                  <li key={item.id}>
+          ) : browsing ? (
+            <ul aria-label="Categories" className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+              {[{ count: menu.length, id: ALL_ITEMS, name: 'All items' }, ...categories].map(
+                (category) => (
+                  <li key={category.id || 'other'}>
                     <button
-                      aria-label={`Add ${item.itemName}`}
-                      className={cn(
-                        'relative flex h-full min-h-28 w-full flex-col justify-between gap-3 overflow-hidden rounded-[18px] border p-3.5 pt-4 text-left transition duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary active:scale-[0.98]',
-                        reason
-                          ? 'cursor-not-allowed border-ds-border bg-ds-subtle opacity-60'
-                          : 'border-ds-border bg-ds-surface hover:border-ds-primary-border hover:shadow-card-hover motion-safe:hover:-translate-y-0.5',
-                        inCart > 0 && 'border-ds-primary ring-1 ring-ds-primary ring-inset',
-                      )}
-                      disabled={Boolean(reason)}
-                      onClick={() => addItem(item)}
+                      className="flex h-full min-h-20 w-full items-center rounded-tile border border-ds-border bg-ds-surface p-4 text-left text-[17px] leading-snug font-bold text-ds-text shadow-xs transition-colors duration-150 hover:border-ds-primary-border hover:bg-ds-primary-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary active:scale-[0.98]"
+                      onClick={() => setCategoryId(category.id)}
                       type="button"
                     >
-                      {/* v3: a band of food art, as on the kiosk, so dishes read at a glance. */}
-                      <FoodArt
-                        category={item.category?.categoryName}
-                        categoryId={item.category?.id}
-                        className="-mx-3.5 -mt-4 h-16"
-                        name={item.itemName}
-                      />
-                      <span className="flex items-start justify-between gap-2">
-                        <span className="line-clamp-2 text-[14px] leading-snug font-semibold text-ds-text">
-                          {item.itemName}
+                      <span>
+                        {category.name}{' '}
+                        <span className="font-normal text-ds-muted tabular-nums">
+                          ({category.count})
                         </span>
-                        <span className="mt-0.5">
-                          <FoodTypeMarker type={item.foodType} />
-                        </span>
-                      </span>
-                      <span className="flex items-end justify-between gap-2">
-                        <span className="min-w-0">
-                          <span className="block font-mono text-[15px] font-semibold text-ds-text">
-                            {item.price === null ? '—' : formatMoney(item.price)}
-                          </span>
-                          <span
-                            className={cn(
-                              'block truncate text-[11.5px]',
-                              reason ? 'text-ds-status-bad-fg' : 'text-ds-muted',
-                            )}
-                          >
-                            {reason ?? (item.stock === null ? '' : `${item.stock - inCart} left`)}
-                          </span>
-                        </span>
-                        {inCart > 0 ? (
-                          // Keyed by the count, so each add pops it again.
-                          <span
-                            className="pop grid h-8 min-w-8 shrink-0 place-items-center rounded-full bg-ds-primary px-2 font-mono text-[13px] font-semibold text-white"
-                            key={inCart}
-                          >
-                            ×{inCart}
-                          </span>
-                        ) : reason ? null : (
-                          <span
-                            aria-hidden="true"
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-ds-link"
-                          >
-                            <Plus className="h-4 w-4" strokeWidth={2.2} />
-                          </span>
-                        )}
                       </span>
                     </button>
                   </li>
-                );
-              })}
+                ),
+              )}
             </ul>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <button
+                  aria-label="Back to categories"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ds-text hover:bg-ds-surface focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+                  onClick={() => {
+                    setCategoryId(null);
+                    setSearch('');
+                    setSearchMessage('');
+                  }}
+                  type="button"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+                <h2 className="text-lg leading-snug font-bold text-ds-text">
+                  {term ? `Results for “${search.trim()}”` : (openCategory ?? 'All items')}
+                </h2>
+              </div>
+              {shown.length === 0 ? (
+                <p className="py-10 text-center text-sm text-ds-muted">No item matches.</p>
+              ) : (
+                <ul className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                  {shown.map((item) => {
+                    const inCart = quantityInCart(item.id);
+                    const reason = unavailableReason(item, inCart);
+                    const hint =
+                      reason ?? (item.stock === null ? null : `${item.stock - inCart} left`);
+
+                    return (
+                      <li
+                        className={cn(
+                          'flex flex-col justify-between gap-3 rounded-tile border bg-ds-surface p-3 shadow-xs',
+                          inCart > 0
+                            ? 'border-ds-primary ring-1 ring-ds-primary ring-inset'
+                            : 'border-ds-border',
+                          reason && inCart === 0 && 'opacity-60',
+                        )}
+                        key={item.id}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-start gap-2">
+                            <span className="mt-0.5">
+                              <FoodTypeMarker type={item.foodType} />
+                            </span>
+                            <span className="line-clamp-2 min-w-0 flex-1 text-[14px] leading-snug font-semibold text-ds-text">
+                              {item.itemName}
+                            </span>
+                            <span className="shrink-0 font-mono text-[14px] font-semibold text-ds-text">
+                              {item.price === null ? '—' : formatMoney(item.price)}
+                            </span>
+                          </div>
+                          {hint ? (
+                            <p
+                              className={cn(
+                                'truncate pl-6 text-[11.5px]',
+                                reason ? 'text-ds-status-bad-fg' : 'text-ds-muted',
+                              )}
+                            >
+                              {hint}
+                            </p>
+                          ) : null}
+                        </div>
+                        {inCart > 0 ? (
+                          <div className="flex h-10 items-center justify-between rounded-control bg-ds-primary text-white">
+                            <button
+                              aria-label={`One less ${item.itemName}`}
+                              className="grid h-full w-12 place-items-center rounded-l-control hover:bg-ds-primary-hover"
+                              onClick={() => changeQuantity(lastLineOf(item.id), -1)}
+                              type="button"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            {/* Keyed by the count, so each add pops it again. */}
+                            <span
+                              className="pop font-mono text-sm font-bold tabular-nums"
+                              key={inCart}
+                            >
+                              {inCart}
+                            </span>
+                            <button
+                              aria-label={`Add ${item.itemName}`}
+                              className="grid h-full w-12 place-items-center rounded-r-control hover:bg-ds-primary-hover disabled:opacity-40"
+                              disabled={Boolean(reason)}
+                              onClick={() => addItem(item)}
+                              type="button"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            aria-label={`Add ${item.itemName}`}
+                            className="h-10 w-full rounded-control border border-ds-border bg-ds-surface text-sm font-bold tracking-wide text-ds-status-ok-fg transition-colors duration-150 hover:border-ds-primary-border hover:bg-ds-primary-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:cursor-not-allowed disabled:text-ds-muted"
+                            disabled={Boolean(reason)}
+                            onClick={() => addItem(item)}
+                            type="button"
+                          >
+                            ADD
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           )}
         </Panel>
 
-        {/* Sticks below the shell header (--app-header-h), short enough to fit on screen before the page scrolls. */}
         {/* Below lg the bill stacks under the menu: a floating bar keeps the total in view and
             takes the cashier to the bill (payment and Complete order) in one tap. */}
         {cart.length > 0 ? (
@@ -877,45 +915,12 @@ export function BillingPageClient() {
             </Button>
           </div>
         ) : null}
+        {/* One column, top to bottom as a bill is taken; it scrolls under its pinned foot (the
+            total, Cancel and Complete order), which sticks below the shell header. */}
         <Panel
-          className="flex scroll-mt-[calc(var(--app-header-h)+1rem)] flex-col gap-4 rounded-[24px] p-5 pb-24 shadow-[0_4px_8px_rgb(15_23_42/0.06),0_24px_48px_rgb(15_23_42/0.12)] lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-9.5rem)] lg:self-start lg:overflow-y-auto lg:pb-5"
+          className="flex scroll-mt-[calc(var(--app-header-h)+1rem)] flex-col gap-3.5 p-4 pb-24 lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-11rem)] lg:self-start lg:overflow-y-auto lg:pb-4"
           id="pos-bill"
         >
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="flex min-w-0 items-center gap-2.5 text-lg font-bold text-ds-text">
-              <span
-                aria-hidden="true"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-ds-primary text-white shadow-md shadow-ds-primary/25"
-              >
-                <ReceiptText className="h-4.5 w-4.5" strokeWidth={2} />
-              </span>
-              Current bill
-              <span
-                className={cn(
-                  'rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums',
-                  itemCount ? 'bg-ds-primary-soft text-ds-link' : 'bg-ds-subtle text-ds-muted',
-                )}
-              >
-                {itemCount} item{itemCount === 1 ? '' : 's'}
-              </span>
-            </h2>
-            {cart.length > 0 ? (
-              <Button
-                className="pointer-coarse:h-11"
-                onClick={() => {
-                  setCart([]);
-                  setKioskOrder(null);
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <Trash2 className="h-4 w-4" />
-                Clear
-              </Button>
-            ) : null}
-          </div>
-
           {kioskOrder ? (
             <div className="flex items-center gap-3 rounded-control-lg bg-ds-primary-soft px-3 py-2 text-sm text-ds-text">
               <MonitorSmartphone aria-hidden="true" className="h-4 w-4 shrink-0 text-ds-link" />
@@ -952,7 +957,7 @@ export function BillingPageClient() {
             >
               <Input
                 aria-label="Kiosk order number"
-                className="min-w-0 flex-1"
+                className="h-9 min-w-0 flex-1"
                 inputMode="numeric"
                 maxLength={6}
                 onChange={(event) => setKioskNumber(event.target.value.replace(/\D/g, ''))}
@@ -960,7 +965,7 @@ export function BillingPageClient() {
                 value={kioskNumber}
               />
               <Button
-                className="pointer-coarse:h-11"
+                className="h-9 pointer-coarse:h-11"
                 disabled={!kioskNumber || loadKiosk.isPending || !menuQuery.data}
                 type="submit"
                 variant="outline"
@@ -973,10 +978,10 @@ export function BillingPageClient() {
 
           {!kioskOrder && channel === 'COUNTER' && waiting.length > 0 ? (
             <section aria-label="Kiosk orders waiting to pay" className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ds-muted">
+              <p className="text-xs font-semibold tracking-wide text-ds-muted uppercase">
                 Waiting to pay · {waiting.length}
                 {cart.length > 0 ? (
-                  <span className="ml-1 font-normal normal-case tracking-normal">
+                  <span className="ml-1 font-normal tracking-normal normal-case">
                     (finish this bill first)
                   </span>
                 ) : null}
@@ -990,7 +995,7 @@ export function BillingPageClient() {
                       onClick={() => loadKiosk.mutate(order.number)}
                       type="button"
                     >
-                      <span className="grid h-9 min-w-9 place-items-center rounded-control bg-ds-primary-soft px-1.5 text-base font-bold tabular-nums text-ds-link">
+                      <span className="grid h-9 min-w-9 place-items-center rounded-control bg-ds-primary-soft px-1.5 text-base font-bold text-ds-link tabular-nums">
                         {order.number}
                       </span>
                       <span className="min-w-0 flex-1">
@@ -1009,239 +1014,154 @@ export function BillingPageClient() {
             </section>
           ) : null}
 
-          {channel === 'ROOM' ? (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="pos-room">
-                  Room <span className="text-ds-status-bad-fg">*</span>
-                </Label>
-                <Input
-                  id="pos-room"
-                  maxLength={20}
-                  onChange={(event) => setRoomNumber(event.target.value)}
-                  placeholder="e.g. 412"
-                  value={roomNumber}
-                />
-              </div>
-              <div>
-                <Label htmlFor="pos-bed">Bed</Label>
-                <Input
-                  id="pos-bed"
-                  maxLength={20}
-                  onChange={(event) => setBedNumber(event.target.value)}
-                  placeholder="Optional"
-                  value={bedNumber}
-                />
-              </div>
+          <div>
+            <Label htmlFor="pos-instructions">
+              Any instruction <span className="font-normal text-ds-muted">(optional, max 200)</span>
+            </Label>
+            <textarea
+              className="mt-1 min-h-14 w-full rounded-control border border-ds-input bg-ds-surface px-3 py-2 text-sm text-ds-text outline-hidden focus:ring-2 focus:ring-ds-primary"
+              id="pos-instructions"
+              maxLength={200}
+              onChange={(event) => setInstructions(event.target.value)}
+              placeholder="For the whole order"
+              value={instructions}
+            />
+          </div>
+
+          {canApproveComplimentary ? (
+            <Toggle
+              checked={isComplimentary}
+              label="Complimentary meal"
+              onChange={setIsComplimentary}
+            />
+          ) : null}
+          {isComplimentary ? (
+            <div>
+              <Label htmlFor="pos-comp-reason">
+                Reason <span className="text-ds-status-bad-fg">*</span>
+              </Label>
+              <Input
+                id="pos-comp-reason"
+                maxLength={200}
+                onChange={(event) => setComplimentaryReason(event.target.value)}
+                placeholder="e.g. Duty doctor, patient attendant"
+                value={complimentaryReason}
+              />
             </div>
           ) : null}
 
-          {cart.length === 0 ? (
-            <div className="flex shrink-0 items-center gap-3 rounded-card bg-ds-subtle px-4 py-4">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ds-surface text-ds-link shadow-xs">
-                <ShoppingBag aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-ds-text">No items yet</span>
-                <span className="block text-xs text-ds-muted">
-                  Tap a dish on the menu to add it to this bill.
-                </span>
-              </span>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label htmlFor="pos-mobile">Customer mobile</Label>
+              <Input
+                id="pos-mobile"
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(event) => setCustomerMobile(event.target.value.replace(/\D/g, ''))}
+                placeholder="Optional"
+                value={customerMobile}
+              />
             </div>
-          ) : (
-            <ul className="divide-y divide-ds-divider">
-              {cart.map((line, index) => (
-                <li className="py-3" key={`${line.item.id}-${index}`}>
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5">
-                      <FoodTypeMarker type={line.item.foodType} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-ds-text">
-                        {line.item.itemName}
-                      </p>
-                      <p className="font-mono text-xs text-ds-muted">
-                        {formatMoney(line.item.price)} · GST {line.item.gstPercent}%
-                        {line.item.isGstInclusive ? ' incl.' : ''}
-                      </p>
-                      {line.note || noteOpenFor === index ? null : (
-                        <button
-                          className="mt-0.5 text-xs font-semibold text-ds-link hover:underline pointer-coarse:py-2"
-                          onClick={() => setNoteOpenFor(index)}
-                          type="button"
-                        >
-                          + Add note
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center rounded-full bg-ds-subtle p-0.5">
-                      <button
-                        aria-label={`One less ${line.item.itemName}`}
-                        className="grid h-8 w-8 place-items-center rounded-full text-ds-text-2 hover:bg-ds-surface pointer-coarse:h-11 pointer-coarse:w-11"
-                        onClick={() => changeQuantity(index, -1)}
-                        type="button"
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="w-7 text-center text-sm font-bold tabular-nums">
-                        {line.quantity}
-                      </span>
-                      <button
-                        aria-label={`One more ${line.item.itemName}`}
-                        className="grid h-8 w-8 place-items-center rounded-full bg-ds-primary text-white shadow-sm shadow-ds-primary/30 hover:bg-ds-primary-hover pointer-coarse:h-11 pointer-coarse:w-11"
-                        onClick={() => changeQuantity(index, 1)}
-                        type="button"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+            <div>
+              <Label htmlFor="pos-employee">Employee ID</Label>
+              <Input
+                id="pos-employee"
+                maxLength={50}
+                onChange={(event) => setEmployeeCode(event.target.value)}
+                placeholder="Optional"
+                value={employeeCode}
+              />
+            </div>
+          </div>
+          {employee?.data ? (
+            <p className="-mt-1.5 text-xs text-ds-text-3" role="status">
+              <span className="font-semibold text-ds-text">{employee.data.employeeName}</span>
+              {employee.data.employmentType
+                ? ` · ${employmentTypeLabels[employee.data.employmentType]}`
+                : ''}
+              {' · '}
+              {employee.data.discountPercent && !isComplimentary ? (
+                <span className="font-semibold text-ds-status-ok-fg">
+                  {employee.data.discountPercent}% {employee.data.discountName ?? 'staff discount'}
+                </span>
+              ) : (
+                'no staff discount here'
+              )}
+            </p>
+          ) : employee?.isError ? (
+            <p className="-mt-1.5 text-xs text-ds-status-bad-fg" role="alert">
+              {getApiErrorMessage(employee.error)}
+            </p>
+          ) : null}
+
+          {isComplimentary ? null : (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-ds-text">Mode of payment</p>
+              <div
+                aria-label="Payment mode"
+                className="grid grid-cols-4 gap-1 rounded-control-lg bg-ds-subtle p-1"
+                role="group"
+              >
+                {paymentModes.map((mode) => {
+                  const Icon = paymentIcons[mode];
+
+                  return (
                     <button
-                      aria-label={`Remove ${line.item.itemName}`}
-                      className="grid h-8 w-8 place-items-center text-ds-muted hover:text-ds-status-bad-fg pointer-coarse:h-11 pointer-coarse:w-11"
-                      onClick={() => changeQuantity(index, -line.quantity)}
+                      aria-pressed={paymentMode === mode}
+                      className={cn(
+                        'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary pointer-coarse:h-11',
+                        paymentMode === mode
+                          ? 'bg-ds-primary text-white shadow-md shadow-ds-primary/25'
+                          : 'text-ds-text-2 hover:bg-ds-surface hover:text-ds-text',
+                      )}
+                      key={mode}
+                      onClick={() => setPaymentMode(mode)}
                       type="button"
                     >
-                      <X className="h-4 w-4" />
+                      <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+                      {paymentModeLabels[mode]}
                     </button>
-                  </div>
-                  {line.note || noteOpenFor === index ? (
-                    <Input
-                      aria-label={`Note for ${line.item.itemName}`}
-                      // Only on a tap of "Add note", never when a line is added from the menu.
-                      autoFocus={!line.note}
-                      className="mt-1.5 h-8 text-xs"
-                      maxLength={200}
-                      onChange={(event) =>
-                        setCart((lines) =>
-                          lines.map((entry, at) =>
-                            at === index ? { ...entry, note: event.target.value } : entry,
-                          ),
-                        )
-                      }
-                      placeholder="Note for the kitchen (less spicy, no onion…)"
-                      value={line.note}
-                    />
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+                  );
+                })}
+              </div>
+              {paymentMode === 'UPI' && upiOptions.length > 1 ? (
+                <CollectVia
+                  label="Collect UPI via"
+                  onPick={setUpiVia}
+                  options={upiOptions.map((option) => ({
+                    label: option === 'OWN' ? 'Own QR' : providerLabels[option],
+                    value: option,
+                  }))}
+                  value={collectVia}
+                />
+              ) : null}
+              {paymentMode === 'CARD' && !isComplimentary && cardMachine ? (
+                <CollectVia
+                  label="Take the card on"
+                  onPick={setCardVia}
+                  options={[
+                    { label: `Card machine · ${cardMachine.name}`, value: 'MACHINE' },
+                    { label: 'Keyed in', value: 'MANUAL' },
+                  ]}
+                  value={cardVia}
+                />
+              ) : null}
+              {paymentMode === 'CASH' || collectsOnline ? null : (
+                <Input
+                  aria-label="Payment reference"
+                  className="h-9"
+                  maxLength={100}
+                  onChange={(event) => setPaymentReference(event.target.value)}
+                  placeholder={
+                    paymentMode === 'OTHER'
+                      ? 'How was it paid? (e.g. Sodexo)'
+                      : `${paymentModeLabels[paymentMode]} reference (optional)`
+                  }
+                  value={paymentReference}
+                />
+              )}
+            </div>
           )}
-
-          {cart.length > 0 ? (
-            <div className="shrink-0 rounded-card bg-ds-subtle px-3.5 py-3">
-              <BillTotals
-                {...totals}
-                discountPercent={staffDiscount}
-                gstRates={[...new Set(cart.map((line) => line.item.gstPercent))].filter(Boolean)}
-              />
-            </div>
-          ) : null}
-
-          {/* The optional fields fold away so the items stay the main thing on the bill. Opens
-              itself when Complete order finds a problem, so the messages below have their field. */}
-          <details
-            // The bottom margin clears the payment bar that sticks over the cart's foot.
-            className="group shrink-0 rounded-card border border-ds-border lg:scroll-mb-36"
-            onToggle={(event) => {
-              const { open } = event.currentTarget;
-              setExtrasOpen(open);
-              // On a short screen the fields open below the cart's fold: bring them into view.
-              if (open) event.currentTarget.scrollIntoView({ block: 'nearest' });
-            }}
-            open={extrasOpen || (submitted && problems.length > 0)}
-          >
-            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-card px-3.5 py-2 text-sm font-semibold text-ds-text transition hover:bg-ds-subtle focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary [&::-webkit-details-marker]:hidden">
-              Customer, staff &amp; notes
-              <span className="ml-auto truncate text-xs font-medium text-ds-muted">
-                {extrasFilled.length ? extrasFilled.join(' · ') : 'Optional'}
-              </span>
-              <ChevronDown
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0 text-ds-muted transition-transform duration-100 group-open:rotate-180 motion-reduce:transition-none"
-              />
-            </summary>
-            <div className="flex flex-col gap-3 border-t border-ds-divider p-3.5">
-              <div>
-                <Label htmlFor="pos-instructions">Instructions</Label>
-                <textarea
-                  className="mt-1 min-h-16 w-full rounded-control border border-ds-input bg-ds-surface px-3 py-2 text-sm text-ds-text outline-hidden focus:ring-2 focus:ring-ds-primary"
-                  id="pos-instructions"
-                  maxLength={200}
-                  onChange={(event) => setInstructions(event.target.value)}
-                  placeholder="For the whole order"
-                  value={instructions}
-                />
-                <p className="text-right text-[11px] text-ds-muted">{instructions.length}/200</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="pos-mobile">Customer mobile</Label>
-                  <Input
-                    id="pos-mobile"
-                    inputMode="numeric"
-                    maxLength={10}
-                    onChange={(event) => setCustomerMobile(event.target.value.replace(/\D/g, ''))}
-                    placeholder="Optional"
-                    value={customerMobile}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="pos-employee">Employee ID</Label>
-                  <Input
-                    id="pos-employee"
-                    maxLength={50}
-                    onChange={(event) => setEmployeeCode(event.target.value)}
-                    placeholder="Optional"
-                    value={employeeCode}
-                  />
-                </div>
-              </div>
-              {employee?.data ? (
-                <p className="-mt-1.5 text-xs text-ds-text-3" role="status">
-                  <span className="font-semibold text-ds-text">{employee.data.employeeName}</span>
-                  {employee.data.employmentType
-                    ? ` · ${employmentTypeLabels[employee.data.employmentType]}`
-                    : ''}
-                  {' · '}
-                  {employee.data.discountPercent && !isComplimentary ? (
-                    <span className="font-semibold text-ds-status-ok-fg">
-                      {employee.data.discountPercent}%{' '}
-                      {employee.data.discountName ?? 'staff discount'}
-                    </span>
-                  ) : (
-                    'no staff discount here'
-                  )}
-                </p>
-              ) : employee?.isError ? (
-                <p className="-mt-1.5 text-xs text-ds-status-bad-fg" role="alert">
-                  {getApiErrorMessage(employee.error)}
-                </p>
-              ) : null}
-
-              {canApproveComplimentary ? (
-                <Toggle
-                  checked={isComplimentary}
-                  label="Complimentary meal"
-                  onChange={setIsComplimentary}
-                />
-              ) : null}
-              {isComplimentary ? (
-                <div>
-                  <Label htmlFor="pos-comp-reason">
-                    Reason <span className="text-ds-status-bad-fg">*</span>
-                  </Label>
-                  <Input
-                    id="pos-comp-reason"
-                    maxLength={200}
-                    onChange={(event) => setComplimentaryReason(event.target.value)}
-                    placeholder="e.g. Duty doctor, patient attendant"
-                    value={complimentaryReason}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </details>
 
           {!isComplimentary &&
           paymentMode === 'UPI' &&
@@ -1263,89 +1183,139 @@ export function BillingPageClient() {
               <p className="text-sm text-ds-text-2">
                 Customer scans to pay{' '}
                 <span className="font-semibold text-ds-text">{formatMoney(totals.grandTotal)}</span>{' '}
-                to <span className="font-mono text-xs">{upiId}</span>. Enter the UPI reference below
+                to <span className="font-mono text-xs">{upiId}</span>. Enter the UPI reference above
                 once paid.
               </p>
             </div>
           ) : null}
 
-          {/* Payment and the buttons stay pinned to the panel's foot while the bill scrolls, so
-              how it's paid is always in view beside Complete order (which carries the total). The
-              breakdown sits under the items: pinned too, it left a short screen no room for them. */}
-          <div className="space-y-3 lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:border-ds-divider lg:bg-ds-surface lg:px-4 lg:py-3">
-            {isComplimentary ? null : (
-              <div className="space-y-2">
-                <div
-                  aria-label="Payment mode"
-                  className="grid grid-cols-4 gap-1 rounded-control-lg bg-ds-subtle p-1"
-                  role="group"
-                >
-                  {paymentModes.map((mode) => {
-                    const Icon = paymentIcons[mode];
-
-                    return (
-                      <button
-                        aria-pressed={paymentMode === mode}
-                        className={cn(
-                          'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary pointer-coarse:h-11',
-                          paymentMode === mode
-                            ? 'bg-ds-primary text-white shadow-md shadow-ds-primary/25'
-                            : 'text-ds-text-2 hover:bg-ds-surface hover:text-ds-text',
-                        )}
-                        key={mode}
-                        onClick={() => setPaymentMode(mode)}
-                        type="button"
-                      >
-                        <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                        {paymentModeLabels[mode]}
-                      </button>
-                    );
-                  })}
-                </div>
-                {paymentMode === 'UPI' && upiOptions.length > 1 ? (
-                  <div
-                    aria-label="Collect UPI via"
-                    className="flex flex-wrap items-center gap-1.5"
-                    role="group"
+          {/* What the guest handed over, note by note, and the change due: for the cashier only. */}
+          {takesCash ? (
+            <div className="space-y-2.5">
+              <div aria-label="Cash received" className="grid grid-cols-5 gap-1.5" role="group">
+                {cashNotes.map((note) => (
+                  <button
+                    aria-label={`₹${note}`}
+                    className="h-11 rounded-control border border-ds-status-ok-fg/20 bg-ds-status-ok-bg text-sm font-semibold text-ds-text tabular-nums transition-colors duration-150 hover:border-ds-status-ok-fg/50 active:scale-[0.97]"
+                    key={note}
+                    onClick={() => setCashReceived((sum) => sum + note)}
+                    type="button"
                   >
-                    <span className="mr-1 text-xs font-semibold text-ds-text-3">Collect via</span>
-                    {upiOptions.map((option) => (
-                      <button
-                        aria-pressed={collectVia === option}
-                        className={cn(
-                          'flex h-8 items-center gap-1 rounded-full border px-3 text-[12.5px] font-semibold transition pointer-coarse:h-11',
-                          collectVia === option
-                            ? 'border-ds-primary-border bg-ds-primary-soft text-ds-link'
-                            : 'border-ds-border text-ds-text-2 hover:bg-ds-subtle',
-                        )}
-                        key={option}
-                        onClick={() => setUpiVia(option)}
-                        type="button"
-                      >
-                        {collectVia === option ? (
-                          <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
-                        ) : null}
-                        {option === 'OWN' ? 'Own QR' : providerLabels[option]}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {paymentMode === 'CASH' || collectsOnline ? null : (
-                  <Input
-                    aria-label="Payment reference"
-                    className="h-9"
-                    maxLength={100}
-                    onChange={(event) => setPaymentReference(event.target.value)}
-                    placeholder={
-                      paymentMode === 'OTHER'
-                        ? 'How was it paid? (e.g. Sodexo)'
-                        : `${paymentModeLabels[paymentMode]} reference (optional)`
-                    }
-                    value={paymentReference}
-                  />
-                )}
+                    {note}
+                  </button>
+                ))}
+                <button
+                  className="h-11 rounded-control border border-ds-primary-border bg-ds-primary-soft text-xs font-bold text-ds-link disabled:opacity-50"
+                  disabled={totals.grandTotal === 0}
+                  onClick={() => setCashReceived(totals.grandTotal)}
+                  type="button"
+                >
+                  Exact
+                </button>
               </div>
-            )}
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold tracking-wide text-ds-muted uppercase">
+                    Received
+                  </p>
+                  <p className="font-mono text-lg font-bold text-ds-text">
+                    {formatMoney(cashReceived)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold tracking-wide text-ds-muted uppercase">
+                    {cashChange > 0 ? 'Change' : 'Pending'}
+                  </p>
+                  <p
+                    className={cn(
+                      'font-mono text-lg font-bold',
+                      cashChange > 0 ? 'text-ds-status-ok-fg' : 'text-ds-status-pending-fg',
+                    )}
+                  >
+                    {formatMoney(cashChange > 0 ? cashChange : cashPending)}
+                  </p>
+                </div>
+                <Button
+                  disabled={cashReceived === 0}
+                  onClick={() => setCashReceived(0)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {cart.length === 0 ? (
+            <p className="rounded-control bg-ds-subtle px-3 py-3 text-sm text-ds-muted">
+              No items yet. Tap ADD on the menu.
+            </p>
+          ) : (
+            <div className="space-y-2 border-t border-ds-divider pt-3">
+              {/* Tap an item for its kitchen note; × takes it off the bill. */}
+              <ul aria-label="Items on the bill" className="flex flex-wrap gap-1.5">
+                {cart.map((line, index) => (
+                  <li
+                    className={cn(
+                      'flex max-w-full items-center rounded-full border text-[13px] text-ds-text',
+                      noteOpenFor === index
+                        ? 'border-ds-primary bg-ds-primary-soft'
+                        : 'border-ds-primary-border bg-ds-primary-soft/50',
+                    )}
+                    key={`${line.item.id}-${index}`}
+                  >
+                    <button
+                      className="min-w-0 truncate py-1.5 pr-1 pl-3 text-left font-semibold"
+                      onClick={() => setNoteOpenFor(noteOpenFor === index ? null : index)}
+                      title="Note for the kitchen"
+                      type="button"
+                    >
+                      {line.quantity} × {line.item.itemName}
+                      {line.note ? (
+                        <span className="font-normal text-ds-muted"> · {line.note}</span>
+                      ) : null}
+                    </button>
+                    <button
+                      aria-label={`Remove ${line.item.itemName}`}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ds-status-bad-fg hover:bg-ds-status-bad-bg pointer-coarse:h-10 pointer-coarse:w-10"
+                      onClick={() => changeQuantity(index, -line.quantity)}
+                      type="button"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {noteLine ? (
+                <Input
+                  aria-label={`Note for ${noteLine.item.itemName}`}
+                  autoFocus
+                  className="h-9 text-xs"
+                  maxLength={200}
+                  onChange={(event) =>
+                    setCart((lines) =>
+                      lines.map((entry, at) =>
+                        at === noteOpenFor ? { ...entry, note: event.target.value } : entry,
+                      ),
+                    )
+                  }
+                  placeholder={`Note for ${noteLine.item.itemName} (less spicy, no onion…)`}
+                  value={noteLine.note}
+                />
+              ) : null}
+              <div className="rounded-card bg-ds-subtle px-3.5 py-3">
+                <BillTotals
+                  {...totals}
+                  discountPercent={staffDiscount}
+                  gstRates={[...new Set(cart.map((line) => line.item.gstPercent))].filter(Boolean)}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2.5 lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:border-ds-divider lg:bg-ds-surface lg:px-4 lg:py-3">
             {submitted && problems.length > 0 ? (
               <ul className="space-y-0.5 text-sm text-ds-status-bad-fg" role="alert">
                 {problems.map((problem) => (
@@ -1353,10 +1323,20 @@ export function BillingPageClient() {
                 ))}
               </ul>
             ) : null}
-
+            <p className="flex items-baseline gap-2 text-ds-text">
+              <span
+                className="pop inline-block font-mono text-xl font-bold"
+                key={totals.grandTotal}
+              >
+                {formatMoney(totals.grandTotal)}
+              </span>
+              <span className="text-xs font-semibold tracking-wide text-ds-muted uppercase">
+                Total ({itemCount} item{itemCount === 1 ? '' : 's'})
+              </span>
+            </p>
             <div className="grid grid-cols-[auto_1fr] gap-2">
               <Button
-                className="h-[52px] rounded-full px-5"
+                className="h-12 px-5 text-ds-status-bad-fg hover:border-ds-status-bad-fg/40 hover:bg-ds-status-bad-bg hover:text-ds-status-bad-fg"
                 disabled={bill.isPending || cart.length === 0}
                 onClick={resetBill}
                 type="button"
@@ -1365,28 +1345,18 @@ export function BillingPageClient() {
                 Cancel
               </Button>
               <Button
-                // Label and amount on one line where the bill is wide enough; on a phone the
-                // amount wraps under the label instead of pushing the page sideways.
-                className="h-auto min-h-[52px] flex-wrap justify-between gap-x-3 gap-y-0 rounded-full px-5 py-1.5 text-[15px] shadow-[0_6px_16px_rgb(11_87_164/0.28)]"
+                className="h-12 text-[15px]"
                 disabled={bill.isPending}
                 id="pos-complete"
                 onClick={complete}
                 type="button"
               >
-                <span className="flex items-center gap-2 whitespace-nowrap">
-                  {bill.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-5 w-5" />
-                  )}
-                  Complete order
-                </span>
-                <span
-                  className="pop inline-block font-mono text-base whitespace-nowrap"
-                  key={totals.grandTotal}
-                >
-                  {formatMoney(totals.grandTotal)}
-                </span>
+                {bill.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5" />
+                )}
+                Complete order
               </Button>
             </div>
           </div>
@@ -1456,5 +1426,43 @@ export function BillingPageClient() {
         request={onlinePayment?.request ?? null}
       />
     </section>
+  );
+}
+
+/** How the picked payment mode is collected: one chip per way, the chosen one ticked. */
+function CollectVia<T extends string>({
+  label,
+  onPick,
+  options,
+  value,
+}: Readonly<{
+  label: string;
+  onPick: (value: T) => void;
+  options: Array<{ label: string; value: T }>;
+  value: T;
+}>) {
+  return (
+    <div aria-label={label} className="flex flex-wrap items-center gap-1.5" role="group">
+      <span className="mr-1 text-xs font-semibold text-ds-text-3">Collect via</span>
+      {options.map((option) => (
+        <button
+          aria-pressed={value === option.value}
+          className={cn(
+            'flex h-8 items-center gap-1 rounded-full border px-3 text-[12.5px] font-semibold transition pointer-coarse:h-11',
+            value === option.value
+              ? 'border-ds-primary-border bg-ds-primary-soft text-ds-link'
+              : 'border-ds-border text-ds-text-2 hover:bg-ds-subtle',
+          )}
+          key={option.value}
+          onClick={() => onPick(option.value)}
+          type="button"
+        >
+          {value === option.value ? (
+            <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
+          ) : null}
+          {option.label}
+        </button>
+      ))}
+    </div>
   );
 }

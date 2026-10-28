@@ -1,7 +1,7 @@
 import { KitchenProductionStatus } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { StatusCountsQueryDto } from '../../common/dto/status-counts-query.dto';
 
 export const kitchenProductionSortFields = [
   'businessDate',
@@ -14,7 +14,7 @@ export const kitchenProductionSortFields = [
 
 export type KitchenProductionSortField = (typeof kitchenProductionSortFields)[number];
 
-export class ListKitchenProductionsQueryDto extends PaginationQueryDto {
+export class ListKitchenProductionsQueryDto extends StatusCountsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

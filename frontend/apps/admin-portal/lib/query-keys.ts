@@ -9,12 +9,7 @@ const key =
 export const queryKeys = {
   // Inventory: GRNs, stock and transfers
   grns: key('grns'),
-  inventoryHospitals: key('inventory-hospitals'),
-  inventoryItems: key('inventory-items'),
-  inventoryKitchens: key('inventory-kitchens'),
-  inventoryRestaurants: key('inventory-restaurants'),
   inventoryStoreItems: key('inventory-store-items'),
-  inventoryStores: key('inventory-stores'),
   restaurantStock: key('restaurant-stock'),
   stockBalances: key('stock-balances'),
   stockLedgers: key('stock-ledgers'),
@@ -26,13 +21,10 @@ export const queryKeys = {
   transfersViewCounts: key('transfers', 'view-counts'),
 
   // Kitchen
-  kitchenHospitals: key('kitchen-hospitals'),
-  kitchenKitchens: key('kitchen-kitchens'),
   kitchenProductionItems: key('kitchen-production-items'),
   kitchenProductions: key('kitchen-productions'),
   kitchenProductionsToday: key('kitchen-productions', 'today'),
   kitchenStock: key('kitchen-stock'),
-  kitchenStockItems: key('kitchen-stock-items'),
   kitchenStockLedgers: key('kitchen-stock-ledgers'),
 
   // Organization: locations, stores, kitchens, restaurants, counters
@@ -77,6 +69,7 @@ export const queryKeys = {
   posBill: key('pos-bill'),
   posBills: key('pos-bills'),
   posCounters: key('pos-counters'),
+  posWhoAmI: key('pos-whoami'),
   posPaymentProviders: key('pos-payment-providers'),
   reports: key('reports'),
   posEmployee: key('pos-employee'),

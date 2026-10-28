@@ -39,6 +39,19 @@ function normalizeException(exception: unknown): {
     };
   }
 
+  // node-postgres's pool, when every connection stayed busy past connect_timeout: the service is
+  // overloaded, not broken, and a retry a moment later usually works.
+  if (
+    exception instanceof Error &&
+    exception.message === 'timeout exceeded when trying to connect'
+  ) {
+    return {
+      errors: [],
+      message: 'The server is busy right now. Please try again in a moment.',
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    };
+  }
+
   if (!(exception instanceof HttpException)) {
     return {
       errors: [],

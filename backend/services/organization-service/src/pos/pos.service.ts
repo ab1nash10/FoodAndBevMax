@@ -1,4 +1,4 @@
-import { hospitalScopeStorage } from '@aahar/auth';
+import { getAllowedHospitalIds, hospitalScopeStorage } from '@aahar/auth';
 import {
   BadRequestException,
   ConflictException,
@@ -21,10 +21,11 @@ import {
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { bestDiscountRule } from '../employee-discounts/employee-discount-rules';
-import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { getOrderBy, getPageMeta, getPagination, toStatusCounts } from '../common/pagination';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { lockRow } from '../common/row-lock';
+import { ShortCache } from '../common/short-cache';
 import { optionalText, toDateOnly, toNumber } from '../common/values';
 import type {
   CancelPosOrderDto,
@@ -36,6 +37,7 @@ import type {
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
 import { itemCount } from '../restaurant-orders/restaurant-orders.service';
+import { deviceHost } from './device-host';
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { shiftStates, shiftsOn, tally, userNames } from './shifts';
 
@@ -43,6 +45,22 @@ type Client = Prisma.TransactionClient | PrismaService;
 
 /** SAC for restaurant food service, printed for items with no HSN of their own. */
 const RESTAURANT_SERVICE_SAC = '996331';
+
+/** A restaurant counts as using its kiosk when a kiosk order came in within this many days. */
+const KIOSK_IN_USE_DAYS = 30;
+
+const notAssignedToTill =
+  'You are not assigned to the location of this till’s restaurant. Ask an admin to give you access to its location.';
+
+/** Whether the signed-in user reaches the location of one of the till's restaurants. */
+function mayWorkTill(device: { restaurants: Array<{ restaurant: { hospitalId: string } }> }) {
+  const allowed = getAllowedHospitalIds();
+  // null: a Super Admin, who reaches every location (undefined: no request, as in a job).
+  return (
+    allowed == null ||
+    device.restaurants.some((entry) => allowed.includes(entry.restaurant.hospitalId))
+  );
+}
 
 const counterSelect = {
   counterCode: true,
@@ -182,37 +200,122 @@ export class PosService {
     private readonly prisma: PrismaService,
   ) {}
 
+  private readonly tillByAddress = new ShortCache(5 * 60_000);
+
   /**
    * The active counters the user may bill at (reads are already limited to their locations),
    * each with its shift: the open one, a handover waiting for the next cashier, a closed day.
+   * With `ip`, only the counters of the till that computer is: DNS must name it as a mapped POS
+   * device, whatever its browser says. The POS module opens nowhere else.
    */
-  async counters(host?: string) {
-    const counters = await this.prisma.counter.findMany({
+  async counters(ip?: string) {
+    const tillName = ip === undefined ? null : await this.tillAt(ip);
+    if (ip !== undefined && !tillName) {
+      throw new NotFoundException(
+        'This computer is not mapped to a POS. Ask an admin to add its hostname to a POS device under POS & Payment Machines.',
+      );
+    }
+    const till = tillName ? await this.tillDevice(tillName) : undefined;
+    if (till && !mayWorkTill(till)) {
+      throw new ForbiddenException(notAssignedToTill);
+    }
+    const found = await this.prisma.counter.findMany({
       orderBy: [{ restaurant: { restaurantName: 'asc' } }, { counterName: 'asc' }],
-      select: counterSelect,
+      select: { ...counterSelect, posDeviceId: true },
       where: {
         deletedAt: null,
         hospital: { deletedAt: null, isActive: true },
         isActive: true,
         restaurant: { deletedAt: null, isActive: true },
-        ...(host ? await this.tillCounters(host) : {}),
+        ...(till
+          ? {
+              OR: [
+                { posDeviceId: till.id },
+                { restaurantId: { in: till.restaurants.map((entry) => entry.restaurantId) } },
+              ],
+            }
+          : {}),
       },
     });
-    const states = await shiftStates(
-      this.prisma,
-      counters.map((counter) => counter.id),
-      toDateOnly(siteBusinessDate(new Date())),
-    );
+    // A till bills at its device's own counters if any name it, else at its restaurants' counters.
+    const counters =
+      till && found.some((counter) => counter.posDeviceId === till.id)
+        ? found.filter((counter) => counter.posDeviceId === till.id)
+        : found;
+    const [states, kiosks] = await Promise.all([
+      shiftStates(
+        this.prisma,
+        counters.map((counter) => counter.id),
+        toDateOnly(siteBusinessDate(new Date())),
+      ),
+      // Only a restaurant whose kiosk took orders lately has guests to look for: the other tills
+      // skip the waiting-orders poll (a number can still be looked up by hand).
+      this.prisma.kioskOrder.groupBy({
+        by: ['restaurantId'],
+        where: {
+          createdAt: { gte: new Date(Date.now() - KIOSK_IN_USE_DAYS * 86_400_000) },
+          restaurantId: { in: [...new Set(counters.map((counter) => counter.restaurantId))] },
+        },
+      }),
+    ]);
+    const kioskRestaurants = new Set(kiosks.map((entry) => entry.restaurantId));
 
-    return counters.map((counter) => ({ ...counter, shift: states.get(counter.id) }));
+    return counters.map(({ posDeviceId: _posDeviceId, ...counter }) => ({
+      ...counter,
+      kioskInUse: kioskRestaurants.has(counter.restaurantId),
+      shift: states.get(counter.id),
+    }));
   }
 
   /**
-   * Which counters a till computer bills at, from its hostname: the active POS device with that
-   * hostname, its counters if any name it, else every counter of the restaurants mapped to it.
-   * Reads stay limited to the user's locations, so a till outside them shows no counter.
+   * The till computer's POS device, from its hostname, with the restaurants mapped to it. Looked
+   * up across every location; the counters read after it stay limited to the user's, so a till
+   * outside them shows no counter.
    */
-  private async tillCounters(host: string): Promise<Prisma.CounterWhereInput> {
+  /** The registered till the computer at `ip` is; remembered a few minutes, as DNS can be slow. */
+  /** The till the computer at `ip` is, its restaurants, and whether the signed-in user may work it. */
+  async tillAccess(
+    ip: string,
+  ): Promise<{ allowed: boolean; restaurants: string[]; till: string | null }> {
+    const till = await this.tillAt(ip);
+    if (!till) return { allowed: false, restaurants: [], till: null };
+
+    const device = await this.tillDevice(till);
+    return {
+      allowed: mayWorkTill(device),
+      restaurants: device.restaurants.map((entry) => entry.restaurant.restaurantName),
+      till,
+    };
+  }
+
+  async tillAt(ip: string): Promise<string | null> {
+    // No DNS name is not remembered (the cache drops a failed load): a slow answer once must
+    // not leave a till unrecognised for minutes. ponytail: a nameless address pays the lookup
+    // (up to its 1 s timeout) on every call; remember misses briefly if that shows up.
+    return await this.tillByAddress
+      .get(ip, async () => {
+        const { hostname } = await deviceHost(ip);
+        if (!hostname) throw new Error('No DNS name');
+        return await this.tillHost(hostname);
+      })
+      .catch(() => null);
+  }
+
+  /** The registered till a computer is, from the name DNS gives it (tills hold its short name). */
+  async tillHost(dnsName: string | null): Promise<string | null> {
+    const host = dnsName?.split('.')[0];
+    if (!host) return null;
+
+    return await this.tillDevice(host).then(
+      () => host,
+      (error: unknown) => {
+        if (error instanceof NotFoundException) return null;
+        throw error;
+      },
+    );
+  }
+
+  private async tillDevice(host: string) {
     const hostName = host.trim();
     const device = await hospitalScopeStorage.run(
       { allowedHospitalIds: null },
@@ -221,7 +324,10 @@ export class PosService {
           select: {
             id: true,
             restaurants: {
-              select: { restaurantId: true },
+              select: {
+                restaurant: { select: { hospitalId: true, restaurantName: true } },
+                restaurantId: true,
+              },
               where: { deletedAt: null, isActive: true },
             },
           },
@@ -239,13 +345,7 @@ export class PosService {
       );
     }
 
-    const named = await this.prisma.counter.count({
-      where: { deletedAt: null, isActive: true, posDeviceId: device.id },
-    });
-
-    return named > 0
-      ? { posDeviceId: device.id }
-      : { restaurantId: { in: device.restaurants.map((entry) => entry.restaurantId) } };
+    return device;
   }
 
   async findCounter(id: string, client: Client = this.prisma) {
@@ -519,15 +619,15 @@ export class PosService {
     const payment = await tx.onlinePayment.findFirst({ where: { counterId, id } });
 
     if (!payment) {
-      throw new NotFoundException('This UPI payment was not found at this counter.');
+      throw new NotFoundException('This payment was not found at this counter.');
     }
 
     if (payment.status !== 'PAID') {
-      throw new BadRequestException('This UPI payment has not been received yet.');
+      throw new BadRequestException('This payment has not been received yet.');
     }
 
     if (payment.orderId) {
-      throw new ConflictException('This UPI payment is already on another bill.');
+      throw new ConflictException('This payment is already on another bill.');
     }
 
     if (Math.abs(toNumber(payment.amount) - grandTotal) > 0.005) {
@@ -642,7 +742,14 @@ export class PosService {
           })),
         },
         orderNumber: String(ordersToday + 1).padStart(4, '0'),
-        paymentMode: online ? PaymentMode.UPI : isComplimentary ? null : dto.paymentMode,
+        // Online payments are UPI, except a card taken on the counter's Pine Labs machine.
+        paymentMode: online
+          ? online.provider === 'PINELABS'
+            ? PaymentMode.CARD
+            : PaymentMode.UPI
+          : isComplimentary
+            ? null
+            : dto.paymentMode,
         paymentReference: online
           ? online.paidReference
           : isComplimentary
@@ -682,7 +789,7 @@ export class PosService {
       });
 
       if (count === 0) {
-        throw new ConflictException('This UPI payment is already on another bill.');
+        throw new ConflictException('This payment is already on another bill.');
       }
     }
 
@@ -1007,7 +1114,10 @@ export class PosService {
           }
         : {}),
     };
-    const [orders, total] = await Promise.all([
+    // The tabs (all, cancelled, complimentary) at once: the other filters (the Complimentary
+    // screen keeps its own), whichever status tab is open.
+    const untabbed = { ...where, status: undefined };
+    const [orders, total, byStatus, complimentaryCount] = await Promise.all([
       this.prisma.restaurantOrder.findMany({
         orderBy: getOrderBy(query, 'placedAt'),
         select: {
@@ -1042,6 +1152,16 @@ export class PosService {
         where,
       }),
       this.prisma.restaurantOrder.count({ where }),
+      query.statusCounts
+        ? this.prisma.restaurantOrder.groupBy({
+            _count: { _all: true },
+            by: ['status'],
+            where: untabbed,
+          })
+        : undefined,
+      query.statusCounts
+        ? this.prisma.restaurantOrder.count({ where: { ...untabbed, isComplimentary: true } })
+        : undefined,
     ]);
 
     return {
@@ -1068,7 +1188,10 @@ export class PosService {
           subtotal: money(subtotal),
         }),
       ),
-      meta: getPageMeta(page, limit, total),
+      meta: {
+        ...getPageMeta(page, limit, total),
+        ...(byStatus ? { complimentaryCount, statusCounts: toStatusCounts(byStatus) } : {}),
+      },
     };
   }
 

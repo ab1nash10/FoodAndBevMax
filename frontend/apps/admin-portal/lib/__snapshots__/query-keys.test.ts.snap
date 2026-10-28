@@ -70,23 +70,8 @@ exports[`every prefix stays as it is 1`] = `
   "hospitals": [
     "hospitals",
   ],
-  "inventoryHospitals": [
-    "inventory-hospitals",
-  ],
-  "inventoryItems": [
-    "inventory-items",
-  ],
-  "inventoryKitchens": [
-    "inventory-kitchens",
-  ],
-  "inventoryRestaurants": [
-    "inventory-restaurants",
-  ],
   "inventoryStoreItems": [
     "inventory-store-items",
-  ],
-  "inventoryStores": [
-    "inventory-stores",
   ],
   "itemCategories": [
     "item-categories",
@@ -109,12 +94,6 @@ exports[`every prefix stays as it is 1`] = `
   "kioskOrderToBill": [
     "kiosk-order-to-bill",
   ],
-  "kitchenHospitals": [
-    "kitchen-hospitals",
-  ],
-  "kitchenKitchens": [
-    "kitchen-kitchens",
-  ],
   "kitchenOptions": [
     "kitchen-options",
   ],
@@ -130,9 +109,6 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "kitchenStock": [
     "kitchen-stock",
-  ],
-  "kitchenStockItems": [
-    "kitchen-stock-items",
   ],
   "kitchenStockLedgers": [
     "kitchen-stock-ledgers",
@@ -199,6 +175,9 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "posSummary": [
     "pos-summary",
+  ],
+  "posWhoAmI": [
+    "pos-whoami",
   ],
   "reports": [
     "reports",

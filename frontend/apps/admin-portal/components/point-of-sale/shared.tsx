@@ -8,7 +8,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiClientError, type PaymentMode, type PosBill, type PosCounter } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { StatusChip } from '@/components/design-system';
-import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Select, Skeleton } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
@@ -58,62 +57,33 @@ function readStoredCounter(): string {
   }
 }
 
-const tillHostKey = 'aahar.pos.host';
-
 /**
- * This computer's hostname when it is a till, empty anywhere else. A browser cannot read the
- * hostname, so the till's launcher opens AAHAR with ?host=%COMPUTERNAME%; the device remembers
- * it from then on, so the till keeps its counter however AAHAR is opened later.
+ * The till this computer is, as the server knows it: a browser cannot read its own hostname, so
+ * the server looks the caller's address up in DNS and matches the name to a mapped POS device.
+ * Asked once a session; the POS module opens only where it names a till.
  */
-function readTillHost(canSetUpTill: boolean): string {
-  if (typeof window === 'undefined') return '';
-
-  // Only someone who may set up tills can point this computer at one by address; for anyone
-  // else ?host= is ignored, so a cashier cannot move a till to another counter.
-  const fromUrl = canSetUpTill
-    ? (new URLSearchParams(window.location.search).get('host')?.trim() ?? '')
-    : '';
-
-  try {
-    if (fromUrl) window.localStorage.setItem(tillHostKey, fromUrl);
-    return fromUrl || (window.localStorage.getItem(tillHostKey) ?? '');
-  } catch {
-    // Private windows may refuse storage: the address alone names the till for this visit.
-    return fromUrl;
-  }
+export function usePosTill() {
+  return useQuery({
+    queryFn: async () => (await organizationApi.posWhoAmI()).data,
+    queryKey: queryKeys.posWhoAmI(),
+    retry: false,
+    staleTime: Infinity,
+  });
 }
 
 /**
- * The counters the user may bill at, and the one this till works at. On a till computer (one
- * with a hostname) only the counters of its POS device, whatever location the header shows;
- * elsewhere those within the header's location. The choice among several is remembered here.
+ * The counters of this computer's till, and the one the cashier works at: the till's device's
+ * own counters, else its restaurants'. The choice among several is remembered here.
  */
 export function usePosCounter() {
-  const { scopedHospitalId } = useLocationContext();
-  // Read at once rather than in an effect, so the till never flashes "no counter" first. The
-  // server renders the loading state either way.
-  const canSetUpTill = useAuth().hasPermission('POS_DEVICE_UPDATE');
-  const [host, setHostState] = useState(() => readTillHost(canSetUpTill));
-  // An admin sets this computer up as a till (or clears it): remembered on this browser.
-  const setHost = useCallback((hostName: string) => {
-    setHostState(hostName);
-    try {
-      if (hostName) window.localStorage.setItem(tillHostKey, hostName);
-      else window.localStorage.removeItem(tillHostKey);
-    } catch {
-      // Private windows may refuse storage; the choice then lasts for this visit only.
-    }
-  }, []);
   const query = useQuery({
-    queryFn: async () => (await organizationApi.listPosCounters(host || undefined)).data,
-    queryKey: host ? queryKeys.posCounters(host) : queryKeys.posCounters(),
-    // An unregistered till is an answer, not a hiccup: say so at once.
+    queryFn: async () => (await organizationApi.listPosCounters(true)).data,
+    queryKey: queryKeys.posCounters('till'),
+    // A computer that is no till is an answer, not a hiccup: say so at once.
     retry: (count, error) =>
       !(error instanceof ApiClientError && error.status === 404) && count < 2,
   });
-  const counters = (query.data ?? []).filter(
-    (counter) => Boolean(host) || !scopedHospitalId || counter.hospitalId === scopedHospitalId,
-  );
+  const counters = query.data ?? [];
   const [storedId, setStoredId] = useState('');
 
   useEffect(() => {
@@ -130,7 +100,7 @@ export function usePosCounter() {
     }
   }, []);
 
-  return { counter, counters, host, query, setCounterId, setHost };
+  return { counter, counters, query, setCounterId };
 }
 
 export function counterLabel(counter: Pick<PosCounter, 'counterName' | 'restaurant'>): string {

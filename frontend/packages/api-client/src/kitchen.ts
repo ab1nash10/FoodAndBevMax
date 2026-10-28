@@ -57,6 +57,8 @@ export interface KitchenProductionInput {
 }
 
 export interface KitchenProductionListQuery extends ListQuery {
+  /** Adds meta.statusCounts: every status tab's count in the same request. */
+  statusCounts?: boolean;
   chefUserId?: string;
   fromDate?: string;
   hospitalId?: string;

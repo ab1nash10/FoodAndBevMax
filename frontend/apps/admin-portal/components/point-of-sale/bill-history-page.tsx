@@ -143,15 +143,15 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
 
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (extra: PosBillListQuery) =>
-        (await organizationApi.listPosBills({ ...baseQuery, ...extra, limit: 0 })).data.meta.total;
-      const [all, cancelled, comp] = await Promise.all([
-        count({}),
-        count({ status: 'CANCELLED' }),
-        complimentary ? null : count({ isComplimentary: true }),
-      ]);
+      const { meta } = (
+        await organizationApi.listPosBills({ ...baseQuery, limit: 0, statusCounts: true })
+      ).data;
 
-      return { all, cancelled, complimentary: comp };
+      return {
+        all: meta.total,
+        cancelled: meta.statusCounts?.CANCELLED ?? 0,
+        complimentary: complimentary ? null : (meta.complimentaryCount ?? 0),
+      };
     },
     queryKey: queryKeys.posBills('stats', ...filterKey),
   });

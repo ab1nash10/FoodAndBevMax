@@ -1,7 +1,7 @@
 import { InventoryLocationType, ItemType } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { StatusCountsQueryDto } from '../../common/dto/status-counts-query.dto';
 
 export const stockBalanceStatuses = [
   'AVAILABLE',
@@ -15,7 +15,7 @@ export const stockBalanceSortFields = ['availableQty', 'expiryDate', 'lastUpdate
 export type StockBalanceSortField = (typeof stockBalanceSortFields)[number];
 export type StockBalanceStatus = (typeof stockBalanceStatuses)[number];
 
-export class ListStockBalancesQueryDto extends PaginationQueryDto {
+export class ListStockBalancesQueryDto extends StatusCountsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

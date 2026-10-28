@@ -1,7 +1,7 @@
 import { GrnStatus } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { StatusCountsQueryDto } from '../../common/dto/status-counts-query.dto';
 
 export const grnSortFields = [
   'createdAt',
@@ -13,7 +13,7 @@ export const grnSortFields = [
 
 export type GrnSortField = (typeof grnSortFields)[number];
 
-export class ListGrnsQueryDto extends PaginationQueryDto {
+export class ListGrnsQueryDto extends StatusCountsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()

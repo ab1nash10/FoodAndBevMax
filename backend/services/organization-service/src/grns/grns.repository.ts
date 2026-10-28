@@ -74,6 +74,10 @@ export class GrnsRepository {
     return this.prisma.grn.count(args);
   }
 
+  async countByStatus(where: Prisma.GrnWhereInput) {
+    return this.prisma.grn.groupBy({ _count: { _all: true }, by: ['status'], where });
+  }
+
   async create(
     data: Prisma.GrnUncheckedCreateInput,
     client: GrnClient,

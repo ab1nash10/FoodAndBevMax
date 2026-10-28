@@ -42,13 +42,7 @@ test('each write invalidates the same query keys', () => {
       ['transfer-kitchen-stock'],
       ['dashboard'],
     ],
-    invalidateKitchenQueries: [
-      ['kitchens'],
-      ['kitchen-options'],
-      ['inventory-kitchens'],
-      ['location-names'],
-      ['kitchen-kitchens'],
-    ],
+    invalidateKitchenQueries: [['kitchens'], ['kitchen-options'], ['location-names']],
     invalidateStockDiscardQueries: [
       ['stock-balances'],
       ['stock-ledgers'],

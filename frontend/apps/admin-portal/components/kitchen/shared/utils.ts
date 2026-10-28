@@ -19,21 +19,7 @@ export function formatDate(value: string | null | undefined): string {
   return dateFormatter.format(new Date(value));
 }
 
-export function useHospitals() {
-  return useQuery({
-    queryFn: async () => {
-      const response = await organizationApi.listHospitals({
-        isActive: true,
-        limit: 100,
-        sortBy: 'hospitalName',
-        sortOrder: 'asc',
-      });
-
-      return response.data.items;
-    },
-    queryKey: queryKeys.kitchenHospitals(),
-  });
-}
+export { useMyLocations as useHospitals } from '@/components/location-context';
 
 export function useKitchens(hospitalId?: string) {
   return useQuery({
@@ -49,6 +35,7 @@ export function useKitchens(hospitalId?: string) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.kitchenKitchens(hospitalId),
+    // Master data: fresh 5 minutes, refreshed whenever a kitchen is edited.
+    queryKey: queryKeys.kitchenOptions('kitchen', hospitalId),
   });
 }

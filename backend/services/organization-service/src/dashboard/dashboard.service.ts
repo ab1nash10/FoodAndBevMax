@@ -1,6 +1,8 @@
+import { getAllowedHospitalIds } from '@aahar/auth';
 import { Injectable } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { ShortCache } from '../common/short-cache';
 import { ListEmployeesQueryDto } from '../employees/dto/list-employees-query.dto';
 import { EmployeesService } from '../employees/employees.service';
 import { ListGrnsQueryDto } from '../grns/dto/list-grns-query.dto';
@@ -89,6 +91,20 @@ const toGrn = (grn: GrnRow) => ({
   vendorName: grn.vendorName,
 });
 
+/**
+ * Whom an answer may be shared with: the same location reach (the Prisma scope narrows every
+ * read to it), the same permissions and the same filters.
+ */
+function shareKey(permissions: readonly string[], filters: Record<string, string | undefined>) {
+  const scope = getAllowedHospitalIds();
+
+  return JSON.stringify([
+    scope === undefined ? 'unscoped' : scope,
+    [...permissions].sort(),
+    filters,
+  ]);
+}
+
 function slim<T, R>(page: { items: T[]; meta: { total: number } }, toRow: (row: T) => R) {
   return { items: page.items.map(toRow), truncated: page.meta.total > page.items.length };
 }
@@ -100,6 +116,13 @@ function slim<T, R>(page: { items: T[]; meta: { total: number } }, toRow: (row: 
  */
 @Injectable()
 export class DashboardService {
+  // Every admin's dashboard asks the same: under load (scripts/loadtest) these were the slowest
+  // calls, so one answer is shared per scope. A new record shows within these times; the period
+  // records go stale faster than the setup totals.
+  private readonly navCountsCache = new ShortCache(15_000);
+  private readonly recordsCache = new ShortCache(30_000);
+  private readonly setupCache = new ShortCache(60_000);
+
   constructor(
     private readonly employees: EmployeesService,
     private readonly grns: GrnsService,
@@ -121,7 +144,14 @@ export class DashboardService {
    * acknowledgement, draft GRNs and draft productions, each the total its own list endpoint
    * gives for the same filters, and only when the user may view that list.
    */
-  async navCounts(query: DashboardSetupQueryDto, permissions: readonly string[]) {
+  navCounts(query: DashboardSetupQueryDto, permissions: readonly string[]) {
+    // Every signed-in tab asks each minute (10% of all requests with 2,000 users): shared 15 s.
+    return this.navCountsCache.get(shareKey(permissions, { hospitalId: query.hospitalId }), () =>
+      this.loadNavCounts(query, permissions),
+    );
+  }
+
+  private async loadNavCounts(query: DashboardSetupQueryDto, permissions: readonly string[]) {
     const can = (...any: string[]) => any.some((permission) => permissions.includes(permission));
     const here = { hospitalId: query.hospitalId, limit: 0, page: 1 };
     const [transfers, grns, productions] = await Promise.all([
@@ -197,7 +227,15 @@ export class DashboardService {
   }
 
   /** Transfers, posted productions and posted GRNs from `fromDate`, newest first. */
-  async records(query: DashboardRecordsQueryDto, permissions: readonly string[]) {
+  records(query: DashboardRecordsQueryDto, permissions: readonly string[]) {
+    const filters = { fromDate: query.fromDate, hospitalId: query.hospitalId };
+
+    return this.recordsCache.get(shareKey(permissions, filters), () =>
+      this.loadRecords(query, permissions),
+    );
+  }
+
+  private async loadRecords(query: DashboardRecordsQueryDto, permissions: readonly string[]) {
     const can = (...any: string[]) => any.some((permission) => permissions.includes(permission));
     const period = {
       fromDate: query.fromDate,
@@ -239,8 +277,14 @@ export class DashboardService {
     };
   }
 
-  /** The setup checklist's totals and its first posted GRN and acknowledged transfer. */
-  async setup(query: DashboardSetupQueryDto, permissions: readonly string[]) {
+  /** The master-data totals and the first posted GRN and acknowledged transfer. */
+  setup(query: DashboardSetupQueryDto, permissions: readonly string[]) {
+    return this.setupCache.get(shareKey(permissions, { hospitalId: query.hospitalId }), () =>
+      this.loadSetup(query, permissions),
+    );
+  }
+
+  private async loadSetup(query: DashboardSetupQueryDto, permissions: readonly string[]) {
     const can = (...any: string[]) => any.some((permission) => permissions.includes(permission));
     const { hospitalId } = query;
     // limit 0: each total is one count, without loading a row and its related records.

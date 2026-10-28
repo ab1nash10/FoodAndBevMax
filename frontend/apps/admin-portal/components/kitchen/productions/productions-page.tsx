@@ -173,23 +173,22 @@ export function KitchenProductionsPageClient() {
   // Every status's total at the chosen location and kitchen, whatever the board shows now.
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (status?: KitchenProductionStatus) =>
-        (
-          await organizationApi.listKitchenProductions({
-            hospitalId: hospitalFilter,
-            kitchenId: kitchenFilter,
-            limit: 0,
-            status,
-          })
-        ).data.meta.total;
-      const [all, draft, posted, cancelled] = await Promise.all([
-        count(),
-        count('DRAFT'),
-        count('POSTED'),
-        count('CANCELLED'),
-      ]);
+      const { meta } = (
+        await organizationApi.listKitchenProductions({
+          hospitalId: hospitalFilter,
+          kitchenId: kitchenFilter,
+          limit: 0,
+          statusCounts: true,
+        })
+      ).data;
+      const count = (status: KitchenProductionStatus) => meta.statusCounts?.[status] ?? 0;
 
-      return { all, CANCELLED: cancelled, DRAFT: draft, POSTED: posted };
+      return {
+        all: meta.total,
+        CANCELLED: count('CANCELLED'),
+        DRAFT: count('DRAFT'),
+        POSTED: count('POSTED'),
+      };
     },
     queryKey: queryKeys.kitchenProductions('stats', hospitalFilter, kitchenFilter),
   });

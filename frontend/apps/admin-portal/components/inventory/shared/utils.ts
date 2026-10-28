@@ -77,21 +77,10 @@ export function formatQuantity(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(3);
 }
 
-export function useHospitals() {
-  return useQuery({
-    queryFn: async () => {
-      const response = await organizationApi.listHospitals({
-        isActive: true,
-        limit: 100,
-        sortBy: 'hospitalName',
-        sortOrder: 'asc',
-      });
+export { useMyLocations as useHospitals } from '@/components/location-context';
 
-      return response.data.items;
-    },
-    queryKey: queryKeys.inventoryHospitals(),
-  });
-}
+// The pickers below are master data: under the *Options keys they stay fresh 5 minutes and are
+// refreshed whenever a store, item, restaurant or kitchen is edited (lib/query-client.ts).
 
 export function useStores(hospitalId?: string) {
   return useQuery({
@@ -107,7 +96,7 @@ export function useStores(hospitalId?: string) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.inventoryStores(hospitalId),
+    queryKey: queryKeys.storeOptions('inventory', hospitalId),
   });
 }
 
@@ -123,7 +112,7 @@ export function useItems(itemType?: ItemType) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.inventoryItems(itemType ?? 'all'),
+    queryKey: queryKeys.itemOptions('inventory', itemType ?? 'all'),
   });
 }
 
@@ -141,7 +130,7 @@ export function useRestaurants(hospitalId?: string) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.inventoryRestaurants(hospitalId),
+    queryKey: queryKeys.restaurantOptions('inventory', hospitalId),
   });
 }
 
@@ -159,7 +148,7 @@ export function useKitchens(hospitalId?: string) {
 
       return response.data.items;
     },
-    queryKey: queryKeys.inventoryKitchens(hospitalId),
+    queryKey: queryKeys.kitchenOptions('inventory', hospitalId),
   });
 }
 

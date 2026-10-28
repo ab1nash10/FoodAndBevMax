@@ -114,7 +114,7 @@ export function KitchenTabletPageClient() {
           sortOrder: 'asc',
         })
       ).data.items,
-    queryKey: queryKeys.kitchenKitchens(scopedHospitalId ?? 'all'),
+    queryKey: queryKeys.kitchenOptions('kitchen-tablet', scopedHospitalId ?? 'all'),
   });
   const kitchens = kitchensQuery.data ?? [];
   const kitchen = kitchens.find((entry) => entry.id === kitchenId) ?? kitchens[0] ?? null;

@@ -1,13 +1,17 @@
 import { Prisma } from '@prisma/client';
 
-type LockableTable =
-  | 'counter_shifts'
-  | 'counters'
-  | 'grns'
-  | 'kitchen_productions'
-  | 'restaurant_orders'
-  | 'transfers'
-  | 'users';
+/** Each table's primary key column: the inventory tables name theirs after the table. */
+const primaryKey = {
+  counter_shifts: 'id',
+  counters: 'id',
+  grns: 'grn_id',
+  kitchen_productions: 'kitchen_production_id',
+  restaurant_orders: 'id',
+  transfers: 'transfer_id',
+  users: 'id',
+} as const;
+
+type LockableTable = keyof typeof primaryKey;
 
 /**
  * Holds the document's row lock until the transaction ends.
@@ -22,5 +26,5 @@ export async function lockRow(
   table: LockableTable,
   id: string,
 ): Promise<void> {
-  await tx.$queryRaw`SELECT 1 FROM ${Prisma.raw(`"${table}"`)} WHERE id = ${id}::uuid FOR UPDATE`;
+  await tx.$queryRaw`SELECT 1 FROM ${Prisma.raw(`"${table}"`)} WHERE ${Prisma.raw(`"${primaryKey[table]}"`)} = ${id}::uuid FOR UPDATE`;
 }

@@ -412,11 +412,24 @@ export function createOrganizationApi(options: ApiClientOptions) {
       );
     },
     /** Counters the signed-in user may bill at. */
-    /** With the till computer's hostname, only the counters of its POS device. */
-    listPosCounters(host?: string) {
+    /** With till, only those of the till this computer is (404 when it is mapped to no POS). */
+    listPosCounters(till = false) {
       return client.request<ApiResponse<PosCounter[]>>('/pos/counters', {
-        query: host ? { host } : undefined,
+        query: till ? { till: 'true' } : undefined,
       });
+    },
+    /** This computer as the server sees it: address, DNS name, and the registered till it is. */
+    posWhoAmI() {
+      return client.request<
+        ApiResponse<{
+          /** Whether the signed-in user is assigned to the location of the till's restaurants. */
+          allowed: boolean;
+          hostname: string | null;
+          ip: string | null;
+          restaurants: string[];
+          till: string | null;
+        }>
+      >('/pos/whoami');
     },
     getPosMenu(counterId: string, channel: PosChannel) {
       return client.request<ApiResponse<PosMenu>>('/pos/menu', { query: { channel, counterId } });
@@ -440,6 +453,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
     /** The online UPI providers set up on the server, in the order to offer them. */
     listOnlinePaymentProviders() {
       return client.request<ApiResponse<OnlinePaymentProvider[]>>('/pos/online-payments/providers');
+    },
+    /** The counter's Pine Labs card machine, or null: cards go to it as provider PINELABS. */
+    getCardMachine(counterId: string) {
+      return client.request<ApiResponse<{ name: string } | null>>(
+        `/pos/online-payments/card-machine/${counterId}`,
+      );
     },
     startOnlinePayment(body: OnlinePaymentInput) {
       return client.request<ApiResponse<OnlinePayment>>('/pos/online-payments', {

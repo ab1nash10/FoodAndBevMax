@@ -19,8 +19,8 @@ const screens: Array<[string, string]> = [
   ['inventory/grns/new', 'Receive a delivery'],
 ];
 
-// The till: a local POS device with this hostname, mapped to the restaurant whose counter bills.
-const tillHost = process.env.E2E_POS_HOST ?? 'test1';
+// The POS opens only on a till: this computer's hostname must be on a local POS device, mapped
+// to a restaurant with a counter. The server finds it from this computer's address.
 const orgUrl = process.env.E2E_ORG_URL ?? 'http://localhost:4003/api/v1';
 let openedShift = false;
 
@@ -34,26 +34,24 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
   test.setTimeout(5 * 60_000);
   page.setDefaultTimeout(30_000);
   const session = await newSession();
-  await page.addInitScript(
-    ({ host, tokens }) => {
-      if (!window.localStorage.getItem('aahar.admin.auth')) {
-        window.localStorage.setItem(
-          'aahar.admin.auth',
-          JSON.stringify({ ...tokens, savedAt: new Date().toISOString() }),
-        );
-      }
-      // This browser is the till whose hostname a local POS device carries.
-      window.localStorage.setItem('aahar.pos.host', host);
-    },
-    { host: tillHost, tokens: session },
-  );
+  await page.addInitScript((tokens) => {
+    if (!window.localStorage.getItem('aahar.admin.auth')) {
+      window.localStorage.setItem(
+        'aahar.admin.auth',
+        JSON.stringify({ ...tokens, savedAt: new Date().toISOString() }),
+      );
+    }
+    // Every location, so the bill shows in the history whichever location the till is in.
+    window.localStorage.setItem('aahar.location-context', 'all');
+  }, session);
   const title = page.getByRole('heading', { level: 1 });
 
   for (const [path, name] of screens) {
     await test.step(`${path} opens`, async () => {
       await page.goto(path);
       // The error page has its own title, so this also fails when the screen crashes.
-      await expect.soft(title, `${path}: its title shows`).toHaveText(name);
+      // Some titles carry a count badge once their list loads ("Orders 8").
+      await expect.soft(title, `${path}: its title shows`).toHaveText(new RegExp(`^${name}\\d*$`));
     });
   }
 
@@ -67,18 +65,26 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     await page.goto('pos/billing');
     // The till opens once a shift is started; one this test starts, it ends again below.
     const openShift = page.getByRole('button', { name: /open shift$/i });
-    const anyItem = page.locator('button[aria-label^="Add "]');
+    // The menu opens on its categories; "All items" lists every dish.
+    const allItems = page.getByRole('button', { name: /^All items/ });
     // Wait for the till to load: either the shift step or the menu.
-    await expect(openShift.or(anyItem).first()).toBeVisible();
+    await expect(openShift.or(allItems).first()).toBeVisible();
     if (await openShift.isVisible()) {
       await page.locator('#shift-opening-cash').fill('0');
       await openShift.click();
       openedShift = true;
     }
+    await allItems.click();
     const sellable = page.locator('button[aria-label^="Add "]:not([disabled])').first();
     await expect(sellable, 'the counter has an item it can sell now').toBeVisible();
     await sellable.click();
+    await expect(page.getByRole('button', { name: 'Back to categories' })).toBeVisible();
     await page.getByRole('button', { exact: true, name: 'Cash' }).click();
+    // Notes the guest hands over add up; the change due shows once they cover the bill.
+    await page.getByRole('button', { exact: true, name: '₹500' }).click();
+    await page.getByRole('button', { exact: true, name: '₹500' }).click();
+    await expect(page.getByText('₹1,000.00', { exact: true })).toBeVisible();
+    await expect(page.getByText('Change', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /^Complete order/ }).click();
 
     const done = page.getByRole('dialog', { name: 'Bill completed' });
@@ -97,7 +103,7 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     await test.step('end the shift this test started', async () => {
       const headers = { Authorization: `Bearer ${session.accessToken}` };
       const counters = (await (
-        await fetch(`${orgUrl}/pos/counters?host=${encodeURIComponent(tillHost)}`, { headers })
+        await fetch(`${orgUrl}/pos/counters?till=true`, { headers })
       ).json()) as { data: Array<{ shift: { open: { id: string } | null } }> };
       const shiftId = counters.data[0]?.shift.open?.id;
       expect(shiftId, 'the shift this test opened').toBeTruthy();
@@ -110,3 +116,54 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     });
   }
 });
+
+// What the server says about this computer, and why the POS stays closed then.
+const closedCases = [
+  {
+    message: 'This computer is not mapped to a POS',
+    name: 'on a computer not mapped to a POS',
+    // DNS names this computer, but no POS device carries that hostname.
+    whoami: { allowed: false, restaurants: [], till: null },
+  },
+  {
+    message:
+      'You are not assigned to the location of this till’s restaurant (Smart Main Restaurant)',
+    name: 'for a user not assigned to the till’s location',
+    whoami: { allowed: false, restaurants: ['Smart Main Restaurant'], till: 'OFFICE-PC-01' },
+  },
+];
+
+for (const closed of closedCases) {
+  test(`${closed.name}, no POS screen opens; the rest of the portal does`, async ({ page }) => {
+    const session = await newSession();
+    await page.addInitScript((tokens) => {
+      if (!window.localStorage.getItem('aahar.admin.auth')) {
+        window.localStorage.setItem(
+          'aahar.admin.auth',
+          JSON.stringify({ ...tokens, savedAt: new Date().toISOString() }),
+        );
+      }
+    }, session);
+    await page.route('**/pos/whoami', (route) =>
+      route.fulfill({
+        json: {
+          data: { ...closed.whoami, hostname: 'OFFICE-PC-01.Maxhealthcare.com', ip: '10.0.0.9' },
+          message: 'Success',
+          success: true,
+        },
+      }),
+    );
+
+    for (const [path] of screens.filter(([path]) => path.startsWith('pos/'))) {
+      await test.step(`${path} stays closed`, async () => {
+        await page.goto(path);
+        await expect.soft(page.getByText(closed.message)).toBeVisible();
+        await expect.soft(page.getByText('OFFICE-PC-01.Maxhealthcare.com')).toBeVisible();
+      });
+    }
+
+    await page.goto('dashboard');
+    await expect(page.getByText(closed.message)).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+}

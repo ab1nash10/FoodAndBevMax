@@ -62,6 +62,8 @@ export type PaymentMode = 'CARD' | 'CASH' | 'OTHER' | 'UPI';
 export interface PosCounter {
   counterCode: string;
   counterName: string;
+  /** Its restaurant's kiosk took orders in the last 30 days: worth looking for waiting ones. */
+  kioskInUse?: boolean;
   hospital: {
     billPrefix: string | null;
     gstApplicable: boolean;
@@ -184,13 +186,17 @@ export interface PosBillInput {
   roomNumber?: string;
   /** The kiosk order this bill is for; it can be billed once. */
   kioskOrderId?: string;
-  /** A paid online UPI payment for exactly this bill; it pays one bill only. */
+  /** A paid online payment (UPI, or a card on Pine Labs) for exactly this bill; it pays one bill. */
   onlinePaymentId?: string;
 }
 
-export type OnlinePaymentProvider = 'PAYU' | 'RAZORPAY';
+/** Razorpay and PayU take UPI by a QR; Pine Labs takes a card on the counter's machine. */
+export type OnlinePaymentProvider = 'PAYU' | 'PINELABS' | 'RAZORPAY';
 
-/** A UPI payment taken online for a bill before it is made: its link is shown as a QR. */
+/**
+ * A payment taken online for a bill before it is made: a UPI link shown as a QR, or (Pine Labs)
+ * the amount sent to the counter's card machine, with an empty paymentUrl.
+ */
 export interface OnlinePayment {
   amount: number;
   id: string;
@@ -313,6 +319,8 @@ export interface PosBillSummary {
 }
 
 export interface PosBillListQuery extends ListQuery {
+  /** Adds meta.statusCounts: the count per status, and meta.complimentaryCount, in the same request. */
+  statusCounts?: boolean;
   channel?: PosChannel;
   counterId?: string;
   /** Business dates, YYYY-MM-DD. */

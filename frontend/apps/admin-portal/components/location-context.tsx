@@ -284,3 +284,18 @@ export function useLocationContext(): LocationContextValue {
 
   return context;
 }
+
+/**
+ * The user's own locations (the server sends only active ones), by name, for a location picker:
+ * already loaded with their access, so no request, and no 403 for a role without HOSPITAL_VIEW.
+ * Shaped like a query.
+ */
+export function useMyLocations(): { data: HospitalSummary[]; isLoading: boolean } {
+  const { availableLocations, isLoadingLocations } = useLocationContext();
+  const data = useMemo(
+    () => [...availableLocations].sort((a, b) => a.hospitalName.localeCompare(b.hospitalName)),
+    [availableLocations],
+  );
+
+  return { data, isLoading: isLoadingLocations };
+}

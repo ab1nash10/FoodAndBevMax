@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { test } from 'vitest';
+import { hospitalScopeStorage } from '@aahar/auth';
+import { test, vi } from 'vitest';
 import { DASHBOARD_RECORDS_CAP, DashboardService } from './dashboard.service';
 
 type Query = Record<string, unknown>;
@@ -8,6 +9,7 @@ type Query = Record<string, unknown>;
 // answers one page; `total` above the page size marks it truncated.
 function serviceWith(pages: Record<string, { items: unknown[]; total?: number }> = {}) {
   const calls: Record<string, Query> = {};
+  const hits: Record<string, number> = {};
   // Each kind's findMany records its arguments and answers one named row.
   const prisma = Object.fromEntries(
     ['counter', 'kitchen', 'restaurant', 'store'].map((model) => [
@@ -22,6 +24,7 @@ function serviceWith(pages: Record<string, { items: unknown[]; total?: number }>
   );
   const list = (name: string) => ({
     list: (query: Query) => {
+      hits[name] = (hits[name] ?? 0) + 1;
       // A DTO instance also has its unset fields, as undefined; compare the ones that are set.
       calls[name] = Object.fromEntries(
         Object.entries(query).filter(([, value]) => value !== undefined),
@@ -76,8 +79,47 @@ function serviceWith(pages: Record<string, { items: unknown[]; total?: number }>
     ] as unknown as ConstructorParameters<typeof DashboardService>),
   );
 
-  return { calls, service };
+  return { calls, hits, service };
 }
+
+// Every admin's dashboard asks the same thing: up to 23 queries for setup, 3 lists of up to
+// 5,000 records. Under load (scripts/loadtest) these were the slowest calls, so the same answer
+// is shared for a short while per location scope, permission set and filters.
+test('setup and records: the same scope and filters are answered from memory for a while', async () => {
+  vi.useFakeTimers();
+  try {
+    const all = ['STORE_VIEW', 'TRANSFER_VIEW', 'GRN_VIEW', 'KITCHEN_PRODUCTION_VIEW'];
+    const { hits, service } = serviceWith();
+    const asAdmin = (ids: string[] | null, run: () => Promise<unknown>) =>
+      hospitalScopeStorage.run({ allowedHospitalIds: ids }, run);
+
+    await asAdmin(['h1'], () => service.setup({ hospitalId: 'h1' }, all));
+    await asAdmin(['h1'], () => service.setup({ hospitalId: 'h1' }, all));
+    assert.equal(hits.stores, 1, 'a second admin at the same location shares the answer');
+
+    await asAdmin(['h2'], () => service.setup({ hospitalId: 'h1' }, all));
+    assert.equal(hits.stores, 2, 'another location scope is never served the first one');
+    await asAdmin(['h1'], () => service.setup({ hospitalId: 'h1' }, ['STORE_VIEW']));
+    assert.equal(hits.stores, 3, 'another permission set is never served the first one');
+
+    vi.advanceTimersByTime(61_000);
+    await asAdmin(['h1'], () => service.setup({ hospitalId: 'h1' }, all));
+    assert.equal(hits.stores, 4, 'fresh again after a minute');
+
+    const period = { fromDate: '2026-09-01', hospitalId: 'h1' };
+    const before = hits.transfers ?? 0; // setup reads transfers too (first acknowledged)
+    await asAdmin(['h1'], () => service.records(period, all));
+    await asAdmin(['h1'], () => service.records(period, all));
+    assert.equal(hits.transfers, before + 1);
+    await asAdmin(['h1'], () => service.records({ ...period, fromDate: '2026-08-01' }, all));
+    assert.equal(hits.transfers, before + 2, 'another period is its own answer');
+    vi.advanceTimersByTime(31_000);
+    await asAdmin(['h1'], () => service.records(period, all));
+    assert.equal(hits.transfers, before + 3, 'records are kept for 30 s');
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 const transfer = {
   businessDate: '2026-10-01',
@@ -232,6 +274,28 @@ test('setup: without a permission its count and first record are left out', asyn
   assert.equal(result.counts.items, undefined);
   assert.equal(result.firstGrn, undefined);
   assert.equal(result.firstTransfer, undefined);
+});
+
+// Every signed-in tab asks for its badges each minute (10% of all requests with 2,000 users): one
+// answer per location scope and permission set serves them all for 15 s.
+test('navCounts: the badges are shared for 15 s per scope and permission set', async () => {
+  vi.useFakeTimers();
+  try {
+    const { hits, service } = serviceWith();
+    const at = (ids: string[], run: () => Promise<unknown>) =>
+      hospitalScopeStorage.run({ allowedHospitalIds: ids }, run);
+
+    await at(['h1'], () => service.navCounts({ hospitalId: 'h1' }, ['GRN_VIEW']));
+    await at(['h1'], () => service.navCounts({ hospitalId: 'h1' }, ['GRN_VIEW']));
+    assert.equal(hits.grns, 1);
+    await at(['h2'], () => service.navCounts({ hospitalId: 'h1' }, ['GRN_VIEW']));
+    assert.equal(hits.grns, 2, 'another location scope is never served the first one');
+    vi.advanceTimersByTime(16_000);
+    await at(['h1'], () => service.navCounts({ hospitalId: 'h1' }, ['GRN_VIEW']));
+    assert.equal(hits.grns, 3, 'fresh again after 15 s');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('navCounts: each badge is its list asked for a count only, with the same filters', async () => {

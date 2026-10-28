@@ -167,23 +167,23 @@ export function StoreStockPageClient() {
   // The strip's numbers: every item held in a store at the location, then each that needs a look.
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (status?: StockBalanceStatus) =>
-        (
-          await organizationApi.listStoreStockSummaries({
-            hospitalId: hospitalFilter,
-            limit: 0,
-            locationType: 'STORE',
-            status,
-          })
-        ).data.meta.total;
-      const [all, nearExpiry, expired, outOfStock] = await Promise.all([
-        count(),
-        count('NEAR_EXPIRY'),
-        count('EXPIRED'),
-        count('OUT_OF_STOCK'),
-      ]);
+      // One load of the location's stock answers every tab (each was a full load of its own).
+      const { meta } = (
+        await organizationApi.listStoreStockSummaries({
+          hospitalId: hospitalFilter,
+          limit: 0,
+          locationType: 'STORE',
+          statusCounts: true,
+        })
+      ).data;
+      const count = (status: StockBalanceStatus) => meta.statusCounts?.[status] ?? 0;
 
-      return { all, expired, nearExpiry, outOfStock };
+      return {
+        all: meta.total,
+        expired: count('EXPIRED'),
+        nearExpiry: count('NEAR_EXPIRY'),
+        outOfStock: count('OUT_OF_STOCK'),
+      };
     },
     queryKey: queryKeys.stockBalances('stats', hospitalFilter),
   });
