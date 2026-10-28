@@ -3,6 +3,8 @@ import type { AuthTokens } from '@aahar/api-client';
 const STORAGE_KEY = 'aahar.admin.auth';
 export const AUTH_STORAGE_EVENT = 'aahar:auth-storage-changed';
 const AAHAR_STORAGE_PREFIXES = ['aahar.', 'aahar-', 'aahar:'];
+/** The browser's till key belongs to the computer, not the user: a sign-out keeps it. */
+export const TILL_KEY_STORAGE_KEY = 'aahar.pos.tillKey';
 
 export interface StoredAuth extends AuthTokens {
   savedAt: string;
@@ -74,7 +76,11 @@ export function clearAaharClientStorage(): void {
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index);
 
-      if (key && AAHAR_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      if (
+        key &&
+        key !== TILL_KEY_STORAGE_KEY &&
+        AAHAR_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+      ) {
         keysToRemove.push(key);
       }
     }

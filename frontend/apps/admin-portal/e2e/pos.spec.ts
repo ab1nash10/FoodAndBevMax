@@ -19,8 +19,10 @@ const screens: Array<[string, string]> = [
   ['inventory/grns/new', 'Receive a delivery'],
 ];
 
-// The POS opens only on a till: this computer's hostname must be on a local POS device, mapped
-// to a restaurant with a counter. The server finds it from this computer's address.
+// The POS opens only in a browser an admin set up as a POS device's till. The test does that on
+// the screen, as an admin would, for a local POS device mapped to a restaurant with a counter.
+// (Setting a device up again moves its till: any other browser set up as it stops being one.)
+const tillDevice = process.env.E2E_POS_DEVICE ?? 'Smart Main Res';
 const orgUrl = process.env.E2E_ORG_URL ?? 'http://localhost:4003/api/v1';
 let openedShift = false;
 
@@ -45,6 +47,16 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     window.localStorage.setItem('aahar.location-context', 'all');
   }, session);
   const title = page.getByRole('heading', { level: 1 });
+
+  await test.step('an admin sets this computer up as the till', async () => {
+    await page.goto('pos/billing');
+    const notATill = page.getByText('This computer is not set up as a till');
+    await expect(notATill).toBeVisible();
+    await page
+      .getByRole('button', { name: `Make this computer the till of ${tillDevice}` })
+      .click();
+    await expect(notATill).toHaveCount(0);
+  });
 
   for (const [path, name] of screens) {
     await test.step(`${path} opens`, async () => {
@@ -101,7 +113,11 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
 
   if (openedShift) {
     await test.step('end the shift this test started', async () => {
-      const headers = { Authorization: `Bearer ${session.accessToken}` };
+      const tillKey = await page.evaluate(() => localStorage.getItem('aahar.pos.tillKey'));
+      const headers = {
+        Authorization: `Bearer ${session.accessToken}`,
+        'X-Till-Key': tillKey ?? '',
+      };
       const counters = (await (
         await fetch(`${orgUrl}/pos/counters?till=true`, { headers })
       ).json()) as { data: Array<{ shift: { open: { id: string } | null } }> };
@@ -120,16 +136,15 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
 // What the server says about this computer, and why the POS stays closed then.
 const closedCases = [
   {
-    message: 'This computer is not mapped to a POS',
-    name: 'on a computer not mapped to a POS',
-    // DNS names this computer, but no POS device carries that hostname.
+    message: 'This computer is not set up as a till',
+    name: 'on a computer not set up as a till',
     whoami: { allowed: false, restaurants: [], till: null },
   },
   {
     message:
       'You are not assigned to the location of this till’s restaurant (Smart Main Restaurant)',
     name: 'for a user not assigned to the till’s location',
-    whoami: { allowed: false, restaurants: ['Smart Main Restaurant'], till: 'OFFICE-PC-01' },
+    whoami: { allowed: false, restaurants: ['Smart Main Restaurant'], till: 'Smart Main Res' },
   },
 ];
 
@@ -147,7 +162,7 @@ for (const closed of closedCases) {
     await page.route('**/pos/whoami', (route) =>
       route.fulfill({
         json: {
-          data: { ...closed.whoami, hostname: 'OFFICE-PC-01.Maxhealthcare.com', ip: '10.0.0.9' },
+          data: closed.whoami,
           message: 'Success',
           success: true,
         },
@@ -158,7 +173,6 @@ for (const closed of closedCases) {
       await test.step(`${path} stays closed`, async () => {
         await page.goto(path);
         await expect.soft(page.getByText(closed.message)).toBeVisible();
-        await expect.soft(page.getByText('OFFICE-PC-01.Maxhealthcare.com')).toBeVisible();
       });
     }
 

@@ -41,6 +41,12 @@ export class PosCountersQueryDto {
   till?: boolean;
 }
 
+export class EnrollTillDto {
+  @ApiProperty({ description: 'The POS device this computer is the till of.' })
+  @IsUUID()
+  posDeviceId!: string;
+}
+
 export class PosMenuQueryDto {
   @ApiProperty()
   @IsUUID()

@@ -412,24 +412,34 @@ export function createOrganizationApi(options: ApiClientOptions) {
       );
     },
     /** Counters the signed-in user may bill at. */
-    /** With till, only those of the till this computer is (404 when it is mapped to no POS). */
-    listPosCounters(till = false) {
+    /**
+     * With a till key, only the counters of the till this browser was set up as (404 when the
+     * key is no till's, or there is none).
+     */
+    listPosCounters(tillKey?: string | null) {
       return client.request<ApiResponse<PosCounter[]>>('/pos/counters', {
-        query: till ? { till: 'true' } : undefined,
+        headers: tillKey === undefined ? undefined : { 'X-Till-Key': tillKey ?? '' },
+        query: tillKey === undefined ? undefined : { till: 'true' },
       });
     },
-    /** This computer as the server sees it: address, DNS name, and the registered till it is. */
-    posWhoAmI() {
+    /** The till this browser was set up as, if any, and whether the user may work it. */
+    posWhoAmI(tillKey: string | null) {
       return client.request<
         ApiResponse<{
           /** Whether the signed-in user is assigned to the location of the till's restaurants. */
           allowed: boolean;
-          hostname: string | null;
-          ip: string | null;
           restaurants: string[];
+          /** The POS device's name; null when this browser is no till. */
           till: string | null;
         }>
-      >('/pos/whoami');
+      >('/pos/whoami', { headers: tillKey ? { 'X-Till-Key': tillKey } : undefined });
+    },
+    /** Sets up this browser as the POS device's till; the key comes back once. */
+    enrollTill(posDeviceId: string) {
+      return client.request<ApiResponse<{ tillKey: string }>>('/pos/till', {
+        body: { posDeviceId },
+        method: 'POST',
+      });
     },
     getPosMenu(counterId: string, channel: PosChannel) {
       return client.request<ApiResponse<PosMenu>>('/pos/menu', { query: { channel, counterId } });

@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiClientError, type PaymentMode, type PosBill, type PosCounter } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
+import { TILL_KEY_STORAGE_KEY } from '@/lib/auth-storage';
 import { StatusChip } from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Select, Skeleton } from '@/components/ui';
@@ -57,14 +58,31 @@ function readStoredCounter(): string {
   }
 }
 
+/** The key this browser holds when an admin set it up as a till; null anywhere else. */
+export function readTillKey(): string | null {
+  try {
+    return window.localStorage.getItem(TILL_KEY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps the key the server gave when an admin set this browser up as a till. */
+export function saveTillKey(tillKey: string): void {
+  try {
+    window.localStorage.setItem(TILL_KEY_STORAGE_KEY, tillKey);
+  } catch {
+    // Private windows may refuse storage; the till then lasts for this visit only.
+  }
+}
+
 /**
- * The till this computer is, as the server knows it: a browser cannot read its own hostname, so
- * the server looks the caller's address up in DNS and matches the name to a mapped POS device.
- * Asked once a session; the POS module opens only where it names a till.
+ * The till this browser is, as the server knows it from the key it holds. Asked once a session;
+ * the POS module opens only where it names a till the user may work.
  */
 export function usePosTill() {
   return useQuery({
-    queryFn: async () => (await organizationApi.posWhoAmI()).data,
+    queryFn: async () => (await organizationApi.posWhoAmI(readTillKey())).data,
     queryKey: queryKeys.posWhoAmI(),
     retry: false,
     staleTime: Infinity,
@@ -77,7 +95,7 @@ export function usePosTill() {
  */
 export function usePosCounter() {
   const query = useQuery({
-    queryFn: async () => (await organizationApi.listPosCounters(true)).data,
+    queryFn: async () => (await organizationApi.listPosCounters(readTillKey())).data,
     queryKey: queryKeys.posCounters('till'),
     // A computer that is no till is an answer, not a hiccup: say so at once.
     retry: (count, error) =>

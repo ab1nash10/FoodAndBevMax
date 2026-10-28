@@ -17,6 +17,7 @@ import { getActorId, getIpAddress, type RequestContextLike } from '../common/req
 import {
   CancelPosOrderDto,
   CreatePosOrderDto,
+  EnrollTillDto,
   EmployeeLookupQueryDto,
   ListPosOrdersQueryDto,
   PosCountersQueryDto,
@@ -25,8 +26,13 @@ import {
   SetMenuAvailabilityDto,
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
-import { deviceHost } from './device-host';
 import { PosService } from './pos.service';
+
+/** The key a till's browser sends to say which till it is; absent anywhere else. */
+function tillKeyOf(request: RequestContextLike): string | undefined {
+  const key = request.headers['x-till-key'];
+  return typeof key === 'string' ? key : undefined;
+}
 
 @ApiBearerAuth('access-token')
 @ApiTags('pos')
@@ -37,30 +43,51 @@ export class PosController {
   @Get('counters')
   @Permissions('POS_ORDER_VIEW')
   @ApiOperation({
-    summary: 'Counters the signed-in user may bill at; with host, only that till computer’s',
+    summary: 'Counters the signed-in user may bill at; with till, only this browser’s till’s',
   })
   @ApiOkResponse({ description: 'Counters returned.' })
   async counters(@Query() query: PosCountersQueryDto, @Req() request: RequestContextLike) {
     return {
-      data: await this.pos.counters(query.till ? (getIpAddress(request) ?? '') : undefined),
+      data: await this.pos.counters(query.till ? (tillKeyOf(request) ?? '') : undefined),
       message: 'Success',
       success: true,
     };
   }
 
-  // Any signed-in user: it only tells the caller about their own computer, and every POS screen
+  // Any signed-in user: it only tells the caller about their own browser, and every POS screen
   // (whatever permission it needs) asks it first.
   @Get('whoami')
   @ApiOperation({
-    summary: 'The calling computer: its address, DNS name, and the registered till it is, if any',
+    summary: 'The till this browser was set up as (X-Till-Key), and whether the user may work it',
   })
-  @ApiOkResponse({ description: 'Address, hostname and till returned.' })
+  @ApiOkResponse({ description: 'Till returned.' })
   async whoami(@Req() request: RequestContextLike) {
-    const device = await deviceHost(getIpAddress(request));
-    const access = device.ip
-      ? await this.pos.tillAccess(device.ip)
-      : { allowed: false, restaurants: [], till: null };
-    return { data: { ...device, ...access }, message: 'Success', success: true };
+    return {
+      data: await this.pos.tillAccess(tillKeyOf(request)),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('till')
+  @Permissions('POS_DEVICE_UPDATE')
+  @ApiOperation({
+    summary: 'Set up the calling browser as a POS device’s till; its key is returned once',
+  })
+  @ApiOkResponse({ description: 'Till key returned.' })
+  async enrollTill(
+    @Body() body: EnrollTillDto,
+    @CurrentUser() user: JwtRequestUser,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.pos.enrollTill(body.posDeviceId, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'This computer is now a till',
+      success: true,
+    };
   }
 
   @Get('menu')

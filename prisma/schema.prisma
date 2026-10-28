@@ -723,6 +723,9 @@ model PosDevice {
   isInvoicePrintEnabled Boolean   @default(false) @map("is_invoice_print_enabled")
   /// SHA-256 of the key the POS sends orders with; the key itself is shown once and never stored.
   apiKeyHash            String?   @unique @map("api_key_hash")
+  /// SHA-256 of the key the till's browser holds after an admin sets the computer up as this
+  /// device; the POS opens only in that browser. Setting it up again replaces it.
+  tillKeyHash           String?   @unique @map("till_key_hash")
   isActive              Boolean   @default(true) @map("is_active")
   createdAt             DateTime  @default(now()) @map("created_at")
   createdBy             String?   @map("created_by") @db.Uuid

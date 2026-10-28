@@ -64,7 +64,7 @@ export function configureSecurityBaseline(
     }),
   );
   app.enableCors({
-    allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Till-Key'],
     credentials: true,
     exposedHeaders: ['X-Request-Id'],
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

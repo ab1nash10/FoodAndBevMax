@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { getAllowedHospitalIds, hospitalScopeStorage } from '@aahar/auth';
 import {
   BadRequestException,
@@ -25,7 +26,6 @@ import { getOrderBy, getPageMeta, getPagination, toStatusCounts } from '../commo
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { lockRow } from '../common/row-lock';
-import { ShortCache } from '../common/short-cache';
 import { optionalText, toDateOnly, toNumber } from '../common/values';
 import type {
   CancelPosOrderDto,
@@ -36,8 +36,7 @@ import type {
   PosSummaryQueryDto,
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
-import { itemCount } from '../restaurant-orders/restaurant-orders.service';
-import { deviceHost } from './device-host';
+import { hashOrderKey, itemCount } from '../restaurant-orders/restaurant-orders.service';
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { shiftStates, shiftsOn, tally, userNames } from './shifts';
 
@@ -48,6 +47,9 @@ const RESTAURANT_SERVICE_SAC = '996331';
 
 /** A restaurant counts as using its kiosk when a kiosk order came in within this many days. */
 const KIOSK_IN_USE_DAYS = 30;
+
+const notATill =
+  'This computer is not set up as a till. An admin opens the POS on it once and sets it up as its POS device.';
 
 const notAssignedToTill =
   'You are not assigned to the location of this till’s restaurant. Ask an admin to give you access to its location.';
@@ -200,22 +202,17 @@ export class PosService {
     private readonly prisma: PrismaService,
   ) {}
 
-  private readonly tillByAddress = new ShortCache(5 * 60_000);
-
   /**
    * The active counters the user may bill at (reads are already limited to their locations),
    * each with its shift: the open one, a handover waiting for the next cashier, a closed day.
-   * With `ip`, only the counters of the till that computer is: DNS must name it as a mapped POS
-   * device, whatever its browser says. The POS module opens nowhere else.
+   * With `tillKey` (the browser's, '' when it has none), only the counters of the till that
+   * browser was set up as. The POS module opens nowhere else.
    */
-  async counters(ip?: string) {
-    const tillName = ip === undefined ? null : await this.tillAt(ip);
-    if (ip !== undefined && !tillName) {
-      throw new NotFoundException(
-        'This computer is not mapped to a POS. Ask an admin to add its hostname to a POS device under POS & Payment Machines.',
-      );
+  async counters(tillKey?: string) {
+    const till = tillKey === undefined ? undefined : await this.tillByKey(tillKey);
+    if (till === null) {
+      throw new NotFoundException(notATill);
     }
-    const till = tillName ? await this.tillDevice(tillName) : undefined;
     if (till && !mayWorkTill(till)) {
       throw new ForbiddenException(notAssignedToTill);
     }
@@ -267,62 +264,71 @@ export class PosService {
     }));
   }
 
-  /**
-   * The till computer's POS device, from its hostname, with the restaurants mapped to it. Looked
-   * up across every location; the counters read after it stay limited to the user's, so a till
-   * outside them shows no counter.
-   */
-  /** The registered till the computer at `ip` is; remembered a few minutes, as DNS can be slow. */
-  /** The till the computer at `ip` is, its restaurants, and whether the signed-in user may work it. */
+  /** The till this browser's key belongs to, its restaurants, and whether the user may work it. */
   async tillAccess(
-    ip: string,
+    tillKey: string | undefined,
   ): Promise<{ allowed: boolean; restaurants: string[]; till: string | null }> {
-    const till = await this.tillAt(ip);
-    if (!till) return { allowed: false, restaurants: [], till: null };
+    const device = tillKey ? await this.tillByKey(tillKey) : null;
+    if (!device) return { allowed: false, restaurants: [], till: null };
 
-    const device = await this.tillDevice(till);
     return {
       allowed: mayWorkTill(device),
       restaurants: device.restaurants.map((entry) => entry.restaurant.restaurantName),
-      till,
+      till: device.name,
     };
   }
 
-  async tillAt(ip: string): Promise<string | null> {
-    // No DNS name is not remembered (the cache drops a failed load): a slow answer once must
-    // not leave a till unrecognised for minutes. ponytail: a nameless address pays the lookup
-    // (up to its 1 s timeout) on every call; remember misses briefly if that shows up.
-    return await this.tillByAddress
-      .get(ip, async () => {
-        const { hostname } = await deviceHost(ip);
-        if (!hostname) throw new Error('No DNS name');
-        return await this.tillHost(hostname);
-      })
-      .catch(() => null);
+  /**
+   * Makes the calling browser the till of this POS device: a new key, returned once and kept
+   * only hashed. Setting a device up again replaces the key, so the old browser is no till.
+   */
+  async enrollTill(posDeviceId: string, context: ActorContext) {
+    // Read under the admin's own locations: a device elsewhere is not found.
+    const device = await this.prisma.posDevice.findFirst({
+      select: { id: true },
+      where: { deletedAt: null, id: posDeviceId, isActive: true },
+    });
+
+    if (!device) {
+      throw new NotFoundException('POS device not found');
+    }
+
+    const tillKey = `till_${randomBytes(24).toString('base64url')}`;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.posDevice.update({
+        data: { tillKeyHash: hashOrderKey(tillKey), updatedBy: context.actorId },
+        where: { id: device.id },
+      });
+      await this.auditLog.record(
+        {
+          action: 'POS_TILL_SET_UP',
+          actorId: context.actorId,
+          entityId: device.id,
+          entityName: 'pos_devices',
+          ipAddress: context.ipAddress,
+        },
+        tx,
+      );
+    });
+
+    return { tillKey };
   }
 
-  /** The registered till a computer is, from the name DNS gives it (tills hold its short name). */
-  async tillHost(dnsName: string | null): Promise<string | null> {
-    const host = dnsName?.split('.')[0];
-    if (!host) return null;
+  /**
+   * The active POS device whose till key this is, with its restaurants; null for none. Looked up
+   * across every location: the counters read after it stay limited to the user's.
+   */
+  private async tillByKey(tillKey: string) {
+    if (!tillKey) return null;
 
-    return await this.tillDevice(host).then(
-      () => host,
-      (error: unknown) => {
-        if (error instanceof NotFoundException) return null;
-        throw error;
-      },
-    );
-  }
-
-  private async tillDevice(host: string) {
-    const hostName = host.trim();
-    const device = await hospitalScopeStorage.run(
+    return await hospitalScopeStorage.run(
       { allowedHospitalIds: null },
       async () =>
         await this.prisma.posDevice.findFirst({
           select: {
             id: true,
+            name: true,
             restaurants: {
               select: {
                 restaurant: { select: { hospitalId: true, restaurantName: true } },
@@ -331,21 +337,9 @@ export class PosService {
               where: { deletedAt: null, isActive: true },
             },
           },
-          where: {
-            deletedAt: null,
-            hostName: { equals: hostName, mode: 'insensitive' },
-            isActive: true,
-          },
+          where: { deletedAt: null, isActive: true, tillKeyHash: hashOrderKey(tillKey) },
         }),
     );
-
-    if (!device) {
-      throw new NotFoundException(
-        `This computer (${hostName}) is not registered as a POS. Ask an admin to add its hostname to a POS device under POS & Payment Machines.`,
-      );
-    }
-
-    return device;
   }
 
   async findCounter(id: string, client: Client = this.prisma) {
