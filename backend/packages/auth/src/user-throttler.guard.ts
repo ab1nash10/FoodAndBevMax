@@ -54,6 +54,19 @@ export class UserThrottlerGuard extends ThrottlerGuard {
       return Promise.resolve(`session:${hash.slice(0, 32)}`);
     }
 
+    // Kiosks and order boards are counted per restaurant, and order pushes per order key: every
+    // one of them behind a hospital network shares its public address, so a per-address limit
+    // let a few busy boards lock out the rest. The address ceiling still caps any one address.
+    const params = (request.params ?? {}) as Record<string, unknown>;
+    if (text(params.restaurantId))
+      return Promise.resolve(`restaurant:${text(params.restaurantId)}`);
+    const headers = (request.headers ?? {}) as Record<string, unknown>;
+    if (text(headers['x-order-key'])) {
+      const hash = createHash('sha256').update(text(headers['x-order-key'])).digest('hex');
+
+      return Promise.resolve(`order-key:${hash.slice(0, 32)}`);
+    }
+
     return super.getTracker(request);
   }
 

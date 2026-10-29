@@ -10,8 +10,23 @@
 // each person's browser cache: a call is skipped while the portal would still hold it as fresh.
 //
 // Writes scripts/loadtest/results/<time>.json and prints a summary.
+//
+// LOADTEST_TARGET=<file> runs against a deployed server instead (written by aws.mjs setup): its
+// API base, the location's ids, the test till's key, and the password its LOADTEST users sign in
+// with by email. There the run stops itself when errors pass 5% or the p95 passes 10 s.
 import http from 'node:http';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import https from 'node:https';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+const target = process.env.LOADTEST_TARGET
+  ? JSON.parse(readFileSync(process.env.LOADTEST_TARGET, 'utf8'))
+  : null;
+const newAgent = (options) =>
+  target?.base.startsWith('https:')
+    ? // The ALB's own hostname has no matching certificate; LOADTEST_INSECURE=1 accepts it.
+      new https.Agent({ ...options, rejectUnauthorized: process.env.LOADTEST_INSECURE !== '1' })
+    : new http.Agent(options);
+const loadtestEmail = (n) => `loadtest-${String(n).padStart(4, '0')}@aahar.test`;
 
 const arg = (name, fallback) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -24,9 +39,14 @@ const OLD = process.argv.includes('--old');
 // The POS opens only on a till, for users of its restaurant's location: the load users work at
 // the location of the till this computer is (seed-users.sql puts them there).
 const LOCATION = 'Max-Smart';
-const AUTH = 'http://localhost:4001/api/v1';
-const USER = 'http://localhost:4002/api/v1';
-const ORG = process.env.ORG_URL ?? 'http://localhost:4003/api/v1';
+// The POS opens only in a browser set up as a POS device's till; the run sets this device up once
+// (as the local Super Admin) and every cashier sends its key, as a till's browser does. Setting it
+// up moves the till: a browser set up as it before must be set up again afterwards.
+const TILL_DEVICE = process.env.LOADTEST_TILL_DEVICE ?? 'Smart Main Res';
+let tillKey = '';
+const AUTH = target?.base ?? 'http://localhost:4001/api/v1';
+const USER = target?.base ?? 'http://localhost:4002/api/v1';
+const ORG = target?.base ?? process.env.ORG_URL ?? 'http://localhost:4003/api/v1';
 
 // ---- Who does what. Each screen is the list of GETs the portal fires when it opens (captured from
 // the browser on 2026-10-27); {h} hospital, {c} counter, {r} restaurant, {k} kitchen, {d} today.
@@ -290,6 +310,7 @@ const signIns = { ms: [], status: {} };
 let windowMs = [];
 let windowErrors = 0;
 let activeUsers = 0;
+let strugglingWindows = 0;
 
 const endpointOf = (url) => {
   const { pathname, searchParams } = new URL(url);
@@ -312,12 +333,13 @@ function request(agent, method, url, token, body) {
   return new Promise((resolve) => {
     const t0 = performance.now();
     const payload = body ? JSON.stringify(body) : undefined;
-    const req = http.request(
+    const req = (url.startsWith('https:') ? https : http).request(
       url,
       {
         agent,
         headers: {
           ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(tillKey && url.includes('/pos/') ? { 'x-till-key': tillKey } : {}),
           ...(payload
             ? { 'content-length': Buffer.byteLength(payload), 'content-type': 'application/json' }
             : {}),
@@ -366,13 +388,20 @@ const fill = (template) =>
     .replace(/\{d\}/g, ids.d)
     .replace(/\{from14\}/g, ids.from14);
 
-const stopAt = () => started + (RAMP_S + HOLD_S) * 1000;
+// Set when a deployed server is struggling: everyone stops, and no one else starts.
+let abortedAt = 0;
+const stopAt = () => abortedAt || started + (RAMP_S + HOLD_S) * 1000;
 
 async function signIn(agent, n) {
-  const res = await request(agent, 'POST', `${AUTH}/auth/verify-otp`, null, {
-    mobile: String(7000000000 + n),
-    otp: '000000',
-  });
+  const res = target
+    ? await request(agent, 'POST', `${AUTH}/auth/login-with-password`, null, {
+        email: loadtestEmail(n),
+        password: target.password,
+      })
+    : await request(agent, 'POST', `${AUTH}/auth/verify-otp`, null, {
+        mobile: String(7000000000 + n),
+        otp: '000000',
+      });
   signIns.ms.push(res.ms);
   signIns.status[res.status] = (signIns.status[res.status] ?? 0) + 1;
   windowMs.push(res.ms);
@@ -410,7 +439,7 @@ async function poll(agent, token, template, everyS) {
 }
 
 async function person(n) {
-  const agent = new http.Agent({ keepAlive: true, maxSockets: 6 });
+  const agent = newAgent({ keepAlive: true, maxSockets: 6 });
   const role = roles[roleOf(n)];
   const token = await signIn(agent, n);
   if (!token) return;
@@ -454,6 +483,18 @@ const stats = (ms) => {
 };
 
 async function resolveIds() {
+  if (target) {
+    tillKey = target.tillKey;
+    const today = new Date();
+    const day = new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 10);
+    return {
+      ...target.ids,
+      d: day,
+      from14: new Date(today.getTime() - 14 * 86_400_000).toISOString(),
+    };
+  }
   // The first admin load user looks up the location, its counter, restaurant and kitchen.
   const agent = new http.Agent({ keepAlive: true });
   const res = await request(agent, 'POST', `${AUTH}/auth/verify-otp`, null, {
@@ -470,6 +511,20 @@ async function resolveIds() {
   const counters = await get(`${ORG}/counters?hospitalId=${hospital.id}&limit=10`);
   const counter = (counters.items ?? counters)[0];
   const kitchen = (await get(`${ORG}/kitchens?hospitalId=${hospital.id}&limit=1`)).items[0];
+  const admin = await request(agent, 'POST', `${AUTH}/auth/verify-otp`, null, {
+    mobile: '9999999991',
+    otp: '000000',
+  });
+  const adminToken = JSON.parse(admin.body).data.accessToken;
+  const devices = JSON.parse(
+    (await request(agent, 'GET', `${ORG}/pos-devices?limit=100`, adminToken)).body,
+  ).data.items;
+  const device = devices.find((entry) => entry.name === TILL_DEVICE);
+  if (!device) throw new Error(`no POS device named ${TILL_DEVICE}`);
+  const enrolled = await request(agent, 'POST', `${ORG}/pos/till`, adminToken, {
+    posDeviceId: device.id,
+  });
+  tillKey = JSON.parse(enrolled.body).data.tillKey;
   const today = new Date();
   const local = (d) =>
     new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
@@ -502,13 +557,20 @@ const ticker = setInterval(() => {
   console.log(
     `t=${row.t}s users=${row.users} rps=${row.rps} p50=${row.p50}ms p95=${row.p95}ms errors=${row.errors}`,
   );
+  // On a deployed server: two 10 s windows in a row over 5% errors or a 10 s p95 end the run.
+  const struggling = row.requests > 20 && (row.errors / row.requests > 0.05 || row.p95 > 10_000);
+  strugglingWindows = struggling ? strugglingWindows + 1 : 0;
+  if (target && strugglingWindows >= 2 && !abortedAt) {
+    abortedAt = Date.now();
+    console.log(`STOPPING at t=${row.t}s: errors ${row.errors}/${row.requests}, p95 ${row.p95}ms`);
+  }
   windowMs = [];
   windowErrors = 0;
 }, 10_000);
 
 const people = [];
 // A run under 1,000 takes users spread over the first 1,000, so every role is in it.
-for (let i = 1; i <= USERS; i += 1) {
+for (let i = 1; i <= USERS && !abortedAt; i += 1) {
   people.push(person(USERS >= 1000 ? i : Math.round((i * 1000) / USERS)));
   await sleep((RAMP_S * 1000) / USERS);
 }
@@ -554,3 +616,7 @@ console.table(screensOut.slice(0, 12));
 console.log('slowest endpoints:');
 console.table(endpoints.slice(0, 20).map((e) => ({ ...e, status: JSON.stringify(e.status) })));
 console.log(`saved ${file}`);
+if (abortedAt) {
+  console.log('STOPPED EARLY: the server passed the error or response-time limit.');
+  process.exitCode = 2;
+}

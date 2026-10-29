@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  emailPasswordSchema,
   sendEmailOtpSchema,
   sendOtpSchema,
   verifyEmailOtpSchema,
@@ -54,4 +55,15 @@ test('only the fields of the schema are sent, and a missing field fails', () => 
   });
   expect(verifyOtpSchema.safeParse({ mobile: '9999999991' }).success).toBe(false);
   expect(sendOtpSchema.safeParse(undefined).success).toBe(false);
+});
+
+test('email and password: the email cleaned, the password sent exactly as typed', () => {
+  expect(emailPasswordSchema.safeParse({ email: ' A@Max.com ', password: ' pa ss1 ' })).toEqual({
+    data: { email: 'a@max.com', password: ' pa ss1 ' },
+    success: true,
+  });
+  expect(emailPasswordSchema.safeParse({ email: 'a@max.com', password: '' })).toEqual({
+    error: { issues: [{ message: 'Enter your password.', path: ['password'] }] },
+    success: false,
+  });
 });

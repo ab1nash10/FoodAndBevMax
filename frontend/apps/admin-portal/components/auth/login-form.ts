@@ -70,10 +70,17 @@ export const sendEmailOtpSchema = objectSchema({
 
 export const verifyEmailOtpSchema = sendEmailOtpSchema.extend({ otp: otpField });
 
+// Email can also sign in with the password an admin set; the password goes as typed (any
+// character, spaces too), so it is only required, never cleaned.
+export const emailPasswordSchema = sendEmailOtpSchema.extend({
+  password: { message: 'Enter your password.', pattern: /./s },
+});
+
 export type LoginFormValues = {
   email: string;
   mobile: string;
   otp: string;
+  password: string;
 };
 
 export type LoginMethod = 'email' | 'mobile';

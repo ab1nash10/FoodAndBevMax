@@ -1,8 +1,11 @@
 import { HealthCheckService, Public } from '@aahar/auth';
 import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @ApiTags('health')
+// Load balancers, Kubernetes and monitors call it constantly, often from one shared address.
+@SkipThrottle({ address: true, default: true })
 @Controller('health')
 export class HealthController {
   constructor(private readonly healthCheck: HealthCheckService) {}

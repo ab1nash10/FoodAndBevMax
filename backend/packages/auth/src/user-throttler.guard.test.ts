@@ -37,6 +37,19 @@ void test('signed-out sign-in requests are counted per identity, not per hospita
   assert.equal(await at({}), '203.0.113.7');
 });
 
+void test('kiosks, order boards and order pushes are counted per restaurant or key, not per address', async () => {
+  // Every kiosk and board behind one hospital network shares its public address.
+  const at = (request: Record<string, unknown>) => tracker({ ip: '203.0.113.7', ...request });
+
+  assert.equal(await at({ params: { restaurantId: 'cafe' } }), 'restaurant:cafe');
+  assert.equal(await at({ params: { restaurantId: 'canteen' } }), 'restaurant:canteen');
+  const push = await at({ headers: { 'x-order-key': 'rsk_one' } });
+  assert.match(push, /^order-key:[0-9a-f]{32}$/);
+  assert.notEqual(push, await at({ headers: { 'x-order-key': 'rsk_two' } }));
+  // A signed-in user stays counted as themselves.
+  assert.equal(await at({ params: { restaurantId: 'cafe' }, user: { id: 'u' } }), 'user:u');
+});
+
 void test('the address ceiling counts by address and skips signed-in requests', () => {
   const options = addressThrottler(3_000);
   const context = (request: Record<string, unknown>) =>

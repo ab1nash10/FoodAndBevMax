@@ -2,8 +2,21 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation } from '@tanstack/react-query';
-import type { SendOtpRequest, VerifyOtpRequest } from '@aahar/api-client';
-import { ArrowRight, ChefHat, Mail, Package, Receipt, ShieldCheck, Smartphone } from 'lucide-react';
+import type {
+  EmailPasswordLoginRequest,
+  SendOtpRequest,
+  VerifyOtpRequest,
+} from '@aahar/api-client';
+import {
+  ArrowRight,
+  ChefHat,
+  KeyRound,
+  Mail,
+  Package,
+  Receipt,
+  ShieldCheck,
+  Smartphone,
+} from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -16,6 +29,7 @@ import { withBasePath } from '@/lib/base-path';
 import { cn } from '@/lib/utils';
 import {
   applyValidationErrors,
+  emailPasswordSchema,
   resendDelaySeconds,
   sendEmailOtpSchema,
   sendOtpSchema,
@@ -65,6 +79,8 @@ export default function LoginPage() {
   const { showToast } = useToast();
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [isOtpStep, setIsOtpStep] = useState(false);
+  // The Email tab signs in with the password, or by a code: errors follow the last one tried.
+  const [emailWay, setEmailWay] = useState<'code' | 'password'>('password');
   const [hasShownSessionNotice, setHasShownSessionNotice] = useState(false);
   // Errors appear on the first submit, then follow the user's typing.
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
@@ -75,13 +91,18 @@ export default function LoginPage() {
       email: '',
       mobile: '',
       otp: '',
+      password: '',
     },
   });
   const errors = form.formState.errors;
-  // Email and mobile both sign in by a one-time code: the address first, then the code.
+  // Mobile signs in by a one-time code; email by its password, or by a code sent to it.
   const sendSchema = loginMethod === 'email' ? sendEmailOtpSchema : sendOtpSchema;
   const verifySchema = loginMethod === 'email' ? verifyEmailOtpSchema : verifyOtpSchema;
-  const activeSchema = isOtpStep ? verifySchema : sendSchema;
+  const activeSchema = isOtpStep
+    ? verifySchema
+    : loginMethod === 'email' && emailWay === 'password'
+      ? emailPasswordSchema
+      : sendSchema;
   const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
   useEffect(() => {
@@ -174,7 +195,41 @@ export default function LoginPage() {
     },
   });
 
+  const passwordLoginMutation = useMutation({
+    mutationFn: (body: EmailPasswordLoginRequest) => authApi.loginWithPassword(body),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Login failed',
+        variant: 'error',
+      });
+    },
+    onSuccess(response) {
+      enterFullscreen();
+      signIn(response.data);
+      showToast({
+        title: 'Signed in',
+        variant: 'success',
+      });
+    },
+  });
+
+  const handlePasswordLogin = form.handleSubmit((values) => {
+    setEmailWay('password');
+    setHasTriedSubmit(true);
+    const parsed = emailPasswordSchema.safeParse(values);
+
+    if (!parsed.success) {
+      applyValidationErrors(form, parsed.error);
+      return;
+    }
+
+    passwordLoginMutation.mutate(parsed.data);
+  });
+
   const handleSendOtp = form.handleSubmit((values) => {
+    setEmailWay('code');
+    form.clearErrors('password');
     setHasTriedSubmit(true);
     const parsed = sendSchema.safeParse(values);
 
@@ -204,13 +259,16 @@ export default function LoginPage() {
     setHasTriedSubmit(false);
     form.clearErrors();
     form.setValue('otp', '');
+    form.setValue('password', '');
   };
 
-  const isBusy = sendOtpMutation.isPending || verifyOtpMutation.isPending;
+  const isBusy =
+    sendOtpMutation.isPending || verifyOtpMutation.isPending || passwordLoginMutation.isPending;
   const mobile = form.watch('mobile');
   const email = form.watch('email');
   const emailField = form.register('email');
   const mobileField = form.register('mobile');
+  const passwordField = form.register('password');
 
   return (
     // The brand panel on the left, the form on plain white beside it.
@@ -340,8 +398,8 @@ export default function LoginPage() {
                   Welcome back
                 </h2>
                 <p className="text-ds-text-2">
-                  Sign in with the email or mobile number your admin registered. We’ll send you a
-                  one-time code.
+                  Sign in with the email your admin registered and your password, or with a one-time
+                  code to your email or mobile.
                 </p>
               </div>
               <SegmentedControl<LoginMethod>
@@ -353,7 +411,7 @@ export default function LoginPage() {
                     label: (
                       <>
                         <Mail aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                        Email code
+                        Email
                       </>
                     ),
                     value: 'email',
@@ -378,7 +436,13 @@ export default function LoginPage() {
             className="flex flex-col gap-[22px]"
             noValidate
             onSubmit={(event) => {
-              void (isOtpStep ? handleVerifyOtp : handleSendOtp)(event);
+              void (
+                isOtpStep
+                  ? handleVerifyOtp
+                  : loginMethod === 'email'
+                    ? handlePasswordLogin
+                    : handleSendOtp
+              )(event);
             }}
           >
             {isOtpStep ? (
@@ -427,6 +491,33 @@ export default function LoginPage() {
                     Use the address on your AAHAR profile.
                   </span>
                 )}
+                <label className={cn(fieldLabel, 'mt-2.5')} htmlFor="login-password">
+                  Password
+                </label>
+                <span
+                  className={cn(
+                    fieldShell,
+                    errors.password ? 'border-ds-status-bad-fg' : 'border-ds-border',
+                  )}
+                >
+                  <KeyRound
+                    aria-hidden="true"
+                    className="ml-3.5 h-[18px] w-[18px] shrink-0 text-ds-muted"
+                  />
+                  <input
+                    aria-describedby={errors.password ? 'login-password-error' : undefined}
+                    aria-invalid={errors.password ? true : undefined}
+                    autoComplete="current-password"
+                    className={bareInput}
+                    id="login-password"
+                    placeholder="The password your admin set"
+                    // Autofill/temp-mail extensions inject attributes before hydration.
+                    suppressHydrationWarning
+                    type="password"
+                    {...passwordField}
+                  />
+                </span>
+                <ErrorText id="login-password-error">{errors.password?.message}</ErrorText>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -470,9 +561,20 @@ export default function LoginPage() {
               disabled={isBusy}
               type="submit"
             >
-              {isOtpStep ? 'Verify & sign in' : 'Send code'}
+              {isOtpStep ? 'Verify & sign in' : loginMethod === 'email' ? 'Sign in' : 'Send code'}
               {isOtpStep ? null : <ArrowRight aria-hidden="true" className="h-4 w-4" />}
             </Button>
+
+            {!isOtpStep && loginMethod === 'email' ? (
+              <button
+                className="-mt-2 self-center text-sm font-semibold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:text-ds-muted"
+                disabled={isBusy}
+                onClick={(event) => void handleSendOtp(event)}
+                type="button"
+              >
+                Email me a code instead
+              </button>
+            ) : null}
 
             {isOtpStep ? (
               <p className="text-[13px] text-ds-muted">
