@@ -20,6 +20,7 @@ import { Panel, Skeleton } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
+import { HistoryButton } from '@/components/audit/history-drawer';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
@@ -353,6 +354,7 @@ export function GrnVerificationView({ grnId }: Readonly<{ grnId: string }>) {
               <Printer aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
               Print
             </Button>
+            <HistoryButton entityId={grn.id} entityName="grns" recordLabel={grn.grnNumber} />
             {canSave ? (
               <>
                 <Button

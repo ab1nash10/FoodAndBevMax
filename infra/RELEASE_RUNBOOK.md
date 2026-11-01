@@ -27,6 +27,13 @@ Before the first uat or prod deploy:
 5. Set the job's `RDS_INSTANCE_ID_PROD` (and `_UAT` / `_DEV` if wanted) to the RDS instance
    identifier, and give the `aws-ecr` credential `rds:CreateDBSnapshot` and
    `rds:DescribeDBSnapshots`. Production refuses to deploy without it.
+6. Make the database connection verify TLS, or anyone on the network path can downgrade or
+   intercept it (the default, `sslmode=prefer`, does neither check). End the database URL with
+   `?sslmode=require&sslaccept=strict`, and give the pods AWS's RDS certificate authority:
+   put <https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem> in a ConfigMap, mount
+   it in the backend and migrate containers, and set `NODE_EXTRA_CA_CERTS` to the mounted path.
+   Check with `/fandb/api/v1/health` (`checks.database.status` = `ok`); a wrong CA shows there
+   as a certificate error.
 
 ## What a deploy does
 

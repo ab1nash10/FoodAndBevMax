@@ -370,7 +370,6 @@ export interface PosEmployee {
   discountName: string | null;
   /** 0 when the restaurant gives none, the employee is not eligible, or no rule applies now. */
   discountPercent: number;
-  eligibleForDiscount: boolean;
   employeeCode: string;
   employeeName: string;
   employmentType: EmploymentType | null;

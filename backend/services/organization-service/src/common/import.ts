@@ -1,3 +1,4 @@
+import { auditRowData } from '@aahar/logging';
 import { ApiProperty } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { plainToInstance, type ClassConstructor } from 'class-transformer';
@@ -237,7 +238,7 @@ export async function nextSequenceValues(
   return rows.map((row) => Number(row.nextValue)).sort((a, b) => a - b);
 }
 
-/** Audit entries for an import's rows, written with one query (as AuditLogService.record maps them). */
+/** Audit entries for an import's rows, written with one query, built as AuditService builds them. */
 export function importAuditEntries(
   entries: Array<{
     action: string;
@@ -249,19 +250,12 @@ export function importAuditEntries(
   }>,
   context: ActorContext,
 ): Prisma.AuditLogCreateManyInput[] {
-  const json = (value: unknown) =>
-    value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue);
-
-  return entries.map((entry) => ({
-    action: entry.action,
-    createdBy: context.actorId,
-    entityId: entry.entityId,
-    entityName: entry.entityName,
-    hospitalId: entry.hospitalId ?? undefined,
-    ipAddress: context.ipAddress,
-    newValue: json(entry.newValue),
-    oldValue: json(entry.oldValue),
-    updatedBy: context.actorId,
-    userId: context.actorId,
-  }));
+  return entries.map((entry) =>
+    auditRowData({
+      ...entry,
+      actorId: context.actorId,
+      hospitalId: entry.hospitalId ?? null,
+      ipAddress: context.ipAddress,
+    }),
+  );
 }

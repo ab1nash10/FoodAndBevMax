@@ -69,7 +69,10 @@ function serviceForDefaults(allowedHospitalIds: string[] | null) {
       update,
     },
   };
-  const service = new PreferencesService({} as AuditLogService, prisma as unknown as PrismaService);
+  const service = new PreferencesService(
+    { record: () => Promise.resolve() } as unknown as AuditLogService,
+    prisma as unknown as PrismaService,
+  );
   const user = {
     ...actor,
     allowedHospitalIds,

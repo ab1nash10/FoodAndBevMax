@@ -1,6 +1,6 @@
 import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import type { OnlinePaymentProvider } from '@prisma/client';
+import type { OnlinePaymentProvider, Prisma } from '@prisma/client';
 
 /** A payment page the guest opens from the till's QR, and the provider's id for it. */
 export interface ProviderLink {
@@ -219,8 +219,9 @@ export function pinelabs(baseUrl: string, machine: PinelabsMachine): PaymentProv
       ...credentials,
       PlutusTransactionReferenceID: Number(providerRef),
     });
-    const message = text(body.ResponseMessage);
-    const paid = body.ResponseCode === 0 && /APPROVED/i.test(message);
+    const message = text(body.ResponseMessage).trim();
+    // The whole message: "NOT APPROVED" contains the word too.
+    const paid = body.ResponseCode === 0 && /^(TXN )?APPROVED$/i.test(message);
     const data = Array.isArray(body.TransactionData) ? (body.TransactionData as Json[]) : [];
     const tag = (name: string) => text(data.find((entry) => entry.Tag === name)?.Value);
 
@@ -268,6 +269,62 @@ export function pinelabs(baseUrl: string, machine: PinelabsMachine): PaymentProv
     },
     read: status,
   };
+}
+
+/** Pine Labs' Plutus Cloud API; unset (''), card machines are not offered. */
+export function plutusBaseUrl(config: ConfigService) {
+  return config.get<string>('PINELABS_BASE_URL')?.trim().replace(/\/+$/, '') ?? '';
+}
+
+/**
+ * A card machine with all four Pine Labs details, the default first: by its id, or the one on
+ * the counter's POS device. None while Plutus is not set up here.
+ */
+export async function findCardMachine(
+  prisma: Pick<Prisma.TransactionClient, 'counter' | 'paymentMachine'>,
+  plutusUrl: string,
+  by: { counterId: string } | { id: string },
+) {
+  if (!plutusUrl) {
+    return null;
+  }
+
+  let where: { id: string } | { posDeviceId: string };
+
+  if ('id' in by) {
+    where = { id: by.id };
+  } else {
+    const counter = await prisma.counter.findFirst({
+      select: { posDeviceId: true },
+      where: { deletedAt: null, id: by.counterId },
+    });
+
+    if (!counter?.posDeviceId) {
+      return null;
+    }
+
+    where = { posDeviceId: counter.posDeviceId };
+  }
+
+  const machines = await prisma.paymentMachine.findMany({
+    orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    where: { ...where, deletedAt: null, isActive: true },
+  });
+
+  for (const machine of machines) {
+    const details: PinelabsMachine = {
+      imei: machine.pinelabImei?.trim() ?? '',
+      merchantId: machine.pinelabMerchantId?.trim() ?? '',
+      merchantStorePosCode: machine.pinelabMerchantStorePosCode?.trim() ?? '',
+      securityToken: machine.pinelabSecurityToken?.trim() ?? '',
+    };
+
+    if (Object.values(details).every(Boolean)) {
+      return { ...details, id: machine.id, name: machine.name };
+    }
+  }
+
+  return null;
 }
 
 /** The providers whose keys are all set; the cashier is offered only these. */

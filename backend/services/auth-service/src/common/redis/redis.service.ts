@@ -1,5 +1,6 @@
 import { closeSharedRedis, getSharedRedis } from '@aahar/auth';
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { logger } from '@aahar/logging';
+import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 
 // INCR and its expiry in one step, so a crash between them cannot leave a counter that never
 // expires.
@@ -38,12 +39,12 @@ export class RedisService implements OnModuleDestroy {
     }
 
     if (process.env.NODE_ENV === 'production') {
-      console.warn(
-        JSON.stringify({
-          event: 'redis_not_configured',
-          message:
+      logger.warn(
+        {
+          reason:
             'REDIS_URL is not set: OTPs and refresh tokens live in this process. Run a single replica; a restart signs everyone out.',
-        }),
+        },
+        'redis_not_configured',
       );
     }
 
@@ -57,7 +58,7 @@ export class RedisService implements OnModuleDestroy {
    */
   async delete(key: string): Promise<boolean> {
     if (this.client) {
-      return (await this.client.del(key)) > 0;
+      return (await this.reach(this.client.del(key))) > 0;
     }
 
     const entry = this.live(key);
@@ -68,7 +69,7 @@ export class RedisService implements OnModuleDestroy {
 
   async get(key: string): Promise<string | null> {
     if (this.client) {
-      return await this.client.get(key);
+      return await this.reach(this.client.get(key));
     }
 
     return this.live(key)?.value ?? null;
@@ -77,7 +78,7 @@ export class RedisService implements OnModuleDestroy {
   /** Adds one and returns the new count; the first increment starts the expiry window. */
   async increment(key: string, ttlSeconds: number): Promise<number> {
     if (this.client) {
-      return Number(await this.client.eval(INCREMENT_SCRIPT, 1, key, toMs(ttlSeconds)));
+      return Number(await this.reach(this.client.eval(INCREMENT_SCRIPT, 1, key, toMs(ttlSeconds))));
     }
 
     const entry = this.live(key);
@@ -102,7 +103,7 @@ export class RedisService implements OnModuleDestroy {
   /** Sets the key only if it is absent; resolves true when this call set it. */
   async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
     if (this.client) {
-      return (await this.client.set(key, value, 'PX', toMs(ttlSeconds), 'NX')) === 'OK';
+      return (await this.reach(this.client.set(key, value, 'PX', toMs(ttlSeconds), 'NX'))) === 'OK';
     }
 
     if (this.live(key)) {
@@ -116,11 +117,27 @@ export class RedisService implements OnModuleDestroy {
 
   async setWithExpiry(key: string, value: string, ttlSeconds: number): Promise<void> {
     if (this.client) {
-      await this.client.set(key, value, 'PX', toMs(ttlSeconds));
+      await this.reach(this.client.set(key, value, 'PX', toMs(ttlSeconds)));
       return;
     }
 
     this.entries.set(key, { expiresAtMs: Date.now() + toMs(ttlSeconds), value });
+  }
+
+  /**
+   * A Redis outage (refused, timed out, retries spent) answers 503, never a 500, and never a
+   * "wrong code" or "invalid token": the portal keeps a session through a 5xx, so a short
+   * outage no longer signs everyone out.
+   */
+  private async reach<T>(command: Promise<T>): Promise<T> {
+    try {
+      return await command;
+    } catch {
+      // The shared client already logged the outage (redis_unavailable).
+      throw new ServiceUnavailableException(
+        'Sign-in is briefly unavailable. Please try again in a minute.',
+      );
+    }
   }
 
   private live(key: string): { expiresAtMs: number; value: string } | undefined {

@@ -14,7 +14,8 @@ export type GrnStatus =
 export type InventoryLocationType = 'COUNTER' | 'KITCHEN' | 'RESTAURANT' | 'STORE';
 
 export type StockReferenceType =
-  'GRN' | 'KITCHEN_PRODUCTION' | 'ORDER' | 'TRANSFER' | 'TRANSFER_ACKNOWLEDGEMENT';
+  /** GRN_ENTRY: a batch of a GRN sent by the ERP. */
+  'GRN_ENTRY' | 'GRN' | 'KITCHEN_PRODUCTION' | 'ORDER' | 'TRANSFER' | 'TRANSFER_ACKNOWLEDGEMENT';
 
 export type StockTransactionType =
   | 'COUNTER_RECEIVE_IN'
@@ -23,6 +24,8 @@ export type StockTransactionType =
   /** Ready-made leftovers sent from one restaurant to another. */
   | 'RESTAURANT_TRANSFER_OUT'
   | 'GRN_IN'
+  /** Sent back to the vendor: an ERP return GRN, once verified. */
+  | 'GRN_RETURN_OUT'
   | 'KITCHEN_PRODUCTION_IN'
   | 'KITCHEN_TRANSFER_OUT'
   | 'RESTAURANT_TRANSFER_IN'

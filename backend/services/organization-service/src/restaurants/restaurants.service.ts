@@ -10,7 +10,7 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
-import type { ActorContext } from '../common/request-context';
+import { assertMayChangeLegalEntity, type ActorContext } from '../common/request-context';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
 import { ListRestaurantsQueryDto } from './dto/list-restaurants-query.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
@@ -228,7 +228,12 @@ export class RestaurantsService {
         const data: Prisma.RestaurantUpdateInput = {};
         const hospitalId = dto.hospitalId ?? existing.hospitalId;
         const restaurantCode = dto.restaurantCode ?? existing.restaurantCode;
-        const shouldSyncKitchens = dto.kitchenIds !== undefined || dto.kitchenId !== undefined;
+        const isMove = dto.hospitalId !== undefined && dto.hospitalId !== existing.hospitalId;
+        // A move drops kitchens of the old location that were not replaced in the same edit.
+        const shouldSyncKitchens =
+          dto.kitchenIds !== undefined ||
+          dto.kitchenId !== undefined ||
+          (isMove && (existing.kitchenId !== null || existing.restaurantKitchens.length > 0));
         const requestedKitchenIds = shouldSyncKitchens ? this.getRequestedKitchenIds(dto) : [];
         const primaryKitchenId = requestedKitchenIds[0];
 
@@ -239,6 +244,24 @@ export class RestaurantsService {
               id: dto.hospitalId,
             },
           };
+        }
+
+        if (isMove) {
+          // Counters, menus, prices, discounts and orders carry the location too; moving would
+          // leave them, and their bills, at the old one.
+          if (await this.restaurants.hasLocationBoundRecords(id, tx)) {
+            throw new BadRequestException(
+              'This restaurant already has counters, menus, prices, discounts or orders, so it cannot move to another location. Create a new restaurant there instead.',
+            );
+          }
+
+          // The old location's area and store are not the new one's.
+          if (dto.locationId === undefined && existing.locationId) {
+            data.location = { disconnect: true };
+          }
+          if (dto.storeId === undefined && existing.storeId) {
+            data.store = { disconnect: true };
+          }
         }
 
         if (dto.storeId) {
@@ -299,7 +322,7 @@ export class RestaurantsService {
         if (dto.isRegisteredInGst !== undefined) {
           data.isRegisteredInGst = dto.isRegisteredInGst;
         }
-        if (dto.kitchenIds !== undefined || dto.kitchenId !== undefined) {
+        if (shouldSyncKitchens) {
           data.kitchen = primaryKitchenId
             ? {
                 connect: {
@@ -312,6 +335,9 @@ export class RestaurantsService {
         }
         if (dto.legalName !== undefined) data.legalName = dto.legalName;
         if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          // Resending the current entity, as the form does on every save, needs no Super Admin.
+          assertMayChangeLegalEntity(context);
+
           if (dto.legalEntityId) {
             await assertActiveLegalEntity(tx, dto.legalEntityId);
           }

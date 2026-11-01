@@ -50,3 +50,6 @@ frontend/apps/admin-portal/playwright-report/
 
 # Client templates with live payment-machine tokens and staff contacts: never commit.
 Master Module Template.zip
+
+# Load-test runs: hold the LOADTEST users' password and a live till key.
+scripts/loadtest/results/

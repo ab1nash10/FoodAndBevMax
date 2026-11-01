@@ -8,11 +8,13 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CreateKioskOrderDto, KioskOrderLookupQueryDto, KioskStaffQueryDto } from './dto/kiosk.dto';
 import { KioskService } from './kiosk.service';
+import { RequireTill, TillGuard } from './till.guard';
 
 // Every kiosk at a site may share one network address.
 const sharedAddressLimit = { default: { limit: 600, ttl: 60_000 } };
@@ -22,6 +24,7 @@ const staffLookupLimit = { default: { limit: 20, ttl: 60_000 } };
 const tokenQuery = { description: "The restaurant's board link secret.", name: 'token' };
 
 @ApiTags('kiosk')
+@UseGuards(TillGuard)
 @Controller()
 export class KioskController {
   constructor(private readonly kiosk: KioskService) {}
@@ -78,6 +81,7 @@ export class KioskController {
   }
 
   @Get('pos/kiosk-orders')
+  @RequireTill({ from: 'query', kind: 'counterId' })
   @ApiBearerAuth('access-token')
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: 'Kiosk orders waiting to be paid at this counter’s restaurant' })
@@ -91,6 +95,7 @@ export class KioskController {
   }
 
   @Get('pos/kiosk-orders/:number')
+  @RequireTill({ from: 'query', kind: 'counterId' })
   @ApiBearerAuth('access-token')
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: "Today's kiosk order by its number, to bill at this counter" })

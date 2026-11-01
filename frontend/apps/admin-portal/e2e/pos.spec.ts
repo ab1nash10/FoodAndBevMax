@@ -48,13 +48,30 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
   }, session);
   const title = page.getByRole('heading', { level: 1 });
 
-  await test.step('an admin sets this computer up as the till', async () => {
+  await test.step('an admin sets this computer up as the till, by its name', async () => {
+    // The device's Host Name, as the admin would read it off the computer.
+    const devices = (await (
+      await fetch(`${orgUrl}/pos-devices?limit=100`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      })
+    ).json()) as { data: { items: Array<{ hostName: string | null; name: string }> } };
+    const hostName = devices.data.items.find((device) => device.name === tillDevice)?.hostName;
+    expect(hostName, `${tillDevice} has a Host Name`).toBeTruthy();
+
     await page.goto('pos/billing');
     const notATill = page.getByText('This computer is not set up as a till');
     await expect(notATill).toBeVisible();
-    await page
-      .getByRole('button', { name: `Make this computer the till of ${tillDevice}` })
-      .click();
+    const setUp = page.getByRole('button', {
+      name: `Make this computer the till of ${tillDevice}`,
+    });
+    const name = page.getByLabel('This computer’s name');
+    await expect(setUp, 'nothing to check until a name is typed').toBeDisabled();
+    // Another computer's name is refused: the device names a different one.
+    await name.fill('NOT-THIS-PC');
+    await setUp.click();
+    await expect(page.getByText(/This computer \(NOT-THIS-PC\) is not/)).toBeVisible();
+    await name.fill(hostName!.toLowerCase());
+    await setUp.click();
     await expect(notATill).toHaveCount(0);
   });
 

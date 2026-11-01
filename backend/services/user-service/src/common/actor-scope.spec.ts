@@ -2,8 +2,9 @@ import { strict as assert } from 'node:assert';
 import { ForbiddenException } from '@nestjs/common';
 import type { JwtRequestUser } from '@aahar/auth';
 import {
+  assertCanChangeRoles,
   assertCanGrantScope,
-  assertCanTakeOverSignIn,
+  assertHoldsAccessOf,
   assertHoldsPermissions,
   assertHospitalsWithinReach,
   assertNotSelf,
@@ -76,23 +77,52 @@ test('actor reach rules', () => {
 
   // Changing someone's sign-in (password, email, mobile)
   const cashier = { name: 'Cashier', permissionCodes: ['GRN_VIEW'], scopes: ['SINGLE' as const] };
-  assert.doesNotThrow(() => assertCanTakeOverSignIn(cashier, admin));
+  assert.doesNotThrow(() => assertHoldsAccessOf(cashier, admin));
   assert.throws(
-    () => assertCanTakeOverSignIn({ ...cashier, permissionCodes: ['ROLE_CREATE'] }, admin),
+    () => assertHoldsAccessOf({ ...cashier, permissionCodes: ['ROLE_CREATE'] }, admin),
     ForbiddenException,
     'an Admin cannot take over someone holding a permission the Admin lacks',
   );
   assert.throws(
-    () => assertCanTakeOverSignIn({ ...cashier, scopes: ['ALL'] }, admin),
+    () => assertHoldsAccessOf({ ...cashier, scopes: ['ALL'] }, admin),
     ForbiddenException,
     'nor someone with a wider location scope',
   );
   assert.doesNotThrow(() =>
-    assertCanTakeOverSignIn(
+    assertHoldsAccessOf(
       { ...cashier, permissionCodes: ['ROLE_CREATE'], scopes: ['ALL'] },
       superAdmin,
     ),
   );
+
+  // Changing another user's role, locations, status or permissions needs the same.
+  assert.throws(
+    () => assertHoldsAccessOf({ ...cashier, permissionCodes: ['ROLE_CREATE'] }, admin, 'role'),
+    /Cashier has access you do not hold, so only a Super Admin can change their role/,
+  );
+  assert.doesNotThrow(() => assertHoldsAccessOf(cashier, admin, 'status'));
+
+  // Roles are global: only the platform-wide scope may create or change one, never their own.
+  const platformAdmin: JwtRequestUser = {
+    ...admin,
+    allowedHospitalIds: null,
+    locationScope: 'ALL',
+  };
+  for (const role of [undefined, { name: 'Cashier' }, { name: 'Admin' }]) {
+    assert.throws(
+      () => assertCanChangeRoles(admin, role),
+      /Roles apply at every location, so only someone with access to all locations can change them/,
+      'a location Admin changes no role, not even a single-location one',
+    );
+  }
+  assert.doesNotThrow(() => assertCanChangeRoles(platformAdmin));
+  assert.doesNotThrow(() => assertCanChangeRoles(platformAdmin, { name: 'Cashier' }));
+  assert.throws(
+    () => assertCanChangeRoles(platformAdmin, { name: 'Admin' }),
+    /You cannot change the Admin role because you hold it/,
+  );
+  assert.doesNotThrow(() => assertCanChangeRoles(superAdmin, { name: SUPER_ADMIN_ROLE }));
+  assert.throws(() => assertCanChangeRoles(undefined), ForbiddenException);
 
   // Self-service
   assert.throws(() => assertNotSelf('admin', admin, 'role'), ForbiddenException);

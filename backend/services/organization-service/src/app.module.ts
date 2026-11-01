@@ -12,6 +12,7 @@ import {
   RbacGuard,
   UserThrottlerGuard,
 } from '@aahar/auth';
+import { LoggingModule } from '@aahar/logging';
 import {
   getServiceEnvFilePaths,
   shouldUseRootEnvFileOnly,
@@ -22,9 +23,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PassportModule } from '@nestjs/passport';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { CountersModule } from './counters/counters.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EmployeesModule } from './employees/employees.module';
+import { ErpGrnsModule } from './erp-grns/erp-grns.module';
 import { GrnsModule } from './grns/grns.module';
 import { CommonModule } from './common/common.module';
 import { PrismaService } from './common/prisma/prisma.service';
@@ -56,6 +59,8 @@ import { TransfersModule } from './transfers/transfers.module';
 @Module({
   controllers: [HealthController],
   imports: [
+    LoggingModule,
+    AuditLogsModule,
     CommonModule,
     ConfigModule.forRoot({
       cache: true,
@@ -86,6 +91,7 @@ import { TransfersModule } from './transfers/transfers.module';
     CountersModule,
     DashboardModule,
     EmployeesModule,
+    ErpGrnsModule,
     GrnsModule,
     HospitalsModule,
     ItemCategoriesModule,

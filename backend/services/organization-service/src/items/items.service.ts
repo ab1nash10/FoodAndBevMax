@@ -7,6 +7,7 @@ import {
 import { uniqueViolationTarget } from '@aahar/auth';
 import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { assertMayChangeShared } from '../common/location-masters';
 import { normalizeMasterName } from '../common/normalize-master-name';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
@@ -87,6 +88,9 @@ export class ItemsService {
   }
 
   async create(dto: CreateItemDto, context: ActorContext) {
+    // Items have no location: every location's menus share one catalogue.
+    assertMayChangeShared(null, 'items');
+
     try {
       const created = await this.items.transaction(async (tx) => {
         const normalizedName = normalizeMasterName(dto.itemName);
@@ -135,6 +139,8 @@ export class ItemsService {
   }
 
   async update(id: string, dto: UpdateItemDto, context: ActorContext) {
+    assertMayChangeShared(null, 'items');
+
     try {
       const updated = await this.items.transaction(async (tx) => {
         const existing = await this.findActiveItem(id, tx);
@@ -198,6 +204,8 @@ export class ItemsService {
   }
 
   async remove(id: string, context: ActorContext) {
+    assertMayChangeShared(null, 'items');
+
     const existing = await this.findActiveItem(id);
 
     await this.items.transaction(async (tx) => {

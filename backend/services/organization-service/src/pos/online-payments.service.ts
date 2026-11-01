@@ -2,16 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnlinePaymentStatus, type OnlinePayment } from '@prisma/client';
+import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { toNumber } from '../common/values';
 import type { StartOnlinePaymentDto } from './dto/pos.dto';
 import {
+  findCardMachine,
   paymentProviders,
   pinelabs,
+  plutusBaseUrl,
   providerLabels,
   type PaymentProvider,
-  type PinelabsMachine,
 } from './online-payment-providers';
 import { PosService } from './pos.service';
 
@@ -42,9 +44,10 @@ export class OnlinePaymentsService {
     config: ConfigService,
     private readonly pos: PosService,
     private readonly prisma: PrismaService,
+    private readonly auditLog?: AuditLogService,
   ) {
     this.providers = paymentProviders(config);
-    this.plutusUrl = config.get<string>('PINELABS_BASE_URL')?.trim().replace(/\/+$/, '') ?? '';
+    this.plutusUrl = plutusBaseUrl(config);
   }
 
   /** The UPI providers set up here, in the order the cashier sees them. */
@@ -90,7 +93,7 @@ export class OnlinePaymentsService {
       reference: id,
     });
 
-    return toView(
+    const created = toView(
       await this.prisma.onlinePayment.create({
         data: {
           amount: grandTotal,
@@ -105,6 +108,23 @@ export class OnlinePaymentsService {
         },
       }),
     );
+
+    void this.auditLog?.record({
+      action: 'CREATE',
+      actorId: context.actorId,
+      entityId: id,
+      entityName: 'online_payments',
+      hospitalId: counter.hospitalId,
+      newValue: {
+        amount: grandTotal,
+        counterId: counter.id,
+        provider: created.provider,
+        status: created.status,
+      },
+      summary: `${created.provider} payment of ${grandTotal} started`,
+    });
+
+    return created;
   }
 
   /** Asks the provider while it is pending; paid or closed, it is settled for good. */
@@ -123,12 +143,19 @@ export class OnlinePaymentsService {
     }
 
     // Only a pending one moves: two tills checking at once settle it the same way, once.
-    await this.prisma.onlinePayment.updateMany({
+    const settled = await this.prisma.onlinePayment.updateMany({
       data: state.paid
         ? { paidAt: new Date(), paidReference: state.reference, status: OnlinePaymentStatus.PAID }
         : { status: OnlinePaymentStatus.EXPIRED },
       where: { id, status: OnlinePaymentStatus.PENDING },
     });
+
+    if (settled.count === 1) {
+      this.recordStatusChange(
+        payment,
+        state.paid ? OnlinePaymentStatus.PAID : OnlinePaymentStatus.EXPIRED,
+      );
+    }
 
     return toView(await this.find(id));
   }
@@ -152,12 +179,29 @@ export class OnlinePaymentsService {
       return this.check(id);
     }
 
-    await this.prisma.onlinePayment.updateMany({
+    const cancelled = await this.prisma.onlinePayment.updateMany({
       data: { status: OnlinePaymentStatus.CANCELLED },
       where: { id, status: OnlinePaymentStatus.PENDING },
     });
 
+    if (cancelled.count === 1) {
+      this.recordStatusChange(payment, OnlinePaymentStatus.CANCELLED);
+    }
+
     return toView(await this.find(id));
+  }
+
+  /** Saved in the background: settling a payment never waits on, or fails with, its audit row. */
+  private recordStatusChange(payment: OnlinePayment, status: OnlinePaymentStatus): void {
+    void this.auditLog?.record({
+      action: 'STATUS_CHANGE',
+      entityId: payment.id,
+      entityName: 'online_payments',
+      hospitalId: payment.hospitalId,
+      newValue: { status },
+      oldValue: { status: payment.status },
+      summary: `${payment.provider} payment of ${toNumber(payment.amount)} ${status.toLowerCase()}`,
+    });
   }
 
   /** Who to ask about a payment: a Pine Labs one goes back to the machine it was sent to. */
@@ -174,51 +218,8 @@ export class OnlinePaymentsService {
     return machine ? pinelabs(this.plutusUrl, machine) : undefined;
   }
 
-  /**
-   * A card machine with all four Pine Labs details, the default first: by its id, or the one on
-   * the counter's POS device. None while Plutus is not set up here.
-   */
-  private async findCardMachine(by: { counterId: string } | { id: string }) {
-    if (!this.plutusUrl) {
-      return null;
-    }
-
-    let where: { id: string } | { posDeviceId: string };
-
-    if ('id' in by) {
-      where = { id: by.id };
-    } else {
-      const counter = await this.prisma.counter.findFirst({
-        select: { posDeviceId: true },
-        where: { deletedAt: null, id: by.counterId },
-      });
-
-      if (!counter?.posDeviceId) {
-        return null;
-      }
-
-      where = { posDeviceId: counter.posDeviceId };
-    }
-
-    const machines = await this.prisma.paymentMachine.findMany({
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-      where: { ...where, deletedAt: null, isActive: true },
-    });
-
-    for (const machine of machines) {
-      const details: PinelabsMachine = {
-        imei: machine.pinelabImei?.trim() ?? '',
-        merchantId: machine.pinelabMerchantId?.trim() ?? '',
-        merchantStorePosCode: machine.pinelabMerchantStorePosCode?.trim() ?? '',
-        securityToken: machine.pinelabSecurityToken?.trim() ?? '',
-      };
-
-      if (Object.values(details).every(Boolean)) {
-        return { ...details, id: machine.id, name: machine.name };
-      }
-    }
-
-    return null;
+  private findCardMachine(by: { counterId: string } | { id: string }) {
+    return findCardMachine(this.prisma, this.plutusUrl, by);
   }
 
   private async find(id: string) {

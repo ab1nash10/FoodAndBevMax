@@ -93,6 +93,7 @@ export class PosDevicesController {
       data: await this.posDevices.update(id, body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+        roles: user?.roles,
       }),
       message: 'Success',
       success: true,

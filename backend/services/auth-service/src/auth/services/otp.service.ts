@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { logger, maskPhone } from '@aahar/logging';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../common/redis/redis.service';
 import { MailService } from './mail.service';
@@ -25,6 +26,12 @@ const DEV_OTP = '000000';
 const MAX_FAILED_ATTEMPTS = 5;
 // Per number, not per IP: the IP throttle alone let anyone flood one phone from many addresses.
 const RESEND_COOLDOWN_SECONDS = 30;
+// The miss count above is per code, and every new code starts it afresh: a code every 30 seconds
+// bought five more guesses each time. These two are per number or email over a day, and a new
+// code does not reset them.
+const DAY_SECONDS = 24 * 60 * 60;
+const MAX_DAILY_FAILED_ATTEMPTS = 15;
+const MAX_DAILY_SENDS = 10;
 
 @Injectable()
 export class OtpService {
@@ -55,11 +62,11 @@ export class OtpService {
 
   /**
    * Mobile codes go out by SMS, email codes by Microsoft Graph mail. Without its channel only
-   * development can work, because the code is printed to the log there; anywhere else the
+   * development with ALLOW_DEV_OTP can work, signing in with the fixed code; anywhere else the
    * request is refused rather than answering "OTP sent" for a code nobody will ever receive.
    */
   assertCanDeliver(target: OtpTarget): void {
-    if (!this.canDeliver(target) && this.config.get<string>('NODE_ENV') !== 'development') {
+    if (!this.canDeliver(target) && !this.devOtpAllowed()) {
       throw new ServiceUnavailableException('OTP sign-in is not available right now');
     }
   }
@@ -68,9 +75,18 @@ export class OtpService {
     return target.channel === 'mobile' ? this.sms.isConfigured() : this.mail.isConfigured();
   }
 
+  // Both are needed: NODE_ENV=development alone once let any misconfigured server take 000000.
+  private devOtpAllowed(): boolean {
+    return (
+      this.config.get<string>('NODE_ENV') === 'development' &&
+      this.config.get<string>('ALLOW_DEV_OTP') === 'true'
+    );
+  }
+
   /**
-   * Refuses a new code while the previous one for this number is still fresh. Claiming the slot
-   * is one atomic step, so two requests on different instances cannot both send.
+   * Refuses a new code while the previous one for this number is still fresh, and past ten a
+   * day. Claiming the slot and counting are atomic steps, so two requests on different
+   * instances cannot both send.
    */
   async claimSendSlot(target: OtpTarget): Promise<void> {
     if (
@@ -78,6 +94,17 @@ export class OtpService {
     ) {
       throw new HttpException(
         `Please wait ${RESEND_COOLDOWN_SECONDS} seconds before requesting another OTP`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // ponytail: a failed delivery still counts towards the ten; refund it if the gateway's
+    // failures ever lock real users out.
+    if (
+      (await this.redis.increment(this.getDailySendsKey(target), DAY_SECONDS)) > MAX_DAILY_SENDS
+    ) {
+      throw new HttpException(
+        'Too many OTPs requested for this account today. Please try again later.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -103,24 +130,31 @@ export class OtpService {
       }
     }
 
-    if (this.config.get<string>('NODE_ENV') === 'development') {
-      console.info(
-        JSON.stringify({
-          channel: target.channel,
-          event: 'auth_otp_generated',
-          otp,
-          target: target.value,
-        }),
-      );
-    }
+    // Never the code itself (with ALLOW_DEV_OTP in development the fixed OTP 000000 signs in).
+    logger.debug(
+      {
+        channel: target.channel,
+        target: target.channel === 'mobile' ? maskPhone(target.value) : target.value,
+      },
+      'auth_otp_generated',
+    );
   }
 
   async verify(input: { email?: string; mobile?: string; otp: string }): Promise<OtpTarget> {
     const target = this.getTarget(input);
-    const isDevelopment = this.config.get<string>('NODE_ENV') === 'development';
 
-    if (isDevelopment && input.otp === DEV_OTP) {
+    if (this.devOtpAllowed() && input.otp === DEV_OTP) {
       return target;
+    }
+
+    // Checked before the code, so even the right one is refused until the day's window ends.
+    const dailyFailures = Number(await this.redis.get(this.getDailyFailuresKey(target)));
+
+    if (dailyFailures >= MAX_DAILY_FAILED_ATTEMPTS) {
+      throw new HttpException(
+        'Too many wrong codes for this account. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const key = this.getOtpKey(target);
@@ -141,6 +175,7 @@ export class OtpService {
     }
 
     await this.redis.delete(this.getAttemptsKey(target));
+    await this.redis.delete(this.getDailyFailuresKey(target));
 
     return target;
   }
@@ -150,10 +185,19 @@ export class OtpService {
     const attemptsKey = this.getAttemptsKey(target);
     const ttlSeconds = this.config.get<number>('OTP_TTL_SECONDS') ?? 300;
     const attempts = await this.redis.increment(attemptsKey, ttlSeconds);
+    await this.redis.increment(this.getDailyFailuresKey(target), DAY_SECONDS);
 
     if (attempts >= MAX_FAILED_ATTEMPTS) {
       await this.redis.delete(this.getOtpKey(target));
       await this.redis.delete(attemptsKey);
+      logger.warn(
+        {
+          attempts,
+          channel: target.channel,
+          target: target.channel === 'mobile' ? maskPhone(target.value) : target.value,
+        },
+        'otp_lockout',
+      );
     }
   }
 
@@ -163,6 +207,14 @@ export class OtpService {
 
   private getAttemptsKey(target: OtpTarget): string {
     return `auth:otp-attempts:${target.channel}:${target.value}`;
+  }
+
+  private getDailyFailuresKey(target: OtpTarget): string {
+    return `auth:otp-daily-failures:${target.channel}:${target.value}`;
+  }
+
+  private getDailySendsKey(target: OtpTarget): string {
+    return `auth:otp-daily-sends:${target.channel}:${target.value}`;
   }
 
   private getOtpKey(target: OtpTarget): string {

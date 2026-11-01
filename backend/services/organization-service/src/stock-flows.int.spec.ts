@@ -80,10 +80,16 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     storeId: '',
   };
 
+  // This run's browser is a till once beforeAll sets one up: sent with /pos/ calls, as the portal does.
+  let tillKey = '';
   async function api(method: string, path: string, body?: unknown) {
     const response = await fetch(`${baseUrl}${path}`, {
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        ...(tillKey && path.startsWith('/pos/') ? { 'x-till-key': tillKey } : {}),
+      },
       method,
     });
     const json = (await response.json()) as Body;
@@ -186,6 +192,10 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     Object.assign(process.env, {
       DATABASE_URL: databaseUrl,
       NODE_ENV: 'test',
+      // No UPI gateway: UPI is typed in, as at a site without one (a site with one takes UPI
+      // only through it). Blanks that are not empty: dotenv-expand refills an empty one from .env.
+      PAYU_CLIENT_ID: ' ',
+      RAZORPAY_KEY_ID: ' ',
       REDIS_URL: '',
       SWAGGER_ENABLED: 'false',
       THROTTLE_LIMIT: '100000',
@@ -231,6 +241,20 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
         `/restaurants?limit=1&isActive=true&sortBy=createdAt&sortOrder=asc&hospitalId=${fx.hospitalId}`,
       ),
     );
+    // A till of this run's own for that restaurant, set up by its computer's name.
+    const till = await ok('POST', '/pos-devices', {
+      code: `ST${run}`,
+      hospitalId: fx.hospitalId,
+      hostName: `STOCK-TILL-${run}`,
+      name: `Stock Till ${run}`,
+      restaurantIds: [fx.restaurantId],
+    });
+    tillKey = (
+      (await ok('POST', '/pos/till', {
+        computerName: `STOCK-TILL-${run}`,
+        posDeviceId: idOf(till),
+      })) as { tillKey: string }
+    ).tillKey;
     const categoryId = (fx.categoryId = idOf(
       await ok('POST', '/item-categories', { categoryName: `Characterisation ${run}` }),
     ));
@@ -952,8 +976,9 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       paymentMode: undefined,
     });
     expect(comp).toMatchObject({ isComplimentary: true, paymentMode: null });
-    // Failed bills use no number: the next bill is the next invoice and the next order.
-    expect(invoiceNo(comp)).toBe(invoiceNo(created.data) + 1);
+    // Failed bills use no number: the next bill is the counter's next order. (Invoices count per
+    // location, which other suites bill at in parallel, so only their order is checked there.)
+    expect(invoiceNo(comp)).toBeGreaterThan(invoiceNo(created.data));
     expect(comp.orderNumber).toBe('0002');
     expect(await counterQty()).toBe(2);
 

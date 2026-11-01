@@ -121,7 +121,7 @@ pipeline {
             sh '''
               for SERVICE in auth-service user-service organization-service; do
                 docker build -f backend/Dockerfile \
-                  --target runner --build-arg SERVICE="$SERVICE" \
+                  --target runner --build-arg SERVICE="$SERVICE" --build-arg GIT_SHA="$IMAGE_TAG" \
                   -t "$REGISTRY/max-ai-repo:$SERVICE-$IMAGE_TAG" .
                 docker push "$REGISTRY/max-ai-repo:$SERVICE-$IMAGE_TAG"
               done
@@ -195,9 +195,6 @@ pipeline {
           // fails the build if a pod never becomes ready, rather than reporting success
           // over a CrashLoopBackOff.
           //
-          // helm --set splits on commas, so a value containing one must escape it as `\,`.
-          // Base64 secrets and a standard Postgres or Redis URL contain none.
-          //
           // REDIS_URL is optional: set it on the job (an environment variable, or a credential
           // bound under that name) to point the services at ElastiCache. Empty keeps each pod's
           // in-memory store, which needs one replica per service. infra/aws/README.md creates the
@@ -211,16 +208,29 @@ pipeline {
               ENV_VALUES="-f infra/helm/fandb/values-$K8S_NAMESPACE.yaml"
             fi
 
+            # Secrets go to helm in a private file, not --set-string, where any process on the
+            # agent could read them from the command line. Single-quoted YAML ('' escapes a
+            # quote) keeps every character as given, commas included.
+            SECRETS_FILE=$(mktemp)
+            chmod 600 "$SECRETS_FILE"
+            trap 'rm -f "$SECRETS_FILE"' EXIT
+            yq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
+            cat > "$SECRETS_FILE" <<EOF
+config:
+  secrets:
+    DATABASE_URL: $(yq "$DATABASE_URL")
+    JWT_ACCESS_SECRET: $(yq "$JWT_ACCESS_SECRET")
+    JWT_REFRESH_SECRET: $(yq "$JWT_REFRESH_SECRET")
+    ADMIN_PASSWORD: $(yq "$ADMIN_PASSWORD")
+    SMS_USERNAME: $(yq "$SMS_USERNAME")
+    SMS_PASSWORD: $(yq "$SMS_PASSWORD")
+    REDIS_URL: $(yq "${REDIS_URL:-}")
+EOF
+
             helm upgrade --install "$HELM_RELEASE" infra/helm/fandb $ENV_VALUES \
               --namespace "$K8S_NAMESPACE" --create-namespace \
               --set-string image.tag="$IMAGE_TAG" \
-              --set-string config.secrets.DATABASE_URL="$DATABASE_URL" \
-              --set-string config.secrets.JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
-              --set-string config.secrets.JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
-              --set-string config.secrets.ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-              --set-string config.secrets.SMS_USERNAME="$SMS_USERNAME" \
-              --set-string config.secrets.SMS_PASSWORD="$SMS_PASSWORD" \
-              --set-string config.secrets.REDIS_URL="${REDIS_URL:-}" \
+              -f "$SECRETS_FILE" \
               --wait --timeout 10m
           '''
         }

@@ -59,7 +59,7 @@ import {
   usePosCounter,
 } from './shared';
 import { OnlinePaymentDialog, providerLabels } from './online-payment-dialog';
-import { onlineProvider, type CardVia } from './payment-collection';
+import { onlineProvider } from './payment-collection';
 import { ShiftChip, ShiftStartPanel } from './shift-controls';
 import { PosClosed } from './pos-gate';
 import { UnsentBillsButton, UnsentBillsDialog, useUnsentBills } from './unsent-bills';
@@ -151,8 +151,6 @@ export function BillingPageClient() {
   const [cashReceived, setCashReceived] = useState(0);
   // UPI is taken on the restaurant's own QR (OWN) or online, through the provider picked here.
   const [upiVia, setUpiVia] = useState<'OWN' | OnlinePaymentProvider | null>(null);
-  // A card goes to the counter's Pine Labs machine when it has one, or is keyed in by hand.
-  const [cardVia, setCardVia] = useState<CardVia>('MACHINE');
   // The bill waiting for its online payment; it is made once the provider confirms.
   const [onlinePayment, setOnlinePayment] = useState<{
     payload: PosBillInput;
@@ -316,7 +314,6 @@ export function BillingPageClient() {
   const cardMachine = cardMachineQuery.data ?? null;
   const onlineVia = onlineProvider({
     cardMachine: Boolean(cardMachine),
-    cardVia,
     isComplimentary,
     paymentMode,
     upiVia: collectVia,
@@ -1136,15 +1133,8 @@ export function BillingPageClient() {
                 />
               ) : null}
               {paymentMode === 'CARD' && !isComplimentary && cardMachine ? (
-                <CollectVia
-                  label="Take the card on"
-                  onPick={setCardVia}
-                  options={[
-                    { label: `Card machine · ${cardMachine.name}`, value: 'MACHINE' },
-                    { label: 'Keyed in', value: 'MANUAL' },
-                  ]}
-                  value={cardVia}
-                />
+                // A counter with a card machine takes cards on it only: never typed in.
+                <p className="text-xs text-ds-text-3">Card machine · {cardMachine.name}</p>
               ) : null}
               {paymentMode === 'CASH' || collectsOnline ? null : (
                 <Input

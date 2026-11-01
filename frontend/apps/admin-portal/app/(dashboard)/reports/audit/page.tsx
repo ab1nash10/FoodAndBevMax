@@ -1,5 +1,5 @@
-import { PageShell } from '@/components/page-shell';
+import { AuditLogPageClient } from '@/components/audit/audit-log-page';
 
 export default function AuditPage() {
-  return <PageShell eyebrow="Reports" title="Audit Logs" />;
+  return <AuditLogPageClient />;
 }

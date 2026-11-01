@@ -48,6 +48,8 @@ spec:
         app.kubernetes.io/component: cache
         app.kubernetes.io/part-of: fandb
     spec:
+      # Redis never talks to the Kubernetes API, so the pod carries no token for it.
+      automountServiceAccountToken: false
       securityContext:
         # The image's own redis user.
         runAsNonRoot: true
@@ -70,9 +72,10 @@ spec:
           ports:
             - name: redis
               containerPort: 6379
+          # Both probes run inside the pod, so the NetworkPolicy below cannot fail them.
           livenessProbe:
-            tcpSocket:
-              port: redis
+            exec:
+              command: ['redis-cli', 'ping']
             initialDelaySeconds: 10
             periodSeconds: 20
           readinessProbe:
@@ -111,3 +114,27 @@ spec:
     - name: redis
       port: 6379
       targetPort: redis
+---
+# Only fandb backends may connect: the platform's fandb-backend pods carry these labels
+# (devops repo, dev/fandb/fandb-api/templates/deployment.yaml). A no-op on a cluster whose CNI
+# does not enforce NetworkPolicies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fandb-redis
+  namespace: dev
+  labels:
+    app.kubernetes.io/part-of: fandb
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fandb-redis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+              app.kubernetes.io/part-of: fandb
+      ports:
+        - port: redis

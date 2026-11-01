@@ -180,6 +180,29 @@ export class RestaurantsRepository {
     });
   }
 
+  /** Whether anything that also records the restaurant's location (hospital) points at it. */
+  async hasLocationBoundRecords(restaurantId: string, client: RestaurantClient): Promise<boolean> {
+    const found = await Promise.all([
+      client.counter.findFirst({ select: { id: true }, where: { deletedAt: null, restaurantId } }),
+      client.restaurantMenu.findFirst({
+        select: { id: true },
+        where: { deletedAt: null, restaurantId },
+      }),
+      client.itemPrice.findFirst({
+        select: { id: true },
+        where: { deletedAt: null, restaurantId },
+      }),
+      client.employeeDiscount.findFirst({
+        select: { id: true },
+        where: { archivedAt: null, restaurantId },
+      }),
+      // Bills stay with the location they were made at, so any order, ever, counts.
+      client.restaurantOrder.findFirst({ select: { id: true }, where: { restaurantId } }),
+    ]);
+
+    return found.some(Boolean);
+  }
+
   async softDeleteCounters(
     restaurantId: string,
     data: {

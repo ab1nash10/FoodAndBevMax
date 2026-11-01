@@ -55,8 +55,14 @@ stringData:
   SMS_PASSWORD: {{ .Values.config.secrets.SMS_PASSWORD | quote }}
   {{- end }}
   {{- if .Values.redis.enabled }}
+  {{- $redisPassword := required "redis.password is required with redis.enabled (e.g. openssl rand -hex 32)" .Values.redis.password }}
+  {{- if not (regexMatch "^[A-Za-z0-9]{32,}$" $redisPassword) }}
+  {{- fail "redis.password must be at least 32 letters or digits, so it needs no escaping in REDIS_URL" }}
+  {{- end }}
+  # Read by the chart's Redis (--requirepass): it holds live OTPs, so it never runs open.
+  REDIS_PASSWORD: {{ $redisPassword | quote }}
   # Defaults to the Redis this chart deploys; an explicit value still wins.
-  REDIS_URL: {{ .Values.config.secrets.REDIS_URL | default (printf "redis://%s:%v" .Values.redis.name .Values.redis.port) | quote }}
+  REDIS_URL: {{ .Values.config.secrets.REDIS_URL | default (printf "redis://:%s@%s:%v" $redisPassword .Values.redis.name .Values.redis.port) | quote }}
   {{- else if .Values.config.secrets.REDIS_URL }}
   REDIS_URL: {{ .Values.config.secrets.REDIS_URL | quote }}
   {{- end }}

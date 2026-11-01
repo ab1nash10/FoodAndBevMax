@@ -48,6 +48,20 @@ void test('an HttpException keeps its status and message', () => {
   });
 });
 
+void test('a database that cannot be reached is a 503 to retry, not a 500', () => {
+  for (const code of ['P1001', 'P1002', 'P1017']) {
+    const error = Object.assign(new Error("Can't reach database server at localhost:5433"), {
+      code,
+      name: 'PrismaClientKnownRequestError',
+    });
+    assert.deepEqual(send(error), {
+      errors: [],
+      message: 'The server is briefly unavailable. Please try again in a minute.',
+      status: 503,
+    });
+  }
+});
+
 void test('any other error is a bare 500, with no message or stack from the server', () => {
   assert.deepEqual(send(new TypeError("Cannot read properties of undefined (reading 'id')")), {
     errors: [],
@@ -75,5 +89,26 @@ void test('no database connection free in time is a 503 "busy", so people retry 
     errors: [],
     message: 'The server is busy right now. Please try again in a moment.',
     status: 503,
+  });
+});
+
+void test('constraint errors a service left unhandled are 409/404 naming the column, not 500', () => {
+  const prisma = (code: string, meta?: Record<string, unknown>) =>
+    Object.assign(new Error(`Invalid prisma call: value 'secret@x.in'`), {
+      code,
+      meta,
+      name: 'PrismaClientKnownRequestError',
+    });
+
+  assert.deepEqual(send(prisma('P2002', { target: ['email'] })), {
+    errors: [],
+    message: 'A record with this email already exists',
+    status: 409,
+  });
+  assert.deepEqual(send(prisma('P2025')), { errors: [], message: 'Record not found', status: 404 });
+  assert.deepEqual(send(prisma('P2003')), {
+    errors: [],
+    message: 'A linked record is missing or still in use',
+    status: 409,
   });
 });

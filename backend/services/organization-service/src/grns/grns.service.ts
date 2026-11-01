@@ -8,6 +8,7 @@ import {
   StockTransactionType,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { itemsLabel, qty, total } from '../common/audit/audit-summary';
 import {
   getDocumentOrderBy,
   getPageMeta,
@@ -384,6 +385,18 @@ export class GrnsService {
         tx,
       );
 
+      const postedBatches = existing.lines.flatMap((line) =>
+        line.batches
+          .filter((batch) => toNumber(batch.acceptedQty) > 0)
+          .map((batch) => ({
+            acceptedQty: toNumber(batch.acceptedQty),
+            batchNumber: batch.batchNumber,
+            expiryDate: batch.expiryDate,
+            itemId: batch.itemId,
+            itemName: line.item?.itemName,
+          })),
+      );
+
       await this.auditLog.record(
         {
           action: 'GRN_POST',
@@ -392,8 +405,10 @@ export class GrnsService {
           entityName: 'grns',
           hospitalId: posted.hospitalId,
           ipAddress: context.ipAddress,
-          newValue: toGrnResponse(posted),
-          oldValue: toGrnResponse(existing),
+          locationId: existing.storeId,
+          newValue: { batches: postedBatches, status: posted.status },
+          oldValue: { status: existing.status },
+          summary: `Posted ${qty(total(postedBatches.map((batch) => batch.acceptedQty)))} of ${itemsLabel(postedBatches)} in ${postedBatches.length} batch(es) to stock`,
         },
         tx,
       );

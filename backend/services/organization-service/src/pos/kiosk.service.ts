@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { MenuServeAt, Prisma } from '@prisma/client';
+import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { toDateOnly, toNumber } from '../common/values';
 import type { CreateKioskOrderDto } from './dto/kiosk.dto';
@@ -19,6 +20,8 @@ type KioskLine = { menuId: string; quantity: number };
 /** How long an unpaid kiosk order stays on the till's Waiting to pay list. */
 const WAITING_MS = 2 * 60 * 60 * 1000;
 
+const noStaffMobile = 'No staff member is registered with this mobile number.';
+
 /**
  * The restaurant's self-service kiosk: its menu, a staff member's discount by registered
  * mobile, and orders the guest pays for at a counter. The kiosk opens with the restaurant's
@@ -29,6 +32,7 @@ export class KioskService {
   constructor(
     private readonly pos: PosService,
     private readonly prisma: PrismaService,
+    private readonly auditLog?: AuditLogService,
   ) {}
 
   private async restaurant(restaurantId: string, token: string | undefined) {
@@ -120,15 +124,23 @@ export class KioskService {
     });
 
     if (matches.length !== 1) {
-      throw new NotFoundException('No staff member is registered with this mobile number.');
+      throw new NotFoundException(noStaffMobile);
     }
 
     return this.pos.employeeDiscount({ restaurantId }, matches[0]!.employeeCode);
   }
 
-  /** The staff discount for a registered mobile. Says no more than the rate. */
+  /**
+   * The staff discount for a registered mobile. Says no more than the rate; a restaurant that
+   * gives no staff discount answers as for an unknown number, so it tells no one who is staff.
+   */
   async staffDiscount(restaurantId: string, token: string | undefined, mobile: string) {
     const restaurant = await this.restaurant(restaurantId, token);
+
+    if (!restaurant.staffDiscountApplicable) {
+      throw new NotFoundException(noStaffMobile);
+    }
+
     const employee = await this.employeeByMobile(restaurant.id, mobile);
 
     return { discountPercent: employee.discountPercent };
@@ -244,6 +256,21 @@ export class KioskService {
             number: (last?.number ?? 0) + 1,
             restaurantId: restaurant.id,
           },
+        });
+
+        // Signed out (a kiosk): no actor; saved in the background.
+        await this.auditLog?.record({
+          action: 'CREATE',
+          entityId: order.id,
+          entityName: 'kiosk_orders',
+          newValue: {
+            employeeCode: order.employeeCode,
+            lines,
+            number: order.number,
+            restaurantId: restaurant.id,
+            totals,
+          },
+          summary: `Kiosk order #${order.number} placed`,
         });
 
         return { id: order.id, number: order.number, ...totals };

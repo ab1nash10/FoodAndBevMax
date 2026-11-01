@@ -1,3 +1,4 @@
+import { logger } from '@aahar/logging';
 import { PrismaClient } from '@prisma/client';
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { createPrismaAdapter } from './prisma-adapter';
@@ -59,11 +60,9 @@ export class HealthCheckService implements OnModuleDestroy {
     } catch (error) {
       // The endpoint is public; Prisma's message names the database host and user, so it goes
       // to the log, not the response.
-      console.error(
-        JSON.stringify({
-          event: 'health_database_failed',
-          message: error instanceof Error ? error.message : String(error),
-        }),
+      logger.error(
+        { reason: error instanceof Error ? error.message : String(error) },
+        'health_database_failed',
       );
 
       return {

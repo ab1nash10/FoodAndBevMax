@@ -1,7 +1,10 @@
 import { strict as assert } from 'node:assert';
+import { ForbiddenException } from '@nestjs/common';
+import { hospitalScopeStorage } from '@aahar/auth';
 import { FoodType, type Item } from '@prisma/client';
 import { test } from 'vitest';
-import { planItemImport } from './items-import.service';
+import type { PrismaService } from '../common/prisma/prisma.service';
+import { ItemsImportService, planItemImport } from './items-import.service';
 
 const samosa = {
   hsnCode: '2106',
@@ -93,4 +96,25 @@ test('adding needs the create permission and changing the update one', async () 
     updateOnly.rows.map((row) => row.errors),
     [[], ["You can't add items; this row would add one"]],
   );
+});
+
+test('only a user who reaches every location may import items, even as a trial run', async () => {
+  // A catalogue with no items: the trial plans nothing and saves nothing.
+  const prisma = { item: { findMany: () => Promise.resolve([]) } } as unknown as PrismaService;
+  const service = new ItemsImportService(prisma);
+  const rows = [{ itemName: 'Kachori', type: 'Veg' }];
+
+  await hospitalScopeStorage.run({ allowedHospitalIds: ['hospital-a'] }, async () => {
+    for (const dryRun of [true, false]) {
+      await assert.rejects(
+        service.import({ dryRun, rows }, everything),
+        (error: unknown) =>
+          error instanceof ForbiddenException &&
+          error.message === 'Only a Super Admin can change items shared by every location',
+      );
+    }
+  });
+  await hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
+    await assert.doesNotReject(service.import({ dryRun: true, rows }, everything));
+  });
 });

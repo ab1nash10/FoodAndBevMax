@@ -1,18 +1,21 @@
 import { CurrentUser, Permissions } from '@aahar/auth';
 import type { JwtRequestUser } from '@aahar/auth';
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { getActorId } from '../common/request-context';
 import { StartOnlinePaymentDto } from './dto/pos.dto';
 import { OnlinePaymentsService } from './online-payments.service';
+import { RequireTill, TillGuard } from './till.guard';
 
 @ApiBearerAuth('access-token')
 @ApiTags('pos')
+@UseGuards(TillGuard)
 @Controller('pos/online-payments')
 export class OnlinePaymentsController {
   constructor(private readonly payments: OnlinePaymentsService) {}
 
   @Get('providers')
+  @RequireTill()
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: 'The online UPI providers set up here (Razorpay, PayU)' })
   @ApiOkResponse({ description: 'Providers returned.' })
@@ -21,6 +24,7 @@ export class OnlinePaymentsController {
   }
 
   @Get('card-machine/:counterId')
+  @RequireTill({ from: 'param', kind: 'counterId' })
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: "The counter's Pine Labs card machine, or null when it has none" })
   @ApiOkResponse({ description: 'Card machine returned.' })
@@ -33,6 +37,7 @@ export class OnlinePaymentsController {
   }
 
   @Post()
+  @RequireTill({ from: 'body', kind: 'counterId' })
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({
     summary: "Start a bill's payment: a UPI provider's link for its QR, or a card on Pine Labs",
@@ -50,6 +55,7 @@ export class OnlinePaymentsController {
   }
 
   @Get(':id')
+  @RequireTill({ from: 'param', kind: 'paymentId', name: 'id' })
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: 'Whether the guest has paid: asks the provider while pending' })
   @ApiOkResponse({ description: 'Payment returned.' })
@@ -58,6 +64,7 @@ export class OnlinePaymentsController {
   }
 
   @Post(':id/cancel')
+  @RequireTill({ from: 'param', kind: 'paymentId', name: 'id' })
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: 'Let an unpaid payment go; one paid meanwhile comes back PAID' })
   @ApiOkResponse({ description: 'Payment returned.' })

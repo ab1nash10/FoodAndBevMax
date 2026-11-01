@@ -93,6 +93,7 @@ export class HospitalsController {
       data: await this.hospitals.update(id, body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+        roles: user?.roles,
       }),
       message: 'Success',
       success: true,

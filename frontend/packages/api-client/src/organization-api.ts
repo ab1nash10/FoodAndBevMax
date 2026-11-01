@@ -434,10 +434,13 @@ export function createOrganizationApi(options: ApiClientOptions) {
         }>
       >('/pos/whoami', { headers: tillKey ? { 'X-Till-Key': tillKey } : undefined });
     },
-    /** Sets up this browser as the POS device's till; the key comes back once. */
-    enrollTill(posDeviceId: string) {
+    /**
+     * Sets up this browser as the POS device's till; the key comes back once. The computer's
+     * name must be the device's Host Name.
+     */
+    enrollTill(posDeviceId: string, computerName: string) {
       return client.request<ApiResponse<{ tillKey: string }>>('/pos/till', {
-        body: { posDeviceId },
+        body: { computerName, posDeviceId },
         method: 'POST',
       });
     },

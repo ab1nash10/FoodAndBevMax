@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { hospitalScopeStorage } from '@aahar/auth';
 import { test } from 'vitest';
 import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { ItemsRepository } from './items.repository';
@@ -94,4 +95,32 @@ test('a refused item does not use up an item code', async () => {
 
   assert.equal(first?.itemCode, 'ITM0001');
   assert.equal(next?.itemCode, 'ITM0002');
+});
+
+test('only a user who reaches every location may add, change or remove an item', async () => {
+  const items: StoredItem[] = [
+    { categoryId: null, id: 'a', itemName: 'Samosa', normalizedName: 'samosa' },
+  ];
+  const service = serviceWith(items);
+  const isRefused = (error: unknown) =>
+    error instanceof ForbiddenException &&
+    error.message === 'Only a Super Admin can change items shared by every location';
+
+  // Items have no location: every location's menus use the same catalogue.
+  await hospitalScopeStorage.run({ allowedHospitalIds: ['hospital-a'] }, async () => {
+    await assert.rejects(service.create(newItem('Kachori'), actor), isRefused);
+    await assert.rejects(service.update('a', { itemName: 'Vada' }, actor), isRefused);
+    await assert.rejects(service.update('a', { isActive: false }, actor), isRefused);
+    await assert.rejects(service.remove('a', actor), isRefused);
+  });
+  assert.deepEqual(
+    items.map((item) => item.itemName),
+    ['Samosa'],
+  );
+
+  // A Super Admin's requests carry no allowed list.
+  await hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
+    await assert.doesNotReject(service.create(newItem('Kachori'), actor));
+    await assert.doesNotReject(service.update('a', { itemName: 'Vada' }, actor));
+  });
 });

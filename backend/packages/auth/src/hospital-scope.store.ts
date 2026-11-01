@@ -32,6 +32,7 @@ export const HOSPITAL_SCOPED_MODELS = new Set([
   'CounterShift',
   'EmployeeDiscount',
   'Grn',
+  'GrnEntry',
   'ItemPrice',
   'Kitchen',
   'KitchenProduction',

@@ -7,6 +7,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   CounterShiftStatus,
   EmploymentType,
@@ -37,6 +38,7 @@ import type {
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
 import { hashOrderKey, itemCount } from '../restaurant-orders/restaurant-orders.service';
+import { findCardMachine, paymentProviders, plutusBaseUrl } from './online-payment-providers';
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { shiftStates, shiftsOn, tally, userNames } from './shifts';
 
@@ -50,6 +52,9 @@ const KIOSK_IN_USE_DAYS = 30;
 
 const notATill =
   'This computer is not set up as a till. An admin opens the POS on it once and sets it up as its POS device.';
+
+const notTillsCounter =
+  'That is not this till’s counter. A till works only at the counters of its POS device’s restaurants.';
 
 const notAssignedToTill =
   'You are not assigned to the location of this till’s restaurant. Ask an admin to give you access to its location.';
@@ -197,10 +202,19 @@ function toOrderResponse(
 
 @Injectable()
 export class PosService {
+  /** Whether Razorpay or PayU is set up: the till then takes UPI through it. */
+  private readonly upiOnline: boolean;
+  /** Pine Labs' Plutus Cloud API ('' when not set up): a counter's card machine takes cards. */
+  private readonly plutusUrl: string;
+
   constructor(
     private readonly auditLog: AuditLogService,
     private readonly prisma: PrismaService,
-  ) {}
+    config?: ConfigService,
+  ) {
+    this.upiOnline = config ? paymentProviders(config).size > 0 : false;
+    this.plutusUrl = config ? plutusBaseUrl(config) : '';
+  }
 
   /**
    * The active counters the user may bill at (reads are already limited to their locations),
@@ -281,16 +295,31 @@ export class PosService {
   /**
    * Makes the calling browser the till of this POS device: a new key, returned once and kept
    * only hashed. Setting a device up again replaces the key, so the old browser is no till.
+   * The admin types the computer's name, which must be the device's Host Name: a browser cannot
+   * read it, so this is where a wrong Host Name or the wrong computer is caught.
    */
-  async enrollTill(posDeviceId: string, context: ActorContext) {
+  async enrollTill(posDeviceId: string, computerName: string, context: ActorContext) {
     // Read under the admin's own locations: a device elsewhere is not found.
     const device = await this.prisma.posDevice.findFirst({
-      select: { id: true },
+      select: { hostName: true, id: true },
       where: { deletedAt: null, id: posDeviceId, isActive: true },
     });
 
     if (!device) {
       throw new NotFoundException('POS device not found');
+    }
+
+    // Windows shows the name with or without the domain, in any case.
+    const shortName = (name: string | null) => (name ?? '').trim().split('.')[0]!.toLowerCase();
+    if (!shortName(device.hostName)) {
+      throw new BadRequestException(
+        'This POS device has no Host Name yet. Add the till computer’s name to it under POS & Payment Machines first.',
+      );
+    }
+    if (shortName(computerName) !== shortName(device.hostName)) {
+      throw new BadRequestException(
+        `This computer (${computerName.trim()}) is not ${device.hostName}, the computer this POS device names. Set it up on that computer, or correct the device’s Host Name.`,
+      );
     }
 
     const tillKey = `till_${randomBytes(24).toString('base64url')}`;
@@ -340,6 +369,80 @@ export class PosService {
           where: { deletedAt: null, isActive: true, tillKeyHash: hashOrderKey(tillKey) },
         }),
     );
+  }
+
+  /**
+   * Refuses a POS request that does not come from a till, or that touches a counter which is not
+   * the till's (directly, or through its bill, shift, payment or menu item). Returns the till's
+   * counters, so lists can be narrowed to them. Read across locations, like the till itself: this
+   * only decides whether the thing is the till's; the route's own reads stay the user's.
+   */
+  async requireTill(
+    tillKey: string | undefined,
+    target: {
+      billId?: string;
+      counterId?: string;
+      menuId?: string;
+      paymentId?: string;
+      shiftId?: string;
+    },
+  ): Promise<{ counterIds: string[] }> {
+    const till = tillKey ? await this.tillByKey(tillKey) : null;
+    if (!till) throw new ForbiddenException(notATill);
+
+    return await hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
+      const found = await this.prisma.counter.findMany({
+        select: { id: true, posDeviceId: true, restaurantId: true },
+        where: {
+          deletedAt: null,
+          OR: [
+            { posDeviceId: till.id },
+            { restaurantId: { in: till.restaurants.map((entry) => entry.restaurantId) } },
+          ],
+        },
+      });
+      // As counters(): the device's own counters if any name it, else its restaurants'.
+      const counters = found.some((counter) => counter.posDeviceId === till.id)
+        ? found.filter((counter) => counter.posDeviceId === till.id)
+        : found;
+      const counterIds = counters.map((counter) => counter.id);
+      const lookup = (id: string) => ({ select: { counterId: true }, where: { id } });
+
+      // Named but empty: a route that acts on something must say what.
+      const fields = ['billId', 'counterId', 'menuId', 'paymentId', 'shiftId'] as const;
+      if (fields.some((field) => field in target && !target[field])) {
+        throw new ForbiddenException(notTillsCounter);
+      }
+
+      // The counter it acts on: named, or that of its bill, shift or payment. What does not exist
+      // at all is let through, for the route to answer its own 404 as it always did; what exists
+      // but is another till's (or another location's) is refused.
+      const record = target.billId
+        ? await this.prisma.restaurantOrder.findFirst(lookup(target.billId))
+        : target.shiftId
+          ? await this.prisma.counterShift.findFirst(lookup(target.shiftId))
+          : target.paymentId
+            ? await this.prisma.onlinePayment.findFirst(lookup(target.paymentId))
+            : null;
+      const counterId = target.counterId ?? record?.counterId;
+      if (counterId && !counterIds.includes(counterId)) {
+        const exists =
+          record ??
+          (await this.prisma.counter.findFirst({ select: { id: true }, where: { id: counterId } }));
+        if (exists) throw new ForbiddenException(notTillsCounter);
+      }
+      if (target.menuId) {
+        const menu = await this.prisma.restaurantMenu.findFirst({
+          select: { restaurantId: true },
+          where: { id: target.menuId },
+        });
+        if (menu && !counters.some((counter) => counter.restaurantId === menu.restaurantId)) {
+          throw new ForbiddenException(notTillsCounter);
+        }
+      }
+
+      return { counterIds };
+    });
   }
 
   async findCounter(id: string, client: Client = this.prisma) {
@@ -633,6 +736,34 @@ export class PosService {
     return payment;
   }
 
+  /**
+   * Where the till takes a mode through a provider, a bill in that mode comes with the provider's
+   * payment: a typed reference proves nothing, so cash could be booked as UPI or card and kept.
+   * UPI through Razorpay or PayU, unless the restaurant has its own UPI QR (paid to its own
+   * account; no provider to ask, so typed in as before); cards on the counter's Pine Labs machine.
+   * Other modes, and modes with nothing set up, stay typed in.
+   */
+  private async requireOnlineProof(
+    tx: Prisma.TransactionClient,
+    counter: Awaited<ReturnType<PosService['findCounter']>>,
+    mode: PaymentMode | undefined,
+  ) {
+    if (mode === PaymentMode.UPI && this.upiOnline && !counter.restaurant.upiId?.trim()) {
+      throw new BadRequestException(
+        'Take UPI on the till’s QR: this counter collects UPI online, so a typed reference is not accepted.',
+      );
+    }
+
+    if (
+      mode === PaymentMode.CARD &&
+      (await findCardMachine(tx, this.plutusUrl, { counterId: counter.id }))
+    ) {
+      throw new BadRequestException(
+        'Take the card on this counter’s card machine: a typed card reference is not accepted here.',
+      );
+    }
+  }
+
   private async billOrder(
     tx: Prisma.TransactionClient,
     counter: Awaited<ReturnType<PosService['findCounter']>>,
@@ -679,6 +810,10 @@ export class PosService {
     const online = dto.onlinePaymentId
       ? await this.paidOnline(tx, counter.id, dto.onlinePaymentId, totals.grandTotal)
       : null;
+
+    if (!online && !isComplimentary && totals.grandTotal > 0) {
+      await this.requireOnlineProof(tx, counter, dto.paymentMode);
+    }
 
     // Taking the location's next invoice number locks its row until the bill commits, so bills
     // at the location queue here: no two share a number, and the count below is exact.
@@ -978,8 +1113,12 @@ export class PosService {
     };
   }
 
+  /** For the till: only what it shows the cashier (who, their type, the discount here). */
   async lookupEmployee(query: EmployeeLookupQueryDto) {
-    return this.employeeDiscount(await this.findCounter(query.counterId), query.code.trim());
+    const { discountName, discountPercent, employeeCode, employeeName, employmentType } =
+      await this.employeeDiscount(await this.findCounter(query.counterId), query.code.trim());
+
+    return { discountName, discountPercent, employeeCode, employeeName, employmentType };
   }
 
   /** A restaurant's staff discount: whether it gives one, and the rate for each employee type. */
@@ -1076,10 +1215,12 @@ export class PosService {
     return toOrderResponse(order, cashier);
   }
 
-  async list(query: ListPosOrdersQueryDto) {
+  /** Bills; from a till (`tillCounterIds`), only those of its own counters. */
+  async list(query: ListPosOrdersQueryDto, tillCounterIds?: string[]) {
     const { limit, page } = getPagination(query);
     const search = query.search?.trim();
     const where: Prisma.RestaurantOrderWhereInput = {
+      ...(tillCounterIds ? { AND: [{ counterId: { in: tillCounterIds } }] } : {}),
       source: OrderSource.COUNTER,
       ...(query.hospitalId ? { hospitalId: query.hospitalId } : {}),
       ...(query.restaurantId ? { restaurantId: query.restaurantId } : {}),
@@ -1290,18 +1431,33 @@ export class PosService {
 
   /**
    * Cancels a bill and puts what it took back into the counter's stock. A bill the kitchen has
-   * already handed over can still be cancelled (a refund), but only once.
+   * already handed over can still be cancelled (a refund), but only once. While its shift is
+   * open the cashier may fix a mistake; once the shift has ended (its cash counted), only someone
+   * who may close the counter's day (POS_DAY_CLOSE, a manager or admin) may cancel it.
    */
   async cancel(id: string, dto: CancelPosOrderDto, context: ActorContext) {
     await this.prisma.$transaction(async (tx) => {
       const order = await tx.restaurantOrder.findFirst({
-        select: { businessDate: true, counterId: true, hospitalId: true, id: true, status: true },
+        select: {
+          businessDate: true,
+          counterId: true,
+          hospitalId: true,
+          id: true,
+          shiftId: true,
+          status: true,
+        },
         where: { id, source: OrderSource.COUNTER },
       });
 
       if (!order) {
         throw new NotFoundException('Bill not found.');
       }
+
+      // Taken before the checks below: closing the day holds the counter's lock and ending a
+      // shift its shift's, so a cancel racing either lands first or then sees it done.
+      if (order.counterId) await lockRow(tx, 'counters', order.counterId);
+      if (order.shiftId) await lockRow(tx, 'counter_shifts', order.shiftId);
+      await lockRow(tx, 'restaurant_orders', id);
 
       // A closed day's takings are final.
       if (
@@ -1317,7 +1473,23 @@ export class PosService {
         );
       }
 
-      await lockRow(tx, 'restaurant_orders', id);
+      // A bill from before shifts has none: counted, as an ended shift's.
+      const shift = order.shiftId
+        ? await tx.counterShift.findUnique({
+            select: { status: true },
+            where: { id: order.shiftId },
+          })
+        : null;
+
+      if (
+        shift?.status !== CounterShiftStatus.OPEN &&
+        !context.permissions?.includes('POS_DAY_CLOSE')
+      ) {
+        throw new ForbiddenException(
+          'This bill’s shift has ended and its cash is counted. Ask a manager who closes the day to cancel it.',
+        );
+      }
+
       const current = await tx.restaurantOrder.findUniqueOrThrow({
         select: { status: true },
         where: { id },

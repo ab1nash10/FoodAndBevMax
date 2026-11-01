@@ -98,6 +98,15 @@ export class PreferencesService {
       where: { id: actor.id },
     });
 
+    await this.auditLog.record({
+      action: 'UPDATE',
+      actorId: actor.id,
+      entityId: actor.id,
+      entityName: 'user_preferences',
+      newValue: next,
+      oldValue: current,
+    });
+
     return next;
   }
 

@@ -33,6 +33,7 @@ import { useToast } from '@/components/toast-provider';
 import { FieldError, Input, Panel, RequiredMark, Skeleton } from '@/components/ui';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
+import { HistoryButton } from '@/components/audit/history-drawer';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { recordHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
@@ -734,25 +735,34 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
                 .join(' · ') || 'Choose the kitchen, then add what it produced.'}
             </p>
           </div>
-          {isEditable && isExisting && production && hasPermission('KITCHEN_PRODUCTION_UPDATE') ? (
-            <Button
-              className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
-              disabled={isBusy}
-              onClick={() =>
-                void confirm({
-                  confirmLabel: 'Cancel production',
-                  description: 'Nothing is added to stock.',
-                  title: `Cancel ${production.productionNumber}?`,
-                  tone: 'danger',
-                }).then((confirmed) => {
-                  if (confirmed) cancelMutation.mutate(production.id);
-                })
-              }
-              type="button"
-              variant="ghost"
-            >
-              Cancel production
-            </Button>
+          {production ? (
+            <div className="flex flex-wrap gap-2">
+              <HistoryButton
+                entityId={production.id}
+                entityName="kitchen_productions"
+                recordLabel={production.productionNumber}
+              />
+              {isEditable && isExisting && hasPermission('KITCHEN_PRODUCTION_UPDATE') ? (
+                <Button
+                  className="text-ds-status-bad-fg hover:text-ds-status-bad-fg"
+                  disabled={isBusy}
+                  onClick={() =>
+                    void confirm({
+                      confirmLabel: 'Cancel production',
+                      description: 'Nothing is added to stock.',
+                      title: `Cancel ${production.productionNumber}?`,
+                      tone: 'danger',
+                    }).then((confirmed) => {
+                      if (confirmed) cancelMutation.mutate(production.id);
+                    })
+                  }
+                  type="button"
+                  variant="ghost"
+                >
+                  Cancel production
+                </Button>
+              ) : null}
+            </div>
           ) : null}
           {draft.savedAt ? (
             <div className="flex items-center gap-3">

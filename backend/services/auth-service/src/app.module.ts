@@ -11,6 +11,7 @@ import {
   RbacGuard,
   UserThrottlerGuard,
 } from '@aahar/auth';
+import { LoggingModule } from '@aahar/logging';
 import {
   getServiceEnvFilePaths,
   shouldUseRootEnvFileOnly,
@@ -32,6 +33,7 @@ type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y
 @Module({
   controllers: [HealthController],
   imports: [
+    LoggingModule,
     CommonModule,
     ConfigModule.forRoot({
       cache: true,

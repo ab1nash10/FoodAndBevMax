@@ -54,6 +54,8 @@ export interface ApiClientOptions {
   baseUrl: string;
   fetcher?: typeof fetch;
   getAccessToken?: () => string | null | undefined;
+  /** The browser's till key, sent with POS requests (X-Till-Key); none where it is no till. */
+  getTillKey?: () => string | null | undefined;
   onUnauthorized?: () => Promise<void> | void;
   refreshAccessToken?: () => Promise<string | null | undefined>;
   timeoutMs?: number;
@@ -280,15 +282,49 @@ async function readPayload(response: Response): Promise<unknown> {
   }
 }
 
+// A deploy, a pod restart or a database blip answers 502/503/504 or drops the connection for a
+// few seconds, so a read is tried again after 1 s and 2 s before the user sees an error. Only
+// reads: a second POST could place an order twice.
+const RETRY_DELAYS_MS = [1_000, 2_000];
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+
+function retryingReads(fetcher: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const delays = method === 'GET' || method === 'HEAD' ? RETRY_DELAYS_MS : [];
+
+    for (const delay of delays) {
+      try {
+        const response = await fetcher(input, init);
+
+        if (!RETRYABLE_STATUSES.has(response.status)) {
+          return response;
+        }
+      } catch (error) {
+        // A timeout already waited its full length.
+        if (isAbortError(error)) {
+          throw error;
+        }
+      }
+
+      await new Promise((resolve) => globalThis.setTimeout(resolve, delay));
+    }
+
+    return fetcher(input, init);
+  };
+}
+
 export function createApiClient({
   baseUrl,
-  fetcher = fetch,
+  fetcher: baseFetcher = fetch,
   getAccessToken,
+  getTillKey,
   onUnauthorized,
   refreshAccessToken,
   timeoutMs = 20_000,
 }: ApiClientOptions): ApiClient {
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const fetcher = retryingReads(baseFetcher);
 
   return {
     async request<TResponse>(path: string, init: ApiRequestInit = {}) {
@@ -311,6 +347,11 @@ export function createApiClient({
 
         if (token) {
           headers.set('Authorization', `Bearer ${token}`);
+        }
+
+        const tillKey = normalizedPath.startsWith('/pos/') ? getTillKey?.() : null;
+        if (tillKey && !headers.has('X-Till-Key')) {
+          headers.set('X-Till-Key', tillKey);
         }
 
         if (isJsonBody(body)) {

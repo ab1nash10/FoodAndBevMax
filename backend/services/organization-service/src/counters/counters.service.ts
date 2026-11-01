@@ -175,6 +175,10 @@ export class CountersService {
             throw new BadRequestException('Location is inactive. Counter cannot be activated.');
           }
 
+          if (dto.isActive && dto.restaurantId === undefined && !existing.restaurant.isActive) {
+            throw new BadRequestException('Restaurant is inactive. Counter cannot be activated.');
+          }
+
           data.isActive = dto.isActive;
         }
 

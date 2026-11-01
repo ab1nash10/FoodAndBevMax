@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { uniqueViolationTarget } from '@aahar/auth';
 import { ItemCategory, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { assertMayChangeShared } from '../common/location-masters';
 import { normalizeMasterName } from '../common/normalize-master-name';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
@@ -70,6 +71,9 @@ export class ItemCategoriesService {
   }
 
   async create(dto: CreateItemCategoryDto, context: ActorContext) {
+    // Categories have no location: every location's menus share one list.
+    assertMayChangeShared(null, 'item categories');
+
     try {
       const created = await this.itemCategories.transaction(async (tx) => {
         const normalizedName = normalizeMasterName(dto.categoryName);
@@ -115,6 +119,8 @@ export class ItemCategoriesService {
   }
 
   async update(id: string, dto: UpdateItemCategoryDto, context: ActorContext) {
+    assertMayChangeShared(null, 'item categories');
+
     try {
       const updated = await this.itemCategories.transaction(async (tx) => {
         const existing = await this.findActiveItemCategory(id, tx);
@@ -170,6 +176,8 @@ export class ItemCategoriesService {
    * live category not listed keeps its place after the listed ones, in its old order.
    */
   async reorder(dto: ReorderItemCategoriesDto, context: ActorContext) {
+    assertMayChangeShared(null, 'item categories');
+
     await this.itemCategories.transaction(async (tx) => {
       const live = await tx.itemCategory.findMany({
         orderBy: [{ sortOrder: 'asc' }, { categoryName: 'asc' }],

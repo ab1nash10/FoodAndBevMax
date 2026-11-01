@@ -5,7 +5,10 @@ without it each pod keeps them in memory and the backends must stay at one repli
 deploys one inside the namespace, so an environment can have it without provisioning
 ElastiCache first.
 
-ponytail: one replica, memory only, no auth and no persistence. OTPs expire in minutes and
+It requires a password and admits only the fandb backends: it holds live OTPs, and the
+namespace may be shared with other applications.
+
+ponytail: one replica, memory only, no persistence. OTPs expire in minutes and
 refresh-token revocation is a denylist, so losing it on restart signs people out rather than
 corrupting anything. Use ElastiCache in production: set redis.enabled=false and put the real
 endpoint in config.secrets.REDIS_URL.
@@ -35,23 +38,36 @@ spec:
         app.kubernetes.io/name: {{ .Values.redis.name }}
         app.kubernetes.io/component: cache
         app.kubernetes.io/part-of: fandb
+      annotations:
+        # The env var is read only at start, so a new password must restart Redis with it.
+        checksum/redis-password: {{ .Values.redis.password | sha256sum }}
     spec:
+      # Nothing here talks to the Kubernetes API, so no pod carries a token for it.
+      automountServiceAccountToken: false
       securityContext:
 {{ toYaml .Values.securityContext.pod | indent 8 }}
       containers:
         - name: redis
           image: {{ .Values.redis.image }}
           imagePullPolicy: IfNotPresent
-          args: ['--save', '', '--appendonly', 'no']
+          args: ['--save', '', '--appendonly', 'no', '--requirepass', '$(REDIS_PASSWORD)']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.secretName }}
+                  key: REDIS_PASSWORD
           ports:
             - name: redis
               containerPort: {{ .Values.redis.port }}
+          # Both probes run inside the pod, so the NetworkPolicy below cannot fail them.
           livenessProbe:
-            tcpSocket:
-              port: redis
+            exec:
+              command: ['redis-cli', 'ping']
             initialDelaySeconds: 10
             periodSeconds: 20
           readinessProbe:
+            # Needs no password: redis-cli exits 0 on any reply, NOAUTH included.
             exec:
               command: ['redis-cli', 'ping']
             initialDelaySeconds: 5
@@ -82,4 +98,26 @@ spec:
     - name: redis
       port: {{ .Values.redis.port }}
       targetPort: redis
+---
+# Only fandb backends may connect. A no-op on a cluster whose CNI does not enforce policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.redis.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: fandb
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.redis.name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+              app.kubernetes.io/part-of: fandb
+      ports:
+        - port: redis
 {{- end }}

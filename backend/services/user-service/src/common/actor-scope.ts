@@ -99,17 +99,29 @@ export function assertCanGrantScope(
   }
 }
 
-/** A role reaching more locations than the actor may only be changed by someone reaching as far. */
-export function assertRoleWithinScope(
-  role: { locationScope: LocationScopeName; name: string },
+/**
+ * Roles are global rows: a change reaches every holder at every location. So creating or changing
+ * one needs the all-locations scope, and nobody but a Super Admin may change a role they hold.
+ * Otherwise a location Admin could switch off every Admin, or re-permission every cashier.
+ */
+export function assertCanChangeRoles(
   actor: JwtRequestUser | undefined,
-) {
+  role?: { name: string },
+): void {
   const current = requireActor(actor);
 
-  if (SCOPE_RANK[role.locationScope] > SCOPE_RANK[current.locationScope]) {
+  if (isSuperAdmin(current)) {
+    return;
+  }
+
+  if (SCOPE_RANK[current.locationScope] < SCOPE_RANK.ALL) {
     throw new ForbiddenException(
-      `The ${role.name} role reaches more locations than you do, so you cannot change it`,
+      'Roles apply at every location, so only someone with access to all locations can change them',
     );
+  }
+
+  if (role && current.roles.includes(role.name)) {
+    throw new ForbiddenException(`You cannot change the ${role.name} role because you hold it`);
   }
 }
 
@@ -131,13 +143,15 @@ export function assertHoldsPermissions(codes: string[], actor: JwtRequestUser | 
 }
 
 /**
- * Setting someone else's password, email or mobile lets the actor sign in as them, so it needs
- * the reach to grant everything they hold: their roles' location scope and every permission.
- * Without it a location Admin could reset a wider Admin's password and inherit their rights.
+ * Changing someone else needs the reach to grant everything they hold: their roles' location
+ * scope and every permission. Setting their password, email or mobile lets the actor sign in as
+ * them and inherit their rights; changing their role, locations, status or permissions (`what`)
+ * would let a location Admin disable or demote a peer who holds more than they do.
  */
-export function assertCanTakeOverSignIn(
+export function assertHoldsAccessOf(
   target: { name: string; permissionCodes: string[]; scopes: LocationScopeName[] },
   actor: JwtRequestUser | undefined,
+  what?: string,
 ): void {
   const current = requireActor(actor);
 
@@ -152,7 +166,9 @@ export function assertCanTakeOverSignIn(
 
   if (wider || missing) {
     throw new ForbiddenException(
-      `${target.name} has access you do not hold, so only they or a Super Admin can change their password, email or mobile`,
+      what
+        ? `${target.name} has access you do not hold, so only a Super Admin can change their ${what}`
+        : `${target.name} has access you do not hold, so only they or a Super Admin can change their password, email or mobile`,
     );
   }
 }

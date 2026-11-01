@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, MonitorSmartphone } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { AppPageHeader } from '@/components/design-system';
 import { Skeleton } from '@/components/ui';
@@ -37,9 +37,12 @@ function TillSetup() {
       (await organizationApi.listPosDevices({ isActive: true, limit: 100 })).data.items,
     queryKey: queryKeys.posDevices('till-setup'),
   });
+  // A browser cannot read the computer's name: the admin types it, and the server checks it is
+  // the device's Host Name.
+  const [computerName, setComputerName] = useState('');
   const enroll = useMutation({
     mutationFn: async (posDeviceId: string) =>
-      (await organizationApi.enrollTill(posDeviceId)).data.tillKey,
+      (await organizationApi.enrollTill(posDeviceId, computerName.trim())).data.tillKey,
     onSuccess: async (tillKey) => {
       saveTillKey(tillKey);
       await Promise.all([
@@ -53,7 +56,22 @@ function TillSetup() {
     <div className="mx-auto mt-6 max-w-xl text-left">
       <p className="text-sm font-semibold text-ds-text">Set up this computer as a till</p>
       <p className="mt-0.5 text-xs text-ds-muted">
-        Pick its POS device. Only this browser becomes the till; cashiers cannot change it.
+        Type this computer’s name, then pick its POS device. Only this browser becomes the till;
+        cashiers cannot change it.
+      </p>
+      <label className="mt-3 block text-sm font-medium text-ds-text" htmlFor="till-computer-name">
+        This computer’s name
+      </label>
+      <input
+        aria-describedby="till-computer-name-hint"
+        className="mt-1 h-10 w-full rounded-control-lg border border-ds-border bg-ds-surface px-3 font-mono text-sm text-ds-text outline-hidden focus-visible:border-ds-primary focus-visible:ring-2 focus-visible:ring-ds-primary/15"
+        id="till-computer-name"
+        onChange={(event) => setComputerName(event.target.value)}
+        placeholder="e.g. HO-LAP-1651"
+        value={computerName}
+      />
+      <p className="mt-1 text-xs text-ds-muted" id="till-computer-name-hint">
+        Windows: Settings → System → About → Device name. It must be the POS device’s Host Name.
       </p>
       {enroll.isError ? (
         <p className="mt-2 text-sm text-ds-status-bad-fg" role="alert">
@@ -88,7 +106,7 @@ function TillSetup() {
                 <Button
                   aria-label={`Make this computer the till of ${device.name}`}
                   className="pointer-coarse:h-11"
-                  disabled={!restaurants || enroll.isPending}
+                  disabled={!restaurants || !computerName.trim() || enroll.isPending}
                   onClick={() => enroll.mutate(device.id)}
                   size="sm"
                   type="button"

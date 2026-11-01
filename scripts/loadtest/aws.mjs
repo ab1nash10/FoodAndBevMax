@@ -126,6 +126,8 @@ async function setup() {
     const created = await api('POST', '/pos-devices', token, {
       code: 'LOADTEST-TILL',
       hospitalId: hospital.id,
+      // A till is set up by its computer's name, which the device must carry.
+      hostName: 'LOADTEST-TILL',
       isActive: true,
       name: 'LOADTEST Till',
       restaurantIds: [restaurantId],
@@ -135,7 +137,13 @@ async function setup() {
   } else if (!device.isActive) {
     await api('PUT', `/pos-devices/${device.id}`, token, { isActive: true });
   }
-  const till = await api('POST', '/pos/till', token, { posDeviceId: device.id });
+  if (!device.hostName) {
+    await api('PUT', `/pos-devices/${device.id}`, token, { hostName: 'LOADTEST-TILL' });
+  }
+  const till = await api('POST', '/pos/till', token, {
+    computerName: device.hostName || 'LOADTEST-TILL',
+    posDeviceId: device.id,
+  });
   if (till.status >= 300) throw new Error(`setting up the test till: ${till.message}`);
 
   const userIds = saved?.userIds ?? {};

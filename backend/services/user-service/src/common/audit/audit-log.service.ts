@@ -1,44 +1,34 @@
+import { AuditService, type AuditClient } from '@aahar/logging';
 import { Injectable } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-type AuditClient = Pick<PrismaClient, 'auditLog'> | Prisma.TransactionClient;
 
 interface AuditRecordInput {
   action: string;
   actorId?: string;
   entityId: string;
   entityName: string;
+  hospitalId?: string | null;
   ipAddress?: string;
+  locationId?: string | null;
   newValue?: unknown;
   oldValue?: unknown;
+  summary?: string;
 }
 
-function toInputJson(value: unknown): Prisma.InputJsonValue | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
-}
-
+/**
+ * This service's door to the shared AuditService (@aahar/logging), kept so existing callers stay
+ * as they are. Passing the transaction client writes the row inside that transaction; without
+ * one the row is saved in the background and never fails the request.
+ */
 @Injectable()
 export class AuditLogService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly audit: AuditService;
 
-  async record(input: AuditRecordInput, client: AuditClient = this.prisma): Promise<void> {
-    await client.auditLog.create({
-      data: {
-        action: input.action,
-        createdBy: input.actorId,
-        entityId: input.entityId,
-        entityName: input.entityName,
-        ipAddress: input.ipAddress,
-        newValue: toInputJson(input.newValue),
-        oldValue: toInputJson(input.oldValue),
-        updatedBy: input.actorId,
-        userId: input.actorId,
-      },
-    });
+  constructor(private readonly prisma: PrismaService) {
+    this.audit = new AuditService(prisma);
+  }
+
+  record(input: AuditRecordInput, client?: AuditClient): Promise<void> {
+    return this.audit.record(input, client && client !== this.prisma ? { tx: client } : {});
   }
 }

@@ -1,5 +1,5 @@
+import { getRequestContext, logger, runWithRequestContext } from '@aahar/logging';
 import type { NextFunction, Request, Response } from 'express';
-import { getRequestId, type CorrelatedRequest } from './correlation-id.middleware';
 import { startQueryCount } from './query-log';
 
 /**
@@ -10,40 +10,67 @@ export function loggedPath(request: { originalUrl?: string; url?: string }): str
   return (request.originalUrl || request.url || '').split('?')[0]!;
 }
 
-/** A request this slow is logged even when it succeeds. */
-const SLOW_REQUEST_MS = 500;
+/** Probes, logged only when they fail. */
+const PROBE_PATH = /\/(?:health|metrics)\/?$/;
 
-/**
- * Only failed or slow requests are logged: a line for every request took ~12% of the
- * organization service's CPU under load. While counting queries (dev), every request is.
- */
-export function shouldLogRequest(statusCode: number, durationMs: number, counting = false) {
-  return counting || statusCode >= 400 || durationMs >= SLOW_REQUEST_MS;
+export function slowRequestMs(env: NodeJS.ProcessEnv = process.env): number {
+  return Number(env.SLOW_REQUEST_MS) || 1000;
 }
 
-export function requestLoggingMiddleware(serviceName: string) {
+/** info below 400, warn for 4xx and for slow requests, error for 5xx. */
+export function accessLogLevel(
+  statusCode: number,
+  durationMs: number,
+  slowMs = slowRequestMs(),
+): 'error' | 'info' | 'warn' {
+  if (statusCode >= 500) return 'error';
+  if (statusCode >= 400 || durationMs > slowMs) return 'warn';
+  return 'info';
+}
+
+/**
+ * One `http_request` line per request, at completion, carrying the route template rather than
+ * the raw URL. A line per request once cost ~12% CPU as JSON.stringify + console.info; pino
+ * writes asynchronously, and LOG_LEVEL=warn drops the info lines before they are built.
+ */
+export function requestLoggingMiddleware(_serviceName?: string) {
+  const slowMs = slowRequestMs();
+
   return (request: Request, response: Response, next: NextFunction) => {
     const startedAt = process.hrtime.bigint();
+    const context = getRequestContext();
     let queryCount: { queries: number } | null = null;
 
     response.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-      if (!shouldLogRequest(response.statusCode, durationMs, Boolean(queryCount))) return;
-      const path = loggedPath(request);
+      const { statusCode } = response;
+      const level = queryCount ? 'info' : accessLogLevel(statusCode, durationMs, slowMs);
 
-      console.info(
-        JSON.stringify({
-          durationMs: Math.round(durationMs),
-          event: 'http_request',
-          method: request.method,
-          path,
-          // Only with PRISMA_QUERY_LOG=1 outside production (see query-log.ts).
-          ...(queryCount ? { prismaQueries: queryCount.queries } : {}),
-          requestId: getRequestId(request as CorrelatedRequest),
-          service: serviceName,
-          statusCode: response.statusCode,
-        }),
-      );
+      if (!logger.isLevelEnabled(level)) return;
+      const path = loggedPath(request);
+      if (statusCode < 400 && PROBE_PATH.test(path)) return;
+
+      const route = context?.route ?? (request.route as { path?: string } | undefined)?.path;
+      const length = Number(response.getHeader('content-length'));
+      const line = {
+        durationMs: Math.round(durationMs * 10) / 10,
+        method: request.method,
+        // Unmatched requests have no template; their path (without the query) stands in.
+        ...(route ? {} : { path }),
+        // Only with PRISMA_QUERY_LOG=1 outside production (see query-log.ts).
+        ...(queryCount ? { prismaQueries: queryCount.queries } : {}),
+        ...(Number.isFinite(length) ? { responseBytes: length } : {}),
+        ...(durationMs > slowMs ? { slow: true } : {}),
+        statusCode,
+      };
+      const write = () => logger[level](line, 'http_request');
+
+      if (context) {
+        context.route ??= route;
+        runWithRequestContext(context, write);
+      } else {
+        write();
+      }
     });
 
     queryCount = startQueryCount(next);

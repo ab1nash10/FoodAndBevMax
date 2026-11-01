@@ -23,6 +23,10 @@ const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 // Indian formats, checked once a code is trimmed and in capitals (@CodeCase runs first).
 const panPattern = /^[A-Z]{5}\d{4}[A-Z]$/;
 const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+// What the portal's image upload returns, and nothing else: the portal's CSP loads images from
+// its own origin only, and the value goes inside a CSS url().
+const imageUrlPattern = /^\/uploads\/restaurants\/[A-Za-z0-9-]+\.(?:jpe?g|png|webp)$/;
+const imageUrlMessage = 'must be an image uploaded here.';
 
 /** One fixed shift, e.g. Morning 07:00–15:00 (one ending before it starts runs past midnight). */
 export class ShiftTimingDto {
@@ -100,15 +104,17 @@ export class CreateRestaurantDto {
   @MaxLength(30)
   mobile?: string;
 
-  @ApiPropertyOptional({ example: 'https://example.com/thumbnail.jpg' })
+  @ApiPropertyOptional({ example: '/uploads/restaurants/1730000000000-0b8f6a2e.webp' })
   @IsOptional()
   @IsString()
+  @Matches(imageUrlPattern, { message: `thumbnailUrl ${imageUrlMessage}` })
   @MaxLength(500)
   thumbnailUrl?: string;
 
-  @ApiPropertyOptional({ example: 'https://example.com/cover.jpg' })
+  @ApiPropertyOptional({ example: '/uploads/restaurants/1730000000000-1c3d4e5f.webp' })
   @IsOptional()
   @IsString()
+  @Matches(imageUrlPattern, { message: `coverImageUrl ${imageUrlMessage}` })
   @MaxLength(500)
   coverImageUrl?: string;
 

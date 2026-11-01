@@ -53,6 +53,7 @@ const stockLedgerLocationTypes: InventoryLocationType[] = [
 
 const stockReferenceTypes: StockReferenceType[] = [
   'GRN',
+  'GRN_ENTRY',
   'KITCHEN_PRODUCTION',
   'TRANSFER',
   'TRANSFER_ACKNOWLEDGEMENT',
@@ -61,6 +62,7 @@ const stockReferenceTypes: StockReferenceType[] = [
 
 const stockTransactionTypes: StockTransactionType[] = [
   'GRN_IN',
+  'GRN_RETURN_OUT',
   'KITCHEN_PRODUCTION_IN',
   'KITCHEN_TRANSFER_OUT',
   'RESTAURANT_TRANSFER_IN',
@@ -79,6 +81,7 @@ const transactionLabels: Partial<Record<StockTransactionType, string>> = {
   COUNTER_RECEIVE_IN: 'Counter receipt',
   DISCARD_OUT: 'Discarded',
   GRN_IN: 'GRN receipt',
+  GRN_RETURN_OUT: 'GRN return to vendor',
   KITCHEN_PRODUCTION_IN: 'Kitchen production',
   KITCHEN_TRANSFER_OUT: 'Kitchen transfer out',
   RESTAURANT_RECEIVE_IN: 'Restaurant receipt',
@@ -94,6 +97,7 @@ const transactionLabels: Partial<Record<StockTransactionType, string>> = {
 const shortTransactionLabels: Partial<Record<StockTransactionType, string>> = {
   COUNTER_RECEIVE_IN: 'Received',
   DISCARD_OUT: 'Discarded',
+  GRN_RETURN_OUT: 'Returned to vendor',
   KITCHEN_PRODUCTION_IN: 'Production',
   KITCHEN_TRANSFER_OUT: 'Transfer out',
   RESTAURANT_RECEIVE_IN: 'Received',
@@ -105,6 +109,7 @@ const shortTransactionLabels: Partial<Record<StockTransactionType, string>> = {
 
 const referenceLabels: Partial<Record<StockReferenceType, string>> = {
   GRN: 'GRN',
+  GRN_ENTRY: 'ERP GRN',
   KITCHEN_PRODUCTION: 'Production',
   ORDER: 'Bill',
   TRANSFER: 'Transfer',

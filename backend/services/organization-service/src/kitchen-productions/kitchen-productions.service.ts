@@ -8,6 +8,7 @@ import {
   StockTransactionType,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { itemsLabel, qty, total } from '../common/audit/audit-summary';
 import {
   getDocumentOrderBy,
   getPageMeta,
@@ -70,6 +71,32 @@ function toKitchenProductionResponse(production: KitchenProductionWithRelations)
     status: production.status,
     updatedAt: production.updatedAt,
   };
+}
+
+type ProductionForAudit = {
+  lines: Array<{
+    acceptedQty: Parameters<typeof toNumber>[0];
+    item?: { itemName?: string | null } | null;
+    itemId: string;
+    producedQty: Parameters<typeof toNumber>[0];
+    wastageQty: Parameters<typeof toNumber>[0];
+  }>;
+};
+
+/** What a production made, line by line, for its audit row. */
+function productionLines(production: ProductionForAudit) {
+  return production.lines.map((line) => ({
+    acceptedQty: toNumber(line.acceptedQty),
+    itemId: line.itemId,
+    itemName: line.item?.itemName,
+    producedQty: toNumber(line.producedQty),
+    wastageQty: toNumber(line.wastageQty),
+  }));
+}
+
+function productionSummary(production: ProductionForAudit): string {
+  const lines = productionLines(production);
+  return `${qty(total(lines.map((line) => line.acceptedQty)))} of ${itemsLabel(lines)} (produced ${qty(total(lines.map((line) => line.producedQty)))}, wastage ${qty(total(lines.map((line) => line.wastageQty)))})`;
 }
 
 @Injectable()
@@ -378,8 +405,10 @@ export class KitchenProductionsService {
           entityName: 'kitchen_productions',
           hospitalId: posted.hospitalId,
           ipAddress: context.ipAddress,
-          newValue: toKitchenProductionResponse(posted),
-          oldValue: toKitchenProductionResponse(existing),
+          locationId: existing.kitchenId,
+          newValue: { lines: productionLines(existing), status: posted.status },
+          oldValue: { status: existing.status },
+          summary: `Posted ${productionSummary(existing)}`,
         },
         tx,
       );
@@ -418,8 +447,10 @@ export class KitchenProductionsService {
           entityName: 'kitchen_productions',
           hospitalId: cancelled.hospitalId,
           ipAddress: context.ipAddress,
-          newValue: toKitchenProductionResponse(cancelled),
-          oldValue: toKitchenProductionResponse(existing),
+          locationId: existing.kitchenId,
+          newValue: { lines: productionLines(existing), status: cancelled.status },
+          oldValue: { status: existing.status },
+          summary: `Cancelled ${productionSummary(existing)}`,
         },
         tx,
       );

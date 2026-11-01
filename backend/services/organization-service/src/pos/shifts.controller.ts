@@ -1,18 +1,30 @@
 import { CurrentUser, Permissions } from '@aahar/auth';
 import type { JwtRequestUser } from '@aahar/auth';
-import { Body, Controller, Param, ParseUUIDPipe, Patch, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import { CloseDayDto, EndShiftDto, OpenShiftDto } from './dto/shift.dto';
 import { ShiftsService } from './shifts.service';
+import { RequireTill, TillGuard } from './till.guard';
 
 @ApiBearerAuth('access-token')
 @ApiTags('pos')
+@UseGuards(TillGuard)
 @Controller('pos')
 export class ShiftsController {
   constructor(private readonly shifts: ShiftsService) {}
 
   @Post('shifts')
+  @RequireTill({ from: 'body', kind: 'counterId' })
   @Permissions('POS_SHIFT_MANAGE')
   @ApiOperation({ summary: 'Open a shift at a counter, with the cash in the till' })
   @ApiOkResponse({ description: 'Shift opened.' })
@@ -32,6 +44,7 @@ export class ShiftsController {
   }
 
   @Patch('shifts/:id/end')
+  @RequireTill({ from: 'param', kind: 'shiftId', name: 'id' })
   @Permissions('POS_SHIFT_MANAGE', 'POS_DAY_CLOSE')
   @ApiOperation({ summary: 'End a shift with the cash counted: close it, or hand it over' })
   @ApiOkResponse({ description: 'Shift ended.' })
@@ -53,6 +66,7 @@ export class ShiftsController {
   }
 
   @Post('day-closes')
+  @RequireTill({ from: 'body', kind: 'counterId' })
   @Permissions('POS_DAY_CLOSE')
   @ApiOperation({ summary: "Close a counter's business day once no shift is open" })
   @ApiOkResponse({ description: 'Day closed.' })

@@ -11,7 +11,7 @@ import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
 import { getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
-import type { ActorContext } from '../common/request-context';
+import { assertMayChangeLegalEntity, type ActorContext } from '../common/request-context';
 import { CreateHospitalDto } from './dto/create-hospital.dto';
 import { HospitalSortField, ListHospitalsQueryDto } from './dto/list-hospitals-query.dto';
 import { UpdateHospitalDto } from './dto/update-hospital.dto';
@@ -304,6 +304,9 @@ export class HospitalsService {
         }
 
         if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          // Resending the current entity, as the form does on every save, needs no Super Admin.
+          assertMayChangeLegalEntity(context);
+
           if (dto.legalEntityId) {
             await assertActiveLegalEntity(tx, dto.legalEntityId);
           }

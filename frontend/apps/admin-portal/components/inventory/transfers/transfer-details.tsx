@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, type ReactNode } from 'react';
 import type { Transfer } from '@aahar/api-client';
+import { HistoryButton } from '@/components/audit/history-drawer';
 import {
   StatusChip,
   Stepper,
@@ -125,7 +126,14 @@ export function TransferDetails({
               {transfer.hospital.hospitalName}
             </p>
           </div>
-          {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+          <div className="flex flex-wrap gap-2">
+            {actions}
+            <HistoryButton
+              entityId={transfer.id}
+              entityName="transfers"
+              recordLabel={transfer.transferNumber}
+            />
+          </div>
         </div>
 
         <Stepper label="Transfer progress" steps={steps} />

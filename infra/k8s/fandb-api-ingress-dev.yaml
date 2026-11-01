@@ -26,6 +26,11 @@ metadata:
     alb.ingress.kubernetes.io/group.name: dev-external
     alb.ingress.kubernetes.io/healthcheck-path: /fandb/api/v1/health
     alb.ingress.kubernetes.io/target-type: ip
+    # HTTPS only: sign-in codes, passwords and tokens never cross the internet in clear.
+    # Plain HTTP for /fandb gets a 301 from fandb-https-redirect-dev.yaml instead. Same
+    # certificate as the platform's fandb-ext-ing (devops repo, dev/fandb/fandb/values.yaml).
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:013929206983:certificate/8827a332-70f1-4127-89cc-286136ae9e74
 spec:
   ingressClassName: alb-dev
   rules:

@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { NestPinoLogger, requestContextMiddleware, setServiceName } from '@aahar/logging';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import helmet from 'helmet';
-import { correlationIdMiddleware } from './correlation-id.middleware';
 import { GlobalExceptionFilter } from './global-exception.filter';
 import { requestLoggingMiddleware } from './request-logging.middleware';
 
@@ -43,6 +43,11 @@ export function configureSecurityBaseline(
   options: SecurityBaselineOptions,
 ): void {
   const allowedOrigins = parseAllowedOrigins(config);
+
+  // Nest's own lines and every `new Logger()` go through the shared JSON logger (LoggingModule,
+  // imported by each AppModule).
+  setServiceName(options.serviceName);
+  app.useLogger(app.get(NestPinoLogger));
 
   // The services sit behind exactly one proxy (the ALB, or nginx locally). Without this,
   // request.ip is the proxy's address, so the throttler put every client in one bucket: five
@@ -100,7 +105,8 @@ export function configureSecurityBaseline(
     response.setHeader('Content-Type', 'application/json');
     response.end(JSON.stringify({ service: options.serviceName, status: 'ok' }));
   });
-  app.use(correlationIdMiddleware);
+  // The request id and the RequestContext every log line and audit row reads.
+  app.use(requestContextMiddleware);
   app.use(requestLoggingMiddleware(options.serviceName));
   // gzip or brotli for responses over 1 KB when the client accepts it: list JSON shrinks about
   // tenfold, and nothing in front of the services (ALB) compresses for them.

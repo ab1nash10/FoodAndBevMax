@@ -11,3 +11,4 @@ export * from './dashboard';
 export * from './orders';
 export * from './organization-api';
 export * from './reports';
+export * from './audit';

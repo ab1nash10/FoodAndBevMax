@@ -22,6 +22,7 @@ const prisma = (args) =>
 // pg and @prisma/client are dependencies of @aahar/auth, not of the workspace root.
 const require = createRequire(path.resolve('backend/packages/auth/package.json'));
 
+/** The migrations the database lacks, or null when it cannot be reached at all. */
 async function missingMigrations() {
   const local = readdirSync('prisma/migrations', { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -33,6 +34,12 @@ async function missingMigrations() {
 
   try {
     await client.connect();
+  } catch {
+    await client.end().catch(() => {});
+    return null;
+  }
+
+  try {
     const { rows } = await client.query(
       'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL',
     );
@@ -46,7 +53,33 @@ async function missingMigrations() {
   }
 }
 
-const pending = await missingMigrations();
+let pending = await missingMigrations();
+
+// Docker Desktop not started yet, or its VM went down (it did on 2026-10-31): start the local
+// Postgres and Redis instead of failing on a raw "Can't reach database server". Only for a
+// database on this machine; --no-recreate leaves existing containers and their data as they are.
+const localDatabase = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL ?? '');
+
+if (pending === null && localDatabase) {
+  console.log('predev: the database is not reachable; starting Postgres and Redis in Docker');
+  const envFile = existsSync('.env') ? '--env-file .env ' : '';
+
+  try {
+    execSync(
+      `docker compose ${envFile}-f infra/docker/docker-compose.yml up -d --no-recreate --wait postgres redis`,
+      { stdio: 'inherit' },
+    );
+  } catch {
+    console.error(
+      'predev: could not start them. Open Docker Desktop, wait until it says "Engine running", then run pnpm dev again.',
+    );
+    process.exit(1);
+  }
+
+  pending = await missingMigrations();
+}
+
+pending ??= ['(could not reach the database)']; // let migrate deploy report it
 
 if (pending.length > 0) {
   console.log(`predev: applying ${pending.join(', ')}`);

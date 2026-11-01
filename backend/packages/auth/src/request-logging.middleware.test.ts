@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { loggedPath, shouldLogRequest } from './request-logging.middleware';
+import { accessLogLevel, loggedPath, slowRequestMs } from './request-logging.middleware';
 
 void test('logged paths drop the query string, which can carry the board token', () => {
   assert.equal(
@@ -12,11 +12,17 @@ void test('logged paths drop the query string, which can carry the board token',
   assert.equal(loggedPath({}), '');
 });
 
-void test('only failed or slow requests are logged: a line per request cost ~12% CPU under load', () => {
-  assert.equal(shouldLogRequest(200, 120), false);
-  assert.equal(shouldLogRequest(304, 5), false);
-  assert.equal(shouldLogRequest(200, 500), true, 'slow');
-  assert.equal(shouldLogRequest(404, 3), true, 'failed');
-  assert.equal(shouldLogRequest(500, 3), true);
-  assert.equal(shouldLogRequest(200, 3, true), true, 'while counting queries, every request');
+void test('access log level: info below 400, warn for 4xx or slow, error for 5xx', () => {
+  assert.equal(accessLogLevel(200, 120, 1000), 'info');
+  assert.equal(accessLogLevel(304, 5, 1000), 'info');
+  assert.equal(accessLogLevel(200, 1001, 1000), 'warn', 'slow');
+  assert.equal(accessLogLevel(404, 3, 1000), 'warn');
+  assert.equal(accessLogLevel(500, 3, 1000), 'error');
+  assert.equal(accessLogLevel(503, 5000, 1000), 'error', 'a slow 5xx is still an error');
+});
+
+void test('SLOW_REQUEST_MS sets the slow threshold, 1000 ms by default', () => {
+  assert.equal(slowRequestMs({}), 1000);
+  assert.equal(slowRequestMs({ SLOW_REQUEST_MS: '250' }), 250);
+  assert.equal(slowRequestMs({ SLOW_REQUEST_MS: 'nope' }), 1000);
 });

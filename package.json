@@ -24,6 +24,7 @@
     "predev": "node scripts/predev.mjs",
     "prepare": "husky",
     "test": "turbo test",
+    "test:ui": "pnpm --filter @aahar/admin-portal test:ui",
     "typecheck": "turbo typecheck"
   },
   "lint-staged": {
@@ -40,7 +41,7 @@
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
     "@eslint/js": "^10.0.1",
-    "@next/eslint-plugin-next": "^16.3.8",
+    "@next/eslint-plugin-next": "^16.4.1",
     "@types/node": "^24.19.1",
     "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
@@ -56,10 +57,12 @@
   },
   "pnpm": {
     "overrides": {
-      "body-parser@2": "^2.3.0",
+      "body-parser@2": "^2.4.0",
+      "fast-uri@3": "^3.1.9",
       "js-yaml@4": "^4.3.2",
-      "multer@2": "^2.3.0",
-      "qs@6": "^6.16.0"
+      "mysql2@3": "^3.23.1",
+      "multer@2": "^2.5.0",
+      "qs@6": "^6.16.1"
     }
   }
 }

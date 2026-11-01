@@ -11,6 +11,9 @@ exports[`every prefix stays as it is 1`] = `
   "accessUsers": [
     "access-users",
   ],
+  "auditLogs": [
+    "audit-logs",
+  ],
   "commandPaletteSearch": [
     "command-palette",
     "search",

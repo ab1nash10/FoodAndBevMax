@@ -134,6 +134,9 @@ COPY --from=builder --chown=node:node /app/prisma.config.mjs ./prisma.config.mjs
 
 # ARG is build-time only, so the entrypoint reads the name from the environment instead.
 ENV SERVICE=${SERVICE}
+# The commit, as `version` on every log line (--build-arg GIT_SHA=$GIT_COMMIT); "dev" when unset.
+ARG GIT_SHA=dev
+ENV GIT_SHA=${GIT_SHA}
 
 USER node
 

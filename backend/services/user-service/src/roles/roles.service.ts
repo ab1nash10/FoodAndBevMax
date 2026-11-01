@@ -8,7 +8,7 @@ import type { JwtRequestUser } from '@aahar/auth';
 import { Prisma, RecordStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { assertHoldsPermissions, assertRoleWithinScope } from '../common/actor-scope';
+import { assertCanChangeRoles, assertHoldsPermissions } from '../common/actor-scope';
 import { assertSuperAdminActor, isSuperAdminRole } from '../common/super-admin';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -108,6 +108,8 @@ export class RolesService {
   }
 
   async create(dto: CreateRoleDto, context: ActorContext) {
+    assertCanChangeRoles(context.actor);
+
     try {
       const created = await this.prisma.$transaction(async (tx) => {
         if (dto.permissionIds?.length) {
@@ -172,7 +174,7 @@ export class RolesService {
           }
         }
 
-        assertRoleWithinScope(existing, context.actor);
+        assertCanChangeRoles(context.actor, existing);
 
         const data: Prisma.RoleUpdateInput = {};
 
@@ -245,7 +247,7 @@ export class RolesService {
       throw new ConflictException('The Super Admin role cannot be deleted');
     }
 
-    assertRoleWithinScope(existing, context.actor);
+    assertCanChangeRoles(context.actor, existing);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.role.update({
@@ -294,7 +296,7 @@ export class RolesService {
         assertSuperAdminActor(context.actorRoles);
       }
 
-      assertRoleWithinScope(existing, context.actor);
+      assertCanChangeRoles(context.actor, existing);
       await this.assertCanAddPermissions(
         existing.permissions.map(({ permissionId }) => permissionId),
         dto.permissionIds,

@@ -1,4 +1,5 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { logger } from '@aahar/logging';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 const GRAPH_URL = 'https://graph.microsoft.com/v1.0';
@@ -26,7 +27,6 @@ function otpEmail(otp: string, minutes: number) {
  */
 @Injectable()
 export class MailService {
-  private readonly logger = new Logger(MailService.name);
   private token: { expiresAt: number; value: string } | null = null;
 
   constructor(private readonly config: ConfigService) {}
@@ -102,11 +102,9 @@ export class MailService {
     try {
       return await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     } catch (error) {
-      this.logger.error(
-        JSON.stringify({
-          event: 'mail_request_failed',
-          reason: error instanceof Error ? error.name : 'UnknownError',
-        }),
+      logger.error(
+        { reason: error instanceof Error ? error.name : 'UnknownError' },
+        'mail_request_failed',
       );
       throw new ServiceUnavailableException('Could not send the OTP. Please try again.');
     }
@@ -118,7 +116,7 @@ export class MailService {
     } | null;
     const code = typeof body?.error === 'string' ? body.error : body?.error?.code;
 
-    this.logger.error(JSON.stringify({ code, event, status: response.status }));
+    logger.error({ code, status: response.status }, event);
     throw new ServiceUnavailableException('Could not send the OTP. Please try again.');
   }
 

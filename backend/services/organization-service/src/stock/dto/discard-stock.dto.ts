@@ -1,15 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsIn,
-  IsNotEmpty,
-  IsNumber,
-  IsPositive,
-  IsString,
-  IsUUID,
-  MaxLength,
-  ValidateIf,
-} from 'class-validator';
+import { IsIn, IsNumber, IsPositive, IsUUID, ValidateBy, ValidateIf } from 'class-validator';
 
 export const discardReasons = ['EXPIRED', 'DAMAGED', 'SPOILT', 'SPILLED', 'OTHER'] as const;
 
@@ -33,8 +24,18 @@ export class DiscardStockDto {
 
   @ApiPropertyOptional({ description: 'Required for OTHER; optional otherwise.', maxLength: 200 })
   @ValidateIf((body: DiscardStockDto) => body.reason === 'OTHER' || body.note !== undefined)
-  @IsString()
-  @IsNotEmpty({ message: 'Say what happened to the stock.' })
-  @MaxLength(200)
+  // One rule with one message: separate IsString/IsNotEmpty/MaxLength all fired on a missing
+  // note and joined their three messages into one error.
+  @ValidateBy({
+    name: 'discardNote',
+    validator: {
+      defaultMessage: (args) =>
+        typeof args?.value === 'string' && args.value.length > 200
+          ? 'Keep the note to 200 characters or fewer.'
+          : 'Say what happened to the stock.',
+      validate: (value: unknown) =>
+        typeof value === 'string' && value.trim().length > 0 && value.length <= 200,
+    },
+  })
   note?: string;
 }

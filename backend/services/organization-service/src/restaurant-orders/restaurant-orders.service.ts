@@ -119,7 +119,7 @@ export class RestaurantOrdersService {
     }
 
     // A resend never moves the kitchen's progress back; only a cancel changes the status.
-    return this.prisma.restaurantOrder.upsert({
+    const saved = await this.prisma.restaurantOrder.upsert({
       create: {
         ...details,
         externalOrderId,
@@ -141,6 +141,23 @@ export class RestaurantOrdersService {
       },
       where,
     });
+
+    // Sent by a POS or channel with its order key: no signed-in actor.
+    await this.auditLog.record({
+      action: dto.status ? 'STATUS_CHANGE' : 'CREATE',
+      entityId: saved.id,
+      entityName: 'restaurant_orders',
+      hospitalId: sender.restaurant.hospitalId,
+      newValue: {
+        externalOrderId,
+        items,
+        orderNumber: dto.orderNumber.trim(),
+        status: saved.status,
+      },
+      summary: `Order ${dto.orderNumber.trim()} received (${saved.status})`,
+    });
+
+    return saved;
   }
 
   private async resolveSender(keyHash: string, restaurantCode: string | undefined) {
@@ -236,6 +253,16 @@ export class RestaurantOrdersService {
     if (count === 0) {
       throw new ConflictException('Someone else just updated this order. Refresh and try again.');
     }
+
+    await this.auditLog.record({
+      action: 'STATUS_CHANGE',
+      actorId: context.actorId,
+      entityId: id,
+      entityName: 'restaurant_orders',
+      ipAddress: context.ipAddress,
+      newValue: { status },
+      oldValue: { status: order.status },
+    });
 
     return this.prisma.restaurantOrder.findFirstOrThrow({ select: orderSelect, where: { id } });
   }

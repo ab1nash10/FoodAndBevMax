@@ -2,8 +2,10 @@ import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/com
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
+import { logger, setRequestContext } from '@aahar/logging';
 import type { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from './constants';
+import type { JwtRequestUser } from './types';
 import { loggedPath } from './request-logging.middleware';
 
 interface AuthorizationHeaderRequest {
@@ -30,6 +32,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       context.getClass(),
     ]);
 
+    // The route template, for every log line and audit row of this request.
+    const request = context.switchToHttp().getRequest<{ route?: { path?: string } }>();
+    setRequestContext({ route: request.route?.path });
+
     if (isPublic) {
       return true;
     }
@@ -47,6 +53,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       this.logJwtValidationFailure(context, err, info);
       throw err ?? new UnauthorizedException('Unauthorized');
     }
+
+    const signedIn = user as Partial<JwtRequestUser>;
+    setRequestContext({
+      locationIds: signedIn.allowedHospitalIds,
+      roles: signedIn.roles,
+      userId: signedIn.id,
+    });
 
     return user;
   }
@@ -68,11 +81,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const token = parts.length === 2 && scheme?.toLowerCase() === 'bearer' ? parts[1] : undefined;
     const infoError = info instanceof Error ? info : undefined;
 
-    console.warn(
-      JSON.stringify({
+    logger.warn(
+      {
         errorMessage: err?.message,
         errorName: err?.name,
-        event: 'jwt_validation_failed',
         hasAuthorizationHeader: Boolean(authorization),
         infoMessage: infoError?.message ?? (typeof info === 'string' ? info : undefined),
         infoName: infoError?.name,
@@ -80,7 +92,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         path: loggedPath(request),
         scheme,
         tokenLength: token?.length,
-      }),
+      },
+      'jwt_validation_failed',
     );
   }
 }

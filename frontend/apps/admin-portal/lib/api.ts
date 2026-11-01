@@ -1,6 +1,7 @@
 import {
   ApiClientError,
   createApiClient,
+  createAuditApi,
   createAuthApi,
   createOrganizationApi,
   createReportsApi,
@@ -11,6 +12,7 @@ import {
   getStoredAccessToken,
   getStoredRefreshToken,
   saveStoredAuth,
+  TILL_KEY_STORAGE_KEY,
 } from './auth-storage';
 import { BASE_PATH } from './base-path';
 
@@ -84,14 +86,35 @@ export async function refreshStoredSession(): Promise<string | null> {
   }
 }
 
+/**
+ * The till key, on the POS screens only: there the server narrows bills and summaries to the
+ * till's counters, while the same lists elsewhere (dashboard, search) stay the location's.
+ */
+function tillKeyOnPosScreens(): string | null {
+  if (typeof window === 'undefined' || !window.location.pathname.includes('/pos/')) return null;
+  try {
+    return window.localStorage.getItem(TILL_KEY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export const organizationApi = createOrganizationApi({
+  baseUrl: apiConfig.organizationBaseUrl,
+  getAccessToken: getStoredAccessToken,
+  getTillKey: tillKeyOnPosScreens,
+  onUnauthorized: handleUnauthorizedSession,
+  refreshAccessToken: refreshStoredSession,
+});
+
+export const reportsApi = createReportsApi({
   baseUrl: apiConfig.organizationBaseUrl,
   getAccessToken: getStoredAccessToken,
   onUnauthorized: handleUnauthorizedSession,
   refreshAccessToken: refreshStoredSession,
 });
 
-export const reportsApi = createReportsApi({
+export const auditApi = createAuditApi({
   baseUrl: apiConfig.organizationBaseUrl,
   getAccessToken: getStoredAccessToken,
   onUnauthorized: handleUnauthorizedSession,

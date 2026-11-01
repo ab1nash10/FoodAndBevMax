@@ -46,6 +46,12 @@ void test('kiosks, order boards and order pushes are counted per restaurant or k
   const push = await at({ headers: { 'x-order-key': 'rsk_one' } });
   assert.match(push, /^order-key:[0-9a-f]{32}$/);
   assert.notEqual(push, await at({ headers: { 'x-order-key': 'rsk_two' } }));
+  // A kiosk order naming a staff mobile is still the kiosk's: a new number per order must not
+  // buy a fresh bucket to find out who is staff.
+  assert.equal(
+    await at({ body: { mobile: '9876543210' }, params: { restaurantId: 'cafe' } }),
+    'restaurant:cafe',
+  );
   // A signed-in user stays counted as themselves.
   assert.equal(await at({ params: { restaurantId: 'cafe' }, user: { id: 'u' } }), 'user:u');
 });

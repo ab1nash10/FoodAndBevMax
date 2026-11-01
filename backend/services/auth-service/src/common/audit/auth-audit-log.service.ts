@@ -1,43 +1,57 @@
+import { AuditService, type AuditClient } from '@aahar/logging';
 import { Injectable } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-type AuditClient = Pick<PrismaClient, 'auditLog'> | Prisma.TransactionClient;
+/** Sign-in and session events, from the event catalogue in docs/logging.md. */
+export type AuthAuditAction =
+  | 'LOGIN_FAILED'
+  | 'LOGIN_SUCCESS'
+  | 'LOGOUT'
+  | 'OTP_FAILED'
+  | 'OTP_SENT'
+  | 'PASSWORD_CHANGED'
+  | 'SESSION_REFRESHED'
+  | 'SESSION_REVOKED';
 
 interface AuthAuditInput {
-  action: 'AUTH_LOGIN' | 'AUTH_LOGOUT' | 'AUTH_REFRESH';
+  action: AuthAuditAction;
   entityId: string;
+  /** Defaults to auth_sessions; `users` for events about the account itself. */
+  entityName?: string;
   ipAddress?: string;
   newValue?: unknown;
   oldValue?: unknown;
+  summary?: string;
   userId?: string;
 }
 
-function toInputJson(value: unknown): Prisma.InputJsonValue | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
-}
-
+/**
+ * auth-service's door to the shared AuditService (@aahar/logging). Security events are not
+ * part of a business transaction, so they are saved in the background and never fail a sign-in.
+ */
 @Injectable()
 export class AuthAuditLogService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly audit: AuditService;
 
-  async record(input: AuthAuditInput, client: AuditClient = this.prisma): Promise<void> {
-    await client.auditLog.create({
-      data: {
+  constructor(private readonly prisma: PrismaService) {
+    this.audit = new AuditService(prisma);
+  }
+
+  record(input: AuthAuditInput, client?: AuditClient): Promise<void> {
+    return this.audit.record(
+      {
         action: input.action,
-        createdBy: input.userId,
+        actorId: input.userId,
         entityId: input.entityId,
-        entityName: 'auth_sessions',
+        entityName: input.entityName ?? 'auth_sessions',
+        // Sign-in events belong to no one location.
+        hospitalId: null,
         ipAddress: input.ipAddress,
-        newValue: toInputJson(input.newValue),
-        oldValue: toInputJson(input.oldValue),
-        updatedBy: input.userId,
-        userId: input.userId,
+        newValue: input.newValue,
+        oldValue: input.oldValue,
+        summary: input.summary,
       },
-    });
+      client && client !== this.prisma ? { tx: client } : {},
+    );
   }
 }

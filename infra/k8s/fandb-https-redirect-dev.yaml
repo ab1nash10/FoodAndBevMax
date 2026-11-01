@@ -1,0 +1,41 @@
+# Sends plain-HTTP requests for /fandb to HTTPS (301) on the shared dev-external ALB, so
+# sign-in codes, passwords and tokens never cross the internet in clear.
+#
+# Not the alb.ingress.kubernetes.io/ssl-redirect annotation: that one applies to every
+# Ingress in the group, and other teams' apps share dev-external, some HTTP-only. This rule
+# covers /fandb alone.
+#
+# It must be the only fandb rule on port 80, so apply it together with:
+#   - infra/k8s/fandb-api-ingress-dev.yaml (listens on HTTPS only), and
+#   - devops repo dev/fandb/fandb/values.yaml with listen-ports '[{"HTTPS": 443}]', deployed
+#     by the FANDB-UI job. Until then that ingress also answers /fandb on port 80 and the
+#     controller decides which rule wins.
+#
+#   kubectl apply -f infra/k8s/fandb-https-redirect-dev.yaml
+#   curl -sI http://<alb-host>/fandb/login     # 301, Location: https://...
+#
+# DELETE THIS before deploying via the Helm chart (infra/helm/fandb), like the API ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fandb-https-redirect
+  namespace: dev
+  labels:
+    app.kubernetes.io/part-of: fandb
+  annotations:
+    alb.ingress.kubernetes.io/group.name: dev-external
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/actions.to-https: >-
+      {"Type":"redirect","RedirectConfig":{"Protocol":"HTTPS","Port":"443","StatusCode":"HTTP_301"}}
+spec:
+  ingressClassName: alb-dev
+  rules:
+    - http:
+        paths:
+          - path: /fandb
+            pathType: Prefix
+            backend:
+              service:
+                name: to-https
+                port:
+                  name: use-annotation

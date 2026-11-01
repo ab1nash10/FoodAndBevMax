@@ -72,6 +72,8 @@ export const queryKeys = {
   posWhoAmI: key('pos-whoami'),
   posPaymentProviders: key('pos-payment-providers'),
   reports: key('reports'),
+  // Audit log: the whole list (filters) and one record's history ('history', entity, id).
+  auditLogs: key('audit-logs'),
   posEmployee: key('pos-employee'),
   posMenu: key('pos-menu'),
   posSummary: key('pos-summary'),

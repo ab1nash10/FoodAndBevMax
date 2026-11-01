@@ -23,7 +23,7 @@ import {
 } from '../common/super-admin';
 import {
   assertCanGrantScope,
-  assertCanTakeOverSignIn,
+  assertHoldsAccessOf,
   assertHoldsPermissions,
   assertHospitalsWithinReach,
   assertNotSelf,
@@ -325,6 +325,7 @@ export class UsersService {
 
         if (roleChanged || hospitalsChanged || statusChanged) {
           assertNotSelf(id, context.actor, 'role, locations or status');
+          await this.assertHoldsAccessOf(existing, tx, context, 'role, locations or status');
         }
 
         const detailsChanged =
@@ -340,14 +341,7 @@ export class UsersService {
         await assertOwnCurrentPassword(existing, dto, context);
 
         if (changesCredentials(existing, dto) && context.actorId !== id) {
-          assertCanTakeOverSignIn(
-            {
-              name: existing.name,
-              permissionCodes: await this.getEffectivePermissionCodes(existing, tx),
-              scopes: existing.roles.map(({ role }) => role.locationScope),
-            },
-            context.actor,
-          );
+          await this.assertHoldsAccessOf(existing, tx, context);
         }
 
         if (detailsChanged || roleChanged || hospitalsChanged || statusChanged) {
@@ -455,6 +449,7 @@ export class UsersService {
 
     this.assertCanManageUser(existing, context);
     assertNotSelf(id, context.actor, 'account');
+    await this.assertHoldsAccessOf(existing, this.prisma, context, 'account');
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -509,6 +504,7 @@ export class UsersService {
 
       this.assertCanManageUser(existing, context);
       assertNotSelf(id, context.actor, 'role');
+      await this.assertHoldsAccessOf(existing, tx, context, 'role');
 
       const role = await this.findActiveRole(dto.roleId, tx, context, true);
 
@@ -576,6 +572,7 @@ export class UsersService {
 
         this.assertCanManageUser(user, context);
         assertNotSelf(userId, context.actor, 'locations');
+        await this.assertHoldsAccessOf(user, tx, context, 'locations');
 
         const role = user.roles[0]?.role;
 
@@ -620,6 +617,7 @@ export class UsersService {
 
       this.assertCanManageUser(user, context);
       assertNotSelf(id, context.actor, 'permissions');
+      await this.assertHoldsAccessOf(user, tx, context, 'permissions');
 
       await this.assertPermissionsExist(dto.permissionIds, tx);
       const inheritedPermissionIds = await this.getRolePermissionIds(user, tx);
@@ -996,6 +994,27 @@ export class UsersService {
     }
 
     assertUserWithinReach(user, context.actor);
+  }
+
+  /**
+   * Changing another user's sign-in or access needs everything they hold (Super Admin exempt), so
+   * location reach alone never lets an Admin take over, disable or demote a peer who holds more.
+   */
+  private async assertHoldsAccessOf(
+    user: UserWithRoles,
+    client: Prisma.TransactionClient | PrismaService,
+    context: ActorContext,
+    what?: string,
+  ): Promise<void> {
+    assertHoldsAccessOf(
+      {
+        name: user.name,
+        permissionCodes: await this.getEffectivePermissionCodes(user, client),
+        scopes: user.roles.map(({ role }) => role.locationScope),
+      },
+      context.actor,
+      what,
+    );
   }
 
   /**

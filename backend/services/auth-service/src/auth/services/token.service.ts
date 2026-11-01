@@ -8,6 +8,19 @@ import type { AuthTokens, RefreshTokenPayload } from '../auth.types';
 
 type JwtExpiresIn = number | `${number}${'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'y'}`;
 
+// A replaced refresh token stays on record as spent for the rest of its life, so presenting it
+// again is caught as reuse. Within this grace it is a portal tab that woke with the others and
+// lost the race (the portal then takes the pair its sibling stored), not a stolen copy.
+const REUSE_GRACE_MS = 60_000;
+const SPENT_PREFIX = 'spent:';
+
+/** A refresh token presented again after it was replaced: someone else may hold a copy. */
+export class RefreshTokenReusedError extends UnauthorizedException {
+  constructor(readonly userId: string) {
+    super('Invalid refresh token');
+  }
+}
+
 interface TokenUser {
   email?: string | null;
   id: string;
@@ -26,7 +39,8 @@ export class TokenService {
     private readonly redis: RedisService,
   ) {}
 
-  async issueTokens(user: TokenUser): Promise<AuthTokens> {
+  /** `authTime` is when the user signed in; omitted, this is a new sign-in. */
+  async issueTokens(user: TokenUser, authTime?: number): Promise<AuthTokens> {
     const refreshTokenId = randomUUID();
     const accessPayload: JwtPayload = {
       email: user.email,
@@ -38,6 +52,7 @@ export class TokenService {
       sv: user.sessionVersion,
     };
     const refreshPayload: RefreshTokenPayload = {
+      authTime: authTime ?? Math.floor(Date.now() / 1000),
       jti: refreshTokenId,
       sub: user.id,
       sv: user.sessionVersion,
@@ -65,30 +80,44 @@ export class TokenService {
   }
 
   async verifyRefreshToken(refreshToken: string): Promise<RefreshTokenPayload> {
-    try {
-      const payload = await this.jwt.verifyAsync<RefreshTokenPayload>(refreshToken, {
+    const payload = await this.jwt
+      .verifyAsync<RefreshTokenPayload>(refreshToken, {
         algorithms: ['HS256'],
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      })
+      .catch(() => {
+        throw new UnauthorizedException('Invalid refresh token');
       });
 
-      if (payload.type !== 'refresh') {
-        throw new UnauthorizedException('Invalid refresh token');
-      }
-
-      const storedUserId = await this.redis.get(this.getRefreshTokenKey(payload.jti));
-
-      if (storedUserId !== payload.sub) {
-        throw new UnauthorizedException('Invalid refresh token');
-      }
-
-      return payload;
-    } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-
+    if (payload.type !== 'refresh') {
       throw new UnauthorizedException('Invalid refresh token');
     }
+
+    // Not caught: during a Redis outage this is a 503, which the portal rides out. Calling it
+    // an invalid token signed every user out whenever Redis blinked.
+    const storedUserId = await this.redis.get(this.getRefreshTokenKey(payload.jti));
+
+    if (
+      storedUserId?.startsWith(SPENT_PREFIX) &&
+      Date.now() - Number(storedUserId.slice(SPENT_PREFIX.length)) >= REUSE_GRACE_MS
+    ) {
+      throw new RefreshTokenReusedError(payload.sub);
+    }
+
+    if (storedUserId !== payload.sub) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return payload;
+  }
+
+  /** Marks a token replaced by refresh as spent, for as long as it would have lived. */
+  async spendRefreshToken(payload: RefreshTokenPayload): Promise<void> {
+    await this.redis.setWithExpiry(
+      this.getRefreshTokenKey(payload.jti),
+      `${SPENT_PREFIX}${Date.now()}`,
+      payload.exp ? payload.exp - Date.now() / 1000 : this.getRefreshTokenTtlSeconds(),
+    );
   }
 
   /** Resolves true only if this call revoked a still-live token. */

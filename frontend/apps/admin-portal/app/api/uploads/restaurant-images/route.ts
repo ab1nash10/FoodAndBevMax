@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
-import { BASE_PATH } from '@/lib/base-path';
 
 export const runtime = 'nodejs';
 
@@ -29,17 +28,16 @@ function imageExtension(bytes: Uint8Array): '.jpg' | '.png' | '.webp' | null {
 }
 
 /**
- * The user service, as this server reaches it: USER_SERVICE_URL when set (the in-cluster
- * service), else the portal's configured API URL, else this same origin under the API prefix.
+ * The user service, as this server reaches it: USER_SERVICE_URL (the in-cluster service, set by
+ * the Helm chart), else the portal's API URL when absolute (local dev). Never this request's own
+ * origin: that follows the Host header, so a forged one would send the check to any server.
  */
-function userServiceUrl(request: Request): string {
-  const configured = process.env.USER_SERVICE_URL || process.env.NEXT_PUBLIC_USER_API_URL;
+function userServiceUrl(): string | null {
+  const configured = [process.env.USER_SERVICE_URL, process.env.NEXT_PUBLIC_USER_API_URL].find(
+    (url) => url && /^https?:\/\//.test(url),
+  );
 
-  if (configured && /^https?:\/\//.test(configured)) {
-    return configured.replace(/\/+$/, '');
-  }
-
-  return `${new URL(request.url).origin}${BASE_PATH}/api/v1`;
+  return configured ? configured.replace(/\/+$/, '') : null;
 }
 
 /**
@@ -54,10 +52,16 @@ async function refuseUnlessAllowed(request: Request): Promise<NextResponse | nul
     return NextResponse.json({ message: 'Sign in to upload images.' }, { status: 401 });
   }
 
+  const userService = userServiceUrl();
+
+  if (!userService) {
+    return NextResponse.json({ message: 'Uploads are not configured.' }, { status: 503 });
+  }
+
   let response: Response;
 
   try {
-    response = await fetch(`${userServiceUrl(request)}/users/me/access`, {
+    response = await fetch(`${userService}/users/me/access`, {
       headers: { authorization },
       signal: AbortSignal.timeout(5000),
     });

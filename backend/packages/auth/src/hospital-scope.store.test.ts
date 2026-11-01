@@ -6,6 +6,8 @@ const allowed = ['hospital-a'];
 
 void test('a location-owned record is visible only at the user locations', () => {
   assert.deepEqual(readScope('Grn', allowed), { hospitalId: { in: allowed } });
+  // A GRN sent by the ERP: a store user sees and verifies only their own hospitals' ones.
+  assert.deepEqual(readScope('GrnEntry', allowed), { hospitalId: { in: allowed } });
 });
 
 void test('a shared master stays visible everywhere, a location one only there', () => {

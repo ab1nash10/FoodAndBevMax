@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import tls from 'node:tls';
 import { configureSecurityBaseline } from '@aahar/auth';
+import { installProcessHandlers } from '@aahar/logging';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -13,10 +14,18 @@ tls.setDefaultCACertificates([
   ...new Set([...tls.getCACertificates('default'), ...tls.getCACertificates('system')]),
 ]);
 
+// A crash is logged as one fatal JSON line before the process exits.
+installProcessHandlers();
+
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // A spreadsheet import sends up to 1,000 rows in one request, past Express's 100 KB default.
-  // Only the three import routes get 2 MB: bodies are parsed before the JWT guard runs, so a
+  // rawBody keeps the bytes as received: the ERP signs those, not the JSON re-built from them.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+    bufferLogs: true,
+  });
+  // A spreadsheet import sends up to 1,000 rows in one request, past Express's 100 KB default,
+  // and so can an ERP GRN with many batches.
+  // Only those routes get 2 MB: bodies are parsed before the JWT guard runs, so a
   // global limit would let anyone make any route parse 2 MB. Each parser skips what it doesn't
   // own (its `type`), and the first to parse a request wins.
   app.useBodyParser('json', { limit: '2mb', type: (req) => isJson(req) && isImport(req) });
@@ -44,9 +53,11 @@ type ParsedRequest = Readonly<{
 
 const isJson = (req: ParsedRequest) => /\bjson\b/i.test(req.headers['content-type'] ?? '');
 
-/** POST <prefix>/api/v1/{items,employees,restaurant-menus}/import. */
+/** POST <prefix>/api/v1/{items,employees,restaurant-menus}/import, and the ERP's GRNs. */
 const isImport = (req: ParsedRequest) =>
   req.method === 'POST' &&
-  /\/api\/v1\/(?:items|employees|restaurant-menus)\/import\/?(?:\?|$)/.test(req.url ?? '');
+  /\/api\/v1\/(?:(?:items|employees|restaurant-menus)\/import|erp\/grns)\/?(?:\?|$)/.test(
+    req.url ?? '',
+  );
 
 void bootstrap();

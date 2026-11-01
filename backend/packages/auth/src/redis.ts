@@ -1,4 +1,5 @@
 import { ThrottlerStorageService, type ThrottlerStorage } from '@nestjs/throttler';
+import { logger } from '@aahar/logging';
 import Redis from 'ioredis';
 
 type ThrottlerStorageRecord = Awaited<ReturnType<ThrottlerStorage['increment']>>;
@@ -44,13 +45,13 @@ export function getSharedRedis(): Redis | null {
   client.on('error', (error: Error) => {
     if (!isDown) {
       isDown = true;
-      console.error(JSON.stringify({ event: 'redis_unavailable', message: error.message }));
+      logger.error({ reason: error.message }, 'redis_unavailable');
     }
   });
   client.on('ready', () => {
     if (isDown) {
       isDown = false;
-      console.info(JSON.stringify({ event: 'redis_reconnected' }));
+      logger.info('redis_reconnected');
     }
   });
 

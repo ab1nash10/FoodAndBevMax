@@ -14,6 +14,7 @@ import {
   type ImportRowResult,
   type ImportRowsDto,
 } from '../common/import';
+import { assertMayChangeShared } from '../common/location-masters';
 import { normalizeMasterName } from '../common/normalize-master-name';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { handlePrismaError } from '../common/prisma-errors';
@@ -138,6 +139,9 @@ export class ItemsImportService {
   constructor(private readonly prisma: PrismaService) {}
 
   async import({ dryRun, rows }: ImportRowsDto, context: ActorContext) {
+    // Every row adds or changes a shared item, so a trial run is refused too.
+    assertMayChangeShared(null, 'items');
+
     if (dryRun) {
       return importResult((await this.plan(rows, this.prisma, context)).rows, false);
     }

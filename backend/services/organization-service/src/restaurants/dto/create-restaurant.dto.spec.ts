@@ -72,4 +72,32 @@ describe('restaurant fields', () => {
 
     expect(failing(cleared, UpdateRestaurantDto)).toEqual([]);
   });
+
+  test('an image is one the portal uploaded', () => {
+    for (const url of [
+      '/uploads/restaurants/1730000000000-0b8f6a2e-1c3d-4e5f-8a9b-0c1d2e3f4a5b.webp',
+      '/uploads/restaurants/1730000000000-0b8f6a2e-1c3d-4e5f-8a9b-0c1d2e3f4a5b.jpg',
+    ]) {
+      expect(failing({ coverImageUrl: url, thumbnailUrl: url })).toEqual([]);
+      expect(failing({ coverImageUrl: url, thumbnailUrl: url }, UpdateRestaurantDto)).toEqual([]);
+    }
+
+    for (const url of [
+      // The portal's CSP loads images from its own origin only (next.config.ts img-src).
+      'https://cdn.example.com/cafe.jpg',
+      'javascript:alert(1)',
+      'http://example.com/cafe.jpg',
+      'data:image/png;base64,AAAA',
+      '//evil.example/cafe.jpg',
+      '/uploads/restaurants/../../api/v1/users',
+      '/fandb/api/v1/users/me',
+      'https://example.com/a.jpg") , url("https://evil.example/x',
+    ]) {
+      expect(failing({ coverImageUrl: url, thumbnailUrl: url })).toEqual([
+        'thumbnailUrl',
+        'coverImageUrl',
+      ]);
+      expect(failing({ thumbnailUrl: url }, UpdateRestaurantDto)).toEqual(['thumbnailUrl']);
+    }
+  });
 });

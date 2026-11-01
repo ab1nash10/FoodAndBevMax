@@ -19,8 +19,13 @@ export function toCsv(rows: ReadonlyArray<ReadonlyArray<string | number>>): stri
 }
 
 export function downloadCsv(filename: string, rows: ReadonlyArray<ReadonlyArray<string | number>>) {
+  downloadCsvText(filename, toCsv(rows));
+}
+
+/** CSV text (e.g. a server export fetched with the bearer token) saved as a file. */
+export function downloadCsvText(filename: string, csv: string) {
   // A BOM so Excel reads the UTF-8 (₹, names in Hindi) correctly.
-  const blob = new Blob(['﻿', toCsv(rows)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

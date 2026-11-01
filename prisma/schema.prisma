@@ -198,6 +198,8 @@ enum StockTransactionType {
   DISCARD_OUT
   /// Ready-made leftovers sent from one restaurant to another.
   RESTAURANT_TRANSFER_OUT
+  /// Stock sent back from a store to the vendor: an ERP return GRN (flag 1), once verified.
+  GRN_RETURN_OUT
 }
 
 enum StockReferenceType {
@@ -206,6 +208,8 @@ enum StockReferenceType {
   TRANSFER
   TRANSFER_ACKNOWLEDGEMENT
   ORDER
+  /// A batch of a GRN sent by the ERP; reference_id is grn_entries.grn_entry_id.
+  GRN_ENTRY
 }
 
 model User {
@@ -237,6 +241,7 @@ model User {
   auditLogs                AuditLog[]
   assignedHospitals        UserHospital[]
   hospital                 Hospital?           @relation(fields: [hospitalId], references: [id])
+  grnEntriesVerified       GrnEntry[]
   kitchenProductionsAsChef KitchenProduction[] @relation("KitchenProductionChef")
   permissionOverrides      UserPermission[]
   roles                    UserRole[]
@@ -397,6 +402,7 @@ model Hospital {
   transferAcknowledgements TransferAcknowledgement[]
   transfers                Transfer[]
   users                    User[]
+  grnEntries               GrnEntry[]
 
   @@index([deletedAt])
   @@index([isActive])
@@ -476,6 +482,7 @@ model Store {
   storeItems      StoreItem[]
   restaurantMenus RestaurantMenu[]
   restaurants     Restaurant[]
+  grnEntries      GrnEntry[]
 
   @@unique([hospitalId, storeCode])
   @@index([hospitalId])
@@ -1086,6 +1093,7 @@ model Item {
   storeItems                   StoreItem[]
   transferAcknowledgementLines TransferAcknowledgementLine[]
   transferLines                TransferLine[]
+  grnEntries                   GrnEntry[]
 
   @@index([categoryId])
   @@index([deletedAt])
@@ -1353,6 +1361,76 @@ model GrnLine {
   @@index([grnId])
   @@index([itemId])
   @@map("grn_lines")
+}
+
+enum GrnEntryStatus {
+  PENDING
+  VERIFIED
+}
+
+/// One batch of a GRN sent by the ERP (POST /erp/grns), as sent: the ERP's GRN is one document,
+/// so its details repeat on each batch's row. The store accepts or rejects every batch in the
+/// portal, and the ERP reads the result back. Nothing reaches stock while it is PENDING.
+model GrnEntry {
+  id                String         @id @default(uuid()) @map("grn_entry_id") @db.Uuid
+  /// The ERP's id for this batch row: a resend can never add the same batch twice.
+  transactionNumber String         @unique @map("transaction_number")
+  /// The ERP's GRN number, the same on every batch of one GRN.
+  grnNumber         String         @map("grn_number")
+  /// 0 = goods in (adds the accepted quantity to the store), 1 = return to vendor (takes it out).
+  flag              Int            @db.SmallInt
+  hospitalId        String         @map("hospital_id") @db.Uuid
+  storeId           String         @map("store_id") @db.Uuid
+  itemId            String         @map("item_id") @db.Uuid
+  hospitalCode      String         @map("hospital_code")
+  storeCode         String         @map("store_code")
+  itemCode          String         @map("item_code")
+  itemName          String?        @map("item_name")
+  uom               String?
+  hsnCode           String?        @map("hsn_code")
+  batchNumber       String         @map("batch_number")
+  expiryDate        DateTime       @map("expiry_date") @db.Date
+  /// What the ERP sent. Once verified, accepted + rejected equals it (a CHECK in the migration).
+  sentQty           Decimal        @map("sent_qty") @db.Decimal(12, 3)
+  acceptedQty       Decimal?       @map("accepted_qty") @db.Decimal(12, 3)
+  rejectedQty       Decimal?       @map("rejected_qty") @db.Decimal(12, 3)
+  rejectionReason   String?        @map("rejection_reason")
+  unitRate          Decimal?       @map("unit_rate") @db.Decimal(12, 2)
+  mrp               Decimal?       @db.Decimal(12, 2)
+  taxRate           String?        @map("tax_rate")
+  discount          Decimal?       @db.Decimal(12, 2)
+  totalValue        Decimal?       @map("total_value") @db.Decimal(14, 2)
+  transactionDate   DateTime       @map("transaction_date")
+  issuedBy          String?        @map("issued_by")
+  purchaseOrder     String?        @map("purchase_order")
+  requisitionNumber String?        @map("requisition_number")
+  vendorCode        String?        @map("vendor_code")
+  status            GrnEntryStatus @default(PENDING)
+  verifiedAt        DateTime?      @map("verified_at")
+  verifiedBy        String?        @map("verified_by") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  item     Item     @relation(fields: [itemId], references: [id])
+  store    Store    @relation(fields: [storeId], references: [id])
+  verifier User?    @relation(fields: [verifiedBy], references: [id])
+
+  @@index([grnNumber])
+  @@index([hospitalId, status])
+  @@index([status, verifiedAt])
+  @@index([storeId])
+  @@map("grn_entries")
+}
+
+/// X-Nonce of each signed ERP request in the last few minutes, so a captured request cannot be
+/// sent again.
+model ErpRequestNonce {
+  nonce     String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("erp_request_nonces")
 }
 
 model GrnBatch {
@@ -1639,6 +1717,16 @@ model AuditLog {
   oldValue   Json?     @map("old_value")
   newValue   Json?     @map("new_value")
   ipAddress  String?   @map("ip_address")
+  /// The request (x-request-id) that made the change; ties the row to its log lines.
+  requestId  String?   @map("request_id")
+  /// The actor's role name(s) at the time, comma-separated.
+  actorRole  String?   @map("actor_role")
+  /// The store or kitchen involved, when there is one. Text, not uuid: a bad value must never fail the change it records.
+  locationId String?   @map("location_id")
+  /// api | job | system
+  source     String?
+  /// One line for people, e.g. "Accepted 18 of 20 kg basmati".
+  summary    String?
   createdAt  DateTime  @default(now()) @map("created_at")
   createdBy  String?   @map("created_by") @db.Uuid
   updatedAt  DateTime  @updatedAt @map("updated_at")
@@ -1652,6 +1740,10 @@ model AuditLog {
   @@index([hospitalId])
   @@index([userId])
   @@index([deletedAt])
+  @@index([hospitalId, createdAt(sort: Desc)])
+  @@index([entityName, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
   @@map("audit_logs")
 }
 

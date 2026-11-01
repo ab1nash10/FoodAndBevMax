@@ -11,8 +11,10 @@ import {
   Put,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import {
   CancelPosOrderDto,
@@ -27,15 +29,11 @@ import {
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
 import { PosService } from './pos.service';
-
-/** The key a till's browser sends to say which till it is; absent anywhere else. */
-function tillKeyOf(request: RequestContextLike): string | undefined {
-  const key = request.headers['x-till-key'];
-  return typeof key === 'string' ? key : undefined;
-}
+import { RequireTill, TillGuard, tillKeyOf, type TillRequest } from './till.guard';
 
 @ApiBearerAuth('access-token')
 @ApiTags('pos')
+@UseGuards(TillGuard)
 @Controller('pos')
 export class PosController {
   constructor(private readonly pos: PosService) {}
@@ -81,7 +79,7 @@ export class PosController {
     @Req() request: RequestContextLike,
   ) {
     return {
-      data: await this.pos.enrollTill(body.posDeviceId, {
+      data: await this.pos.enrollTill(body.posDeviceId, body.computerName, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),
@@ -91,6 +89,7 @@ export class PosController {
   }
 
   @Get('menu')
+  @RequireTill({ from: 'query', kind: 'counterId' })
   @Permissions('POS_ORDER_VIEW')
   @ApiOperation({ summary: "A counter's menu for a channel, with prices, availability and stock" })
   @ApiOkResponse({ description: 'Menu returned.' })
@@ -99,6 +98,7 @@ export class PosController {
   }
 
   @Patch('menu/:id/availability')
+  @RequireTill({ from: 'param', kind: 'menuId', name: 'id' })
   @Permissions('POS_MENU_UPDATE')
   @ApiOperation({ summary: 'Mark a menu item available or sold out' })
   @ApiOkResponse({ description: 'Availability saved.' })
@@ -119,6 +119,7 @@ export class PosController {
   }
 
   @Post('orders')
+  @RequireTill({ from: 'body', kind: 'counterId' })
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: 'Bill an order at a counter' })
   @ApiOkResponse({ description: 'Bill saved.' })
@@ -139,14 +140,21 @@ export class PosController {
   }
 
   @Get('orders')
+  @RequireTill({ optional: true })
   @Permissions('POS_ORDER_VIEW')
   @ApiOperation({ summary: 'Counter bills: history, complimentary and cancelled' })
   @ApiOkResponse({ description: 'Bills returned.' })
-  async list(@Query() query: ListPosOrdersQueryDto) {
-    return { data: await this.pos.list(query), message: 'Success', success: true };
+  async list(@Query() query: ListPosOrdersQueryDto, @Req() request: TillRequest) {
+    // From a till, its own counters' bills only (the guard has checked the key).
+    return {
+      data: await this.pos.list(query, request.till?.counterIds),
+      message: 'Success',
+      success: true,
+    };
   }
 
   @Get('orders/:id')
+  @RequireTill({ from: 'param', kind: 'billId', name: 'id' })
   @Permissions('POS_ORDER_VIEW')
   @ApiOperation({ summary: 'One bill with its lines, for viewing and reprinting' })
   @ApiOkResponse({ description: 'Bill returned.' })
@@ -155,6 +163,7 @@ export class PosController {
   }
 
   @Patch('orders/:id/cancel')
+  @RequireTill({ from: 'param', kind: 'billId', name: 'id' })
   @Permissions('POS_ORDER_CANCEL')
   @ApiOperation({ summary: 'Cancel a bill and put its stock back' })
   @ApiOkResponse({ description: 'Bill cancelled.' })
@@ -168,13 +177,18 @@ export class PosController {
       data: await this.pos.cancel(id, body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
       }),
       message: 'Success',
       success: true,
     };
   }
 
+  // Staff eat at every location, so this reads every location's employees: few enough per
+  // cashier for typing IDs, too few to page through the directory.
   @Get('employee')
+  @RequireTill()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Permissions('POS_ORDER_CREATE')
   @ApiOperation({ summary: 'Who an Employee ID is, and the staff discount they get here' })
   @ApiOkResponse({ description: 'Employee returned.' })
@@ -211,6 +225,7 @@ export class PosController {
   }
 
   @Get('stock-summary')
+  @RequireTill({ from: 'query', kind: 'counterId' })
   @Permissions('COUNTER_STOCK_VIEW')
   @ApiOperation({ summary: "A counter's stock per item for a day: received, sold, available" })
   @ApiOkResponse({ description: 'Stock summary returned.' })
@@ -219,6 +234,7 @@ export class PosController {
   }
 
   @Get('summary')
+  @RequireTill({ from: 'query', kind: 'counterId', optional: true })
   @Permissions('POS_ORDER_VIEW')
   @ApiOperation({ summary: "A counter's takings for a business day" })
   @ApiOkResponse({ description: 'Summary returned.' })

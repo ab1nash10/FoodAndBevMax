@@ -11,6 +11,7 @@ import {
   RbacGuard,
   UserThrottlerGuard,
 } from '@aahar/auth';
+import { LoggingModule } from '@aahar/logging';
 import {
   getServiceEnvFilePaths,
   shouldUseRootEnvFileOnly,
@@ -32,6 +33,7 @@ import { UsersModule } from './users/users.module';
 @Module({
   controllers: [HealthController],
   imports: [
+    LoggingModule,
     CommonModule,
     ConfigModule.forRoot({
       cache: true,

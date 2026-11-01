@@ -34,6 +34,8 @@ spec:
         app.kubernetes.io/part-of: fandb
     spec:
       terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      # Nothing here talks to the Kubernetes API, so no pod carries a token for it.
+      automountServiceAccountToken: false
       securityContext:
 {{ toYaml $.Values.securityContext.pod | indent 8 }}
       topologySpreadConstraints:

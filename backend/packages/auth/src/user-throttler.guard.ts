@@ -29,8 +29,8 @@ export function addressThrottler(limit = 3_000): ThrottlerOptions {
  * Signed-out sign-in requests are counted per identity they act on (the mobile number, the
  * email, the session being renewed), so ten failed OTP guesses lock that number, not the
  * hospital, and a shift's worth of sign-ins from one address goes through. The address itself
- * is still capped by the ADDRESS_THROTTLER. Anything else signed out (TV boards, order pushes)
- * stays per address.
+ * is still capped by the ADDRESS_THROTTLER. Kiosks and TV boards count per restaurant, order
+ * pushes per order key, and anything else signed out per address.
  */
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {
@@ -44,6 +44,15 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     const body = (request.body ?? {}) as Record<string, unknown>;
     const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
+    // Kiosks and order boards are counted per restaurant, and order pushes per order key: every
+    // one of them behind a hospital network shares its public address, so a per-address limit
+    // let a few busy boards lock out the rest. The address ceiling still caps any one address.
+    // Before the body: a kiosk order naming a staff mobile would otherwise get a fresh bucket per
+    // number tried, enough to find out who is staff.
+    const params = (request.params ?? {}) as Record<string, unknown>;
+    if (text(params.restaurantId))
+      return Promise.resolve(`restaurant:${text(params.restaurantId)}`);
+
     if (text(body.mobile)) return Promise.resolve(`mobile:${text(body.mobile)}`);
     if (text(body.email)) return Promise.resolve(`email:${text(body.email).toLowerCase()}`);
     // The token itself, hashed: its claims are unverified here, so a forged one cannot borrow
@@ -54,12 +63,6 @@ export class UserThrottlerGuard extends ThrottlerGuard {
       return Promise.resolve(`session:${hash.slice(0, 32)}`);
     }
 
-    // Kiosks and order boards are counted per restaurant, and order pushes per order key: every
-    // one of them behind a hospital network shares its public address, so a per-address limit
-    // let a few busy boards lock out the rest. The address ceiling still caps any one address.
-    const params = (request.params ?? {}) as Record<string, unknown>;
-    if (text(params.restaurantId))
-      return Promise.resolve(`restaurant:${text(params.restaurantId)}`);
     const headers = (request.headers ?? {}) as Record<string, unknown>;
     if (text(headers['x-order-key'])) {
       const hash = createHash('sha256').update(text(headers['x-order-key'])).digest('hex');

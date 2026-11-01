@@ -1,11 +1,16 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, Optional } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { AuditLoggerService } from './audit-logger.service';
 import { PERMISSIONS_KEY, ROLES_KEY } from './constants';
+import { recordPermissionDenied, type DeniedRequest } from './permission-denied';
 import type { JwtRequestUser } from './types';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    @Optional() private readonly audit?: AuditLoggerService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
@@ -21,7 +26,7 @@ export class RbacGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<{ user?: JwtRequestUser }>();
+    const request = context.switchToHttp().getRequest<DeniedRequest & { user?: JwtRequestUser }>();
     const user = request.user;
 
     if (!user) {
@@ -34,6 +39,15 @@ export class RbacGuard implements CanActivate {
       !requiredPermissions?.length ||
       requiredPermissions.some((permission) => user.permissions.includes(permission));
 
-    return hasRequiredRole && hasRequiredPermission;
+    if (hasRequiredRole && hasRequiredPermission) {
+      return true;
+    }
+
+    recordPermissionDenied(this.audit, request, {
+      permissions: requiredPermissions,
+      reason: hasRequiredRole ? 'missing_permission' : 'missing_role',
+      roles: requiredRoles,
+    });
+    return false;
   }
 }

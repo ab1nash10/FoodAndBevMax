@@ -522,6 +522,8 @@ async function resolveIds() {
   const device = devices.find((entry) => entry.name === TILL_DEVICE);
   if (!device) throw new Error(`no POS device named ${TILL_DEVICE}`);
   const enrolled = await request(agent, 'POST', `${ORG}/pos/till`, adminToken, {
+    // The device names this computer; the till check needs that name typed back.
+    computerName: device.hostName ?? '',
     posDeviceId: device.id,
   });
   tillKey = JSON.parse(enrolled.body).data.tillKey;

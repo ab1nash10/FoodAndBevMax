@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { logger } from '@aahar/logging';
 
 /**
  * Dev-only Prisma query counting, for measuring query budgets and N+1s: with
@@ -48,12 +49,9 @@ export function countPrismaQueries(client: object): void {
       }
 
       if (slowQueryLog && event.duration > SLOW_QUERY_MS) {
-        console.warn(
-          JSON.stringify({
-            durationMs: Math.round(event.duration),
-            event: 'slow_query',
-            query: event.query.slice(0, 1000),
-          }),
+        logger.warn(
+          { durationMs: Math.round(event.duration), query: event.query.slice(0, 1000) },
+          'slow_query',
         );
       }
     },

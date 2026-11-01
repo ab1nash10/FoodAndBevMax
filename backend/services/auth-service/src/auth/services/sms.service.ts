@@ -1,4 +1,5 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { logger } from '@aahar/logging';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 const DEFAULT_SMS_API_URL = 'https://bulkpush.mytoday.com/BulkSms/SingleMsgApi';
@@ -21,8 +22,6 @@ function otpMessage(otp: string): string {
  */
 @Injectable()
 export class SmsService {
-  private readonly logger = new Logger(SmsService.name);
-
   constructor(private readonly config: ConfigService) {}
 
   isConfigured(): boolean {
@@ -77,6 +76,6 @@ export class SmsService {
   }
 
   private logFailure(details: Record<string, unknown>): void {
-    this.logger.error(JSON.stringify({ event: 'sms_otp_send_failed', ...details }));
+    logger.error(details, 'sms_otp_send_failed');
   }
 }

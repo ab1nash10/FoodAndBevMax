@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
+import { logger } from '@aahar/logging';
 import { countPrismaQueries, isSlowQueryLogEnabled, prismaQueryLogOptions } from './query-log';
 
 const saved = { ...process.env };
@@ -55,7 +56,7 @@ void test('production without the flag registers no query listener', () => {
 
 void test('a query over 300 ms logs its SQL and duration, never its parameters', () => {
   useEnv({ NODE_ENV: 'development' });
-  const warn = mock.method(console, 'warn', () => {});
+  const warn = mock.method(logger, 'warn', () => {});
   const { client, listeners } = fakeClient();
 
   countPrismaQueries(client);
@@ -70,11 +71,11 @@ void test('a query over 300 ms logs its SQL and duration, never its parameters',
     query: 'SELECT "users"."id" FROM "users" WHERE "mobile" = $1',
   });
   assert.equal(warn.mock.callCount(), 1);
-  const line = String(warn.mock.calls[0]?.arguments[0]);
-  assert.deepEqual(JSON.parse(line), {
+  const [fields, message] = warn.mock.calls[0]?.arguments ?? [];
+  assert.equal(message, 'slow_query');
+  assert.deepEqual(fields, {
     durationMs: 413,
-    event: 'slow_query',
     query: 'SELECT "users"."id" FROM "users" WHERE "mobile" = $1',
   });
-  assert.ok(!line.includes('9000000001'));
+  assert.ok(!JSON.stringify(fields).includes('9000000001'));
 });

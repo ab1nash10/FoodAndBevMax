@@ -14,6 +14,7 @@ import {
   TransferStatus,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { itemsLabel, qty, total } from '../common/audit/audit-summary';
 import { stockItemType } from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
@@ -237,15 +238,34 @@ export class TransferAcknowledgementsService {
         const created = await this.findActiveAcknowledgement(acknowledgement.id, tx);
         const newValue = toAcknowledgementResponse(created);
 
+        const auditLines = created.lines.map((line) => ({
+          acceptedQty: toNumber(line.acceptedQty),
+          batchNumber: line.batchNumber,
+          itemId: line.itemId,
+          itemName: line.item?.itemName,
+          rejectedQty: toNumber(line.rejectedQty),
+          rejectionReason: line.rejectionReason,
+          sentQty: toNumber(line.sentQty),
+        }));
+        const rejected = total(auditLines.map((line) => line.rejectedQty));
+
+        // Recorded on the transfer, so the transfer's history shows how it was received.
         await this.auditLog.record(
           {
             action: 'TRANSFER_ACKNOWLEDGE',
             actorId: context.actorId,
-            entityId: acknowledgement.id,
-            entityName: 'transfer_acknowledgements',
+            entityId: transfer.id,
+            entityName: 'transfers',
             hospitalId: acknowledgement.hospitalId,
             ipAddress: context.ipAddress,
-            newValue,
+            locationId: transfer.destinationId,
+            newValue: {
+              acknowledgementId: created.id,
+              lines: auditLines,
+              outcome: created.status,
+              transferNumber: created.transfer.transferNumber,
+            },
+            summary: `${created.status}: accepted ${qty(total(auditLines.map((line) => line.acceptedQty)))} of ${qty(total(auditLines.map((line) => line.sentQty)))} ${itemsLabel(auditLines)}${rejected > 0 ? ` (${qty(rejected)} rejected)` : ''}`,
           },
           tx,
         );

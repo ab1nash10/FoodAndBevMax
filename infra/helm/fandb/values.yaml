@@ -64,15 +64,19 @@ config:
     REDIS_URL: ''
 
 # An in-cluster Redis for environments without ElastiCache: enabled=true deploys it and points
-# REDIS_URL at it (an explicit config.secrets.REDIS_URL still wins). It pulls redis:7-alpine
-# from Docker Hub, so the cluster needs egress to it or the image mirrored into ECR.
-# ponytail: single replica, no persistence, no auth - fine for dev, use ElastiCache in
-# production and set enabled=false with config.secrets.REDIS_URL pointing at it.
+# REDIS_URL at it (an explicit config.secrets.REDIS_URL still wins).
+# It holds live OTPs, so it requires `password` (32+ letters or digits, e.g. openssl rand -hex
+# 32) and a NetworkPolicy admits only the fandb backends. With config.create=false, put
+# REDIS_PASSWORD and REDIS_URL (redis://:<password>@fandb-redis:6379) in that Secret yourself.
+# ponytail: single replica, no persistence - fine for dev, use ElastiCache in production and
+# set enabled=false with config.secrets.REDIS_URL pointing at it.
 redis:
   enabled: false
   name: fandb-redis
-  image: redis:7-alpine
+  # Docker Hub's official image through AWS's mirror: no Docker Hub rate limit or egress.
+  image: public.ecr.aws/docker/library/redis:7-alpine
   port: 6379
+  password: ''
 
 # Schema migration and seeding, run as Helm hooks before the Deployments roll. Both use the
 # migrate image, which carries the Prisma CLI, the schema and the seed scripts.

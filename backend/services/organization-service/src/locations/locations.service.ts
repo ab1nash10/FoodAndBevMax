@@ -156,6 +156,10 @@ export class LocationsService {
       }
 
       if (dto.isActive !== undefined) {
+        if (dto.isActive && dto.hospitalId === undefined && !existing.hospital.isActive) {
+          throw new BadRequestException('Location is inactive. Area cannot be activated.');
+        }
+
         data.isActive = dto.isActive;
       }
 

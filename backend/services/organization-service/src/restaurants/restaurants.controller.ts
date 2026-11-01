@@ -93,6 +93,7 @@ export class RestaurantsController {
       data: await this.restaurants.update(id, body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
+        roles: user?.roles,
       }),
       message: 'Success',
       success: true,

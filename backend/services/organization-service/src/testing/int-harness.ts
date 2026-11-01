@@ -56,6 +56,8 @@ export interface Harness {
   rawQuery<T>(sql: string, ...values: unknown[]): Promise<T[]>;
   signFor(user: { id: string; sessionVersion: number }): string;
   superAdmin: { id: string; sessionVersion: number };
+  /** Sent with /pos/ calls once set, as a till's browser sends its key (X-Till-Key). */
+  tillKey?: string;
   token: string;
 }
 
@@ -95,7 +97,7 @@ export async function startHarness(): Promise<Harness> {
   const { AppModule } = await import('../app.module.js');
   const { PrismaService } = await import('../common/prisma/prisma.service.js');
 
-  const app = await NestFactory.create(AppModule, { logger: false });
+  const app = await NestFactory.create(AppModule, { logger: false, rawBody: true });
   const config = app.get(ConfigService);
   configureSecurityBaseline(app, config, {
     serviceName: 'organization-service',
@@ -117,6 +119,7 @@ export async function startHarness(): Promise<Harness> {
       body: body === undefined ? undefined : JSON.stringify(body),
       headers: {
         ...(as ? { authorization: `Bearer ${as}` } : {}),
+        ...(harness.tillKey && path.startsWith('/pos/') ? { 'x-till-key': harness.tillKey } : {}),
         'content-type': 'application/json',
       },
       method,
@@ -126,7 +129,7 @@ export async function startHarness(): Promise<Harness> {
     return { body: json, data: (json.data ?? {}) as Body, status: response.status };
   };
 
-  return {
+  const harness: Harness = {
     api,
     app,
     baseUrl,
@@ -142,4 +145,5 @@ export async function startHarness(): Promise<Harness> {
     superAdmin,
     token,
   };
+  return harness;
 }

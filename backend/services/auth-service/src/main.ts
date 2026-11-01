@@ -1,11 +1,15 @@
 import 'reflect-metadata';
 import { configureSecurityBaseline } from '@aahar/auth';
+import { installProcessHandlers } from '@aahar/logging';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+// A crash is logged as one fatal JSON line before the process exits.
+installProcessHandlers();
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const config = app.get(ConfigService);
   const port = Number(config.get<string>('PORT') ?? 4001);
   // Unset = Node's default: every address, IPv6 and IPv4. Binding 0.0.0.0 alone made each new

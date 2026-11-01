@@ -17,6 +17,7 @@ import {
   IsInt,
   IsNumber,
   IsOptional,
+  IsNotEmpty,
   IsString,
   IsUUID,
   Matches,
@@ -45,6 +46,14 @@ export class EnrollTillDto {
   @ApiProperty({ description: 'The POS device this computer is the till of.' })
   @IsUUID()
   posDeviceId!: string;
+
+  @ApiProperty({
+    description: 'This computer’s name, as Windows shows it; must be the device’s Host Name.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  computerName!: string;
 }
 
 export class PosMenuQueryDto {
@@ -158,7 +167,8 @@ export class CreatePosOrderDto {
   kioskOrderId?: string;
 
   @ApiPropertyOptional({
-    description: 'A paid online UPI payment (Razorpay, PayU) for exactly this bill: used once.',
+    description:
+      'A paid online payment (UPI through Razorpay or PayU, a card on the Pine Labs machine) for exactly this bill: used once. Required for UPI where Razorpay or PayU is set up and the restaurant has no own UPI ID, and for cards at a counter with a Pine Labs machine.',
   })
   @IsOptional()
   @IsUUID()

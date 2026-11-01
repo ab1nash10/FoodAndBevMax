@@ -9,7 +9,7 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
-import type { ActorContext } from '../common/request-context';
+import { assertMayChangeLegalEntity, type ActorContext } from '../common/request-context';
 import { CreatePosDeviceDto } from './dto/create-pos-device.dto';
 import { ListPosDevicesQueryDto } from './dto/list-pos-devices-query.dto';
 import { UpdatePosDeviceDto } from './dto/update-pos-device.dto';
@@ -233,6 +233,9 @@ export class PosDevicesService {
         }
 
         if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          // Resending the current entity, as the form does on every save, needs no Super Admin.
+          assertMayChangeLegalEntity(context);
+
           if (dto.legalEntityId) {
             await assertActiveLegalEntity(tx, dto.legalEntityId);
           }
