@@ -6,13 +6,13 @@ import { useToast } from '@/components/toast-provider';
 import { Field, Input, Select, Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { recordHref } from '@/lib/navigation';
-import type { RestaurantInput } from '@aahar/api-client';
+import type { LegalEntity, RestaurantInput } from '@aahar/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@aahar/ui';
 import { BadgePercent, Clock3, Utensils } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useForm, type Path } from 'react-hook-form';
+import { useForm, type Path, type UseFormReturn } from 'react-hook-form';
 import { SectionHeading } from '@/components/organization/shared/list-controls';
 import {
   CheckboxLine,
@@ -42,6 +42,25 @@ import { restaurantDetailQuery } from '@/lib/detail-queries';
 
 const requiredFields = restaurantSchema.pick({ hospitalId: true, restaurantName: true });
 
+/** Sets the restaurant's entity and fills its GST details from it; they stay editable. */
+function chooseEntity(
+  form: UseFormReturn<RestaurantFormValues>,
+  entityId: string,
+  entities: LegalEntity[] | undefined,
+) {
+  const filled = { shouldDirty: true, shouldValidate: true };
+  const entity = entities?.find((option) => option.id === entityId);
+
+  form.setValue('legalEntityId', entityId, filled);
+
+  if (entity) {
+    form.setValue('legalName', entity.entityName, filled);
+    form.setValue('gstNumber', entity.gstNumber, filled);
+    form.setValue('address', entity.entityAddress, filled);
+    form.setValue('isRegisteredInGst', true, filled);
+  }
+}
+
 function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: string }>) {
   const isEditMode = Boolean(restaurantId);
   const { isAllLocations, scopedHospitalId } = useLocationContext();
@@ -56,6 +75,9 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
   const hospitalOptionsQuery = useHospitalOptions();
   const legalEntitiesQuery = useLegalEntityOptions();
   const legalEntityField = form.register('legalEntityId');
+  // A restaurant bills under its location's entity unless another one is chosen.
+  const locationEntityId = (id: string) =>
+    hospitalOptionsQuery.data?.find((hospital) => hospital.id === id)?.legalEntityId ?? '';
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();
@@ -97,6 +119,16 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
       form.setValue('hospitalId', scopedHospitalId, { shouldValidate: true });
     }
   }, [form, isEditMode, scopedHospitalId]);
+
+  // A new restaurant starts with its location's entity, also when the scope picked the location
+  // (no change event) or the locations loaded after it was picked.
+  const startingEntityId = isEditMode ? '' : locationEntityId(hospitalId);
+
+  useEffect(() => {
+    if (startingEntityId && !form.getValues('legalEntityId')) {
+      chooseEntity(form, startingEntityId, legalEntitiesQuery.data);
+    }
+  }, [form, legalEntitiesQuery.data, startingEntityId]);
 
   useEffect(() => {
     return () => {
@@ -274,7 +306,23 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               <Select
                 disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
                 id="restaurant-location"
-                {...form.register('hospitalId')}
+                {...form.register('hospitalId', {
+                  // The entity follows the location, unless another one was chosen.
+                  onChange: (event: ChangeEvent<HTMLSelectElement>) => {
+                    const entityId = form.getValues('legalEntityId');
+
+                    if (!entityId || entityId === locationEntityId(hospitalId)) {
+                      chooseEntity(
+                        form,
+                        locationEntityId(event.target.value),
+                        legalEntitiesQuery.data,
+                      );
+                    }
+                  },
+                })}
+                // Controlled: a scoped location is set before its option loads, which left the
+                // select showing "Select location".
+                value={hospitalId}
               >
                 <option value="">Select location</option>
                 {hospitalOptionsQuery.data?.map((hospital) => (
@@ -379,22 +427,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               id="restaurant-legal-entity"
               value={form.watch('legalEntityId')}
               {...legalEntityField}
-              onChange={(event) => {
-                void legalEntityField.onChange(event);
-                // Choosing an entity fills its GST details; they stay editable.
-                const entity = legalEntitiesQuery.data?.find(
-                  (option) => option.id === event.target.value,
-                );
-
-                if (entity) {
-                  const filled = { shouldDirty: true, shouldValidate: true };
-
-                  form.setValue('legalName', entity.entityName, filled);
-                  form.setValue('gstNumber', entity.gstNumber, filled);
-                  form.setValue('address', entity.entityAddress, filled);
-                  form.setValue('isRegisteredInGst', true, filled);
-                }
-              }}
+              onChange={(event) => chooseEntity(form, event.target.value, legalEntitiesQuery.data)}
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">

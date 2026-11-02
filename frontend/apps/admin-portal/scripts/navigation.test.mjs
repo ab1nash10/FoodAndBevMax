@@ -172,6 +172,8 @@ const redirects = new Set([
   // Now tabs of /masters/item-mapping.
   '/masters/kitchen-items',
   '/masters/store-items',
+  // Now Logs → Activity Logs.
+  '/reports/audit',
 ]);
 const known = new Set([
   ...navigationGroups.flatMap((group) => group.items.map((page) => page.href)),
@@ -213,6 +215,7 @@ const kitchenTransfers = (permission) => [permission].flat().includes('KITCHEN_T
 assert.equal(canOpenPath('/inventory/transfers', kitchenTransfers), true);
 assert.equal(canOpenPath(`/inventory/transfers/${id}/acknowledge`, kitchenTransfers), true);
 assert.equal(canOpenPath('/dashboard', none), true);
-assert.equal(canOpenPath('/not/registered', none), true);
+// A screen not registered here stays closed, so a forgotten one never opens for everybody.
+assert.equal(canOpenPath('/not/registered', none), false);
 
 console.log('navigation ok');

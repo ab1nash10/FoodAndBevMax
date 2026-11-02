@@ -316,9 +316,10 @@ export class PosService {
         'This POS device has no Host Name yet. Add the till computer’s name to it under POS & Payment Machines first.',
       );
     }
+    // Never name the expected computer: whoever typed a wrong name learns nothing from it.
     if (shortName(computerName) !== shortName(device.hostName)) {
       throw new BadRequestException(
-        `This computer (${computerName.trim()}) is not ${device.hostName}, the computer this POS device names. Set it up on that computer, or correct the device’s Host Name.`,
+        'This computer’s name doesn’t match the POS device’s Host Name. Set the till up on that computer, or check the Host Name under POS & Payment Machines.',
       );
     }
 
