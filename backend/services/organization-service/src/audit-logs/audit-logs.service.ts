@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { AuditLogQueryDto } from './dto/audit-log-query.dto';
+import { recordNames } from './record-names';
 
 /** A CSV export stops here; narrow the filters for more. */
 export const EXPORT_ROW_LIMIT = 100_000;
@@ -28,7 +29,10 @@ const auditSelect = {
   userId: true,
 } satisfies Prisma.AuditLogSelect;
 
-type AuditRow = Prisma.AuditLogGetPayload<{ select: typeof auditSelect }>;
+type AuditRow = Prisma.AuditLogGetPayload<{ select: typeof auditSelect }> & {
+  /** The record's name today (an item, a POS device, a bill number); null when it has none. */
+  recordName?: string | null;
+};
 
 /** Newest first; the cursor is the last row's (createdAt, id). */
 export function encodeCursor(row: { createdAt: Date; id: string }): string {
@@ -104,6 +108,7 @@ const CSV_COLUMNS: Array<[string, (row: AuditRow) => unknown]> = [
   ['action', (row) => row.action],
   ['entityName', (row) => row.entityName],
   ['entityId', (row) => row.entityId],
+  ['recordName', (row) => row.recordName],
   ['summary', (row) => row.summary],
   ['user', (row) => row.user?.name ?? row.userId],
   ['actorRole', (row) => row.actorRole],
@@ -137,7 +142,12 @@ export class AuditLogsService {
       take: limit + 1,
       where: auditWhere(query, allowed),
     });
-    const items = rows.slice(0, limit);
+    const page = rows.slice(0, limit);
+    const names = await recordNames(this.prisma, page);
+    const items = page.map((row) => ({
+      ...row,
+      recordName: names.get(`${row.entityName}:${row.entityId}`) ?? null,
+    }));
     const last = items[items.length - 1];
 
     return { items, nextCursor: rows.length > limit && last ? encodeCursor(last) : null };

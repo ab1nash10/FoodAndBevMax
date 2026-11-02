@@ -15,7 +15,7 @@ export interface ErpBill extends Bill {
   paymentReference: string | null;
 }
 
-const HEADERS = [
+export const HEADERS = [
   'SUN_BU',
   'JRNAL_TYPE',
   'LEDGER',

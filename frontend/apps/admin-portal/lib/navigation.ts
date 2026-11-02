@@ -27,6 +27,7 @@ import {
   PackageOpen,
   Receipt,
   ScrollText,
+  Send,
   ShieldCheck,
   Store,
   Sun,
@@ -52,6 +53,7 @@ export type NavGroupLabel =
   | 'Inventory'
   | 'Item & Menu Setup'
   | 'Kitchen Operations'
+  | 'Logs'
   | 'Organization'
   | 'Overview'
   | 'Point of Sale'
@@ -369,6 +371,20 @@ export const navigationGroups: NavGroup[] = [
     section: 'Operations',
   },
   {
+    icon: ScrollText,
+    items: [
+      { href: '/logs/erp', icon: Send, label: 'ERP Posting', permissions: ['REPORT_ERP'] },
+      {
+        href: '/logs/activity',
+        icon: History,
+        label: 'Activity Logs',
+        permissions: ['AUDIT_LOG_VIEW'],
+      },
+    ],
+    label: 'Logs',
+    section: 'Operations',
+  },
+  {
     icon: ShieldCheck,
     items: [
       { href: '/users', icon: UsersRound, label: 'Users / Roles', permissions: ['USER_VIEW'] },
@@ -387,13 +403,6 @@ export const navigationGroups: NavGroup[] = [
         icon: ShieldCheck,
         label: 'Permissions',
         permissions: ['PERMISSION_VIEW'],
-      },
-      {
-        hidden: true,
-        href: '/reports/audit',
-        icon: ScrollText,
-        label: 'Audit Logs',
-        permissions: ['AUDIT_LOG_VIEW'],
       },
     ],
     label: 'Access',
@@ -591,7 +600,10 @@ export function homeHref(hasPermission: HasPermission, startPage?: string | null
   return '/dashboard';
 }
 
-/** Whether the user may open this in-app path (an unknown path is not blocked). */
+/**
+ * Whether the user may open this in-app path. A path that is neither a page nor a sub-route is
+ * refused, so a new screen stays closed until it is given its permissions here.
+ */
 export function canOpenPath(href: string, hasPermission: HasPermission): boolean {
   const path = href.split('?')[0]?.replace(/\/+$/, '') || '/';
   const page = findPage(path);
@@ -602,7 +614,7 @@ export function canOpenPath(href: string, hasPermission: HasPermission): boolean
 
   const route = subRoutes.find((candidate) => matchPattern(candidate.pattern, path));
 
-  return route ? canOpen(route.permissions, hasPermission) : true;
+  return route ? canOpen(route.permissions, hasPermission) : false;
 }
 
 /**

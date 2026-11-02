@@ -151,6 +151,7 @@ const defaultPermissions = [
   ['REPORT_IHC', 'REPORT', 'IHC', 'Export the complimentary (In-House Consumption) reports'],
   ['REPORT_UNPAID', 'REPORT', 'UNPAID', 'Export the Unpaid Bills Report'],
   ['REPORT_ERP', 'REPORT', 'ERP', 'Export the ERP (SUN) journal'],
+  ['ERP_POSTING_SEND', 'ERP_POSTING', 'SEND', "Send a restaurant's day to the ERP"],
   [
     'RESTAURANT_STOCK_VIEW',
     'RESTAURANT_STOCK',
@@ -259,7 +260,11 @@ async function main() {
 
     await tx.rolePermission.createMany({
       data: permissions
-        .filter((permission) => !permission.code.endsWith('_DELETE'))
+        // Posting to the ERP is a finance decision: Super Admin only until granted on purpose.
+        .filter(
+          (permission) =>
+            !permission.code.endsWith('_DELETE') && permission.code !== 'ERP_POSTING_SEND',
+        )
         .map((permission) => ({
           permissionId: permission.id,
           roleId: admin.id,

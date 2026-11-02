@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
-import { homeHref } from './navigation';
+import { readdirSync } from 'node:fs';
+import { join, sep } from 'node:path';
+import { canOpenPath, homeHref } from './navigation';
 
 const holding =
   (...codes: string[]) =>
@@ -22,4 +24,14 @@ test('a saved start page wins only while the user may still open it', () => {
   expect(homeHref(cashier, '/dashboard')).toBe('/dashboard');
   expect(homeHref(cashier, '/inventory/grns')).toBe('/pos/billing');
   expect(homeHref(cashier, null)).toBe('/pos/billing');
+});
+
+test('a user with no permissions can open no screen but the dashboard, typed URLs included', () => {
+  const root = join(__dirname, '..', 'app', '(dashboard)');
+  const routes = (readdirSync(root, { recursive: true }) as string[])
+    .filter((file) => file.endsWith(`${sep}page.tsx`))
+    .map((file) => `/${file.split(sep).slice(0, -1).join('/')}`.replace(/\[[^\]]+\]/g, 'x1'));
+
+  expect(routes.length).toBeGreaterThan(50);
+  expect(routes.filter((route) => canOpenPath(route, () => false))).toEqual(['/dashboard']);
 });

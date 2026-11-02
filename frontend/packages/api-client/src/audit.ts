@@ -17,6 +17,8 @@ export interface AuditRow {
   locationId: string | null;
   newValue: unknown;
   oldValue: unknown;
+  /** The record's name today (an item, a POS device, a bill number); null when it has none. */
+  recordName?: string | null;
   requestId: string | null;
   source: string | null;
   summary: string | null;

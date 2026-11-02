@@ -3,6 +3,7 @@ import {
   createApiClient,
   createAuditApi,
   createAuthApi,
+  createErpPostingsApi,
   createOrganizationApi,
   createReportsApi,
   createUserApi,
@@ -115,6 +116,13 @@ export const reportsApi = createReportsApi({
 });
 
 export const auditApi = createAuditApi({
+  baseUrl: apiConfig.organizationBaseUrl,
+  getAccessToken: getStoredAccessToken,
+  onUnauthorized: handleUnauthorizedSession,
+  refreshAccessToken: refreshStoredSession,
+});
+
+export const erpPostingsApi = createErpPostingsApi({
   baseUrl: apiConfig.organizationBaseUrl,
   getAccessToken: getStoredAccessToken,
   onUnauthorized: handleUnauthorizedSession,

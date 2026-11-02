@@ -1425,6 +1425,39 @@ model GrnEntry {
 
 /// X-Nonce of each signed ERP request in the last few minutes, so a captured request cannot be
 /// sent again.
+/// Each time an admin sends a restaurant's day to the ERP's revenue API: what was sent (the ERP
+/// Journal (SUN) report, and the request without its token) and what came back.
+model ErpPosting {
+  id             String           @id @default(uuid()) @map("erp_posting_id") @db.Uuid
+  hospitalId     String           @map("hospital_id") @db.Uuid
+  restaurantId   String           @map("restaurant_id") @db.Uuid
+  businessDate   DateTime         @map("business_date") @db.Date
+  status         ErpPostingStatus @default(PENDING)
+  billCount      Int              @default(0) @map("bill_count")
+  rowCount       Int              @default(0) @map("row_count")
+  report         Json?
+  requestBody    String?          @map("request_body")
+  responseStatus Int?             @map("response_status")
+  responseBody   String?          @map("response_body")
+  error          String?
+  durationMs     Int?             @map("duration_ms")
+  sentBy         String?          @map("sent_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  @@index([hospitalId, createdAt(sort: Desc)])
+  @@index([restaurantId, businessDate])
+  @@map("erp_postings")
+}
+
+/// PENDING while the ERP has not answered; EMPTY when the day had no bills (nothing was sent).
+enum ErpPostingStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EMPTY
+}
+
 model ErpRequestNonce {
   nonce     String   @id
   createdAt DateTime @default(now()) @map("created_at")

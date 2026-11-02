@@ -342,7 +342,7 @@ docs: clarify local database setup
 
 ## UI
 
-The admin portal follows the mockups in `design-reference/`. `design-reference/PROGRESS.md`
+The admin portal follows the mockups in `design-reference/`. `notes/PROGRESS.md`
 records what each screen does, the decisions behind it, and what still needs an API.
 
 - **Colours are tokens.** Use the `ds-*` Tailwind colours (`bg-ds-surface`, `text-ds-muted`,
@@ -378,7 +378,7 @@ The TV above a collection counter shows which orders are being prepared and whic
 Orders reach it from any channel: a POS (with its device's order key, under POS & Payment
 Machines) or a kiosk, QR ordering or another app (with the restaurant's order key, under
 Restaurants → Activity), all through `POST /api/v1/orders`. The kitchen moves them along in
-Restaurants → Activity. See `BOARD-PROGRESS.md` for the design decisions.
+Restaurants → Activity. See `notes/BOARD-PROGRESS.md` for the design decisions.
 
 **Link.** Restaurants → Activity → Copy link gives
 `https://<host>/fandb/board/<restaurantId>?token=<board secret>`. No sign-in: the secret is the

@@ -1,5 +1,6 @@
-import { AuditLogPageClient } from '@/components/audit/audit-log-page';
+import { redirect } from 'next/navigation';
 
-export default function AuditPage() {
-  return <AuditLogPageClient />;
+// Audit Logs moved to Logs → Activity Logs; old links and bookmarks land there.
+export default function AuditLogsMoved() {
+  redirect('/logs/activity');
 }

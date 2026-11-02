@@ -17,25 +17,35 @@ import type { ActiveFilter } from '@/components/pos/shared/types';
 
 type PosTab = 'counters' | 'devices' | 'payments';
 
+const allTabs: Array<{ id: PosTab; label: string; permission: string }> = [
+  { id: 'devices', label: 'POS Devices', permission: 'POS_DEVICE_VIEW' },
+  { id: 'payments', label: 'Payment Machines', permission: 'PAYMENT_MACHINE_VIEW' },
+  { id: 'counters', label: 'Counters', permission: 'COUNTER_VIEW' },
+];
+
+/** The tab to show: the asked one if its permission is held, else the first one that is. */
+export function posTabFor(asked: PosTab, hasPermission: (code: string) => boolean): PosTab {
+  const allowed = allTabs.filter((tab) => hasPermission(tab.permission));
+
+  return allowed.find((tab) => tab.id === asked)?.id ?? allowed[0]?.id ?? 'devices';
+}
+
 export function PosMasterPageClient() {
   const { hasPermission } = useAuth();
-  const canViewCounters = hasPermission('COUNTER_VIEW');
   const { scopedHospitalId } = useLocationContext();
   const [urlTab, setActiveTab] = useUrlParam<PosTab>('tab', 'devices', [
     'counters',
     'devices',
     'payments',
   ]);
-  // Without COUNTER_VIEW a Counters link falls back to the devices.
-  const activeTab = urlTab === 'counters' && !canViewCounters ? 'devices' : urlTab;
+  // A typed ?tab= the user lacks the permission for falls back to one they hold.
+  const activeTab = posTabFor(urlTab, hasPermission);
+  const canViewDevices = hasPermission('POS_DEVICE_VIEW');
+  const canViewMachines = hasPermission('PAYMENT_MACHINE_VIEW');
   const [activeFilter] = useUrlParam<ActiveFilter>('status', '', ['active', 'inactive']);
   const tabs = useMemo(
-    () => [
-      { id: 'devices' as const, label: 'POS Devices' },
-      { id: 'payments' as const, label: 'Payment Machines' },
-      ...(canViewCounters ? [{ id: 'counters' as const, label: 'Counters' }] : []),
-    ],
-    [canViewCounters],
+    () => allTabs.filter((tab) => hasPermission(tab.permission)),
+    [hasPermission],
   );
   const scope = scopedHospitalId ?? 'all';
 
@@ -54,6 +64,7 @@ export function PosMasterPageClient() {
 
       return { all, inactive };
     },
+    enabled: canViewDevices,
     queryKey: queryKeys.posDevices('stats', scope),
   });
   const machineStatsQuery = useQuery({
@@ -70,6 +81,7 @@ export function PosMasterPageClient() {
 
       return { all, inactive };
     },
+    enabled: canViewMachines,
     queryKey: queryKeys.paymentMachines('stats', scope),
   });
   const devices = deviceStatsQuery.data;
@@ -112,6 +124,7 @@ export function PosMasterPageClient() {
             label: 'POS devices',
             onSelect: () => show('devices', ''),
             share: devices?.all ? 1 : undefined,
+            tab: 'devices' as const,
             value: devices?.all ?? '–',
           },
           {
@@ -119,25 +132,28 @@ export function PosMasterPageClient() {
             label: 'Payment machines',
             onSelect: () => show('payments', ''),
             share: machines?.all ? 1 : undefined,
+            tab: 'payments' as const,
             value: machines?.all ?? '–',
           },
           {
             active: activeTab === 'devices' && activeFilter === 'inactive',
             label: 'Inactive devices',
             onSelect: () => show('devices', 'inactive'),
-            tone: 'pending',
+            tone: 'pending' as const,
             share: devices?.all ? devices.inactive / devices.all : undefined,
+            tab: 'devices' as const,
             value: devices?.inactive ?? '–',
           },
           {
             active: activeTab === 'payments' && activeFilter === 'inactive',
             label: 'Inactive machines',
             onSelect: () => show('payments', 'inactive'),
-            tone: 'pending',
+            tone: 'pending' as const,
             share: machines?.all ? machines.inactive / machines.all : undefined,
+            tab: 'payments' as const,
             value: machines?.inactive ?? '–',
           },
-        ]}
+        ].filter(({ tab }) => tabs.some((shown) => shown.id === tab))}
       />
       <Panel className="p-2">
         <div className="flex flex-wrap gap-2">

@@ -25,15 +25,15 @@ import { useToast } from '@/components/toast-provider';
 import { Input, Panel, Select } from '@/components/ui';
 import { FilterSearch } from '@/components/ui-controls';
 import { auditApi, getApiErrorMessage } from '@/lib/api';
-import { auditEntities, dayRange, entityLabel } from '@/lib/audit';
-import { downloadCsvText } from '@/lib/csv';
+import { auditCsvToReport, auditEntities, dayRange, entityLabel } from '@/lib/audit';
 import { queryKeys } from '@/lib/query-keys';
+import { downloadReportExcel } from '@/lib/report-excel';
 import { useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
 
 /**
- * Who changed what, newest first: filter by record type, action, day range and summary text
- * (the top-bar location scopes it), open a row for the fields it changed, export as CSV.
+ * Who changed what, newest first: filter by log type, action, day range and summary text
+ * (the top-bar location scopes it), open a row for the fields it changed, export to Excel.
  */
 export function AuditLogPageClient() {
   const { showToast } = useToast();
@@ -73,15 +73,15 @@ export function AuditLogPageClient() {
     });
   }
 
-  async function exportCsv() {
+  async function exportExcel() {
     setIsExporting(true);
     try {
-      const csv = await auditApi.exportAuditLogs(filters);
-      downloadCsvText(`audit-log-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+      // The server streams CSV (and records the export); the sheet is written here.
+      await downloadReportExcel(auditCsvToReport(await auditApi.exportAuditLogs(filters)));
     } catch (error) {
       showToast({
         description: getApiErrorMessage(error),
-        title: 'The CSV was not exported',
+        title: 'The Excel file was not exported',
         variant: 'error',
       });
     } finally {
@@ -95,7 +95,7 @@ export function AuditLogPageClient() {
         action={
           <Button
             disabled={isExporting || rows.length === 0}
-            onClick={() => void exportCsv()}
+            onClick={() => void exportExcel()}
             type="button"
             variant="outline"
           >
@@ -104,12 +104,12 @@ export function AuditLogPageClient() {
             ) : (
               <Download aria-hidden="true" className="h-4 w-4" />
             )}
-            Export CSV
+            Export Excel
           </Button>
         }
         description="Who changed what and when: deliveries, transfers, production, masters, users and sign-ins."
-        eyebrow="Reports"
-        title="Audit Logs"
+        eyebrow="Logs"
+        title="Activity Logs"
       />
       <Panel aria-label="Audit log" className="overflow-hidden" role="region">
         <ListToolbar>
@@ -120,9 +120,9 @@ export function AuditLogPageClient() {
             value={searchInput}
           />
           <FiltersMenu activeCount={activeFilters}>
-            <FilterField label="Record type">
+            <FilterField label="Log type">
               <Select onChange={(event) => setEntityName(event.target.value)} value={entityName}>
-                <option value="">All records</option>
+                <option value="">All log types</option>
                 {auditEntities.map((entity) => (
                   <option key={entity.value} value={entity.value}>
                     {entity.label}
@@ -237,15 +237,24 @@ export function AuditLogPageClient() {
                           <ActionChip action={row.action} />
                         </td>
                         <td className={cn(tableStyles.td, tableStyles.phoneHidden)}>
-                          <span className="block truncate text-ds-text-2">
+                          <span className="block truncate text-[12px] text-ds-muted">
                             {entityLabel(row.entityName)}
                           </span>
-                          <span
-                            className={cn('block truncate', tableStyles.code)}
-                            title={row.entityId}
-                          >
-                            {row.entityId}
-                          </span>
+                          {row.recordName ? (
+                            <span
+                              className="block truncate font-semibold text-ds-text"
+                              title={row.recordName}
+                            >
+                              {row.recordName}
+                            </span>
+                          ) : (
+                            <span
+                              className={cn('block truncate', tableStyles.code)}
+                              title={row.entityId}
+                            >
+                              {row.entityId}
+                            </span>
+                          )}
                         </td>
                         <td
                           className={cn(tableStyles.td, tableStyles.phoneHidden, 'text-ds-text-2')}
@@ -280,6 +289,7 @@ export function AuditLogPageClient() {
                               <span className="font-semibold text-ds-text">{auditActor(row)}</span>
                               {row.actorRole ? ` · ${row.actorRole}` : null} ·{' '}
                               {entityLabel(row.entityName)}
+                              {row.recordName ? ` ${row.recordName}` : null}
                               {row.summary ? ` · ${row.summary}` : null}
                             </p>
                             <AuditChanges row={row} />

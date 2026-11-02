@@ -57,6 +57,9 @@ exports[`every prefix stays as it is 1`] = `
   "employees": [
     "employees",
   ],
+  "erpPostings": [
+    "erp-postings",
+  ],
   "globalLocationContextActiveLocations": [
     "global-location-context",
     "active-locations",

@@ -50,7 +50,7 @@ slotEndsAt?: string; serverTime: string; orders: BoardOrder[] };
   seconds and disappear after "collection", so every state can be seen.
 - api adapter: first search the repo for an existing orders, KOT or POS endpoint and map it to
   BoardFeed. If none exists, keep DATA_SOURCE=mock, write the needed endpoint contract under
-  "TODO(api)" in BOARD-PROGRESS.md, and don't invent backend tables.
+  "TODO(api)" in notes/BOARD-PROGRESS.md, and don't invent backend tables.
 - Board rules, computed on the client from serverTime (not the TV's clock):
   - NOW READY = the most recent READY order.
   - Ready tiles = the other READY orders, newest first. Each shows "Ready n min ago"; after
@@ -98,7 +98,7 @@ and a README section on setting up a TV in Chrome kiosk mode.
 
 # LOOP — repeat until every task is [x] or [blocked]
 
-1. Open BOARD-PROGRESS.md at the repo root. If it doesn't exist, create it with B0–B10 as [ ],
+1. Open notes/BOARD-PROGRESS.md. If it doesn't exist, create it with B0–B10 as [ ],
    plus "Decisions", "TODO(api)", "Blocked" sections.
 2. Take the first [ ] task and write a 3–5 line plan.
 3. Re-read the matching part of OrderBoard.dc.html and the code you'll touch.

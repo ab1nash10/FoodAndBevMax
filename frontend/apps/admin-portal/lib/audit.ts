@@ -1,4 +1,5 @@
-import type { AuditRow } from '@aahar/api-client';
+import type { AuditRow, ReportResult } from '@aahar/api-client';
+import { parseCsv } from './csv';
 
 /** The record types the audit log knows, in the order the filter lists them. */
 const entityNames: Record<string, string> = {
@@ -14,7 +15,14 @@ const entityNames: Record<string, string> = {
   stores: 'Store',
   kitchens: 'Kitchen',
   restaurants: 'Restaurant',
+  restaurant_staff_discounts: 'Restaurant discount',
+  employee_discounts: 'Employee discount',
   counters: 'Counter',
+  counter_shifts: 'Counter shift',
+  pos_devices: 'POS device',
+  payment_machines: 'Payment machine',
+  time_slots: 'Time slot',
+  legal_entities: 'Legal entity',
   hospitals: 'Hospital',
   locations: 'Location',
   employees: 'Employee',
@@ -23,6 +31,7 @@ const entityNames: Record<string, string> = {
   online_payments: 'Online payment',
   kiosk_orders: 'Kiosk order',
   restaurant_orders: 'Restaurant order',
+  erp_postings: 'ERP posting',
   auth_sessions: 'Sign-in session',
   audit_logs: 'Audit log',
 };
@@ -169,4 +178,29 @@ export function dayRange(from: string, to: string): { from?: string; to?: string
     return new Date(year!, month! - 1, date! + addDays).toISOString();
   };
   return { from: from ? midnight(from) : undefined, to: to ? midnight(to, 1) : undefined };
+}
+
+/**
+ * The server's CSV export as a plain sheet for the Excel writer: one heading row (in words),
+ * then the rows as exported. The export itself is still recorded on the server.
+ */
+export function auditCsvToReport(csv: string, generatedAt = new Date()): ReportResult {
+  const [header = [], ...body] = parseCsv(csv);
+  const at = generatedAt.toISOString();
+
+  return {
+    code: 'activity-logs',
+    columns: header.map((key) => ({ key, kind: 'text', label: fieldLabel(key) })),
+    from: at,
+    generatedAt: at,
+    location: '',
+    plain: true,
+    restaurants: [],
+    rows: body.map((cells) =>
+      Object.fromEntries(header.map((key, index) => [key, cells[index] ?? ''])),
+    ),
+    title: 'Activity Logs',
+    to: at,
+    totals: null,
+  };
 }

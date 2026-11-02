@@ -53,3 +53,6 @@ Master Module Template.zip
 
 # Load-test runs: hold the LOADTEST users' password and a live till key.
 scripts/loadtest/results/
+
+# One-off screenshots from browser checks: keep them out of the repo root.
+/*.png

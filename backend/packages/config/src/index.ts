@@ -36,6 +36,11 @@ const serviceEnvSchema = z
     // registration with the Mail.Send application permission. All four are needed; with any
     // missing, email OTP sign-in works only in development with ALLOW_DEV_OTP (fixed code 000000)
     // and is refused elsewhere. The client secret is a secret.
+    // Sending a restaurant's day to the ERP's revenue API (organization-service), e.g.
+    // https://iwebmax.maxhealthcare.in/MaxLabEMS/api/fnb/revenue. Both are needed; unset, the
+    // ERP Posting screen says sending is not set up. The token is a secret.
+    ERP_REVENUE_TOKEN: z.string().optional(),
+    ERP_REVENUE_URL: z.union([z.literal(''), z.string().url()]).optional(),
     MAIL_CLIENT_ID: z.string().optional(),
     MAIL_CLIENT_SECRET: z.string().optional(),
     MAIL_SENDER: z.string().optional(),

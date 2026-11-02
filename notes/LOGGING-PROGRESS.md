@@ -197,7 +197,7 @@ Totals: 106 write endpoints, 99 audited
 - L6: organization-service `grns/grns.service.ts`, `transfer-acknowledgements/…service.ts`, `kitchen-productions/…service.ts`, `pos/{kiosk,online-payments}.service.ts`, `restaurant-orders/…service.ts`, `common/audit/audit-summary.ts(+spec)`, `audit-trail.int.spec.ts`; user-service `preferences/preferences.service.ts(+spec)`
 - L7: `backend/packages/auth/src/{permission-denied.ts(+test),rbac.guard.ts,hospital-scope.guard.ts}`, auth-service `auth.service.ts`, `services/otp.service.ts`
 - L8: organization-service `src/audit-logs/**`, `app.module.ts`
-- L10/L12: `docs/logging.md`, `LOGGING-PROGRESS.md`
+- L10/L12: `docs/logging.md`, `notes/LOGGING-PROGRESS.md`
 - L11: `frontend/packages/api-client/src/{audit.ts,audit.test.ts,index.ts}`, `frontend/apps/admin-portal/{lib/audit.ts,lib/audit.test.ts,lib/api.ts,lib/query-keys.ts(+snapshot),lib/csv.ts,components/audit/**,app/(dashboard)/reports/audit/page.tsx,components/inventory/transfers/transfer-details.tsx,components/inventory/grns/grn-verification-view.tsx,components/kitchen/productions/production-entry-page.tsx}`
 
 ## Decisions

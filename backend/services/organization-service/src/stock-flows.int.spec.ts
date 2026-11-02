@@ -1278,7 +1278,7 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
   });
 
   // Dates are kept as UTC calendar days whatever the server's zone: these used to land a day early
-  // east of UTC (Bugs found in OPTIMIZE-PROGRESS.md).
+  // east of UTC (Bugs found in notes/OPTIMIZE-PROGRESS.md).
   describe('on a server east of UTC', () => {
     async function inKolkata(check: () => Promise<void>) {
       process.env.TZ = 'Asia/Kolkata';
