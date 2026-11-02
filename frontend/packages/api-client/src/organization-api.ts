@@ -551,6 +551,13 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'PATCH',
       });
     },
+    /** Closes a shift whose counter no till reaches (admins only), with a reason. */
+    endPosShiftWithoutTill(id: string, body: { countedCash?: number; reason: string }) {
+      return client.request<ApiResponse<PosShift>>(`/pos/shifts/${id}/end-without-till`, {
+        body,
+        method: 'PATCH',
+      });
+    },
     closePosDay(counterId: string, date?: string) {
       return client.request<
         ApiResponse<{ businessDate: string; closedAt: string; closedByName: string | null }>

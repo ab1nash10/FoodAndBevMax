@@ -44,9 +44,16 @@ export class PosController {
     summary: 'Counters the signed-in user may bill at; with till, only this browser’s till’s',
   })
   @ApiOkResponse({ description: 'Counters returned.' })
-  async counters(@Query() query: PosCountersQueryDto, @Req() request: RequestContextLike) {
+  async counters(
+    @Query() query: PosCountersQueryDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
     return {
-      data: await this.pos.counters(query.till ? (tillKeyOf(request) ?? '') : undefined),
+      data: await this.pos.counters(
+        query.till ? (tillKeyOf(request) ?? '') : undefined,
+        getActorId(user),
+      ),
       message: 'Success',
       success: true,
     };

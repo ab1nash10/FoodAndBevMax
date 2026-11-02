@@ -86,9 +86,10 @@ export class CountersService {
       }),
       this.counters.count({ where }),
     ]);
+    const shifts = await this.counters.shiftsAndTills(items);
 
     return {
-      items: items.map(toCounterResponse),
+      items: items.map((counter) => ({ ...toCounterResponse(counter), ...shifts.get(counter.id) })),
       meta: getPageMeta(page, limit, total),
     };
   }

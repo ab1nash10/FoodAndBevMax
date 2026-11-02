@@ -125,6 +125,14 @@ export interface PosShift {
 export interface PosCounterShiftState {
   /** Today's business day is closed here: new bills go on the next day. */
   dayClosed: boolean;
+  /** The signed-in cashier's own open shift at another counter: they open none here till it ends. */
+  elsewhere?: {
+    counterName: string;
+    /** Whether a till reaches that counter; if none does, only an admin can end the shift. */
+    hasTill: boolean;
+    openedAt: string;
+    restaurantName: string;
+  } | null;
   /** A handed-over shift waiting for the next cashier to take on. */
   handover: PosShift | null;
   open: PosShift | null;

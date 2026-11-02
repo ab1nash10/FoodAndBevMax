@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -39,6 +41,22 @@ export class EndShiftDto {
   @MaxLength(300)
   @IsOptional()
   note?: string;
+}
+
+export class EndShiftWithoutTillDto {
+  @ApiPropertyOptional({ description: 'Cash counted, when someone counted it.' })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(10_000_000)
+  @IsOptional()
+  countedCash?: number;
+
+  @ApiProperty({ description: 'Why it is ended without its till.', maxLength: 300 })
+  @IsString()
+  @IsNotEmpty({ message: 'Say why the shift is ended here.' })
+  @MaxLength(300)
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  reason!: string;
 }
 
 export class CloseDayDto {

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
-import { CloseDayDto, EndShiftDto, OpenShiftDto } from './dto/shift.dto';
+import { CloseDayDto, EndShiftDto, EndShiftWithoutTillDto, OpenShiftDto } from './dto/shift.dto';
 import { ShiftsService } from './shifts.service';
 import { RequireTill, TillGuard } from './till.guard';
 
@@ -59,6 +59,27 @@ export class ShiftsController {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
         permissions: user?.permissions,
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  // No till: this is for the shift that no till can reach any more, refused for any other.
+  @Patch('shifts/:id/end-without-till')
+  @Permissions('POS_DAY_CLOSE')
+  @ApiOperation({ summary: 'Close a shift whose counter no till reaches, with a reason' })
+  @ApiOkResponse({ description: 'Shift ended.' })
+  async endWithoutTill(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: EndShiftWithoutTillDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.shifts.endWithoutTill(id, body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
       }),
       message: 'Success',
       success: true,

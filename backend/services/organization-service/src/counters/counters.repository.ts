@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Hospital, Prisma, Restaurant } from '@prisma/client';
+import { CounterShiftStatus, Hospital, Prisma, Restaurant } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { countersWithTill, userNames } from '../pos/shifts';
 
 export const counterInclude = {
   hospital: true,
@@ -21,6 +22,44 @@ export class CountersRepository {
 
   async count(args: Prisma.CounterCountArgs): Promise<number> {
     return this.prisma.counter.count(args);
+  }
+
+  /** Per counter: whether a till reaches it, and its open shift (who opened it, and when). */
+  async shiftsAndTills(counters: CounterWithRelations[]) {
+    const [shifts, withTill] = await Promise.all([
+      this.prisma.counterShift.findMany({
+        select: { counterId: true, id: true, openedAt: true, openedBy: true },
+        where: {
+          counterId: { in: counters.map((counter) => counter.id) },
+          status: CounterShiftStatus.OPEN,
+        },
+      }),
+      countersWithTill(this.prisma, counters),
+    ]);
+    const names = await userNames(
+      this.prisma,
+      shifts.map((shift) => shift.openedBy),
+    );
+
+    return new Map(
+      counters.map((counter) => {
+        const shift = shifts.find((entry) => entry.counterId === counter.id);
+
+        return [
+          counter.id,
+          {
+            hasTill: withTill.has(counter.id),
+            openShift: shift
+              ? {
+                  id: shift.id,
+                  openedAt: shift.openedAt,
+                  openedByName: names.get(shift.openedBy) ?? null,
+                }
+              : null,
+          },
+        ];
+      }),
+    );
   }
 
   async create(

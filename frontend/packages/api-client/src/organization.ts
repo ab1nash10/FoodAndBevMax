@@ -374,9 +374,13 @@ export interface Counter {
   createdAt: string;
   deletedAt: string | null;
   hospital: HospitalSummary;
+  /** Whether a set-up till reaches it (in the list only). */
+  hasTill?: boolean;
   hospitalId: string;
   id: string;
   isActive: boolean;
+  /** Its open shift (in the list only); one on a counter with no till only an admin can end. */
+  openShift?: { id: string; openedAt: string; openedByName: string | null } | null;
   paymentDeviceId: string | null;
   pineLabsDeviceId: string | null;
   posDeviceId: string | null;

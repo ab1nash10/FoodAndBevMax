@@ -15,7 +15,8 @@ import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/componen
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { FilterSearch, Modal } from '@/components/ui-controls';
-import { Field, Input, Panel, Select } from '@/components/ui';
+import { Badge, Field, Input, Panel, Select } from '@/components/ui';
+import { EndStuckShiftDialog } from '@/components/pos/end-stuck-shift-dialog';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { PaginationControls, TableState, ToggleField } from '@/components/pos/shared/components';
@@ -82,6 +83,42 @@ function usePosDeviceOptions(hospitalId?: string) {
 }
 
 const counterFormId = 'counter-form';
+
+const sinceDay = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' });
+
+/**
+ * Who has a shift open at the counter. One on a counter no till reaches could never be ended on a
+ * till: it is flagged, and an admin who closes days ends it here.
+ */
+function CounterShiftCell({
+  canEnd,
+  counter,
+  onEnd,
+}: Readonly<{ canEnd: boolean; counter: Counter; onEnd: () => void }>) {
+  const shift = counter.openShift;
+  if (!shift) return <span className="text-ds-muted">No shift open</span>;
+
+  const stuck = counter.hasTill === false;
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <Badge className="normal-case" variant={stuck ? 'warning' : 'success'}>
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+          {stuck ? 'No till to end it' : 'Open'}
+        </Badge>
+        <span className="truncate text-xs text-ds-muted">
+          {shift.openedByName ?? 'A cashier'} · since {sinceDay.format(new Date(shift.openedAt))}
+        </span>
+      </span>
+      {stuck && canEnd ? (
+        <Button onClick={onEnd} size="sm" type="button" variant="outline">
+          End shift
+        </Button>
+      ) : null}
+    </span>
+  );
+}
 
 function CounterForm({
   editingCounter,
@@ -339,6 +376,8 @@ export function CountersTab() {
   const { hasPermission } = useAuth();
   const canCreate = hasPermission('COUNTER_CREATE');
   const canEdit = hasPermission('COUNTER_UPDATE');
+  const canEndShifts = hasPermission('POS_DAY_CLOSE');
+  const [endingShiftAt, setEndingShiftAt] = useState<Counter | null>(null);
   const { scopedHospitalId } = useLocationContext();
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
     'active',
@@ -459,6 +498,7 @@ export function CountersTab() {
         </div>
       ) : null}
       <CounterForm editingCounter={editingCounter} onClose={closeForm} open={isFormOpen} />
+      <EndStuckShiftDialog counter={endingShiftAt} onClose={() => setEndingShiftAt(null)} />
       <Panel>
         <ListToolbar>
           <FilterSearch
@@ -529,14 +569,15 @@ export function CountersTab() {
           />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'phone-cards min-w-200 table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-240 table-fixed')}>
             <thead className={cn(tableStyles.head, 'whitespace-nowrap')}>
               <tr>
-                <th className={cn(tableStyles.th, 'w-[22%]')}>Name</th>
-                <th className={cn(tableStyles.th, 'w-[18%]')}>Location</th>
-                <th className={cn(tableStyles.th, 'w-[18%]')}>Restaurant</th>
-                <th className={cn(tableStyles.th, 'w-[16%]')}>POS device</th>
-                <th className={cn(tableStyles.th, 'w-[14%]')}>Status</th>
+                <th className={cn(tableStyles.th, 'w-[20%]')}>Name</th>
+                <th className={cn(tableStyles.th, 'w-[14%]')}>Location</th>
+                <th className={cn(tableStyles.th, 'w-[15%]')}>Restaurant</th>
+                <th className={cn(tableStyles.th, 'w-[13%]')}>POS device</th>
+                <th className={cn(tableStyles.th, 'w-[20%]')}>Shift</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Status</th>
                 <th className={cn(tableStyles.th, 'w-14')}>
                   <span className="sr-only">Actions</span>
                 </th>
@@ -576,6 +617,14 @@ export function CountersTab() {
                             ?.name ?? 'Linked')
                         : 'Not set'}
                     </td>
+                    {/* Its button has its own click: it does not open the counter. */}
+                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <CounterShiftCell
+                        canEnd={canEndShifts}
+                        counter={counter}
+                        onEnd={() => setEndingShiftAt(counter)}
+                      />
+                    </td>
                     {/* The switch has its own click: it does not open the counter. */}
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
                       <StatusToggleCell
@@ -602,7 +651,7 @@ export function CountersTab() {
                 ))
               ) : (
                 <TableState
-                  colSpan={6}
+                  colSpan={7}
                   error={query.error}
                   isError={query.isError}
                   isLoading={query.isLoading}

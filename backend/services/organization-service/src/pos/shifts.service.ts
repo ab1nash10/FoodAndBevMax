@@ -5,17 +5,29 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CounterShiftStatus, PaymentMode, Prisma, ShiftMode } from '@prisma/client';
+import {
+  CounterShiftStatus,
+  PaymentMode,
+  Prisma,
+  ShiftMode,
+  type CounterShift,
+} from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { lockRow } from '../common/row-lock';
 import { optionalText, toDateOnly, toNumber } from '../common/values';
-import type { CloseDayDto, EndShiftDto, OpenShiftDto } from './dto/shift.dto';
+import type {
+  CloseDayDto,
+  EndShiftDto,
+  EndShiftWithoutTillDto,
+  OpenShiftDto,
+} from './dto/shift.dto';
 import { siteBusinessDate } from './pos-pricing';
 import { PosService } from './pos.service';
 import {
   counterStockNow,
+  countersWithTill,
   fixedShiftAt,
   roundMoney,
   tally,
@@ -148,52 +160,102 @@ export class ShiftsService {
         );
       }
 
-      const summary = tally(
-        await tx.restaurantOrder.findMany({
-          select: { grandTotal: true, isComplimentary: true, paymentMode: true, status: true },
-          where: { shiftId: id },
-        }),
-      );
-      const cashSales =
-        summary.byPaymentMode.find((entry) => entry.mode === PaymentMode.CASH)?.amount ?? 0;
-      const ended = await tx.counterShift.update({
-        data: {
-          closedAt: new Date(),
-          closedBy: context.actorId ?? null,
-          countedCash: dto.countedCash,
-          expectedCash: roundMoney(toNumber(existing.openingCash) + cashSales),
-          handoverStock: dto.handover
-            ? await counterStockNow(tx, existing.counterId)
-            : Prisma.DbNull,
-          note: optionalText(dto.note) ?? null,
-          status: dto.handover ? CounterShiftStatus.HANDED_OVER : CounterShiftStatus.CLOSED,
-          summary,
-        },
-        where: { id },
-      });
-
-      await this.auditLog.record(
-        {
-          action: dto.handover ? 'SHIFT_HANDOVER' : 'SHIFT_CLOSE',
-          actorId: context.actorId,
-          entityId: id,
-          entityName: 'counter_shifts',
-          hospitalId: existing.hospitalId,
-          ipAddress: context.ipAddress,
-          newValue: {
-            countedCash: dto.countedCash,
-            expectedCash: toNumber(ended.expectedCash ?? 0),
-            status: ended.status,
-          },
-        },
-        tx,
-      );
-
-      return ended;
+      return await this.finish(tx, existing, dto, context);
     });
     const [view] = await toShiftViews(this.prisma, [shift]);
 
     return view;
+  }
+
+  /**
+   * An admin closes a shift whose counter no till reaches (its till was removed or never set up),
+   * so it could never be ended on one: its bills are tallied as on a till, with a reason in place
+   * of the note and the cash count only if someone did count it.
+   */
+  async endWithoutTill(id: string, dto: EndShiftWithoutTillDto, context: ActorContext) {
+    const shift = await this.prisma.$transaction(async (tx) => {
+      await lockRow(tx, 'counter_shifts', id);
+      // Read under the admin's own locations: a shift elsewhere is not found.
+      const existing = await tx.counterShift.findFirst({
+        include: { counter: { select: { id: true, posDeviceId: true, restaurantId: true } } },
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new NotFoundException('Shift not found.');
+      }
+
+      if (existing.status !== CounterShiftStatus.OPEN) {
+        throw new ConflictException('This shift has already ended.');
+      }
+
+      if ((await countersWithTill(tx, [existing.counter])).size) {
+        throw new ConflictException('That counter has a till. End the shift on its till.');
+      }
+
+      return await this.finish(
+        tx,
+        existing,
+        { countedCash: dto.countedCash ?? null, handover: false, note: dto.reason },
+        context,
+        { reason: dto.reason, withoutTill: true },
+      );
+    });
+    const [view] = await toShiftViews(this.prisma, [shift]);
+
+    return view;
+  }
+
+  /** Ends an open shift: tallies its bills, works out the cash expected, and records it. */
+  private async finish(
+    tx: Prisma.TransactionClient,
+    existing: CounterShift,
+    dto: { countedCash: number | null; handover: boolean; note?: string },
+    context: ActorContext,
+    audited: Record<string, unknown> = {},
+  ) {
+    const id = existing.id;
+    const summary = tally(
+      await tx.restaurantOrder.findMany({
+        select: { grandTotal: true, isComplimentary: true, paymentMode: true, status: true },
+        where: { shiftId: id },
+      }),
+    );
+    const cashSales =
+      summary.byPaymentMode.find((entry) => entry.mode === PaymentMode.CASH)?.amount ?? 0;
+    const ended = await tx.counterShift.update({
+      data: {
+        closedAt: new Date(),
+        closedBy: context.actorId ?? null,
+        countedCash: dto.countedCash,
+        expectedCash: roundMoney(toNumber(existing.openingCash) + cashSales),
+        handoverStock: dto.handover ? await counterStockNow(tx, existing.counterId) : Prisma.DbNull,
+        note: optionalText(dto.note) ?? null,
+        status: dto.handover ? CounterShiftStatus.HANDED_OVER : CounterShiftStatus.CLOSED,
+        summary,
+      },
+      where: { id },
+    });
+
+    await this.auditLog.record(
+      {
+        action: dto.handover ? 'SHIFT_HANDOVER' : 'SHIFT_CLOSE',
+        actorId: context.actorId,
+        entityId: id,
+        entityName: 'counter_shifts',
+        hospitalId: existing.hospitalId,
+        ipAddress: context.ipAddress,
+        newValue: {
+          countedCash: dto.countedCash,
+          expectedCash: toNumber(ended.expectedCash ?? 0),
+          status: ended.status,
+          ...audited,
+        },
+      },
+      tx,
+    );
+
+    return ended;
   }
 
   async closeDay(dto: CloseDayDto, context: ActorContext) {

@@ -16,6 +16,52 @@ import { formatMoney } from './shared';
 
 const clock = new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit' });
 export const timeOf = (value: string | null) => (value ? clock.format(new Date(value)) : '—');
+const dayAndTime = new Intl.DateTimeFormat('en-IN', {
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  month: 'short',
+});
+
+type ShiftElsewhere = NonNullable<PosCounter['shift']['elsewhere']>;
+
+/** What the cashier does about their open shift at another counter. Names no till or computer. */
+export function whereToEndIt(elsewhere: ShiftElsewhere) {
+  return elsewhere.hasTill
+    ? 'End it on that counter’s till, then come back here.'
+    : 'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & Payment Machines → Counters.';
+}
+
+/** "28 Oct, 1:10 pm · 6 days" */
+function openSince(value: string) {
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+
+  return `${dayAndTime.format(new Date(value))}${days >= 1 ? ` · ${days} day${days === 1 ? '' : 's'}` : ''}`;
+}
+
+/** The cashier's open shift at another counter, which bars them from opening one here. */
+function ShiftElsewhereCard({ elsewhere }: Readonly<{ elsewhere: ShiftElsewhere }>) {
+  return (
+    <div
+      className="grid gap-2.5 rounded-xl bg-ds-status-pending-bg p-3.5 text-sm text-ds-status-pending-fg"
+      role="status"
+    >
+      <p>
+        <strong className="text-ds-text">You still have a shift open at another counter.</strong>{' '}
+        End it before opening one here.
+      </p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-0.5">
+        <dt>Counter</dt>
+        <dd className="font-semibold text-ds-text">{elsewhere.counterName}</dd>
+        <dt>Restaurant</dt>
+        <dd className="font-semibold text-ds-text">{elsewhere.restaurantName}</dd>
+        <dt>Open since</dt>
+        <dd className="font-semibold tabular-nums text-ds-text">{openSince(elsewhere.openedAt)}</dd>
+      </dl>
+      <p className="text-ds-text-2">{whereToEndIt(elsewhere)}</p>
+    </div>
+  );
+}
 
 /** Counted cash against expected: "None", "+₹20.00" (over) or "−₹15.00" (short), with a tone. */
 export function cashDifference(shift: Pick<PosShift, 'countedCash' | 'expectedCash'>) {
@@ -98,7 +144,7 @@ export function ShiftStartPanel({ counter }: Readonly<{ counter: PosCounter }>) 
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const refresh = useRefreshShift();
-  const { dayClosed, handover } = counter.shift;
+  const { dayClosed, elsewhere, handover } = counter.shift;
   const [cash, setCash] = useState(() =>
     handover?.countedCash !== null && handover?.countedCash !== undefined
       ? String(handover.countedCash)
@@ -113,6 +159,8 @@ export function ShiftStartPanel({ counter }: Readonly<{ counter: PosCounter }>) 
         title: 'Shift was not opened',
         variant: 'error',
       });
+      // A shift opened elsewhere since this screen loaded: show where it is.
+      refresh();
     },
     onSuccess() {
       refresh();
@@ -143,9 +191,10 @@ export function ShiftStartPanel({ counter }: Readonly<{ counter: PosCounter }>) 
             className="flex w-full flex-col gap-3 lg:w-[360px]"
             onSubmit={(event) => {
               event.preventDefault();
-              if (openingCash !== null) openMutation.mutate();
+              if (openingCash !== null && !elsewhere) openMutation.mutate();
             }}
           >
+            {elsewhere ? <ShiftElsewhereCard elsewhere={elsewhere} /> : null}
             {handover ? <HandoverCard shift={handover} /> : null}
             <div className="grid gap-1.5">
               <Label htmlFor="shift-opening-cash">Cash in the till</Label>
@@ -163,7 +212,10 @@ export function ShiftStartPanel({ counter }: Readonly<{ counter: PosCounter }>) 
                 </p>
               ) : null}
             </div>
-            <Button disabled={openMutation.isPending || openingCash === null} type="submit">
+            <Button
+              disabled={openMutation.isPending || openingCash === null || Boolean(elsewhere)}
+              type="submit"
+            >
               {openMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {handover ? 'Take over and open shift' : 'Open shift'}
             </Button>

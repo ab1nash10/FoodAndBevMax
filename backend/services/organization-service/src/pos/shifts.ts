@@ -1,3 +1,4 @@
+import { hospitalScopeStorage } from '@aahar/auth';
 import {
   CounterShiftStatus,
   InventoryLocationType,
@@ -205,4 +206,41 @@ export async function counterStockNow(client: Client, counterId: string) {
       quantity: toNumber(balance._sum.availableQty ?? 0),
     }))
     .sort((a, b) => a.itemName.localeCompare(b.itemName));
+}
+
+/**
+ * Of these counters, the ids a till reaches: a POS device set up as a till (it has a key) reaches
+ * its own named counters if any name it, else its restaurants', as requireTill decides. A shift
+ * anywhere else can never be ended on a till. Read across locations, like a till itself.
+ */
+export async function countersWithTill(
+  client: Pick<Prisma.TransactionClient, 'counter' | 'posDevice'>,
+  counters: ReadonlyArray<{ id: string; posDeviceId: string | null; restaurantId: string }>,
+): Promise<Set<string>> {
+  if (!counters.length) return new Set();
+
+  return await hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
+    const tills = await client.posDevice.findMany({
+      select: {
+        id: true,
+        restaurants: { select: { restaurantId: true }, where: { deletedAt: null, isActive: true } },
+      },
+      where: { deletedAt: null, isActive: true, tillKeyHash: { not: null } },
+    });
+    const named = await client.counter.findMany({
+      distinct: ['posDeviceId'],
+      select: { posDeviceId: true },
+      where: { deletedAt: null, posDeviceId: { in: tills.map((till) => till.id) } },
+    });
+    const naming = new Set(named.map((counter) => counter.posDeviceId));
+    const reached = counters.filter((counter) =>
+      tills.some((till) =>
+        naming.has(till.id)
+          ? counter.posDeviceId === till.id
+          : till.restaurants.some((entry) => entry.restaurantId === counter.restaurantId),
+      ),
+    );
+
+    return new Set(reached.map((counter) => counter.id));
+  });
 }

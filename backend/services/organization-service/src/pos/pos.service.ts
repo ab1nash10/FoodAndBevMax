@@ -40,7 +40,7 @@ import type {
 import { hashOrderKey, itemCount } from '../restaurant-orders/restaurant-orders.service';
 import { findCardMachine, paymentProviders, plutusBaseUrl } from './online-payment-providers';
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
-import { shiftStates, shiftsOn, tally, userNames } from './shifts';
+import { countersWithTill, shiftStates, shiftsOn, tally, userNames } from './shifts';
 
 type Client = Prisma.TransactionClient | PrismaService;
 
@@ -220,9 +220,11 @@ export class PosService {
    * The active counters the user may bill at (reads are already limited to their locations),
    * each with its shift: the open one, a handover waiting for the next cashier, a closed day.
    * With `tillKey` (the browser's, '' when it has none), only the counters of the till that
-   * browser was set up as. The POS module opens nowhere else.
+   * browser was set up as. The POS module opens nowhere else. Each shift also says where
+   * `actorId`'s own open shift is when it is at none of these counters: it bars them from
+   * opening one here.
    */
-  async counters(tillKey?: string) {
+  async counters(tillKey?: string, actorId?: string) {
     const till = tillKey === undefined ? undefined : await this.tillByKey(tillKey);
     if (till === null) {
       throw new NotFoundException(notATill);
@@ -253,12 +255,9 @@ export class PosService {
       till && found.some((counter) => counter.posDeviceId === till.id)
         ? found.filter((counter) => counter.posDeviceId === till.id)
         : found;
-    const [states, kiosks] = await Promise.all([
-      shiftStates(
-        this.prisma,
-        counters.map((counter) => counter.id),
-        toDateOnly(siteBusinessDate(new Date())),
-      ),
+    const counterIds = counters.map((counter) => counter.id);
+    const [states, kiosks, elsewhere] = await Promise.all([
+      shiftStates(this.prisma, counterIds, toDateOnly(siteBusinessDate(new Date()))),
       // Only a restaurant whose kiosk took orders lately has guests to look for: the other tills
       // skip the waiting-orders poll (a number can still be looked up by hand).
       this.prisma.kioskOrder.groupBy({
@@ -268,14 +267,46 @@ export class PosService {
           restaurantId: { in: [...new Set(counters.map((counter) => counter.restaurantId))] },
         },
       }),
+      actorId ? this.openShiftElsewhere(actorId, counterIds) : null,
     ]);
     const kioskRestaurants = new Set(kiosks.map((entry) => entry.restaurantId));
 
     return counters.map(({ posDeviceId: _posDeviceId, ...counter }) => ({
       ...counter,
       kioskInUse: kioskRestaurants.has(counter.restaurantId),
-      shift: states.get(counter.id),
+      shift: { ...states.get(counter.id), elsewhere },
     }));
+  }
+
+  /** The user's open shift at a counter not among `counterIds`, and whether a till reaches it. */
+  private async openShiftElsewhere(actorId: string, counterIds: string[]) {
+    const shift = await this.prisma.counterShift.findFirst({
+      select: {
+        counter: {
+          select: {
+            counterName: true,
+            id: true,
+            posDeviceId: true,
+            restaurant: { select: { restaurantName: true } },
+            restaurantId: true,
+          },
+        },
+        openedAt: true,
+      },
+      where: {
+        counterId: { notIn: counterIds },
+        openedBy: actorId,
+        status: CounterShiftStatus.OPEN,
+      },
+    });
+    if (!shift) return null;
+
+    return {
+      counterName: shift.counter.counterName,
+      hasTill: (await countersWithTill(this.prisma, [shift.counter])).has(shift.counter.id),
+      openedAt: shift.openedAt,
+      restaurantName: shift.counter.restaurant.restaurantName,
+    };
   }
 
   /** The till this browser's key belongs to, its restaurants, and whether the user may work it. */
