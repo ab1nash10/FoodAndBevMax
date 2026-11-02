@@ -213,7 +213,7 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
 
           <FormSection description="The password for signing in with your email." title="Security">
             {currentUser?.email ? (
-              <ChangePasswordForm email={currentUser.email} />
+              <ChangePasswordForm email={currentUser.email} hasPassword={preferences.hasPassword} />
             ) : (
               <p className="text-sm text-ds-muted">
                 Your account signs in with a mobile OTP, so there is no password to change.
@@ -226,7 +226,11 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
   );
 }
 
-function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
+/** Changes the password, or, for an account that signed in only by OTP so far, sets the first one. */
+function ChangePasswordForm({
+  email,
+  hasPassword,
+}: Readonly<{ email: string; hasPassword: boolean }>) {
   const { logout } = useAuth();
   const router = useRouter();
   const { showToast } = useToast();
@@ -236,7 +240,11 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
   const [error, setError] = useState<string | null>(null);
 
   const changePassword = useMutation({
-    mutationFn: () => userApi.changeMyPassword({ currentPassword, newPassword }),
+    mutationFn: () =>
+      userApi.changeMyPassword({
+        currentPassword: hasPassword ? currentPassword : undefined,
+        newPassword,
+      }),
     onError(mutationError) {
       setError(getApiErrorMessage(mutationError));
     },
@@ -245,7 +253,7 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
     onSuccess() {
       showToast({
         description: 'Sign in again with your new password.',
-        title: 'Password changed',
+        title: hasPassword ? 'Password changed' : 'Password set',
         variant: 'success',
       });
       void logout().then(() => router.replace('/auth/login'));
@@ -253,7 +261,7 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
   });
 
   const submit = () => {
-    if (!currentPassword) {
+    if (hasPassword && !currentPassword) {
       setError('Enter your current password.');
     } else if (!passwordPattern.test(newPassword)) {
       setError('New password must be at least 8 characters and include a letter and a number.');
@@ -276,14 +284,20 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
       <p className="text-sm text-ds-muted">
         Signed in as <span className="font-medium text-ds-text-2">{email}</span>
       </p>
-      <Field label="Current password" name="current-password" required>
-        <PasswordInput
-          autoComplete="current-password"
-          id="current-password"
-          onChange={(event) => setCurrentPassword(event.target.value)}
-          value={currentPassword}
-        />
-      </Field>
+      {hasPassword ? (
+        <Field label="Current password" name="current-password" required>
+          <PasswordInput
+            autoComplete="current-password"
+            id="current-password"
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            value={currentPassword}
+          />
+        </Field>
+      ) : (
+        <p className="text-sm text-ds-muted">
+          You have no password yet. Set one to also sign in with your email and password.
+        </p>
+      )}
       <Field label="New password" name="new-password" required>
         <PasswordInput
           autoComplete="new-password"
@@ -309,7 +323,7 @@ function ChangePasswordForm({ email }: Readonly<{ email: string }>) {
       <div>
         <Button disabled={changePassword.isPending} type="submit">
           {changePassword.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Change password
+          {hasPassword ? 'Change password' : 'Set password'}
         </Button>
       </div>
     </form>

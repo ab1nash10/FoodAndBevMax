@@ -68,13 +68,17 @@ export interface UserPreferences {
   /** A portal path such as /inventory/grns, or null for the dashboard. */
   startPage: string | null;
   theme: ThemePreference | null;
+  /** False until the user has a password: Preferences then sets one with no current password. */
+  hasPassword: boolean;
 }
 
 /**
  * Partial update: omitted fields are kept, null resets a field to its default. The default
  * location can be changed to another of the user's locations but never cleared.
  */
-export type UserPreferencesInput = Partial<Omit<UserPreferences, 'defaultLocationId'>> & {
+export type UserPreferencesInput = Partial<
+  Omit<UserPreferences, 'defaultLocationId' | 'hasPassword'>
+> & {
   defaultLocationId?: string;
 };
 
@@ -88,7 +92,8 @@ export interface MyAccess {
 }
 
 export interface ChangePasswordInput {
-  currentPassword: string;
+  /** Left out to set a first password. */
+  currentPassword?: string;
   newPassword: string;
 }
 

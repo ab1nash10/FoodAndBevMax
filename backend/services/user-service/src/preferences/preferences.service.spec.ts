@@ -8,12 +8,18 @@ import { PreferencesService } from './preferences.service';
 
 const actor = { id: 'user-1' } as JwtRequestUser;
 
-async function serviceWithPassword(current: string) {
+async function serviceWithPassword(current: string | null) {
   const update = vi.fn();
   const record = vi.fn<(entry: { action: string }) => Promise<void>>();
   const prisma = {
     $transaction: (work: (tx: unknown) => Promise<unknown>) => work({ user: { update } }),
-    user: { findFirst: vi.fn().mockResolvedValue({ passwordHash: await hashPassword(current) }) },
+    user: {
+      findFirst: vi.fn().mockResolvedValue({
+        hospitalId: null,
+        passwordHash: current === null ? null : await hashPassword(current),
+        preferences: {},
+      }),
+    },
   };
   const service = new PreferencesService(
     { record } as unknown as AuditLogService,
@@ -182,4 +188,40 @@ test('a wrong current password changes nothing and keeps the sessions', async ()
       error instanceof BadRequestException && error.message === 'Current password is incorrect',
   );
   assert.equal(update.mock.calls.length, 0);
+});
+
+test('with no password yet, you set one without a current password', async () => {
+  const { record, service, update } = await serviceWithPassword(null);
+
+  assert.deepEqual(await service.changePassword(actor, { newPassword: 'Newpass456' }), {
+    changed: true,
+  });
+
+  const { data } = update.mock.calls[0]?.[0] as {
+    data: { passwordHash: string; sessionVersion: unknown };
+  };
+  assert.equal(await verifyPassword('Newpass456', data.passwordHash), true);
+  assert.deepEqual(data.sessionVersion, { increment: 1 });
+  assert.equal(record.mock.calls[0]?.[0].action, 'USER_PASSWORD_CHANGE');
+});
+
+test('with a password, leaving out the current one changes nothing', async () => {
+  const { service, update } = await serviceWithPassword('Current123');
+
+  await assert.rejects(
+    service.changePassword(actor, { newPassword: 'Newpass456' }),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.message === 'Current password is incorrect',
+  );
+  assert.equal(update.mock.calls.length, 0);
+});
+
+test('your preferences say whether you have a password, never the password itself', async () => {
+  const withPassword = await serviceWithPassword('Current123');
+  const withoutPassword = await serviceWithPassword(null);
+
+  const preferences = await withPassword.service.get(actor.id);
+  assert.equal(preferences.hasPassword, true);
+  assert.equal('passwordHash' in preferences, false);
+  assert.equal((await withoutPassword.service.get(actor.id)).hasPassword, false);
 });

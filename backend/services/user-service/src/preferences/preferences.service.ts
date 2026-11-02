@@ -17,9 +17,9 @@ export class PreferencesService {
 
   // The default location is the user's home location (users.hospital_id), the one place every
   // user's starting location is kept; the rest of the preferences live in the JSON column.
-  async get(userId: string): Promise<UserPreferences> {
+  async get(userId: string): Promise<UserPreferences & { hasPassword: boolean }> {
     const user = await this.prisma.user.findFirst({
-      select: { hospitalId: true, preferences: true },
+      select: { hospitalId: true, passwordHash: true, preferences: true },
       where: { deletedAt: null, id: userId },
     });
 
@@ -27,7 +27,12 @@ export class PreferencesService {
       throw new NotFoundException('User not found');
     }
 
-    return { ...parsePreferences(user.preferences), defaultLocationId: user.hospitalId };
+    return {
+      ...parsePreferences(user.preferences),
+      defaultLocationId: user.hospitalId,
+      // So Preferences offers "Set password" (no current one to ask for) instead of "Change".
+      hasPassword: Boolean(user.passwordHash),
+    };
   }
 
   /**
@@ -71,8 +76,11 @@ export class PreferencesService {
     };
   }
 
-  async update(actor: JwtRequestUser, dto: UpdatePreferencesDto): Promise<UserPreferences> {
-    const current = await this.get(actor.id);
+  async update(
+    actor: JwtRequestUser,
+    dto: UpdatePreferencesDto,
+  ): Promise<UserPreferences & { hasPassword: boolean }> {
+    const { hasPassword, ...current } = await this.get(actor.id);
 
     if (dto.defaultLocationId !== undefined) {
       if (!dto.defaultLocationId) {
@@ -107,7 +115,7 @@ export class PreferencesService {
       oldValue: current,
     });
 
-    return next;
+    return { ...next, hasPassword };
   }
 
   async changePassword(
@@ -124,14 +132,13 @@ export class PreferencesService {
       throw new NotFoundException('User not found');
     }
 
+    // Without a password yet (signed in by OTP, which already proved who they are), the user
+    // sets their first one. Once set, changing it needs the current one.
     // 400, never 401: the portal treats every 401 as an expired session and signs the user out.
-    if (!user.passwordHash) {
-      throw new BadRequestException(
-        'Your account has no password yet. Ask an administrator to set one.',
-      );
-    }
-
-    if (!(await verifyPassword(dto.currentPassword, user.passwordHash))) {
+    if (
+      user.passwordHash &&
+      !(await verifyPassword(dto.currentPassword ?? '', user.passwordHash))
+    ) {
       throw new BadRequestException('Current password is incorrect');
     }
 

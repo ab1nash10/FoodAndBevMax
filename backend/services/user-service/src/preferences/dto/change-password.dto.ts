@@ -1,12 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class ChangePasswordDto {
-  @ApiProperty({ format: 'password' })
+  @ApiPropertyOptional({
+    description: 'Required once you have a password; left out to set your first one.',
+    format: 'password',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(128)
-  currentPassword!: string;
+  currentPassword?: string;
 
   // The same rule an administrator's create/update applies, so both paths accept the same passwords.
   @ApiProperty({ format: 'password', minLength: 8 })
