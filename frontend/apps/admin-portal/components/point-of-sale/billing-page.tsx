@@ -59,7 +59,7 @@ import {
   usePosCounter,
 } from './shared';
 import { OnlinePaymentDialog, providerLabels } from './online-payment-dialog';
-import { onlineProvider } from './payment-collection';
+import { onlineProvider, paymentModesFor } from './payment-collection';
 import { ShiftChip, ShiftStartPanel } from './shift-controls';
 import { PosClosed } from './pos-gate';
 import { UnsentBillsButton, UnsentBillsDialog, useUnsentBills } from './unsent-bills';
@@ -70,7 +70,6 @@ interface CartLine {
   quantity: number;
 }
 
-const paymentModes: PaymentMode[] = ['CASH', 'UPI', 'CARD', 'OTHER'];
 const paymentIcons: Record<PaymentMode, LucideIcon> = {
   CARD: CreditCard,
   CASH: Banknote,
@@ -369,6 +368,8 @@ export function BillingPageClient() {
       setCart(lines);
       setEmployeeCode(order.employeeCode ?? '');
       setKioskOrder({ id: order.id, number: order.number });
+      // A kiosk order is never paid in cash: start on UPI.
+      setPaymentMode('UPI');
       setKioskNumber('');
       if (lines.length < order.lines.length) {
         showToast({
@@ -1096,10 +1097,13 @@ export function BillingPageClient() {
               <p className="text-sm font-medium text-ds-text">Mode of payment</p>
               <div
                 aria-label="Payment mode"
-                className="grid grid-cols-4 gap-1 rounded-control-lg bg-ds-subtle p-1"
+                className={cn(
+                  'grid gap-1 rounded-control-lg bg-ds-subtle p-1',
+                  kioskOrder ? 'grid-cols-2' : 'grid-cols-4',
+                )}
                 role="group"
               >
-                {paymentModes.map((mode) => {
+                {paymentModesFor({ kioskOrder: Boolean(kioskOrder) }).map((mode) => {
                   const Icon = paymentIcons[mode];
 
                   return (

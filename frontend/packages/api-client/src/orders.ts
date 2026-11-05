@@ -391,6 +391,8 @@ export type DayOfWeek =
 export interface EmployeeDiscount {
   archivedAt: string | null;
   createdAt: string;
+  /** Who created the rule; on list rows only. */
+  createdByName?: string | null;
   /** Serve days; empty is every day. */
   daysOfWeek: DayOfWeek[];
   discountPercent: number;

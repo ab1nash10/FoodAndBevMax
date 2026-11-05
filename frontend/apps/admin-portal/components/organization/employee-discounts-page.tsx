@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Loader2, Pencil, Plus } from 'lucide-react';
+import { CircleCheck, CircleX, Loader2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type {
   DayOfWeek,
@@ -13,13 +13,7 @@ import type {
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { useConfirm } from '@/components/confirm-provider';
-import {
-  AppPageHeader,
-  RecordAvatar,
-  RowAction,
-  StatStrip,
-  tableStyles,
-} from '@/components/design-system';
+import { AppPageHeader, RecordAvatar, StatStrip, tableStyles } from '@/components/design-system';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { slotHours } from '@/components/master-data/time-slots/shared';
@@ -28,7 +22,7 @@ import {
   QueryState,
   SearchInput,
 } from '@/components/master-data/shared/components';
-import { listLimit } from '@/components/master-data/shared/utils';
+import { formatDate, listLimit } from '@/components/master-data/shared/utils';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Label, Panel, Select } from '@/components/ui';
 import { Modal, SegmentedControl } from '@/components/ui-controls';
@@ -539,19 +533,21 @@ export function EmployeeDiscountsPageClient() {
           />
         </ListToolbar>
         <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'phone-cards min-w-[900px] table-fixed')}>
+          <table className={cn(tableStyles.table, 'phone-cards min-w-[1240px] table-fixed')}>
             <thead className={tableStyles.head}>
               <tr>
-                <th className={cn(tableStyles.th, 'w-[20%]')}>Name</th>
-                <th className={cn(tableStyles.th, 'w-[17%]')}>Restaurant</th>
-                <th className={cn(tableStyles.th, 'w-[9%] text-right')}>Discount</th>
-                <th className={cn(tableStyles.th, 'w-[10%]')}>Special timings</th>
-                <th className={cn(tableStyles.th, 'w-[13%]')}>Serve days</th>
-                <th className={cn(tableStyles.th, 'w-[14%]')}>Timings</th>
-                <th className={cn(tableStyles.th, 'w-[10%]')}>Employee level</th>
-                <th className={cn(tableStyles.th, 'w-[7%]')}>
-                  <span className="sr-only">Actions</span>
-                </th>
+                <th className={cn(tableStyles.th, 'w-[6%]')}>ID</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Name</th>
+                <th className={cn(tableStyles.th, 'w-[11%]')}>Restaurant</th>
+                <th className={cn(tableStyles.th, 'w-[6%]')}>Discount value</th>
+                <th className={cn(tableStyles.th, 'w-[6%]')}>Special timings</th>
+                <th className={cn(tableStyles.th, 'w-[8%]')}>Serve days</th>
+                <th className={cn(tableStyles.th, 'w-[7%]')}>Timings</th>
+                <th className={cn(tableStyles.th, 'w-[7%]')}>Employee level</th>
+                <th className={cn(tableStyles.th, 'w-[6%] text-center')}>Archived</th>
+                <th className={cn(tableStyles.th, 'w-[9%]')}>Created by</th>
+                <th className={cn(tableStyles.th, 'w-[9%]')}>Last updated at</th>
+                <th className={cn(tableStyles.th, 'w-[14%]')}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -560,26 +556,30 @@ export function EmployeeDiscountsPageClient() {
                   const timed = Boolean(discount.startTime && discount.endTime);
 
                   return (
+                    // Only the Edit button opens a rule; a click on the row itself does nothing.
                     <tr
-                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      className={cn(tableStyles.row, 'cursor-default')}
                       data-record-id={discount.id}
                       key={discount.id}
-                      onClick={canEdit ? () => open(discount) : undefined}
                     >
-                      <td className={cn(tableStyles.td, tableStyles.title)}>
-                        <span className="flex min-w-0 items-center gap-3">
-                          <RecordAvatar name={discount.name} />
-                          <span className="truncate">{discount.name}</span>
-                        </span>
+                      {/* The record's id is a UUID; its first block is enough to tell rules apart. */}
+                      <td
+                        className={cn(tableStyles.td, 'font-mono text-xs text-ds-text-2')}
+                        title={discount.id}
+                      >
+                        {discount.id.slice(0, 8).toUpperCase()}
                       </td>
-                      <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
+                      <td className={cn(tableStyles.td, tableStyles.title)}>
+                        <span className="block break-words">{discount.name}</span>
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                         {discount.restaurant.restaurantName}
                       </td>
                       <td
                         className={cn(
                           tableStyles.td,
                           tableStyles.num,
-                          'text-right font-semibold text-ds-text',
+                          'font-semibold text-ds-text',
                         )}
                       >
                         {discount.discountPercent}%
@@ -597,27 +597,59 @@ export function EmployeeDiscountsPageClient() {
                               isAlwaysAvailable: false,
                               startTime: discount.startTime,
                             })
-                          : '—'}
+                          : '-'}
                       </td>
                       <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                         {levelLabels[discount.employmentType ?? '']}
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-center')}>
+                        {discount.archivedAt ? (
+                          <CircleCheck
+                            aria-label="Archived"
+                            className="inline h-5 w-5 text-ds-status-ok-fg"
+                          />
+                        ) : (
+                          <CircleX
+                            aria-label="Not archived"
+                            className="inline h-5 w-5 text-ds-status-bad-fg"
+                          />
+                        )}
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                        {discount.createdByName ?? '-'}
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2 tabular-nums')}>
+                        {formatDate(discount.updatedAt)}
                       </td>
                       <td
                         className={cn(tableStyles.td, 'pr-3')}
                         onClick={(event) => event.stopPropagation()}
                       >
                         {canEdit ? (
-                          <span className="flex justify-end gap-0.5">
-                            <RowAction
-                              icon={Pencil}
-                              label={`Edit ${discount.name}`}
+                          <span className="flex gap-2">
+                            <Button
+                              aria-label={`Edit ${discount.name}`}
                               onClick={() => open(discount)}
-                            />
-                            <RowAction
-                              icon={discount.archivedAt ? ArchiveRestore : Archive}
-                              label={`${discount.archivedAt ? 'Restore' : 'Archive'} ${discount.name}`}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              aria-label={`${discount.archivedAt ? 'Restore' : 'Archive'} ${discount.name}`}
+                              className={
+                                discount.archivedAt
+                                  ? undefined
+                                  : 'bg-ds-status-pending-fg shadow-none hover:bg-ds-status-pending-fg hover:opacity-90'
+                              }
                               onClick={() => void toggleArchive(discount)}
-                            />
+                              size="sm"
+                              type="button"
+                              variant={discount.archivedAt ? 'outline' : 'default'}
+                            >
+                              {discount.archivedAt ? 'Restore' : 'Archive'}
+                            </Button>
                           </span>
                         ) : null}
                       </td>
@@ -626,7 +658,7 @@ export function EmployeeDiscountsPageClient() {
                 })
               ) : (
                 <QueryState
-                  colSpan={8}
+                  colSpan={12}
                   error={discountsQuery.error}
                   hint={
                     view === 'archived'

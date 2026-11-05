@@ -5,6 +5,7 @@ import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { toNumber } from '../common/values';
+import { userNames } from '../pos/shifts';
 import type {
   CreateEmployeeDiscountDto,
   ListEmployeeDiscountsQueryDto,
@@ -85,7 +86,19 @@ export class EmployeeDiscountsService {
       this.prisma.employeeDiscount.count({ where }),
     ]);
 
-    return { items: items.map(toResponse), meta: getPageMeta(page, limit, total) };
+    // Who created each rule, by name, for the list's Created by column.
+    const names = await userNames(
+      this.prisma,
+      items.map((item) => item.createdBy),
+    );
+
+    return {
+      items: items.map((item) => ({
+        ...toResponse(item),
+        createdByName: item.createdBy ? (names.get(item.createdBy) ?? null) : null,
+      })),
+      meta: getPageMeta(page, limit, total),
+    };
   }
 
   async getById(id: string) {

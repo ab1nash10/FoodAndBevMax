@@ -113,7 +113,7 @@ function Welcome({
   const steps = [
     { icon: Utensils, label: 'Pick your food' },
     { icon: Receipt, label: 'Get your order number' },
-    { icon: CheckCircle2, label: 'Pay at the counter and collect' },
+    { icon: CheckCircle2, label: 'Pay by UPI or card at the counter, then collect' },
   ];
   // A taste of today's menu beside the welcome, on a wide screen: the restaurant's Featured
   // items, or the start of the menu when it has marked none.
@@ -241,11 +241,11 @@ function Done({ onNext, order }: Readonly<{ onNext: () => void; order: KioskOrde
         <div aria-hidden="true" className="mx-6 border-t-2 border-dashed border-ds-border" />
         <div className="px-5 py-6 sm:px-8">
           <p className="text-[28px] font-bold">
-            Pay {formatRupees(order.grandTotal)} at the counter
+            Pay {formatRupees(order.grandTotal)} at the counter by UPI or card
           </p>
           <p className="mt-2 text-[20px] text-ds-text-3">
-            Tell the cashier your order number. Once you have paid, watch the board for the order
-            number on your bill.
+            Cash is not accepted. Tell the cashier your order number. Once you have paid, watch the
+            board for the order number on your bill.
             {order.discountTotal > 0 ? ' Show your staff ID card for the discount.' : ''}
           </p>
           <ul className="mt-5 flex flex-col gap-1 border-t border-ds-divider pt-4 text-left text-[19px]">

@@ -301,7 +301,12 @@ export function KioskReviewScreen({
                 </div>
               ) : null}
               <div className="mt-2 flex items-center justify-between border-t border-ds-divider pt-4">
-                <span className="text-[24px] font-bold">To pay at the counter</span>
+                <span className="text-[24px] font-bold">
+                  To pay at the counter
+                  <span className="block text-[16px] font-medium text-ds-text-3">
+                    UPI or card · no cash
+                  </span>
+                </span>
                 <span className="text-[34px] font-bold tabular-nums">
                   {formatRupees(totals.grandTotal)}
                 </span>

@@ -376,6 +376,15 @@ function PosDeviceForm({
   );
 }
 
+/** A print switch's state in words, beside it, as the Status column shows Active / Inactive. */
+function OnOffLabel({ on }: Readonly<{ on: boolean }>) {
+  return (
+    <span className={cn('text-xs font-bold', on ? 'text-ds-status-ok-fg' : 'text-ds-muted')}>
+      {on ? 'On' : 'Off'}
+    </span>
+  );
+}
+
 export function PosDevicesTab() {
   const entityNamesQuery = useLegalEntityNames();
   const { scopedHospitalId } = useLocationContext();
@@ -564,30 +573,36 @@ export function PosDevicesTab() {
                       />
                     </td>
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                      <Toggle
-                        ariaLabel={`KOT print for ${device.name}`}
-                        checked={device.isKotPrintEnabled}
-                        disabled={flagMutation.isPending}
-                        onChange={(checked) =>
-                          flagMutation.mutate({
-                            body: { isKotPrintEnabled: checked },
-                            id: device.id,
-                          })
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <Toggle
+                          ariaLabel={`KOT print for ${device.name}`}
+                          checked={device.isKotPrintEnabled}
+                          disabled={flagMutation.isPending}
+                          onChange={(checked) =>
+                            flagMutation.mutate({
+                              body: { isKotPrintEnabled: checked },
+                              id: device.id,
+                            })
+                          }
+                        />
+                        <OnOffLabel on={device.isKotPrintEnabled} />
+                      </div>
                     </td>
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                      <Toggle
-                        ariaLabel={`Invoice print for ${device.name}`}
-                        checked={device.isInvoicePrintEnabled}
-                        disabled={flagMutation.isPending}
-                        onChange={(checked) =>
-                          flagMutation.mutate({
-                            body: { isInvoicePrintEnabled: checked },
-                            id: device.id,
-                          })
-                        }
-                      />
+                      <div className="flex items-center gap-2">
+                        <Toggle
+                          ariaLabel={`Invoice print for ${device.name}`}
+                          checked={device.isInvoicePrintEnabled}
+                          disabled={flagMutation.isPending}
+                          onChange={(checked) =>
+                            flagMutation.mutate({
+                              body: { isInvoicePrintEnabled: checked },
+                              id: device.id,
+                            })
+                          }
+                        />
+                        <OnOffLabel on={device.isInvoicePrintEnabled} />
+                      </div>
                     </td>
                     {/* The order key's confirm and pop-up must not open the device either. */}
                     <td

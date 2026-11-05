@@ -844,6 +844,15 @@ export class PosService {
       : null;
 
     if (!online && !isComplimentary && totals.grandTotal > 0) {
+      // A kiosk order is paid by UPI or card (an online payment is one of those), never cash.
+      if (
+        dto.kioskOrderId &&
+        dto.paymentMode !== PaymentMode.UPI &&
+        dto.paymentMode !== PaymentMode.CARD
+      ) {
+        throw new BadRequestException('A kiosk order is paid by UPI or card, not cash.');
+      }
+
       await this.requireOnlineProof(tx, counter, dto.paymentMode);
     }
 
