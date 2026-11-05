@@ -4,6 +4,7 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
+import { maskSecret } from '../common/values';
 import { CreatePaymentMachineDto } from './dto/create-payment-machine.dto';
 import { ListPaymentMachinesQueryDto } from './dto/list-payment-machines-query.dto';
 import { UpdatePaymentMachineDto } from './dto/update-payment-machine.dto';
@@ -13,14 +14,6 @@ import {
 } from './payment-machines.repository';
 
 type PaymentMachineClient = Prisma.TransactionClient;
-
-function maskSecret(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  return `••••${value.slice(-4)}`;
-}
 
 function toPaymentMachineResponse(paymentMachine: PaymentMachineWithRelations) {
   return {

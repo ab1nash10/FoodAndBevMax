@@ -14,13 +14,19 @@ import { RequireTill, TillGuard } from './till.guard';
 export class OnlinePaymentsController {
   constructor(private readonly payments: OnlinePaymentsService) {}
 
-  @Get('providers')
-  @RequireTill()
+  @Get('providers/:counterId')
+  @RequireTill({ from: 'param', kind: 'counterId' })
   @Permissions('POS_ORDER_CREATE')
-  @ApiOperation({ summary: 'The online UPI providers set up here (Razorpay, PayU)' })
+  @ApiOperation({
+    summary: "The online UPI gateway of the counter's location (Razorpay or PayU), if set up",
+  })
   @ApiOkResponse({ description: 'Providers returned.' })
-  providers() {
-    return { data: this.payments.available(), message: 'Success', success: true };
+  async providers(@Param('counterId', ParseUUIDPipe) counterId: string) {
+    return {
+      data: await this.payments.available(counterId),
+      message: 'Success',
+      success: true,
+    };
   }
 
   @Get('card-machine/:counterId')

@@ -74,6 +74,21 @@ export class PosController {
     };
   }
 
+  // Any signed-in user, from any page: it only tells the caller about their own shift. The portal
+  // asks it on Sign out, to have an open shift ended or handed over first.
+  @Get('my-shift')
+  @ApiOperation({ summary: 'The signed-in user’s own open shift, wherever it is; null if none' })
+  @ApiOkResponse({ description: 'Shift returned.' })
+  async myShift(@CurrentUser() user: JwtRequestUser) {
+    const actorId = getActorId(user);
+
+    return {
+      data: actorId ? await this.pos.myOpenShift(actorId) : null,
+      message: 'Success',
+      success: true,
+    };
+  }
+
   @Post('till')
   @Permissions('POS_DEVICE_UPDATE')
   @ApiOperation({

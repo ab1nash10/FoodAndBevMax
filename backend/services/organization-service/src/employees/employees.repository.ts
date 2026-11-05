@@ -3,7 +3,10 @@ import { Employee, Prisma } from '@prisma/client';
 import { masterHospitalSelect } from '../common/location-masters';
 import { PrismaService } from '../common/prisma/prisma.service';
 
-const employeeInclude = { hospital: masterHospitalSelect } satisfies Prisma.EmployeeInclude;
+export const employeeInclude = {
+  hospital: masterHospitalSelect,
+  reportingManager: { select: { employeeCode: true, employeeName: true, id: true } },
+} satisfies Prisma.EmployeeInclude;
 
 export type EmployeeWithHospital = Prisma.EmployeeGetPayload<{ include: typeof employeeInclude }>;
 

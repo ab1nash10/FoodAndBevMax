@@ -51,9 +51,10 @@ export class LegalEntitiesRepository {
     return this.prisma.legalEntity.findMany(args);
   }
 
-  /** Locations, restaurants and POS devices still linked to the entity. */
+  /** Locations, restaurants, POS devices and employees still linked to the entity. */
   async countLinks(id: string, client: LegalEntityClient): Promise<number> {
     const counts = await Promise.all([
+      client.employee.count({ where: { deletedAt: null, legalEntityId: id } }),
       client.hospital.count({ where: { deletedAt: null, legalEntityId: id } }),
       client.restaurant.count({ where: { deletedAt: null, legalEntityId: id } }),
       client.posDevice.count({ where: { deletedAt: null, legalEntityId: id } }),

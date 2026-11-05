@@ -110,6 +110,38 @@ export class CreateHospitalDto {
   @IsOptional()
   onlinePaymentOption?: OnlinePaymentOption;
 
+  // The location's own gateway account. Unset, it uses the shared server keys. A secret left out
+  // of an edit stays as it is; sent blank, it is cleared. Secrets are only ever returned masked.
+  @ApiPropertyOptional({ description: 'PayU payment-links client id.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  payuClientId?: string;
+
+  @ApiPropertyOptional({ description: 'PayU payment-links client secret (write-only).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  payuClientSecret?: string;
+
+  @ApiPropertyOptional({ description: 'PayU merchant id.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  payuMerchantId?: string;
+
+  @ApiPropertyOptional({ description: 'Razorpay key id.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  razorpayKeyId?: string;
+
+  @ApiPropertyOptional({ description: 'Razorpay key secret (write-only).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  razorpayKeySecret?: string;
+
   @ApiPropertyOptional({ example: 'MAX-LKO' })
   @IsOptional()
   @IsString()

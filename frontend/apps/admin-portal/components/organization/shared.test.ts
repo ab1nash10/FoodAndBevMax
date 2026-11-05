@@ -111,11 +111,43 @@ describe('form helpers', () => {
       locationCode: 'SKT',
       longitude: null,
       onlinePaymentOption: 'NONE',
+      payuClientId: null,
+      payuMerchantId: null,
       postalCode: null,
+      razorpayKeyId: null,
       state: 'Delhi',
       title: 'Saket',
       visitingCardAddress: null,
     });
+  });
+
+  test('gateway keys: ids are sent trimmed; a secret only when typed, so a saved one stays', () => {
+    const saved = toHospitalFormDefaults({
+      displayName: 'Saket',
+      hospitalCode: 'SKT',
+      hospitalName: 'Saket',
+      locationCode: 'SKT',
+      onlinePaymentOption: 'RAZORPAY',
+      razorpayKeyId: 'rzp_live_skt',
+      razorpayKeySecret: '••••cret',
+      title: 'Saket',
+    } as Parameters<typeof toHospitalFormDefaults>[0]);
+    // The masked secret is never put in the box.
+    expect(saved).toMatchObject({ razorpayKeyId: 'rzp_live_skt', razorpayKeySecret: '' });
+
+    const kept = toHospitalInput({ ...saved, title: 'Saket' });
+    expect(kept).toMatchObject({ onlinePaymentOption: 'RAZORPAY', razorpayKeyId: 'rzp_live_skt' });
+    expect(kept).not.toHaveProperty('razorpayKeySecret');
+    expect(kept).not.toHaveProperty('payuClientSecret');
+
+    expect(
+      toHospitalInput({
+        ...saved,
+        payuClientSecret: ' payu-secret ',
+        razorpayKeySecret: ' new-secret ',
+        title: 'Saket',
+      }),
+    ).toMatchObject({ payuClientSecret: 'payu-secret', razorpayKeySecret: 'new-secret' });
   });
 
   test('a blank display name and address are optional: the title stands in for the name', () => {

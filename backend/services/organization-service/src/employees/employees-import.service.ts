@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { getAllowedHospitalIds } from '@aahar/auth';
-import { EmploymentType, Prisma } from '@prisma/client';
+import { EmploymentType, Gender, Prisma } from '@prisma/client';
 import {
   cellReader,
   cellText,
@@ -14,42 +14,70 @@ import {
   type ImportRowResult,
   type ImportRowsDto,
 } from '../common/import';
-import { masterHospitalSelect } from '../common/location-masters';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
+import { toDateOnly } from '../common/values';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
-import type { EmployeeWithHospital } from './employees.repository';
+import { employeeInclude, type EmployeeWithHospital } from './employees.repository';
 import { toEmployeeResponse } from './employees.service';
 
 const labels = {
+  birthDate: 'Birth date',
   department: 'Department',
   designation: 'Designation',
   eligibleForDiscount: 'Eligible for discount',
   employeeCode: 'Employee code',
+  employeeLevel: 'Employee level',
   employeeName: 'Employee name',
   employmentType: 'Employment type',
+  gender: 'Gender',
   hospitalId: 'Location code',
   isActive: 'Status',
+  joiningDate: 'Joining date',
   mobile: 'Mobile',
+  officialEmail: 'Official email',
+  reportingManagerId: 'Reporting manager code',
 };
 
+// On-Role / Off-Role as the form says; the older On roll / Outsourced still read.
 const employmentTypes = {
+  offrole: EmploymentType.OUTSOURCED,
+  onrole: EmploymentType.ON_ROLL,
   onroll: EmploymentType.ON_ROLL,
   outsourced: EmploymentType.OUTSOURCED,
 };
 
+const genders = { female: Gender.FEMALE, male: Gender.MALE };
+
+/** A day as YYYY-MM-DD; DD-MM-YYYY (or with / or .), as Excel saves it on an Indian PC, turned round. */
+const isoDay = (cell: string | undefined) =>
+  cell?.replace(
+    /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/,
+    (_, day: string, month: string, year: string) =>
+      `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+  );
+
+const managerLoop = 'An employee cannot report to themselves or to someone who reports to them';
+
 type EmployeeFields = Pick<
   Prisma.EmployeeUncheckedCreateInput,
+  | 'birthDate'
   | 'department'
   | 'designation'
   | 'eligibleForDiscount'
   | 'employeeCode'
+  | 'employeeLevel'
   | 'employeeName'
   | 'employmentType'
+  | 'gender'
   | 'hospitalId'
   | 'isActive'
+  | 'joiningDate'
+  | 'legalEntityId'
   | 'mobile'
+  | 'officialEmail'
+  | 'reportingManagerId'
 >;
 
 export interface EmployeeImportLookups {
@@ -57,7 +85,12 @@ export interface EmployeeImportLookups {
   allowedHospitalIds: string[] | null | undefined;
   /** Live employees the caller can see. */
   employees: EmployeeWithHospital[];
-  hospitals: Array<{ hospitalCode: string; id: string; isActive: boolean }>;
+  hospitals: Array<{
+    hospitalCode: string;
+    id: string;
+    isActive: boolean;
+    legalEntityId?: string | null;
+  }>;
   /** Every code taken, including deleted employees' and those at locations out of reach. */
   usedCodes: Set<string>;
 }
@@ -106,26 +139,45 @@ export async function planEmployeeImport(
     }
 
     const employmentType = cells.required('employmentType', 'Employment type')
-      ? cells.choice('employmentType', 'Employment type', employmentTypes, 'On roll or Outsourced')
+      ? cells.choice('employmentType', 'Employment type', employmentTypes, 'On-Role or Off-Role')
       : undefined;
+    // The manager by their code. ponytail: only a direct loop (they or their own reports) is
+    // caught here; the form walks the whole chain.
+    const managerCode = cells.upper('reportingManagerCode');
+    const manager = managerCode ? byCode.get(managerCode) : undefined;
+
+    if (managerCode && !manager) {
+      cells.fail('reportingManagerId', `No employee has code ${managerCode}`);
+    } else if (
+      manager &&
+      (manager.employeeCode === employeeCode || (match && manager.reportingManagerId === match.id))
+    ) {
+      cells.fail('reportingManagerId', managerLoop);
+    }
+
     // Blank: a new employee is shared, an existing one keeps its location.
     const hospitalId = hospital?.id ?? (match ? undefined : null);
     const { dto, errors } = await validateRow(
       CreateEmployeeDto,
       {
+        birthDate: isoDay(cells.text('birthDate')),
         department: cells.text('department'),
         designation: cells.text('designation'),
         eligibleForDiscount: cells.yesNo('eligibleForDiscount', 'Eligible for discount'),
         employeeCode,
+        employeeLevel: cells.text('employeeLevel'),
         employeeName: cells.text('employeeName'),
         employmentType,
+        gender: cells.choice('gender', 'Gender', genders, 'Male or Female'),
         hospitalId,
         isActive: cells.status('isActive'),
+        joiningDate: isoDay(cells.text('joiningDate')),
         mobile: cells.text('mobile'),
+        officialEmail: cells.text('officialEmail'),
       },
       labels,
-      // The location is found by its code, so the DTO's "must be a UUID" never applies.
-      new Set([...cells.failed, 'hospitalId']),
+      // The location and manager are found by their codes, so "must be a UUID" never applies.
+      new Set([...cells.failed, 'hospitalId', 'reportingManagerId']),
     );
 
     if (employeeCode && !match && lookups.usedCodes.has(employeeCode)) {
@@ -142,15 +194,22 @@ export async function planEmployeeImport(
     }
 
     const data: EmployeeFields = {
+      birthDate: dto.birthDate ? toDateOnly(dto.birthDate) : undefined,
       department: dto.department,
       designation: dto.designation,
       eligibleForDiscount: dto.eligibleForDiscount,
-      employeeCode: dto.employeeCode,
+      // Required on every row above, so a blank only reaches here with an error already listed.
+      employeeCode: dto.employeeCode ?? '',
+      employeeLevel: dto.employeeLevel,
       employeeName: dto.employeeName,
       employmentType: dto.employmentType,
+      gender: dto.gender,
       hospitalId,
       isActive: dto.isActive,
+      joiningDate: dto.joiningDate ? toDateOnly(dto.joiningDate) : undefined,
       mobile: dto.mobile,
+      officialEmail: dto.officialEmail,
+      reportingManagerId: manager?.id,
     };
     const action = match ? (changes(match, data) ? 'update' : 'skip') : 'create';
 
@@ -177,6 +236,8 @@ export async function planEmployeeImport(
         ...data,
         eligibleForDiscount: data.eligibleForDiscount ?? true,
         isActive: data.isActive ?? true,
+        // As the form fills it in: a new employee starts with their location's entity.
+        legalEntityId: hospital?.legalEntityId ?? null,
       });
     } else if (action === 'update' && match) {
       plan.updates.push({ data, existing: match });
@@ -185,8 +246,6 @@ export async function planEmployeeImport(
 
   return plan;
 }
-
-const include = { hospital: masterHospitalSelect } satisfies Prisma.EmployeeInclude;
 
 @Injectable()
 export class EmployeesImportService {
@@ -222,15 +281,18 @@ export class EmployeesImportService {
   ) {
     const cell = (row: Record<string, unknown>, field: string) =>
       cellText(row, field).toUpperCase();
-    const codes = rows.map((row) => cell(row, 'employeeCode')).filter(Boolean);
+    // Managers too, so a row can name its manager by code.
+    const codes = rows
+      .flatMap((row) => [cell(row, 'employeeCode'), cell(row, 'reportingManagerCode')])
+      .filter(Boolean);
     const [employees, hospitals, used] = await Promise.all([
       // Scoped to the caller's locations, as the form's lookups are.
       client.employee.findMany({
-        include,
+        include: employeeInclude,
         where: { deletedAt: null, employeeCode: { in: codes } },
       }),
       client.hospital.findMany({
-        select: { hospitalCode: true, id: true, isActive: true },
+        select: { hospitalCode: true, id: true, isActive: true, legalEntityId: true },
         where: {
           deletedAt: null,
           hospitalCode: { in: rows.map((row) => cell(row, 'locationCode')) },
@@ -265,7 +327,7 @@ export class EmployeesImportService {
         createdBy: context.actorId,
         updatedBy: context.actorId,
       })),
-      include,
+      include: employeeInclude,
     });
     const updated: Array<{ existing: EmployeeWithHospital; employee: EmployeeWithHospital }> = [];
 
@@ -274,7 +336,7 @@ export class EmployeesImportService {
       updated.push({
         employee: await tx.employee.update({
           data: { ...data, updatedBy: context.actorId },
-          include,
+          include: employeeInclude,
           where: { id: existing.id },
         }),
         existing,

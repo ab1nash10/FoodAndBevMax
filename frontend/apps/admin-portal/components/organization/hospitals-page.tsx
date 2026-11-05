@@ -56,6 +56,12 @@ import { onlinePaymentOptions } from '@/components/organization/shared/locations
 import { useLegalEntityNames } from '@/components/organization/shared/hooks';
 import { LegalEntityCell } from '@/components/organization/shared/legal-entity-select';
 import type { ActiveFilter, OnlinePaymentFilter } from '@/components/organization/shared/types';
+import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
+import {
+  locationColumns,
+  startLocationImport,
+  locationMatching,
+} from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
 
 export function HospitalsPageClient() {
@@ -198,14 +204,46 @@ export function HospitalsPageClient() {
       <PageHeader
         count={stats?.all}
         action={
-          <IfCanOpen href="/masters/locations/new">
-            <Button asChild>
-              <Link href="/masters/locations/new">
-                <Plus className="h-4 w-4" />
-                New location
-              </Link>
-            </Button>
-          </IfCanOpen>
+          <>
+            <CsvImportExport
+              columns={locationColumns(entityNamesQuery.data)}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listHospitals({
+                    city: cityFilter || undefined,
+                    isActive: activeFilterToBoolean(activeFilter),
+                    limit: 100,
+                    onlinePaymentOption: onlinePaymentFilter || undefined,
+                    page: exportPage,
+                    search,
+                    sortBy,
+                    sortOrder,
+                    state: stateFilter || undefined,
+                  }),
+                )
+              }
+              filename="locations"
+              matching={locationMatching}
+              noun="locations"
+              onImported={() => {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.hospitals() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
+              }}
+              startImport={
+                hasPermission('HOSPITAL_CREATE')
+                  ? () => startLocationImport(organizationApi)
+                  : undefined
+              }
+            />
+            <IfCanOpen href="/masters/locations/new">
+              <Button asChild>
+                <Link href="/masters/locations/new">
+                  <Plus className="h-4 w-4" />
+                  New location
+                </Link>
+              </Button>
+            </IfCanOpen>
+          </>
         }
         icon={MapPin}
         subtitle="Manage operating locations for food and cafeteria services."

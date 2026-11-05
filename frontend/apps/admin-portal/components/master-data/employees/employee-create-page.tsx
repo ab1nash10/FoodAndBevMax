@@ -13,17 +13,14 @@ import {
   EmployeeFormFields,
   employeeSchema,
   emptyEmployeeFormValues,
+  toEmployeeInput,
   type EmployeeFormValues,
 } from '@/components/master-data/employees/shared';
 import { FormShell, SubmitButton } from '@/components/master-data/shared/components';
-import { applyValidationErrors, optionalValue } from '@/components/master-data/shared/utils';
+import { applyValidationErrors } from '@/components/master-data/shared/utils';
 import { useMasterEditing } from '@/components/master-location';
 
-const requiredFields = employeeSchema.pick({
-  employeeCode: true,
-  employeeName: true,
-  employmentType: true,
-});
+const requiredFields = employeeSchema.pick({ employeeName: true, employmentType: true });
 
 export function EmployeeCreatePageClient() {
   const { defaultHospitalId } = useMasterEditing();
@@ -57,14 +54,10 @@ export function EmployeeCreatePageClient() {
   });
 
   // Only the fields this reads, so typing elsewhere in the form does not re-render the page.
-  const [employeeCode, employeeName, employmentType] = form.watch([
-    'employeeCode',
-    'employeeName',
-    'employmentType',
-  ]);
+  const [employeeName, employmentType] = form.watch(['employeeName', 'employmentType']);
   // The first required field still missing, in the schema's own words.
-  const disabledReason = requiredFields.safeParse({ employeeCode, employeeName, employmentType })
-    .error?.issues[0]?.message;
+  const disabledReason = requiredFields.safeParse({ employeeName, employmentType }).error?.issues[0]
+    ?.message;
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = employeeSchema.safeParse(values);
@@ -74,17 +67,7 @@ export function EmployeeCreatePageClient() {
       return;
     }
 
-    createEmployeeMutation.mutate({
-      department: optionalValue(parsed.data.department),
-      designation: optionalValue(parsed.data.designation),
-      eligibleForDiscount: parsed.data.eligibleForDiscount,
-      employmentType: parsed.data.employmentType || undefined,
-      employeeCode: parsed.data.employeeCode,
-      employeeName: parsed.data.employeeName,
-      hospitalId: parsed.data.hospitalId || null,
-      isActive: parsed.data.isActive,
-      mobile: optionalValue(parsed.data.mobile),
-    });
+    createEmployeeMutation.mutate(toEmployeeInput(parsed.data));
   });
 
   return (

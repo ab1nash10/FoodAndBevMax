@@ -9,7 +9,7 @@ import { toNumber } from '../common/values';
 import type { StartOnlinePaymentDto } from './dto/pos.dto';
 import {
   findCardMachine,
-  paymentProviders,
+  providersAt,
   pinelabs,
   plutusBaseUrl,
   providerLabels,
@@ -36,23 +36,29 @@ function toView(payment: OnlinePayment) {
  */
 @Injectable()
 export class OnlinePaymentsService {
-  private readonly providers: Map<OnlinePayment['provider'], PaymentProvider>;
   /** Pine Labs' Plutus Cloud API; unset, card machines are not offered. */
   private readonly plutusUrl: string;
 
   constructor(
-    config: ConfigService,
+    private readonly config: ConfigService,
     private readonly pos: PosService,
     private readonly prisma: PrismaService,
     private readonly auditLog?: AuditLogService,
   ) {
-    this.providers = paymentProviders(config);
     this.plutusUrl = plutusBaseUrl(config);
   }
 
-  /** The UPI providers set up here, in the order the cashier sees them. */
-  available() {
-    return [...this.providers.keys()];
+  /** The UPI gateway the counter's location offers (its Online Payment Option), if set up. */
+  async available(counterId: string) {
+    const counter = await this.pos.findCounter(counterId);
+
+    return [...(await this.providersAt(counter.hospitalId)).keys()];
+  }
+
+  private providersAt(
+    hospitalId: string,
+  ): Promise<Map<OnlinePayment['provider'], PaymentProvider>> {
+    return providersAt(this.prisma, this.config, hospitalId);
   }
 
   /** The counter's Pine Labs card machine the till offers for cards, or null when it has none. */
@@ -67,7 +73,10 @@ export class OnlinePaymentsService {
       dto.provider === 'PINELABS' && this.plutusUrl
         ? await this.findCardMachine({ counterId: dto.counterId })
         : null;
-    const provider = machine ? pinelabs(this.plutusUrl, machine) : this.providers.get(dto.provider);
+    const counter = await this.pos.findCounter(dto.counterId);
+    const provider = machine
+      ? pinelabs(this.plutusUrl, machine)
+      : (await this.providersAt(counter.hospitalId)).get(dto.provider);
 
     if (dto.provider === 'PINELABS' && this.plutusUrl && !machine) {
       throw new BadRequestException(
@@ -76,10 +85,13 @@ export class OnlinePaymentsService {
     }
 
     if (!provider) {
-      throw new BadRequestException(`${providerLabels[dto.provider]} is not set up here.`);
+      throw new BadRequestException(
+        dto.provider === 'PINELABS'
+          ? 'Pine Labs is not set up here.'
+          : `${providerLabels[dto.provider]} is not set up for this location. Pick it as the location's Online Payment Option, with its keys.`,
+      );
     }
 
-    const counter = await this.pos.findCounter(dto.counterId);
     const { grandTotal } = await this.pos.quoteBill(counter, dto);
 
     if (grandTotal <= 0) {
@@ -207,7 +219,9 @@ export class OnlinePaymentsService {
   /** Who to ask about a payment: a Pine Labs one goes back to the machine it was sent to. */
   private async providerFor(payment: OnlinePayment) {
     if (payment.provider !== 'PINELABS') {
-      return this.providers.get(payment.provider);
+      // ponytail: asked on the location's account as it is now; keys changed while a payment is
+      // pending make it unreadable there (the till then expires it).
+      return (await this.providersAt(payment.hospitalId)).get(payment.provider);
     }
 
     const machine =

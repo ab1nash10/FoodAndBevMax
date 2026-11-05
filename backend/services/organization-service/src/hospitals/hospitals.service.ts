@@ -17,7 +17,7 @@ import { HospitalSortField, ListHospitalsQueryDto } from './dto/list-hospitals-q
 import { UpdateHospitalDto } from './dto/update-hospital.dto';
 import { HospitalsRepository } from './hospitals.repository';
 import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
-import { optionalText } from '../common/values';
+import { maskSecret, optionalText } from '../common/values';
 
 type HospitalClient = Prisma.TransactionClient;
 
@@ -46,12 +46,34 @@ function toHospitalResponse(hospital: Hospital) {
     locationCode,
     longitude: hospital.longitude,
     onlinePaymentOption: hospital.onlinePaymentOption,
+    payuClientId: hospital.payuClientId,
+    payuClientSecret: maskSecret(hospital.payuClientSecret),
+    payuMerchantId: hospital.payuMerchantId,
     postalCode: hospital.postalCode,
+    razorpayKeyId: hospital.razorpayKeyId,
+    razorpayKeySecret: maskSecret(hospital.razorpayKeySecret),
     state: hospital.state,
     title,
     visitingCardAddress: hospital.visitingCardAddress,
     updatedAt: hospital.updatedAt,
   };
+}
+
+const paymentKeyFields = [
+  'payuClientId',
+  'payuClientSecret',
+  'payuMerchantId',
+  'razorpayKeyId',
+  'razorpayKeySecret',
+] as const;
+
+/** The gateway keys sent: each trimmed, a blank one cleared, one left out untouched. */
+function paymentKeys(dto: Partial<Pick<CreateHospitalDto, (typeof paymentKeyFields)[number]>>) {
+  return Object.fromEntries(
+    paymentKeyFields
+      .filter((field) => dto[field] !== undefined)
+      .map((field) => [field, optionalText(dto[field]) ?? null]),
+  );
 }
 
 function requiredText(value: string | undefined, message: string): string {
@@ -180,6 +202,7 @@ export class HospitalsService {
             ...(dto.legalEntityId ? { legalEntity: { connect: { id: dto.legalEntityId } } } : {}),
             longitude: optionalText(dto.longitude),
             onlinePaymentOption: dto.onlinePaymentOption ?? OnlinePaymentOption.NONE,
+            ...paymentKeys(dto),
             postalCode: optionalText(dto.postalCode),
             state,
             updatedBy: context.actorId,
@@ -290,6 +313,8 @@ export class HospitalsService {
         if (dto.onlinePaymentOption !== undefined) {
           data.onlinePaymentOption = dto.onlinePaymentOption;
         }
+
+        Object.assign(data, paymentKeys(dto));
 
         if (dto.postalCode !== undefined) {
           data.postalCode = optionalText(dto.postalCode) ?? null;

@@ -1,10 +1,12 @@
 'use client';
 
+import type { PosOwnShift } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { AlertTriangle, Menu, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { LogOutShiftDialog } from '@/components/admin-shell/log-out-shift-dialog';
 import { MobileTabBar } from '@/components/admin-shell/mobile-tab-bar';
 import { AccountMenu, SidebarActions } from '@/components/admin-shell/sidebar-actions';
 import { CommandPalette, type PalettePage } from '@/components/command-palette';
@@ -14,6 +16,7 @@ import { useLocationContext } from '@/components/location-context';
 import { PreferencesDialog } from '@/components/preferences/preferences-dialog';
 import { useApplyThemePreference } from '@/components/preferences/use-preferences';
 import { Skeleton } from '@/components/ui';
+import { organizationApi } from '@/lib/api';
 import { openCommandPalette } from '@/lib/command-palette-events';
 import { canOpenPath, getPermittedPages } from '@/lib/navigation';
 import { useApplyDensity } from '@/lib/use-density';
@@ -87,6 +90,8 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  // The user's open POS shift, found on Log out: they are asked to end or hand it over first.
+  const [openShift, setOpenShift] = useState<PosOwnShift | null>(null);
   // Where a swipe on the phone menu began; a swipe left of 60px closes it.
   const swipeStartX = useRef<number | null>(null);
 
@@ -142,13 +147,24 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     .join('');
   const roleLabel = roles[0] ?? 'Active user';
   const openPalette = openCommandPalette;
+  const logOutNow = () => {
+    setOpenShift(null);
+    void logout().then(() => router.replace('/auth/login'));
+  };
   const account = (below = false) => (
     <AccountMenu
       below={below}
       displayName={displayName}
       initials={initials}
       onLogout={() => {
-        void logout().then(() => router.replace('/auth/login'));
+        // Asked only now, on Log out, so no page load waits on it. A failed check never keeps
+        // anyone signed in.
+        void organizationApi
+          .getMyPosShift()
+          .then(
+            (response) => (response.data ? setOpenShift(response.data) : logOutNow()),
+            logOutNow,
+          );
       }}
       onPreferences={() => setIsPreferencesOpen(true)}
       roleLabel={roleLabel}
@@ -297,6 +313,11 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       />
       <CommandPalette pages={palettePages} />
       {isPreferencesOpen ? <PreferencesDialog onClose={() => setIsPreferencesOpen(false)} /> : null}
+      <LogOutShiftDialog
+        onClose={() => setOpenShift(null)}
+        onLogOut={logOutNow}
+        shift={openShift}
+      />
     </div>
   );
 }

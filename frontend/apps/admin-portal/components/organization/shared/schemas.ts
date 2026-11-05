@@ -50,7 +50,14 @@ export const hospitalSchema = z.object({
   locationCode: z.string().trim().min(1, 'Location code is required.').max(50),
   longitude: optionalText(50),
   onlinePaymentOption: z.enum(['NONE', 'PAYU', 'RAZORPAY']),
+  // The location's own gateway account. A secret box stays empty: typed in, it replaces the
+  // saved one; left empty, the saved one stays.
+  payuClientId: optionalText(200),
+  payuClientSecret: optionalText(500),
+  payuMerchantId: optionalText(100),
   postalCode: postalCodeSchema,
+  razorpayKeyId: optionalText(200),
+  razorpayKeySecret: optionalText(500),
   state: z.string().trim().min(1, 'State is required.').max(100),
   title: z.string().trim().min(1, 'Title is required.').max(255),
   visitingCardAddress: optionalText(500),

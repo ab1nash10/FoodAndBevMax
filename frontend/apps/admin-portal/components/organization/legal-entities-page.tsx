@@ -32,6 +32,12 @@ import { Field, Input, Panel } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { invalidateLegalEntityQueries } from '@/lib/query-invalidation';
+import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
+import {
+  entityColumns,
+  startEntityImport,
+  entityMatching,
+} from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
@@ -207,12 +213,30 @@ export function LegalEntitiesPageClient() {
       <PageHeader
         count={stats?.all}
         action={
-          canCreate ? (
-            <Button onClick={() => openDialog('new')} type="button">
-              <Plus className="h-4 w-4" />
-              New entity
-            </Button>
-          ) : undefined
+          <>
+            <CsvImportExport
+              columns={entityColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listLegalEntities({ ...query, limit: 100, page: exportPage }),
+                )
+              }
+              filename="entities"
+              matching={entityMatching}
+              noun="entities"
+              onImported={() => invalidateLegalEntityQueries(queryClient)}
+              // As the form: only a Super Admin adds or changes an entity.
+              startImport={
+                canCreate && canEdit ? () => startEntityImport(organizationApi) : undefined
+              }
+            />
+            {canCreate ? (
+              <Button onClick={() => openDialog('new')} type="button">
+                <Plus className="h-4 w-4" />
+                New entity
+              </Button>
+            ) : null}
+          </>
         }
         icon={Landmark}
         subtitle="The legal entities locations and restaurants bill under: registered name, address and GST number."

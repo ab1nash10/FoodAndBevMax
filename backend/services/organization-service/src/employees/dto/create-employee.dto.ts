@@ -1,23 +1,71 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EmploymentType } from '@prisma/client';
+import { EmploymentType, Gender } from '@prisma/client';
 import {
   IsBoolean,
+  IsDateString,
+  IsEmail,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 
+const day = /^\d{4}-\d{2}-\d{2}$/;
+
 export class CreateEmployeeDto {
-  @ApiProperty({ example: 'EMP001' })
+  @ApiPropertyOptional({
+    description: 'Left out, the next free EMP code is given',
+    example: 'EMP001',
+  })
+  @IsOptional()
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
   @CodeCase()
-  employeeCode!: string;
+  employeeCode?: string;
+
+  @ApiPropertyOptional({ example: 'ravi.kumar@maxhealthcare.com', nullable: true })
+  @IsOptional()
+  @IsEmail({}, { message: 'Enter a valid email address' })
+  @MaxLength(255)
+  officialEmail?: string | null;
+
+  @ApiPropertyOptional({ enum: Gender, nullable: true })
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender | null;
+
+  @ApiPropertyOptional({ example: '1990-04-12', nullable: true })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(day, { message: 'birthDate must be a date (YYYY-MM-DD)' })
+  birthDate?: string | null;
+
+  @ApiPropertyOptional({ example: '2024-01-15', nullable: true })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(day, { message: 'joiningDate must be a date (YYYY-MM-DD)' })
+  joiningDate?: string | null;
+
+  @ApiPropertyOptional({ example: 'L2', nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  employeeLevel?: string | null;
+
+  @ApiPropertyOptional({ description: "Starts as the location's entity", nullable: true })
+  @IsOptional()
+  @IsUUID()
+  legalEntityId?: string | null;
+
+  @ApiPropertyOptional({ description: 'The employee they report to', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  reportingManagerId?: string | null;
 
   @ApiProperty({ example: 'John Doe' })
   @IsNotEmpty()

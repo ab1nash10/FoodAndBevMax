@@ -117,6 +117,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
           <LocationMasterFormFields
             disabled={updateLocationMasterMutation.isPending}
             form={locationMasterForm}
+            savedSecrets={hospital}
           />
           <div className="flex justify-end">
             <SubmitButton

@@ -53,6 +53,12 @@ import {
 } from '@/components/organization/shared/locations';
 import { useHospitalOptions } from '@/components/organization/shared/hooks';
 import type { ActiveFilter } from '@/components/organization/shared/types';
+import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
+import {
+  kitchenColumns,
+  startKitchenImport,
+  siteMatching,
+} from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 
@@ -216,14 +222,44 @@ export function KitchensPageClient() {
       <PageHeader
         count={stats?.all}
         action={
-          <IfCanOpen href="/masters/kitchens/new">
-            <Button asChild>
-              <Link href="/masters/kitchens/new">
-                <Plus className="h-4 w-4" />
-                New kitchen
-              </Link>
-            </Button>
-          </IfCanOpen>
+          <>
+            <CsvImportExport
+              columns={kitchenColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listKitchens({
+                    hospitalId: hospitalFilter || undefined,
+                    isActive: activeFilterToBoolean(activeFilter),
+                    limit: 100,
+                    page: exportPage,
+                    search,
+                    sortBy,
+                    sortOrder,
+                  }),
+                )
+              }
+              filename="kitchens"
+              matching={siteMatching('kitchen')}
+              noun="kitchens"
+              onImported={() => {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.kitchens() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.kitchenOptions() });
+              }}
+              startImport={
+                hasPermission('KITCHEN_CREATE')
+                  ? () => startKitchenImport(organizationApi)
+                  : undefined
+              }
+            />
+            <IfCanOpen href="/masters/kitchens/new">
+              <Button asChild>
+                <Link href="/masters/kitchens/new">
+                  <Plus className="h-4 w-4" />
+                  New kitchen
+                </Link>
+              </Button>
+            </IfCanOpen>
+          </>
         }
         icon={ChefHat}
         subtitle="Manage production kitchens for location food service."

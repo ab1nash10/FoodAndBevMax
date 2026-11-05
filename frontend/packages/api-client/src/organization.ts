@@ -25,7 +25,15 @@ export interface Hospital {
   locationCode: string;
   longitude: string | null;
   onlinePaymentOption: OnlinePaymentOption;
+  /** The location's own gateway account; unset, it uses the shared server keys. */
+  payuClientId: string | null;
+  /** Masked ("••••last4"), or null when unset: the secret itself is never sent back. */
+  payuClientSecret: string | null;
+  payuMerchantId: string | null;
   postalCode: string | null;
+  razorpayKeyId: string | null;
+  /** Masked, or null when unset. */
+  razorpayKeySecret: string | null;
   state: string | null;
   title: string;
   updatedAt: string;
@@ -78,7 +86,14 @@ export interface HospitalInput {
   locationCode?: string;
   longitude?: string | null;
   onlinePaymentOption?: OnlinePaymentOption;
+  payuClientId?: string | null;
+  /** Left out, the saved secret stays. */
+  payuClientSecret?: string;
+  payuMerchantId?: string | null;
   postalCode?: string | null;
+  razorpayKeyId?: string | null;
+  /** Left out, the saved secret stays. */
+  razorpayKeySecret?: string;
   state?: string;
   title?: string;
   visitingCardAddress?: string | null;
@@ -405,29 +420,49 @@ export interface CounterListQuery extends ListQuery {
   restaurantId?: string;
 }
 
+export type Gender = 'FEMALE' | 'MALE';
+
 export interface Employee extends LocationOwned {
+  /** The day alone, YYYY-MM-DD. */
+  birthDate: string | null;
   createdAt: string;
   deletedAt: string | null;
   department: string | null;
   designation: string | null;
   eligibleForDiscount: boolean;
   employeeCode: string;
+  employeeLevel: string | null;
   employeeName: string;
   /** Null for employees recorded before the type was asked for. */
   employmentType: EmploymentType | null;
+  gender: Gender | null;
   id: string;
   isActive: boolean;
+  /** The day alone, YYYY-MM-DD. */
+  joiningDate: string | null;
+  legalEntityId: string | null;
   mobile: string | null;
+  officialEmail: string | null;
+  reportingManager: { employeeCode: string; employeeName: string; id: string } | null;
+  reportingManagerId: string | null;
   updatedAt: string;
 }
 
-/** On an update, null clears an optional text field. */
+/** On an update, null clears an optional field. */
 export interface EmployeeInput {
+  birthDate?: string | null;
   department?: string | null;
   designation?: string | null;
   eligibleForDiscount?: boolean;
-  employeeCode: string;
+  /** Left out on create, the next free EMP code is given; on update, the code stays. */
+  employeeCode?: string;
+  employeeLevel?: string | null;
   employeeName: string;
+  gender?: Gender | null;
+  joiningDate?: string | null;
+  legalEntityId?: string | null;
+  officialEmail?: string | null;
+  reportingManagerId?: string | null;
   /** Required on create; older employees may still have none. */
   employmentType?: EmploymentType;
   /** The location it belongs to; null shares it with every location. */

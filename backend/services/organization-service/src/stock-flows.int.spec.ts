@@ -1229,7 +1229,10 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     );
     const draft = { channel: 'COUNTER', counterId, lines: [{ menuId, quantity: 1 }] };
     const shift = await ok('POST', '/pos/shifts', { counterId, openingCash: 0 });
-    const providers = (await ok('GET', '/pos/online-payments/providers')) as unknown as string[];
+    const providers = (await ok(
+      'GET',
+      `/pos/online-payments/providers/${counterId}`,
+    )) as unknown as string[];
 
     // A real sandbox round trip when Razorpay test keys are set: link made, still unpaid, let go.
     if (providers.includes('RAZORPAY')) {

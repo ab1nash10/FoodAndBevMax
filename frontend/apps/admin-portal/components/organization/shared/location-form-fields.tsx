@@ -10,12 +10,97 @@ import { onlinePaymentOptions } from '@/components/organization/shared/locations
 import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
 import type { HospitalFormValues } from '@/components/organization/shared/types';
 
+type GatewayField =
+  'payuClientId' | 'payuClientSecret' | 'payuMerchantId' | 'razorpayKeyId' | 'razorpayKeySecret';
+
+const gatewayFields: Record<
+  'PAYU' | 'RAZORPAY',
+  { fields: Array<{ label: string; name: GatewayField; secret?: boolean }>; title: string }
+> = {
+  PAYU: {
+    fields: [
+      { label: 'PayU Client ID', name: 'payuClientId' },
+      { label: 'PayU Merchant ID', name: 'payuMerchantId' },
+      { label: 'PayU Client Secret', name: 'payuClientSecret', secret: true },
+    ],
+    title: 'PayU Details',
+  },
+  RAZORPAY: {
+    fields: [
+      { label: 'Key ID', name: 'razorpayKeyId' },
+      { label: 'Key Secret', name: 'razorpayKeySecret', secret: true },
+    ],
+    title: 'RazorPay Details',
+  },
+};
+
+/**
+ * The picked gateway's account for this location. A secret is never shown: its box stays empty,
+ * saying one is saved (by its last 4), and only a new one typed in replaces it.
+ */
+function GatewayDetails({
+  disabled,
+  form,
+  savedSecrets,
+}: Readonly<{
+  disabled: boolean;
+  form: UseFormReturn<HospitalFormValues>;
+  savedSecrets?: Partial<Record<'payuClientSecret' | 'razorpayKeySecret', string | null>>;
+}>) {
+  const option = form.watch('onlinePaymentOption');
+  if (option === 'NONE') return null;
+
+  const gateway = gatewayFields[option];
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-center gap-3 text-xs text-ds-muted">
+        <span className="h-px flex-1 bg-ds-border" />
+        {gateway.title}
+        <span className="h-px flex-1 bg-ds-border" />
+      </div>
+      {gateway.fields.map((field) => {
+        const saved =
+          field.name === 'payuClientSecret' || field.name === 'razorpayKeySecret'
+            ? savedSecrets?.[field.name]
+            : null;
+
+        return (
+          <Field
+            error={form.formState.errors[field.name]?.message}
+            key={field.name}
+            label={field.label}
+            name={`location-${field.name}`}
+          >
+            <Input
+              autoComplete={field.secret ? 'new-password' : 'off'}
+              disabled={disabled}
+              id={`location-${field.name}`}
+              placeholder={saved ? `Saved (${saved}). Type a new one to replace it.` : undefined}
+              spellCheck={false}
+              type={field.secret ? 'password' : 'text'}
+              {...form.register(field.name)}
+            />
+          </Field>
+        );
+      })}
+      <p className="text-xs text-ds-muted">
+        Left empty, this location uses the shared {gateway.title.replace(' Details', '')} account
+        set up on the server.
+      </p>
+    </div>
+  );
+}
+
 export function LocationMasterFormFields({
   disabled = false,
   form,
+  savedSecrets,
 }: Readonly<{
   disabled?: boolean;
   form: UseFormReturn<HospitalFormValues>;
+  /** The saved location's masked secrets, to say one is saved. */
+  savedSecrets?: Partial<Record<'payuClientSecret' | 'razorpayKeySecret', string | null>>;
 }>) {
   const selectedState = form.watch('state');
   const selectedCity = form.watch('city');
@@ -197,6 +282,7 @@ export function LocationMasterFormFields({
         </div>
         <FieldError>{form.formState.errors.onlinePaymentOption?.message}</FieldError>
       </div>
+      <GatewayDetails disabled={disabled} form={form} savedSecrets={savedSecrets} />
       <CheckboxLine
         input={
           <input

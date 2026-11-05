@@ -5,11 +5,33 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, MonitorSmartphone } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { useLocationContext } from '@/components/location-context';
 import { AppPageHeader } from '@/components/design-system';
 import { Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { saveTillKey, usePosTill } from './shared';
+
+/**
+ * Why the till does not open for the location picked in the portal: it is another location's.
+ * Null when it is the picked location's, or when all locations are picked.
+ */
+export function tillElsewhere(
+  tillHospitalIds: string[],
+  scopedHospitalId: string | undefined,
+  locations: ReadonlyArray<{ hospitalName: string; id: string }>,
+): string | null {
+  if (!scopedHospitalId || tillHospitalIds.includes(scopedHospitalId)) return null;
+
+  const nameOf = (id: string) => locations.find((location) => location.id === id)?.hospitalName;
+  const tillAt =
+    tillHospitalIds
+      .map(nameOf)
+      .filter((name): name is string => Boolean(name))
+      .join(' or ') || 'another location';
+
+  return `This till is at ${tillAt}, and you have ${nameOf(scopedHospitalId) ?? 'another location'} picked. Pick ${tillAt} at the top to use the POS here.`;
+}
 
 /** Why a POS screen does not open on this computer. */
 export function PosClosed({
@@ -32,10 +54,19 @@ export function PosClosed({
  */
 function TillSetup() {
   const queryClient = useQueryClient();
+  // Only the picked location's devices: none are listed until a location is picked.
+  const { scopedHospitalId } = useLocationContext();
   const devices = useQuery({
+    enabled: Boolean(scopedHospitalId),
     queryFn: async () =>
-      (await organizationApi.listPosDevices({ isActive: true, limit: 100 })).data.items,
-    queryKey: queryKeys.posDevices('till-setup'),
+      (
+        await organizationApi.listPosDevices({
+          hospitalId: scopedHospitalId,
+          isActive: true,
+          limit: 100,
+        })
+      ).data.items,
+    queryKey: queryKeys.posDevices('till-setup', scopedHospitalId),
   });
   // A browser cannot read the computer's name: the admin types it, and the server checks it is
   // the device's Host Name.
@@ -78,7 +109,11 @@ function TillSetup() {
           {getApiErrorMessage(enroll.error)}
         </p>
       ) : null}
-      {devices.isLoading ? (
+      {!scopedHospitalId ? (
+        <p className="mt-3 text-sm text-ds-muted">
+          Pick a location at the top to see its POS devices.
+        </p>
+      ) : devices.isLoading ? (
         <p className="mt-3 flex items-center gap-2 text-sm text-ds-muted">
           <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> Loading POS devices…
         </p>
@@ -136,8 +171,9 @@ function TillSetup() {
 export function PosGate({ children }: Readonly<{ children: ReactNode }>) {
   const till = usePosTill();
   const canSetUp = useAuth().hasPermission('POS_DEVICE_UPDATE');
+  const { availableLocations, isLoadingLocations, scopedHospitalId } = useLocationContext();
 
-  if (till.isLoading) {
+  if (till.isLoading || isLoadingLocations) {
     return <Skeleton className="h-64 w-full" />;
   }
 
@@ -148,7 +184,7 @@ export function PosGate({ children }: Readonly<{ children: ReactNode }>) {
       ? 'This computer is not set up as a till, so the POS screens do not open here.'
       : !till.data?.allowed
         ? `You are not assigned to the location of this till’s restaurant (${till.data?.restaurants.join(', ')}), so the POS screens do not open for you. Ask an admin to give you access to its location.`
-        : null;
+        : tillElsewhere(till.data.hospitalIds, scopedHospitalId, availableLocations);
 
   if (problem) {
     return (

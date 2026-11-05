@@ -57,6 +57,11 @@ export function timestampRange(
   };
 }
 
+/** A secret as a screen may see it: its last 4 characters only, or null when unset. */
+export function maskSecret(value: string | null): string | null {
+  return value ? `••••${value.slice(-4)}` : null;
+}
+
 /** Trimmed text, or undefined when nothing is left. */
 export function optionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

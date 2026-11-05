@@ -43,8 +43,11 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
         JSON.stringify({ ...tokens, savedAt: new Date().toISOString() }),
       );
     }
-    // Every location, so the bill shows in the history whichever location the till is in.
-    window.localStorage.setItem('aahar.location-context', 'all');
+    // Every location, so the bill shows in the history whichever location the till is in. Only
+    // when unset, so the till setup below can pick the till's own location for a moment.
+    if (!window.localStorage.getItem('aahar.location-context')) {
+      window.localStorage.setItem('aahar.location-context', 'all');
+    }
   }, session);
   const title = page.getByRole('heading', { level: 1 });
 
@@ -54,11 +57,20 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
       await fetch(`${orgUrl}/pos-devices?limit=100`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       })
-    ).json()) as { data: { items: Array<{ hostName: string | null; name: string }> } };
-    const hostName = devices.data.items.find((device) => device.name === tillDevice)?.hostName;
+    ).json()) as {
+      data: { items: Array<{ hospitalId: string; hostName: string | null; name: string }> };
+    };
+    const device = devices.data.items.find((option) => option.name === tillDevice);
+    const hostName = device?.hostName;
     expect(hostName, `${tillDevice} has a Host Name`).toBeTruthy();
 
+    // Till setup lists only the picked location's POS devices, so pick the till's location.
     await page.goto('pos/billing');
+    await page.evaluate(
+      (id) => window.localStorage.setItem('aahar.location-context', id),
+      device!.hospitalId,
+    );
+    await page.reload();
     const notATill = page.getByText('This computer is not set up as a till');
     await expect(notATill).toBeVisible();
     const setUp = page.getByRole('button', {
@@ -69,10 +81,17 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     // Another computer's name is refused: the device names a different one.
     await name.fill('NOT-THIS-PC');
     await setUp.click();
-    await expect(page.getByText(/This computer \(NOT-THIS-PC\) is not/)).toBeVisible();
+    // Without saying which name was expected.
+    await expect(
+      page.getByText('This computer’s name doesn’t match the POS device’s Host Name.', {
+        exact: false,
+      }),
+    ).toBeVisible();
     await name.fill(hostName!.toLowerCase());
     await setUp.click();
     await expect(notATill).toHaveCount(0);
+    // Back to every location for the screens and the bill history.
+    await page.evaluate(() => window.localStorage.setItem('aahar.location-context', 'all'));
   });
 
   for (const [path, name] of screens) {
@@ -126,6 +145,20 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
 
     await page.goto('pos/history');
     await expect(page.getByText(billNumber)).toBeVisible();
+  });
+
+  await test.step('logging out with the shift open asks to end or hand it over first', async () => {
+    await page.goto('pos/billing');
+    await page.locator('summary[aria-label^="Account menu"]:visible').first().click();
+    await page.locator('[role="menuitem"]:visible', { hasText: 'Log out' }).click();
+
+    const asked = page.getByRole('dialog', { name: 'End your shift before you log out' });
+    await expect(asked).toBeVisible();
+    await expect(asked.getByText('You still have a POS shift open.')).toBeVisible();
+    await asked.getByRole('button', { name: 'Stay signed in' }).click();
+    await expect(asked).toHaveCount(0);
+    // Still signed in, on the till.
+    await expect(title).toHaveText(/^Billing/);
   });
 
   if (openedShift) {

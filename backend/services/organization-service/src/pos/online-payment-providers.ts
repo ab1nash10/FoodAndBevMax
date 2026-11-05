@@ -327,7 +327,84 @@ export async function findCardMachine(
   return null;
 }
 
-/** The providers whose keys are all set; the cashier is offered only these. */
+/** A location's gateway choice and its own keys (each null until set on the location). */
+export interface LocationPaymentKeys {
+  onlinePaymentOption: 'NONE' | 'PAYU' | 'RAZORPAY';
+  payuClientId: string | null;
+  payuClientSecret: string | null;
+  payuMerchantId: string | null;
+  razorpayKeyId: string | null;
+  razorpayKeySecret: string | null;
+}
+
+// One provider per set of keys, so a PayU token is reused across bills like the shared one.
+const byKeys = new Map<string, PaymentProvider>();
+
+/**
+ * The UPI gateway a location's tills offer: only the one its Online Payment Option picks, on the
+ * location's own account when every key of it is set, else on the shared server keys. None
+ * offers none.
+ */
+export function locationProviders(config: ConfigService, location: LocationPaymentKeys) {
+  const value = (key: string) => config.get<string>(key)?.trim() || '';
+  const own = (...keys: Array<string | null>) => keys.map((key) => key?.trim() ?? '');
+  const providers = new Map<OnlinePaymentProvider, PaymentProvider>();
+  const shared = paymentProviders(config);
+  const once = (cacheKey: string, build: () => PaymentProvider) => {
+    if (!byKeys.has(cacheKey)) byKeys.set(cacheKey, build());
+    return byKeys.get(cacheKey)!;
+  };
+
+  if (location.onlinePaymentOption === 'RAZORPAY') {
+    const [keyId, keySecret] = own(location.razorpayKeyId, location.razorpayKeySecret);
+    const provider =
+      keyId && keySecret
+        ? once(`RAZORPAY:${keyId}:${keySecret}`, () => razorpay(keyId, keySecret))
+        : shared.get('RAZORPAY');
+    if (provider) providers.set('RAZORPAY', provider);
+  }
+
+  if (location.onlinePaymentOption === 'PAYU') {
+    const [clientId, clientSecret, merchantId] = own(
+      location.payuClientId,
+      location.payuClientSecret,
+      location.payuMerchantId,
+    );
+    const endpoints = { baseUrl: value('PAYU_BASE_URL'), tokenUrl: value('PAYU_TOKEN_URL') };
+    const provider =
+      clientId && clientSecret && merchantId && endpoints.baseUrl && endpoints.tokenUrl
+        ? once(`PAYU:${clientId}:${clientSecret}:${merchantId}`, () =>
+            payu({ ...endpoints, clientId, clientSecret, merchantId }),
+          )
+        : shared.get('PAYU');
+    if (provider) providers.set('PAYU', provider);
+  }
+
+  return providers;
+}
+
+/** The UPI gateways a location's tills offer, read from the location (none for an unknown one). */
+export async function providersAt(
+  client: Pick<Prisma.TransactionClient, 'hospital'>,
+  config: ConfigService,
+  hospitalId: string,
+) {
+  const location = await client.hospital.findFirst({
+    select: {
+      onlinePaymentOption: true,
+      payuClientId: true,
+      payuClientSecret: true,
+      payuMerchantId: true,
+      razorpayKeyId: true,
+      razorpayKeySecret: true,
+    },
+    where: { id: hospitalId },
+  });
+
+  return location ? locationProviders(config, location) : new Map<never, never>();
+}
+
+/** The providers whose keys are all set on the server: the shared accounts. */
 export function paymentProviders(config: ConfigService) {
   const value = (key: string) => config.get<string>(key)?.trim() || '';
   const providers = new Map<OnlinePaymentProvider, PaymentProvider>();

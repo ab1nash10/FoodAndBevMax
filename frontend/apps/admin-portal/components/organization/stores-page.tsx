@@ -52,6 +52,12 @@ import {
 } from '@/components/organization/shared/locations';
 import { useHospitalOptions } from '@/components/organization/shared/hooks';
 import type { ActiveFilter } from '@/components/organization/shared/types';
+import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
+import {
+  storeColumns,
+  startStoreImport,
+  siteMatching,
+} from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 
@@ -217,14 +223,42 @@ export function StoresPageClient() {
       <PageHeader
         count={stats?.all}
         action={
-          <IfCanOpen href="/masters/stores/new">
-            <Button asChild>
-              <Link href="/masters/stores/new">
-                <Plus className="h-4 w-4" />
-                New store
-              </Link>
-            </Button>
-          </IfCanOpen>
+          <>
+            <CsvImportExport
+              columns={storeColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listStores({
+                    hospitalId: hospitalFilter || undefined,
+                    isActive: activeFilterToBoolean(activeFilter),
+                    limit: 100,
+                    page: exportPage,
+                    search,
+                    sortBy,
+                    sortOrder,
+                  }),
+                )
+              }
+              filename="stores"
+              matching={siteMatching('store')}
+              noun="stores"
+              onImported={() => {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.stores() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.storeOptions() });
+              }}
+              startImport={
+                hasPermission('STORE_CREATE') ? () => startStoreImport(organizationApi) : undefined
+              }
+            />
+            <IfCanOpen href="/masters/stores/new">
+              <Button asChild>
+                <Link href="/masters/stores/new">
+                  <Plus className="h-4 w-4" />
+                  New store
+                </Link>
+              </Button>
+            </IfCanOpen>
+          </>
         }
         icon={Store}
         subtitle="Manage F&B stores linked to locations."

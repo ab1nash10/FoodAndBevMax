@@ -77,7 +77,7 @@ test('codes, locations and types are checked like the form does', async () => {
     plan.rows.map((result) => result.errors),
     [
       ['Employee code EMP404 is already used'],
-      ['No location has code XYZ', 'Employment type must be On roll or Outsourced'],
+      ['No location has code XYZ', 'Employment type must be On-Role or Off-Role'],
       ['Employee name is required', 'Mobile must be shorter than or equal to 20 characters'],
       ['Row 4 has the same Employee code'],
     ],
@@ -173,6 +173,65 @@ test('Status and discount cells set a new employee; blank, they default to activ
     [
       { eligibleForDiscount: true, isActive: false },
       { eligibleForDiscount: true, isActive: true },
+    ],
+  );
+});
+
+test('the form’s other details come in too: email, gender, dates, level, manager by code', async () => {
+  const boss = { ...shared, employeeCode: 'EMP010', id: 'emp-10', reportingManagerId: 'emp-1' };
+  const plan = await planEmployeeImport(
+    [
+      row({
+        birthDate: '1990-04-12',
+        employeeCode: 'EMP020',
+        employeeLevel: 'L2',
+        employmentType: 'Off-Role',
+        gender: 'female',
+        // As Excel saves a date on an Indian-format PC.
+        joiningDate: '15/01/2024',
+        locationCode: 'SKT',
+        officialEmail: 'ravi@maxhealthcare.com',
+        reportingManagerCode: 'emp010',
+      }),
+      row({ employeeCode: 'EMP021', employmentType: 'on-role', gender: 'Other' }),
+      row({ employeeCode: 'EMP022', reportingManagerCode: 'EMP999' }),
+      // Their own manager, or someone who reports to them.
+      row({ employeeCode: 'EMP010', reportingManagerCode: 'EMP010' }),
+      row({ employeeCode: 'EMP001', reportingManagerCode: 'EMP010' }),
+    ],
+    lookups({
+      employees: [shared, boss],
+      hospitals: [{ ...saket, legalEntityId: 'entity-skt' }, vaishali],
+    }),
+    everything,
+  );
+
+  assert.deepEqual(plan.creates[0], {
+    birthDate: new Date('1990-04-12T00:00:00Z'),
+    department: undefined,
+    designation: undefined,
+    eligibleForDiscount: true,
+    employeeCode: 'EMP020',
+    employeeLevel: 'L2',
+    employeeName: 'Ravi Kumar',
+    employmentType: EmploymentType.OUTSOURCED,
+    gender: 'FEMALE',
+    hospitalId: 'h-saket',
+    isActive: true,
+    joiningDate: new Date('2024-01-15T00:00:00Z'),
+    // A new employee takes their location's entity, as the form fills it in.
+    legalEntityId: 'entity-skt',
+    mobile: undefined,
+    officialEmail: 'ravi@maxhealthcare.com',
+    reportingManagerId: 'emp-10',
+  });
+  assert.deepEqual(
+    plan.rows.slice(1).map((result) => result.errors),
+    [
+      ['Gender must be Male or Female'],
+      ['No employee has code EMP999'],
+      ['An employee cannot report to themselves or to someone who reports to them'],
+      ['An employee cannot report to themselves or to someone who reports to them'],
     ],
   );
 });

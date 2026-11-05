@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Employee, Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import {
@@ -6,9 +11,12 @@ import {
   assertMayChangeShared,
   sharedOrAt,
 } from '../common/location-masters';
+import { formatMasterCode, getNextSequenceNumber } from '../common/master-code-generator';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
+import { toDateOnly } from '../common/values';
+import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { ListEmployeesQueryDto } from './dto/list-employees-query.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -16,21 +24,34 @@ import { EmployeesRepository, type EmployeeWithHospital } from './employees.repo
 
 type EmployeeClient = Prisma.TransactionClient;
 
+/** A DATE column as the day alone (YYYY-MM-DD), as a date box takes it. */
+const dayOf = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
+/** A day sent in, kept as undefined (left out) or null (cleared). */
+const toDay = (value: string | null | undefined) => (value ? toDateOnly(value) : value);
+
 export function toEmployeeResponse(employee: EmployeeWithHospital) {
   return {
+    birthDate: dayOf(employee.birthDate),
     createdAt: employee.createdAt,
     deletedAt: employee.deletedAt,
     department: employee.department,
     designation: employee.designation,
     eligibleForDiscount: employee.eligibleForDiscount,
     employeeCode: employee.employeeCode,
+    employeeLevel: employee.employeeLevel,
     employeeName: employee.employeeName,
     employmentType: employee.employmentType,
+    gender: employee.gender,
     hospital: employee.hospital,
     hospitalId: employee.hospitalId,
     id: employee.id,
     isActive: employee.isActive,
+    joiningDate: dayOf(employee.joiningDate),
+    legalEntityId: employee.legalEntityId,
     mobile: employee.mobile,
+    officialEmail: employee.officialEmail,
+    reportingManager: employee.reportingManager,
+    reportingManagerId: employee.reportingManagerId,
     updatedAt: employee.updatedAt,
   };
 }
@@ -120,20 +141,37 @@ export class EmployeesService {
           await assertActiveHospital(tx, hospitalId);
         }
 
-        await this.assertUniqueEmployeeCode(dto.employeeCode, undefined, tx);
+        if (dto.legalEntityId) {
+          await assertActiveLegalEntity(tx, dto.legalEntityId);
+        }
+
+        if (dto.reportingManagerId) {
+          await this.assertReportingManager(undefined, dto.reportingManagerId, tx);
+        }
+
+        if (dto.employeeCode) {
+          await this.assertUniqueEmployeeCode(dto.employeeCode, undefined, tx);
+        }
 
         const employee = await this.employees.create(
           {
+            birthDate: toDay(dto.birthDate),
             createdBy: context.actorId,
             department: dto.department,
             designation: dto.designation,
             eligibleForDiscount: dto.eligibleForDiscount ?? true,
-            employeeCode: dto.employeeCode,
+            employeeCode: dto.employeeCode || (await this.nextFreeCode(tx)),
+            employeeLevel: dto.employeeLevel,
             employmentType: dto.employmentType,
+            gender: dto.gender,
             hospitalId,
             employeeName: dto.employeeName,
             isActive: dto.isActive ?? true,
+            joiningDate: toDay(dto.joiningDate),
+            legalEntityId: dto.legalEntityId,
             mobile: dto.mobile,
+            officialEmail: dto.officialEmail,
+            reportingManagerId: dto.reportingManagerId,
             updatedBy: context.actorId,
           },
           tx,
@@ -213,6 +251,49 @@ export class EmployeesService {
           data.mobile = dto.mobile;
         }
 
+        if (dto.officialEmail !== undefined) {
+          data.officialEmail = dto.officialEmail;
+        }
+
+        if (dto.gender !== undefined) {
+          data.gender = dto.gender;
+        }
+
+        if (dto.birthDate !== undefined) {
+          data.birthDate = toDay(dto.birthDate);
+        }
+
+        if (dto.joiningDate !== undefined) {
+          data.joiningDate = toDay(dto.joiningDate);
+        }
+
+        if (dto.employeeLevel !== undefined) {
+          data.employeeLevel = dto.employeeLevel;
+        }
+
+        if (dto.legalEntityId !== undefined && dto.legalEntityId !== existing.legalEntityId) {
+          if (dto.legalEntityId) {
+            await assertActiveLegalEntity(tx, dto.legalEntityId);
+          }
+
+          data.legalEntity = dto.legalEntityId
+            ? { connect: { id: dto.legalEntityId } }
+            : { disconnect: true };
+        }
+
+        if (
+          dto.reportingManagerId !== undefined &&
+          dto.reportingManagerId !== existing.reportingManagerId
+        ) {
+          if (dto.reportingManagerId) {
+            await this.assertReportingManager(id, dto.reportingManagerId, tx);
+          }
+
+          data.reportingManager = dto.reportingManagerId
+            ? { connect: { id: dto.reportingManagerId } }
+            : { disconnect: true };
+        }
+
         if (Object.keys(data).length > 0) {
           data.updatedBy = context.actorId;
         }
@@ -289,6 +370,51 @@ export class EmployeesService {
 
     if (employee) {
       throw new ConflictException('Employee code already exists');
+    }
+  }
+
+  /** The next EMP code from the sequence, stepping over any typed in by hand. */
+  private async nextFreeCode(client: EmployeeClient): Promise<string> {
+    for (;;) {
+      const code = formatMasterCode(
+        'EMP',
+        await getNextSequenceNumber(client, 'employee_code_sequence'),
+      );
+
+      if (!(await this.employees.findByCode(code, undefined, client))) {
+        return code;
+      }
+    }
+  }
+
+  /**
+   * The manager must be a current employee, and not the employee or anyone below them: walking
+   * up from the manager must never reach the employee.
+   */
+  private async assertReportingManager(
+    employeeId: string | undefined,
+    managerId: string,
+    client: EmployeeClient,
+  ): Promise<void> {
+    const loop = 'An employee cannot report to themselves or to someone who reports to them.';
+
+    if (managerId === employeeId) {
+      throw new BadRequestException(loop);
+    }
+
+    let manager = await this.employees.findActiveById(managerId, client);
+
+    if (!manager) {
+      throw new BadRequestException('Choose a reporting manager who is a current employee.');
+    }
+
+    // ponytail: one read per level, capped at 100 levels; enough for any real chain of managers.
+    for (let depth = 0; employeeId && manager?.reportingManagerId && depth < 100; depth += 1) {
+      if (manager.reportingManagerId === employeeId) {
+        throw new BadRequestException(loop);
+      }
+
+      manager = await this.employees.findActiveById(manager.reportingManagerId, client);
     }
   }
 

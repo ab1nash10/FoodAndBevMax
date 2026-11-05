@@ -12,9 +12,26 @@ import type { ImportDefinition } from '@/components/import/import-definitions';
 import { Badge, RequiredMark } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage } from '@/lib/api';
-import { downloadCsv } from '@/lib/csv';
-import { readImportFile, tableToImportRows } from '@/lib/import-file';
+import { readImportFile, tableToImportRows, type ImportColumn } from '@/lib/import-file';
+import { downloadImportTemplate } from '@/lib/import-template';
 import { cn } from '@/lib/utils';
+
+/** Each column a file fills: its header, a required mark, and its rules. */
+export function ImportColumnList({ columns }: Readonly<{ columns: ImportColumn[] }>) {
+  return (
+    <dl className="grid gap-2 rounded-control border border-ds-border p-3">
+      {columns.map((column) => (
+        <div key={column.field}>
+          <dt className="font-semibold text-ds-text">
+            {column.header}
+            {column.required ? <RequiredMark /> : null}
+          </dt>
+          {column.hint ? <dd className="text-ds-text-2">{column.hint}</dd> : null}
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 type Busy = 'checking' | 'importing' | 'reading' | null;
 
@@ -198,17 +215,12 @@ export function ImportButton({ definition }: Readonly<{ definition: ImportDefini
                       {checked ? 'Choose another file' : 'Choose file'}
                     </Button>
                     <Button
-                      onClick={() =>
-                        downloadCsv(`${definition.filename}.csv`, [
-                          columns.map((column) => column.header),
-                          columns.map((column) => column.example),
-                        ])
-                      }
+                      onClick={() => void downloadImportTemplate(definition)}
                       type="button"
                       variant="ghost"
                     >
                       <Download aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                      Download template
+                      Download Excel template
                     </Button>
                     <input
                       accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -322,17 +334,7 @@ export function ImportButton({ definition }: Readonly<{ definition: ImportDefini
                         An Excel (.xlsx) or CSV file, up to 1,000 rows, with these columns in any
                         order:
                       </p>
-                      <dl className="grid gap-2 rounded-control border border-ds-border p-3">
-                        {columns.map((column) => (
-                          <div key={column.field}>
-                            <dt className="font-semibold text-ds-text">
-                              {column.header}
-                              {column.required ? <RequiredMark /> : null}
-                            </dt>
-                            {column.hint ? <dd className="text-ds-text-2">{column.hint}</dd> : null}
-                          </div>
-                        ))}
-                      </dl>
+                      <ImportColumnList columns={columns} />
                     </div>
                   ) : null}
                 </div>

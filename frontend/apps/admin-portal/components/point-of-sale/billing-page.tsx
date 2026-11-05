@@ -293,9 +293,10 @@ export function BillingPageClient() {
   const upiId = counter?.restaurant.upiId?.trim();
   // Asked for only once UPI is picked, so opening the till costs no extra request.
   const providersQuery = useQuery({
-    enabled: paymentMode === 'UPI',
-    queryFn: async () => (await organizationApi.listOnlinePaymentProviders()).data,
-    queryKey: queryKeys.posPaymentProviders(),
+    enabled: paymentMode === 'UPI' && Boolean(counter),
+    // The counter's location decides its gateway (its Online Payment Option).
+    queryFn: async () => (await organizationApi.listOnlinePaymentProviders(counter!.id)).data,
+    queryKey: queryKeys.posPaymentProviders(counter?.id),
     staleTime: Infinity,
   });
   const upiOptions: Array<'OWN' | OnlinePaymentProvider> = [

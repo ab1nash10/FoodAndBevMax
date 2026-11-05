@@ -70,9 +70,23 @@ import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 
 const categoryColumns: Array<CsvColumn<ItemCategory>> = [
-  { header: 'Category name', value: (category) => category.categoryName },
-  { header: 'Status', value: (category) => (category.isActive ? 'Active' : 'Inactive') },
+  {
+    example: 'Snacks',
+    header: 'Category name',
+    hint: 'Up to 255 characters, with at least one letter or number. Duplicate names are not allowed: a name matching an existing category (ignoring case, spaces and punctuation) updates that category instead of adding one.',
+    required: true,
+    value: (category) => category.categoryName,
+  },
+  {
+    example: 'Active',
+    header: 'Status',
+    hint: 'Active or Inactive only. Blank: active when added, unchanged on an update.',
+    value: (category) => (category.isActive ? 'Active' : 'Inactive'),
+  },
 ];
+
+const categoryMatching =
+  'A row whose Category name matches a category (ignoring case, spaces and punctuation) updates it, taking the row’s spelling; any other name adds a category.';
 
 /**
  * A row whose name matches a category (ignoring case, spaces and punctuation, as the server
@@ -312,6 +326,7 @@ export function ItemCategoriesPageClient() {
                 )
               }
               filename="item-categories"
+              matching={categoryMatching}
               noun="item categories"
               onImported={() => invalidateItemCategoryQueries(queryClient)}
               startImport={hasPermission('ITEM_CATEGORY_CREATE') ? startCategoryImport : undefined}

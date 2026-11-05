@@ -45,6 +45,7 @@ import type {
   PosChannel,
   PosCounter,
   PosDaySummary,
+  PosOwnShift,
   PosShift,
   OnlinePayment,
   OnlinePaymentInput,
@@ -428,6 +429,8 @@ export function createOrganizationApi(options: ApiClientOptions) {
         ApiResponse<{
           /** Whether the signed-in user is assigned to the location of the till's restaurants. */
           allowed: boolean;
+          /** The locations of the till's restaurants: the POS opens while one is picked. */
+          hospitalIds: string[];
           restaurants: string[];
           /** The POS device's name; null when this browser is no till. */
           till: string | null;
@@ -464,8 +467,11 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}`);
     },
     /** The online UPI providers set up on the server, in the order to offer them. */
-    listOnlinePaymentProviders() {
-      return client.request<ApiResponse<OnlinePaymentProvider[]>>('/pos/online-payments/providers');
+    /** The UPI gateway the counter's location offers: its Online Payment Option, if set up. */
+    listOnlinePaymentProviders(counterId: string) {
+      return client.request<ApiResponse<OnlinePaymentProvider[]>>(
+        `/pos/online-payments/providers/${counterId}`,
+      );
     },
     /** The counter's Pine Labs card machine, or null: cards go to it as provider PINELABS. */
     getCardMachine(counterId: string) {
@@ -536,6 +542,10 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<PosStockSummary>>('/pos/stock-summary', {
         query: { counterId, date },
       });
+    },
+    /** The signed-in user's own open shift, wherever it is; null when none. Needs no till. */
+    getMyPosShift() {
+      return client.request<ApiResponse<PosOwnShift | null>>('/pos/my-shift');
     },
     /** Opens a shift at a counter with the cash in the till; it takes on a waiting handover. */
     openPosShift(counterId: string, openingCash: number) {

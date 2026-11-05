@@ -9,7 +9,8 @@ import type { Employee, EmployeeInput, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { ImportButton } from '@/components/import/import-dialog';
-import { employeeImport } from '@/components/import/import-definitions';
+import { employeeExportColumns, employeeImport } from '@/components/import/import-definitions';
+import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
 import {
   FilterField,
   FiltersMenu,
@@ -34,7 +35,9 @@ import { invalidateEmployeeQueries } from '@/lib/query-invalidation';
 import {
   EmployeeFormFields,
   employeeSchema,
+  employeeToFormValues,
   emptyEmployeeFormValues,
+  toEmployeeInput,
   type EmployeeFormValues,
 } from '@/components/master-data/employees/shared';
 import {
@@ -48,14 +51,13 @@ import {
   activeFilterToBoolean,
   applyValidationErrors,
   listLimit,
-  optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 import { useLocationContext } from '@/components/location-context';
 import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
 
-const requiredFields = employeeSchema.pick({ employeeCode: true, employeeName: true });
+const requiredFields = employeeSchema.pick({ employeeName: true });
 
 type DiscountFilter = '' | 'eligible' | 'notEligible';
 
@@ -69,20 +71,6 @@ function discountFilterToBoolean(value: DiscountFilter): boolean | undefined {
   }
 
   return undefined;
-}
-
-function employeeToFormValues(employee: Employee): EmployeeFormValues {
-  return {
-    department: employee.department ?? '',
-    designation: employee.designation ?? '',
-    eligibleForDiscount: employee.eligibleForDiscount,
-    employmentType: employee.employmentType ?? '',
-    employeeCode: employee.employeeCode,
-    employeeName: employee.employeeName,
-    hospitalId: employee.hospitalId ?? '',
-    isActive: employee.isActive,
-    mobile: employee.mobile ?? '',
-  };
 }
 
 type EmployeeDialog = { mode: 'create' } | { employee: Employee; mode: 'edit' };
@@ -223,10 +211,9 @@ export function EmployeesPageClient() {
     totalPages: 1,
   };
   // Only the fields this reads, so typing elsewhere in the form does not re-render the page.
-  const [employeeCode, employeeName] = form.watch(['employeeCode', 'employeeName']);
+  const employeeName = form.watch('employeeName');
   // The first required field still missing, in the schema's own words.
-  const disabledReason = requiredFields.safeParse({ employeeCode, employeeName }).error?.issues[0]
-    ?.message;
+  const disabledReason = requiredFields.safeParse({ employeeName }).error?.issues[0]?.message;
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = employeeSchema.safeParse(values);
@@ -237,17 +224,7 @@ export function EmployeesPageClient() {
     }
 
     // Blank optional fields are sent as null, so an edit can clear them.
-    saveEmployeeMutation.mutate({
-      department: optionalValue(parsed.data.department) ?? null,
-      designation: optionalValue(parsed.data.designation) ?? null,
-      eligibleForDiscount: parsed.data.eligibleForDiscount,
-      employmentType: parsed.data.employmentType || undefined,
-      employeeCode: parsed.data.employeeCode,
-      employeeName: parsed.data.employeeName,
-      hospitalId: parsed.data.hospitalId || null,
-      isActive: parsed.data.isActive,
-      mobile: optionalValue(parsed.data.mobile) ?? null,
-    });
+    saveEmployeeMutation.mutate(toEmployeeInput(parsed.data));
   });
 
   const hasFilters = Boolean(searchInput || activeFilter || discountFilter);
@@ -288,6 +265,26 @@ export function EmployeesPageClient() {
       <AppPageHeader
         action={
           <>
+            <CsvImportExport
+              columns={employeeExportColumns}
+              exportRows={() =>
+                fetchAllPages((exportPage) =>
+                  organizationApi.listEmployees({
+                    eligibleForDiscount: discountFilterToBoolean(discountFilter),
+                    hospitalId: scopedHospitalId,
+                    isActive: activeFilterToBoolean(activeFilter),
+                    limit: 100,
+                    page: exportPage,
+                    search,
+                    sortBy,
+                    sortOrder,
+                  }),
+                )
+              }
+              filename="employees"
+              noun="employees"
+              onImported={() => invalidateEmployeeQueries(queryClient)}
+            />
             <ImportButton definition={employeeImport} />
             <Button onClick={openCreate} type="button">
               <Plus className="h-4 w-4" />
@@ -561,7 +558,7 @@ export function EmployeesPageClient() {
               void handleSubmit(event);
             }}
           >
-            <EmployeeFormFields form={form} />
+            <EmployeeFormFields employeeId={editingEmployee?.id} form={form} />
           </form>
         ) : null}
       </Modal>

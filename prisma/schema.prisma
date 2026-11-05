@@ -174,6 +174,11 @@ enum EmploymentType {
   OUTSOURCED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 enum InventoryLocationType {
   STORE
   KITCHEN
@@ -363,6 +368,13 @@ model Hospital {
   ipAddress           String?             @map("ip_address")
   visitingCardAddress String?             @map("visiting_card_address")
   onlinePaymentOption OnlinePaymentOption @default(NONE) @map("online_payment_option")
+  /// The location's own gateway account for the option above; unset, the shared server keys.
+  /// The secrets are never sent back to a screen, only masked.
+  payuClientId        String?             @map("payu_client_id")
+  payuMerchantId      String?             @map("payu_merchant_id")
+  payuClientSecret    String?             @map("payu_client_secret")
+  razorpayKeyId       String?             @map("razorpay_key_id")
+  razorpayKeySecret   String?             @map("razorpay_key_secret")
   gstApplicable       Boolean             @default(true) @map("gst_applicable")
   billPrefix          String?             @map("bill_prefix")
   /// The last invoice number the location's counters issued: every bill takes the next, so the
@@ -425,6 +437,7 @@ model LegalEntity {
   updatedBy     String?   @map("updated_by") @db.Uuid
   deletedAt     DateTime? @map("deleted_at")
 
+  employees   Employee[]
   hospitals   Hospital[]
   posDevices  PosDevice[]
   restaurants Restaurant[]
@@ -1288,6 +1301,14 @@ model Employee {
   eligibleForDiscount Boolean         @default(true) @map("eligible_for_discount")
   /// Null for employees recorded before the type was asked for.
   employmentType      EmploymentType? @map("employment_type")
+  officialEmail       String?         @map("official_email")
+  gender              Gender?
+  birthDate           DateTime?       @map("birth_date") @db.Date
+  joiningDate         DateTime?       @map("joining_date") @db.Date
+  employeeLevel       String?         @map("employee_level")
+  /// Starts as the location's entity; may be changed.
+  legalEntityId       String?         @map("legal_entity_id") @db.Uuid
+  reportingManagerId  String?         @map("reporting_manager_id") @db.Uuid
   /// The location this record belongs to; null means shared by every location.
   hospitalId          String?         @map("hospital_id") @db.Uuid
   isActive            Boolean         @default(true) @map("is_active")
@@ -1297,12 +1318,17 @@ model Employee {
   updatedBy           String?         @map("updated_by") @db.Uuid
   deletedAt           DateTime?       @map("deleted_at")
 
-  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+  hospital         Hospital?    @relation(fields: [hospitalId], references: [id])
+  legalEntity      LegalEntity? @relation(fields: [legalEntityId], references: [id])
+  reportingManager Employee?    @relation("ReportingManager", fields: [reportingManagerId], references: [id])
+  reports          Employee[]   @relation("ReportingManager")
 
   @@index([deletedAt])
   @@index([eligibleForDiscount])
   @@index([hospitalId])
   @@index([isActive])
+  @@index([legalEntityId])
+  @@index([reportingManagerId])
   @@map("employees")
 }
 

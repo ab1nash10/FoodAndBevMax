@@ -38,7 +38,7 @@ import type {
   SetStaffDiscountsDto,
 } from './dto/pos.dto';
 import { hashOrderKey, itemCount } from '../restaurant-orders/restaurant-orders.service';
-import { findCardMachine, paymentProviders, plutusBaseUrl } from './online-payment-providers';
+import { findCardMachine, plutusBaseUrl, providersAt } from './online-payment-providers';
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { countersWithTill, shiftStates, shiftsOn, tally, userNames } from './shifts';
 
@@ -202,17 +202,14 @@ function toOrderResponse(
 
 @Injectable()
 export class PosService {
-  /** Whether Razorpay or PayU is set up: the till then takes UPI through it. */
-  private readonly upiOnline: boolean;
   /** Pine Labs' Plutus Cloud API ('' when not set up): a counter's card machine takes cards. */
   private readonly plutusUrl: string;
 
   constructor(
     private readonly auditLog: AuditLogService,
     private readonly prisma: PrismaService,
-    config?: ConfigService,
+    private readonly config?: ConfigService,
   ) {
-    this.upiOnline = config ? paymentProviders(config).size > 0 : false;
     this.plutusUrl = config ? plutusBaseUrl(config) : '';
   }
 
@@ -278,6 +275,11 @@ export class PosService {
     }));
   }
 
+  /** The user's open shift, wherever it is (a cashier has one at most); null when none. */
+  myOpenShift(actorId: string) {
+    return this.openShiftElsewhere(actorId, []);
+  }
+
   /** The user's open shift at a counter not among `counterIds`, and whether a till reaches it. */
   private async openShiftElsewhere(actorId: string, counterIds: string[]) {
     const shift = await this.prisma.counterShift.findFirst({
@@ -309,15 +311,22 @@ export class PosService {
     };
   }
 
-  /** The till this browser's key belongs to, its restaurants, and whether the user may work it. */
-  async tillAccess(
-    tillKey: string | undefined,
-  ): Promise<{ allowed: boolean; restaurants: string[]; till: string | null }> {
+  /**
+   * The till this browser's key belongs to, its restaurants and their locations (the portal opens
+   * the POS only while one of them is the picked location), and whether the user may work it.
+   */
+  async tillAccess(tillKey: string | undefined): Promise<{
+    allowed: boolean;
+    hospitalIds: string[];
+    restaurants: string[];
+    till: string | null;
+  }> {
     const device = tillKey ? await this.tillByKey(tillKey) : null;
-    if (!device) return { allowed: false, restaurants: [], till: null };
+    if (!device) return { allowed: false, hospitalIds: [], restaurants: [], till: null };
 
     return {
       allowed: mayWorkTill(device),
+      hospitalIds: [...new Set(device.restaurants.map((entry) => entry.restaurant.hospitalId))],
       restaurants: device.restaurants.map((entry) => entry.restaurant.restaurantName),
       till: device.name,
     };
@@ -780,7 +789,13 @@ export class PosService {
     counter: Awaited<ReturnType<PosService['findCounter']>>,
     mode: PaymentMode | undefined,
   ) {
-    if (mode === PaymentMode.UPI && this.upiOnline && !counter.restaurant.upiId?.trim()) {
+    // UPI goes online where the counter's location has Razorpay or PayU set up.
+    if (
+      mode === PaymentMode.UPI &&
+      !counter.restaurant.upiId?.trim() &&
+      this.config &&
+      (await providersAt(tx, this.config, counter.hospitalId)).size > 0
+    ) {
       throw new BadRequestException(
         'Take UPI on the till’s QR: this counter collects UPI online, so a typed reference is not accepted.',
       );

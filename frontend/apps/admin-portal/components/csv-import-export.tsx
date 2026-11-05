@@ -1,19 +1,42 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import { Download, Loader2, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ApiList, ApiResponse } from '@aahar/api-client';
 import { useToast } from '@/components/toast-provider';
 import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage } from '@/lib/api';
-import { downloadCsv, parseCsv } from '@/lib/csv';
+import { ImportColumnList } from '@/components/import/import-dialog';
+import { downloadCsv } from '@/lib/csv';
+import { readImportFile, type ImportColumn } from '@/lib/import-file';
+import { downloadImportTemplate } from '@/lib/import-template';
 
 export interface CsvColumn<T> {
+  /** For the import template's Instructions sheet. */
+  example?: string;
   header: string;
+  /** What to fill in and the rules a row must keep, shown in the import panel and template. */
+  hint?: string;
+  /** Needed on every row. */
+  required?: boolean;
   /** For people reading the export (a name beside a code); an import neither needs nor uses it. */
   readOnly?: boolean;
   value: (row: T) => number | string | null | undefined;
+}
+
+/** The columns an import reads, as the import panel and its Excel template list them. */
+export function templateColumns<T>(columns: Array<CsvColumn<T>>): ImportColumn[] {
+  return columns
+    .filter((column) => !column.readOnly)
+    .map((column) => ({
+      example: column.example ?? '',
+      field: column.header,
+      header: column.header,
+      hint: column.hint ?? '',
+      required: column.required,
+    }));
 }
 
 /** One imported row: the cell under a header, trimmed; '' when blank. */
@@ -111,7 +134,8 @@ interface ImportResult {
 
 /**
  * Export and Import buttons for a list page. Export writes every row that matches the page's
- * filters; Import reads the same columns back, so an edited export is the import template.
+ * filters; Import reads the same columns back, so an edited export imports too. Import opens a
+ * panel with each column's rules and an Excel template, then reads an .xlsx or .csv file.
  * Rows are saved one at a time through the normal API, so every check and permission a form
  * has applies, and a bad row is reported without stopping the rest.
  */
@@ -119,6 +143,7 @@ export function CsvImportExport<T>({
   columns,
   exportRows,
   filename,
+  matching,
   noun,
   onImported,
   startImport,
@@ -127,6 +152,8 @@ export function CsvImportExport<T>({
   exportRows: () => Promise<T[]>;
   /** File name without the date or extension, e.g. "items". */
   filename: string;
+  /** How a row finds the record it updates, for the import panel and template. */
+  matching?: string;
   /** Plural, lower case, e.g. "items". */
   noun: string;
   onImported: () => void;
@@ -136,6 +163,8 @@ export function CsvImportExport<T>({
   const { showToast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isChoosing, setIsChoosing] = useState(false);
+  const importColumns = templateColumns(columns);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const isImporting = progress !== null && result === null;
@@ -167,7 +196,20 @@ export function CsvImportExport<T>({
       return;
     }
 
-    const [header = [], ...rows] = parseCsv(await file.text());
+    let table: string[][];
+
+    try {
+      table = await readImportFile(file);
+    } catch (error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: `This file can't be imported as ${noun}`,
+        variant: 'error',
+      });
+      return;
+    }
+
+    const [header = [], ...rows] = table;
     const positions = new Map(header.map((name, index) => [name.trim().toLowerCase(), index]));
     const missing = columns
       .filter((column) => !column.readOnly)
@@ -178,7 +220,7 @@ export function CsvImportExport<T>({
       showToast({
         description:
           missing.length > 0
-            ? `Missing column${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}. Export first and edit that file.`
+            ? `Missing column${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}. Download the template to see the columns.`
             : 'The file has no rows under its header.',
         title: `This file can't be imported as ${noun}`,
         variant: 'error',
@@ -240,8 +282,8 @@ export function CsvImportExport<T>({
         <>
           <Button
             disabled={isImporting}
-            onClick={() => fileRef.current?.click()}
-            title={`Add or update ${noun} from a CSV file`}
+            onClick={() => setIsChoosing(true)}
+            title={`Add or update ${noun} from an Excel or CSV file`}
             type="button"
             variant="outline"
           >
@@ -249,7 +291,7 @@ export function CsvImportExport<T>({
             Import
           </Button>
           <input
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -258,12 +300,57 @@ export function CsvImportExport<T>({
               event.target.value = '';
 
               if (file) {
+                setIsChoosing(false);
                 void runImport(file);
               }
             }}
             ref={fileRef}
             type="file"
           />
+          {/* On the body: the page header the button sits in would otherwise clip the panel. */}
+          {isChoosing
+            ? createPortal(
+                <Modal
+                  description={matching}
+                  onClose={() => setIsChoosing(false)}
+                  open
+                  side
+                  title={`Import ${noun}`}
+                >
+                  <div className="grid gap-4 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button onClick={() => fileRef.current?.click()} type="button">
+                        <FileSpreadsheet aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                        Choose file
+                      </Button>
+                      <Button
+                        onClick={() =>
+                          void downloadImportTemplate({
+                            columns: importColumns,
+                            filename: `${filename}-import-template`,
+                            matching: matching ?? '',
+                            noun,
+                            savesEachRow: true,
+                          })
+                        }
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Download aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                        Download Excel template
+                      </Button>
+                    </div>
+                    <p className="text-ds-text-2">
+                      An Excel (.xlsx) or CSV file with these columns, in any order. Rows are saved
+                      one at a time; a row with a problem is skipped and listed when the import
+                      ends.
+                    </p>
+                    <ImportColumnList columns={importColumns} />
+                  </div>
+                </Modal>,
+                document.body,
+              )
+            : null}
         </>
       ) : null}
 

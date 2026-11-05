@@ -82,7 +82,13 @@ export function toHospitalFormDefaults(hospital?: HospitalRecord): HospitalFormV
     locationCode: hospital ? getLocationCode(hospital) : '',
     longitude: hospital?.longitude ?? '',
     onlinePaymentOption: hospital?.onlinePaymentOption ?? 'NONE',
+    payuClientId: hospital?.payuClientId ?? '',
+    // Secrets come back masked: the box starts empty and keeps the saved one unless typed in.
+    payuClientSecret: '',
+    payuMerchantId: hospital?.payuMerchantId ?? '',
     postalCode: hospital ? (getLocationPostalCode(hospital) ?? '') : '',
+    razorpayKeyId: hospital?.razorpayKeyId ?? '',
+    razorpayKeySecret: '',
     state: hospital?.state ?? '',
     title: hospital ? getLocationTitle(hospital) : '',
     visitingCardAddress: hospital?.visitingCardAddress ?? '',
@@ -113,7 +119,17 @@ export function toHospitalInput(values: HospitalFormValues): HospitalInput {
     locationCode,
     longitude: clearable(values.longitude),
     onlinePaymentOption: values.onlinePaymentOption,
+    payuClientId: clearable(values.payuClientId),
+    payuMerchantId: clearable(values.payuMerchantId),
     postalCode: clearable(values.postalCode),
+    razorpayKeyId: clearable(values.razorpayKeyId),
+    // Only a secret typed in is sent: left out, the saved one stays.
+    ...(optionalValue(values.payuClientSecret)
+      ? { payuClientSecret: optionalValue(values.payuClientSecret) }
+      : {}),
+    ...(optionalValue(values.razorpayKeySecret)
+      ? { razorpayKeySecret: optionalValue(values.razorpayKeySecret) }
+      : {}),
     state: values.state.trim(),
     title,
     visitingCardAddress: clearable(values.visitingCardAddress),

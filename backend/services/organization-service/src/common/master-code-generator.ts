@@ -8,6 +8,7 @@ interface SequenceRow {
 export async function getNextSequenceNumber(
   client: Prisma.TransactionClient,
   sequenceName:
+    | 'employee_code_sequence'
     | 'store_code_sequence'
     | 'kitchen_code_sequence'
     | 'restaurant_code_sequence'
