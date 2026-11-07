@@ -1,3 +1,4 @@
+import { networkInterfaces } from 'node:os';
 import type { NextConfig } from 'next';
 
 import { BASE_PATH } from './lib/base-path';
@@ -10,6 +11,10 @@ const apiOrigins = [
   process.env.NEXT_PUBLIC_ORGANIZATION_API_URL,
   process.env.NEXT_PUBLIC_USER_API_URL,
 ].flatMap((url) => (url && /^https?:\/\//.test(url) ? [new URL(url).origin] : []));
+const localDevOrigins = Object.values(networkInterfaces())
+  .flatMap((interfaces) => interfaces ?? [])
+  .filter((address) => address.family === 'IPv4' && !address.internal)
+  .map((address) => address.address);
 
 // Tokens live in localStorage, so this limits what an injected script could do with them: it
 // can send nothing to, or load anything from, another site (connect-src, img-src and the
@@ -35,6 +40,7 @@ const nextConfig: NextConfig = {
   // The prefix is baked into the bundle here, so it must be the same value the client
   // helper uses - both read it from lib/base-path.
   basePath: BASE_PATH,
+  allowedDevOrigins: process.env.NODE_ENV === 'development' ? localDevOrigins : [],
   devIndicators: false,
   // Tokens live in localStorage, so these are the portal's main line against injected scripts,
   // clickjacking and content sniffing (uploads are served from /uploads).
@@ -52,6 +58,28 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
         source: '/:path*',
+      },
+    ]);
+  },
+  rewrites() {
+    if (process.env.NODE_ENV !== 'development') {
+      return Promise.resolve([]);
+    }
+
+    const organizationApiBase = (
+      process.env.NEXT_PUBLIC_ORGANIZATION_API_URL || 'http://localhost:4003/api/v1'
+    ).replace(/\/+$/, '');
+
+    return Promise.resolve([
+      {
+        basePath: false,
+        destination: `${organizationApiBase}/kiosk/:path*`,
+        source: `${BASE_PATH}/api/v1/kiosk/:path*`,
+      },
+      {
+        basePath: false,
+        destination: `${organizationApiBase}/order-board/:path*`,
+        source: `${BASE_PATH}/api/v1/order-board/:path*`,
       },
     ]);
   },

@@ -143,8 +143,14 @@ exports[`every prefix stays as it is 1`] = `
   "mappingHospitalOptions": [
     "mapping-hospital-options",
   ],
+  "orderAmendments": [
+    "order-amendments",
+  ],
   "orderBoard": [
     "order-board",
+  ],
+  "orderReports": [
+    "order-reports",
   ],
   "paymentMachinePosDeviceOptions": [
     "payment-machine-pos-device-options",

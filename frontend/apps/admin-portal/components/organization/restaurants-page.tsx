@@ -1,7 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { useAuth } from '@/components/auth-provider';
 import { RecordAvatar, RowAction, StatStrip, tableStyles } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
@@ -31,8 +34,17 @@ import type { Restaurant, SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, BadgePercent, Pencil, Plus, QrCode, Utensils } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Activity,
+  BadgePercent,
+  Download,
+  Pencil,
+  Plus,
+  Printer,
+  QrCode,
+  Utensils,
+  X,
+} from 'lucide-react';
 import {
   ActiveFilterSelect,
   PageHeader,
@@ -94,6 +106,11 @@ export function RestaurantsPageClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [onlineUpdatingId, setOnlineUpdatingId] = useState<string | null>(null);
   const [staffDiscountRestaurant, setStaffDiscountRestaurant] = useState<Restaurant | null>(null);
+  const [qrRestaurant, setQrRestaurant] = useState<Restaurant | null>(null);
+  const [qrOrigin, setQrOrigin] = useState<string | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const qrDialogRef = useRef<HTMLDialogElement>(null);
 
   const restaurantsQuery = useQuery({
     queryFn: async () => {
@@ -137,6 +154,112 @@ export function RestaurantsPageClient() {
     queryKey: queryKeys.restaurants('stats', scopedHospitalId ?? 'all'),
   });
   const stats = statsQuery.data;
+  const qrLinkQuery = useQuery({
+    enabled: Boolean(qrRestaurant),
+    queryFn: async () => {
+      if (!qrRestaurant) return null;
+      return (await organizationApi.getRestaurantBoardLink(qrRestaurant.id)).data.boardToken;
+    },
+    queryKey: queryKeys.restaurantBoardLink(qrRestaurant?.id ?? ''),
+    staleTime: 0,
+  });
+  const kioskUrl =
+    qrRestaurant && qrOrigin && qrLinkQuery.data
+      ? `${qrOrigin}${withBasePath(`/kiosk/${qrRestaurant.id}?token=${qrLinkQuery.data}`)}`
+      : null;
+
+  useEffect(() => {
+    const dialog = qrDialogRef.current;
+
+    if (!dialog) return;
+    if (qrRestaurant && !dialog.open) dialog.showModal();
+    if (!qrRestaurant && dialog.open) dialog.close();
+  }, [qrRestaurant]);
+
+  useEffect(() => {
+    if (!qrRestaurant) {
+      setQrOrigin(null);
+      return undefined;
+    }
+
+    let active = true;
+    setQrOrigin(null);
+    setQrError(null);
+    void fetch(withBasePath('/api/qr-origin'), { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Could not determine a phone-reachable site address.');
+        return (await response.json()) as { origin: string };
+      })
+      .then(({ origin }) => {
+        if (active) setQrOrigin(origin);
+      })
+      .catch(() => {
+        if (active) setQrError('Could not determine a phone-reachable site address.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [qrRestaurant?.id]);
+
+  useEffect(() => {
+    let active = true;
+    setQrImage(null);
+
+    if (!kioskUrl)
+      return () => {
+        active = false;
+      };
+
+    void QRCode.toDataURL(kioskUrl, {
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      width: 512,
+    })
+      .then((image) => {
+        if (active) setQrImage(image);
+      })
+      .catch(() => {
+        if (active) setQrError('Could not generate the restaurant QR code.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [kioskUrl]);
+
+  function printQr() {
+    if (!qrRestaurant || !qrImage) return;
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+      showToast({
+        description: 'Allow pop-ups for this site, then try printing again.',
+        title: 'Print window was blocked',
+        variant: 'error',
+      });
+      return;
+    }
+
+    printWindow.opener = null;
+    const printDocument = printWindow.document;
+    const style = printDocument.createElement('style');
+    style.textContent =
+      'body{align-items:center;display:flex;flex-direction:column;font-family:Arial,sans-serif;justify-content:center;min-height:90vh;text-align:center}img{height:72mm;width:72mm}h1{font-size:24pt;margin:12px 0 4px}p{font-size:12pt}';
+    const heading = printDocument.createElement('h1');
+    heading.textContent = qrRestaurant.restaurantName;
+    const image = printDocument.createElement('img');
+    image.alt = `QR code for ${qrRestaurant.restaurantName} menu and ordering`;
+    image.src = qrImage;
+    const instructions = printDocument.createElement('p');
+    instructions.textContent = 'Scan to view the menu and place an order';
+    printDocument.title = `${qrRestaurant.restaurantName} menu QR`;
+    printDocument.body.replaceChildren(style, heading, image, instructions);
+    void image.decode().then(() => {
+      printWindow.focus();
+      printWindow.print();
+    });
+  }
 
   useOnScopeChange(scopedHospitalId, isLoadingLocations, () => {
     setPage(1);
@@ -459,17 +582,18 @@ export function RestaurantsPageClient() {
                               {...prefetchDetail}
                             />
                           ) : null}
-                          <RowAction
-                            icon={QrCode}
-                            label={`Print QR for ${restaurant.restaurantName}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              showToast({
-                                title: 'QR printing will be available in QR module.',
-                                variant: 'info',
-                              });
-                            }}
-                          />
+                          {hasPermission('RESTAURANT_UPDATE') ? (
+                            <RowAction
+                              icon={QrCode}
+                              label={`Menu and ordering QR for ${restaurant.restaurantName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setQrImage(null);
+                                setQrError(null);
+                                setQrRestaurant(restaurant);
+                              }}
+                            />
+                          ) : null}
                           <RowAction
                             icon={BadgePercent}
                             label={`Staff discount for ${restaurant.restaurantName}`}
@@ -519,6 +643,75 @@ export function RestaurantsPageClient() {
         onClose={() => setStaffDiscountRestaurant(null)}
         restaurant={staffDiscountRestaurant}
       />
+      <dialog
+        aria-labelledby="restaurant-menu-qr-title"
+        className="m-auto max-h-[90dvh] w-[min(92vw,28rem)] max-w-none overflow-y-auto rounded-md border border-ds-border bg-ds-surface p-0 text-ds-text shadow-xl backdrop:bg-black/55"
+        onClose={() => setQrRestaurant(null)}
+        ref={qrDialogRef}
+      >
+        <div className="space-y-4 p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold" id="restaurant-menu-qr-title">
+                {qrRestaurant?.restaurantName ?? 'Restaurant menu QR'}
+              </h2>
+              <p className="mt-1 text-sm text-ds-muted">
+                Scan to view the current menu and place an order. Payment is completed at the mapped
+                POS counter.
+              </p>
+            </div>
+            <Button
+              aria-label="Close restaurant QR"
+              onClick={() => qrDialogRef.current?.close()}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="grid min-h-64 place-items-center rounded-md border border-ds-border bg-white p-4">
+            {qrImage ? (
+              <Image
+                alt={`QR code for ${qrRestaurant?.restaurantName ?? 'restaurant'} menu and ordering`}
+                className="h-64 w-64 max-w-full object-contain"
+                height={512}
+                src={qrImage}
+                unoptimized
+                width={512}
+              />
+            ) : qrError ? (
+              <p className="text-sm text-ds-danger">{qrError}</p>
+            ) : qrLinkQuery.isError ? (
+              <p className="text-sm text-ds-danger">{getApiErrorMessage(qrLinkQuery.error)}</p>
+            ) : (
+              <p className="text-sm text-ds-muted">Preparing restaurant QR…</p>
+            )}
+          </div>
+          {qrImage ? (
+            <div className="flex flex-wrap gap-2">
+              <Button className="flex-1" onClick={printQr} type="button">
+                <Printer aria-hidden="true" className="h-4 w-4" />
+                Print QR
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.download = `restaurant-${qrRestaurant?.id}-menu-qr.png`;
+                  link.href = qrImage;
+                  link.click();
+                }}
+                type="button"
+                variant="outline"
+              >
+                <Download aria-hidden="true" className="h-4 w-4" />
+                Download PNG
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </dialog>
     </section>
   );
 }

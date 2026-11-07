@@ -59,6 +59,11 @@ import type {
   StaffDiscountInput,
   StaffDiscountSettings,
   RestaurantOrder,
+  AmendableBill,
+  OrderAmendment,
+  OrderAmendmentInput,
+  OrderReportQuery,
+  OrderReportRow,
 } from './orders';
 import {
   createApiClient,
@@ -463,6 +468,43 @@ export function createOrganizationApi(options: ApiClientOptions) {
     listPosBills(query?: PosBillListQuery) {
       return client.request<ApiResponse<ApiList<PosBillSummary>>>('/pos/orders', { query });
     },
+    /** Orders & Reports: every counter bill with its steps, flags and payment. */
+    listOrderReports(query?: OrderReportQuery) {
+      return client.request<ApiResponse<ApiList<OrderReportRow>>>('/order-reports', { query });
+    },
+    /** Users who have made bills, for the POS Operator filter. */
+    listOrderReportOperators(hospitalId?: string) {
+      return client.request<ApiResponse<{ items: Array<{ id: string; name: string }> }>>(
+        '/order-reports/operators',
+        { query: { hospitalId } },
+      );
+    },
+    /** One bill for its invoice, from any portal page (no till needed). */
+    getOrderReportBill(id: string) {
+      return client.request<ApiResponse<PosBill>>(`/order-reports/${id}/bill`);
+    },
+    listOrderAmendments(query?: {
+      hospitalId?: string;
+      limit?: number;
+      page?: number;
+      search?: string;
+    }) {
+      return client.request<ApiResponse<ApiList<OrderAmendment>>>('/order-reports/amendments', {
+        query,
+      });
+    },
+    /** Bills of the last 48 hours with this order or bill number. */
+    findAmendableBills(q: string, hospitalId?: string) {
+      return client.request<ApiResponse<{ items: AmendableBill[] }>>('/order-reports/amendable', {
+        query: { hospitalId, q },
+      });
+    },
+    amendBill(id: string, body: OrderAmendmentInput) {
+      return client.request<ApiResponse<{ id: string }>>(`/order-reports/${id}/amendments`, {
+        body,
+        method: 'POST',
+      });
+    },
     getPosBill(id: string) {
       return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}`);
     },
@@ -581,6 +623,20 @@ export function createOrganizationApi(options: ApiClientOptions) {
     listRestaurantOrders(restaurantId: string) {
       return client.request<ApiResponse<RestaurantOrder[]>>('/restaurant-orders', {
         query: { restaurantId },
+      });
+    },
+    /** Stewards (Delivery Operators) at a restaurant's location. */
+    listOrderStewards(restaurantId: string) {
+      return client.request<ApiResponse<Array<{ employeeCode: string; id: string; name: string }>>>(
+        '/restaurant-orders/stewards',
+        { query: { restaurantId } },
+      );
+    },
+    /** Gives an order to a steward, or (null) takes it off them. */
+    setOrderSteward(id: string, stewardId: string | null) {
+      return client.request<ApiResponse<RestaurantOrder>>(`/restaurant-orders/${id}/steward`, {
+        body: { stewardId },
+        method: 'PATCH',
       });
     },
     setRestaurantOrderStatus(id: string, status: OrderStatus) {

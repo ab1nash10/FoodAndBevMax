@@ -18,7 +18,7 @@ export interface TillRequest {
   params?: Record<string, unknown>;
   query?: Record<string, unknown>;
   /** The till's counters, once TillGuard has let a request through from a till. */
-  till?: { counterIds: string[] };
+  till?: { counterIds: string[]; posDeviceId: string };
 }
 
 const TILL_TARGET = 'aahar:till-target';

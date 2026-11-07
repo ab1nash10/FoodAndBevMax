@@ -21,6 +21,9 @@ export interface RestaurantOrder {
   roomNumber: string | null;
   source: OrderSource;
   status: OrderStatus;
+  /** The steward (Delivery Operator) taking it to the guest; kitchen screen only. */
+  stewardId?: string | null;
+  stewardName?: string | null;
 }
 
 /** One order on the TV pickup board: its number and pickup details, never the guest's. */
@@ -509,4 +512,103 @@ export interface KioskOrderWaiting {
   isStaff: boolean;
   items: Array<{ name: string; quantity: number }>;
   number: number;
+}
+
+/** A bill's row in Orders & Reports: the bill, each step's time and the yes/no columns. */
+export interface OrderReportRow {
+  acceptedAt: string | null;
+  accepted: boolean;
+  bedNumber: string | null;
+  billNumber: string;
+  businessDate: string;
+  cancelReason: string | null;
+  cancelled: boolean;
+  cancelledAt: string | null;
+  channel: PosChannel;
+  complimentaryReason: string | null;
+  counter: { counterCode: string; counterName: string; posDeviceId: string | null } | null;
+  delivered: boolean;
+  deliveredAt: string | null;
+  /** Minutes from ready to handed over; null until both are known. */
+  deliveryMinutes: number | null;
+  discounted: boolean;
+  discountTotal: number;
+  /** The restaurant's day has been posted to the ERP. */
+  erpSent: boolean;
+  finalStatus: 'Cancelled' | 'Complimentary' | 'Paid';
+  grandTotal: number | null;
+  gstTotal: number | null;
+  id: string;
+  /** In-House Consumption: a complimentary bill. */
+  ihc: boolean;
+  inRoom: boolean;
+  isComplimentary: boolean;
+  items: Array<{ name: string; note?: string; quantity: number }>;
+  kitchenMinutes: number | null;
+  /** The payment gateway or card machine confirmed the payment. */
+  online: boolean;
+  onlineProvider: OnlinePaymentProvider | null;
+  operatorName: string | null;
+  orderMinutes: number | null;
+  orderNumber: string;
+  paid: boolean;
+  paidAt: string | null;
+  paymentMode: PaymentMode | null;
+  paymentReference: string | null;
+  placedAt: string;
+  posDevice: { code: string; id: string; name: string } | null;
+  /** Billed at the till itself (false: ordered at the kiosk). */
+  posOrder: boolean;
+  ready: boolean;
+  readyAt: string | null;
+  refunded: boolean;
+  restaurant: { id: string; restaurantName: string };
+  restaurantId: string;
+  roomNumber: string | null;
+  roundOff: number | null;
+  status: OrderStatus;
+  stewardAssigned: boolean;
+  stewardName: string | null;
+  subtotal: number | null;
+  totalMinutes: number | null;
+}
+
+export interface OrderReportQuery extends ListQuery {
+  /** true: discounted bills only; false: without discount only. */
+  discounted?: boolean;
+  /** Business dates, YYYY-MM-DD. */
+  from?: string;
+  hospitalId?: string;
+  isComplimentary?: boolean;
+  operatorId?: string;
+  posDeviceId?: string;
+  restaurantId?: string;
+  sortBy?: 'billNumber' | 'grandTotal' | 'placedAt';
+  to?: string;
+}
+
+/** A bill found to amend, with why it cannot be, if it cannot. */
+export interface AmendableBill extends OrderReportRow {
+  refusal: string | null;
+}
+
+export interface OrderAmendment {
+  amendedAt: string;
+  amendedByName: string | null;
+  billNumber: string;
+  fromPaymentMode: PaymentMode | null;
+  fromPaymentReference: string | null;
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  remarks: string;
+  toPaymentMode: PaymentMode | null;
+  toPaymentReference: string | null;
+  type: 'PAYMENT_MODE';
+}
+
+export interface OrderAmendmentInput {
+  paymentMode: PaymentMode;
+  paymentReference?: string;
+  remarks: string;
 }

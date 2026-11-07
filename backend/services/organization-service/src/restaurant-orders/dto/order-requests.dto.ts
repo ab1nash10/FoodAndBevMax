@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderStatus } from '@prisma/client';
-import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsUUID, ValidateIf } from 'class-validator';
 
 export class ListRestaurantOrdersQueryDto {
   @ApiProperty()
@@ -19,4 +19,15 @@ export class BoardLinkDto {
   @IsOptional()
   @IsBoolean()
   regenerate?: boolean;
+}
+
+export class SetStewardDto {
+  @ApiProperty({
+    description: 'The steward (a Delivery Operator); null takes the order off them.',
+    nullable: true,
+    type: String,
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  stewardId!: string | null;
 }

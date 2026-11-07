@@ -18,6 +18,7 @@ import { getActorId, getIpAddress, type RequestContextLike } from '../common/req
 import {
   BoardLinkDto,
   ListRestaurantOrdersQueryDto,
+  SetStewardDto,
   UpdateOrderStatusDto,
 } from './dto/order-requests.dto';
 import { PushOrderDto } from './dto/push-order.dto';
@@ -94,6 +95,40 @@ export class RestaurantOrdersController {
   async list(@Query() query: ListRestaurantOrdersQueryDto) {
     return {
       data: await this.orders.listActive(query.restaurantId),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Get('restaurant-orders/stewards')
+  @ApiBearerAuth('access-token')
+  @Permissions('ORDER_STEWARD_ASSIGN')
+  @ApiOperation({ summary: "Stewards (Delivery Operators) of a restaurant's location" })
+  @ApiOkResponse({ description: 'Stewards returned.' })
+  async stewards(@Query() query: ListRestaurantOrdersQueryDto) {
+    return {
+      data: await this.orders.stewards(query.restaurantId),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Patch('restaurant-orders/:id/steward')
+  @ApiBearerAuth('access-token')
+  @Permissions('ORDER_STEWARD_ASSIGN')
+  @ApiOperation({ summary: 'Give an order to a steward, or take it off them (null)' })
+  @ApiOkResponse({ description: 'Steward saved.' })
+  async setSteward(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SetStewardDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.orders.setSteward(id, body.stewardId, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
       message: 'Success',
       success: true,
     };

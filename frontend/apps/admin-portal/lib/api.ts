@@ -131,7 +131,7 @@ export const erpPostingsApi = createErpPostingsApi({
 
 /** No sign-in: only for public endpoints such as the TV order board. */
 export const publicOrganizationApi = createOrganizationApi({
-  baseUrl: apiConfig.organizationBaseUrl,
+  baseUrl: sameOriginApi,
 });
 
 export const userApi = createUserApi({

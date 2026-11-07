@@ -1,21 +1,21 @@
 'use client';
 
-import { Button } from '@aahar/ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { OrderSource, OrderStatus, RestaurantOrder } from '@aahar/api-client';
-import { Copy, ExternalLink, MonitorSmartphone, RefreshCw, Tv, Undo2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useConfirm } from '@/components/confirm-provider';
 import { AppPageHeader, EmptyState } from '@/components/design-system';
 import { OrderKeyButton } from '@/components/order-key-button';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Skeleton } from '@/components/ui';
-import { withBasePath } from '@/lib/base-path';
+import { Panel, Select, Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { withBasePath } from '@/lib/base-path';
 import { restaurantDetailQuery } from '@/lib/detail-queries';
 import { queryKeys } from '@/lib/query-keys';
+import type { OrderSource, OrderStatus, RestaurantOrder } from '@aahar/api-client';
+import { Button } from '@aahar/ui';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Copy, ExternalLink, MonitorSmartphone, RefreshCw, Tv, Undo2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 // The kitchen and the TV see a new order within this.
 const REFRESH_MS = 5000;
@@ -173,16 +173,23 @@ function BoardLinkControls({ restaurantId }: Readonly<{ restaurantId: string }>)
   );
 }
 
+type Steward = { employeeCode: string; id: string; name: string };
+
 function OrderCard({
   canUpdate,
   isPending,
   now,
   onMove,
+  onSteward,
   order,
   next,
+  stewards,
 }: Readonly<{
   canUpdate: boolean;
   isPending: boolean;
+  /** Set when the user may give orders to stewards. */
+  onSteward?: (stewardId: string | null) => void;
+  stewards: Steward[];
   next?: { label: string; status: OrderStatus };
   now: number;
   onMove: (status: OrderStatus) => void;
@@ -223,6 +230,29 @@ function OrderCard({
       {order.instructions ? (
         <p className="mt-2 rounded bg-ds-status-pending-bg px-2 py-1 text-xs text-ds-status-pending-fg">
           {order.instructions}
+        </p>
+      ) : null}
+      {onSteward ? (
+        <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-ds-text-3">
+          Steward
+          <Select
+            aria-label={`Steward for order ${order.orderNumber}`}
+            className="h-8 min-w-0 flex-1 text-xs"
+            disabled={isPending}
+            onChange={(event) => onSteward(event.target.value || null)}
+            value={order.stewardId ?? ''}
+          >
+            <option value="">None</option>
+            {stewards.map((steward) => (
+              <option key={steward.id} value={steward.id}>
+                {steward.name} ({steward.employeeCode})
+              </option>
+            ))}
+          </Select>
+        </label>
+      ) : order.stewardName ? (
+        <p className="mt-2 text-xs text-ds-text-3">
+          Steward: <span className="font-semibold text-ds-text">{order.stewardName}</span>
         </p>
       ) : null}
       {canUpdate ? (
@@ -298,6 +328,27 @@ export function OrderBoard({
   const queryClient = useQueryClient();
   const now = useNow();
   const canUpdate = hasPermission('ORDER_UPDATE');
+  const canAssign = hasPermission('ORDER_STEWARD_ASSIGN');
+  const stewardsQuery = useQuery({
+    enabled: canAssign,
+    queryFn: async () => (await organizationApi.listOrderStewards(restaurantId)).data,
+    queryKey: queryKeys.restaurantOrders('stewards', restaurantId),
+    staleTime: 60_000,
+  });
+  const stewardMutation = useMutation({
+    mutationFn: ({ id, stewardId }: { id: string; stewardId: string | null }) =>
+      organizationApi.setOrderSteward(id, stewardId),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Steward not saved',
+        variant: 'error',
+      });
+    },
+    onSettled() {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.restaurantOrders(restaurantId) });
+    },
+  });
   const moveMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
       organizationApi.setRestaurantOrderStatus(id, status),
@@ -330,12 +381,21 @@ export function OrderBoard({
               {inColumn.map((order) => (
                 <OrderCard
                   canUpdate={canUpdate}
-                  isPending={moveMutation.isPending && moveMutation.variables?.id === order.id}
+                  isPending={
+                    (moveMutation.isPending && moveMutation.variables?.id === order.id) ||
+                    (stewardMutation.isPending && stewardMutation.variables?.id === order.id)
+                  }
                   key={order.id}
                   next={column.next}
                   now={now}
                   onMove={(status) => moveMutation.mutate({ id: order.id, status })}
+                  onSteward={
+                    canAssign
+                      ? (stewardId) => stewardMutation.mutate({ id: order.id, stewardId })
+                      : undefined
+                  }
                   order={order}
+                  stewards={stewardsQuery.data ?? []}
                 />
               ))}
             </ul>

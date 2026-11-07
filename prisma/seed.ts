@@ -160,6 +160,9 @@ const defaultPermissions = [
   ],
   ['ORDER_VIEW', 'ORDER', 'VIEW', 'View guest orders on the kitchen screen'],
   ['ORDER_UPDATE', 'ORDER', 'UPDATE', 'Move guest orders to preparing, ready and collected'],
+  ['ORDER_STEWARD_ASSIGN', 'ORDER', 'STEWARD', 'Assign a steward (delivery person) to an order'],
+  ['ORDER_REPORT_VIEW', 'ORDER_REPORT', 'VIEW', 'View Orders & Reports: every bill with its steps and amendments'],
+  ['ORDER_AMEND', 'ORDER_REPORT', 'AMEND', "Change a bill's payment mode within 48 hours"],
   // AAHAR's own POS, at a counter.
   ['POS_ORDER_CREATE', 'POS_ORDER', 'CREATE', 'Bill orders at a counter'],
   ['POS_ORDER_VIEW', 'POS_ORDER', 'VIEW', 'View counter bills and their history'],

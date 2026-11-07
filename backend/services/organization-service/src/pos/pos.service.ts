@@ -427,7 +427,7 @@ export class PosService {
       paymentId?: string;
       shiftId?: string;
     },
-  ): Promise<{ counterIds: string[] }> {
+  ): Promise<{ counterIds: string[]; posDeviceId: string }> {
     const till = tillKey ? await this.tillByKey(tillKey) : null;
     if (!till) throw new ForbiddenException(notATill);
 
@@ -482,7 +482,7 @@ export class PosService {
         }
       }
 
-      return { counterIds };
+      return { counterIds, posDeviceId: till.id };
     });
   }
 
@@ -628,7 +628,8 @@ export class PosService {
    * is taken earliest expiry first; the bill number is the counter's next, so two tills never
    * share one. Sending the same clientOrderId again returns the bill already made.
    */
-  async createOrder(dto: CreatePosOrderDto, context: ActorContext) {
+  /** Bills at a counter; `tillId` is the till (POS device) it was billed at. */
+  async createOrder(dto: CreatePosOrderDto, context: ActorContext, tillId?: string) {
     // Operator access, as the previous system's operator master set it per person.
     if (dto.channel === OrderChannel.ROOM && !context.permissions?.includes('POS_ROOM_ORDER')) {
       throw new ForbiddenException('You do not have access to bill room orders.');
@@ -648,7 +649,7 @@ export class PosService {
 
     try {
       const id = await this.prisma.$transaction((tx) =>
-        this.billOrder(tx, counter, clientOrderId, dto, context),
+        this.billOrder(tx, counter, clientOrderId, dto, context, tillId),
       );
 
       return await this.detail(id);
@@ -817,6 +818,7 @@ export class PosService {
     clientOrderId: string,
     dto: CreatePosOrderDto,
     context: ActorContext,
+    tillId?: string,
   ): Promise<string> {
     const now = new Date();
     const today = toDateOnly(siteBusinessDate(now));
@@ -892,6 +894,7 @@ export class PosService {
         complimentaryReason: isComplimentary ? optionalText(dto.complimentaryReason) : null,
         counterId: counter.id,
         createdBy: context.actorId,
+        posDeviceId: tillId ?? null,
         customerMobile: optionalText(dto.customerMobile),
         discountPercent: totals.discountTotal ? staffDiscount : null,
         discountTotal: totals.discountTotal,

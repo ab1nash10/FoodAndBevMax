@@ -37,6 +37,7 @@ export const HOSPITAL_SCOPED_MODELS = new Set([
   'Kitchen',
   'KitchenProduction',
   'Location',
+  'OrderAmendment',
   'OnlinePayment',
   'PaymentMachine',
   'PosDevice',

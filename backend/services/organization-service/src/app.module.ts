@@ -44,6 +44,7 @@ import { KitchensModule } from './kitchens/kitchens.module';
 import { LocationsModule } from './locations/locations.module';
 import { PaymentMachinesModule } from './payment-machines/payment-machines.module';
 import { PosDevicesModule } from './pos-devices/pos-devices.module';
+import { OrderReportsModule } from './order-reports/order-reports.module';
 import { PosModule } from './pos/pos.module';
 import { RestaurantMenusModule } from './restaurant-menus/restaurant-menus.module';
 import { RestaurantOrdersModule } from './restaurant-orders/restaurant-orders.module';
@@ -106,6 +107,7 @@ import { TransfersModule } from './transfers/transfers.module';
     LocationsModule,
     PaymentMachinesModule,
     PosDevicesModule,
+    OrderReportsModule,
     PosModule,
     RestaurantMenusModule,
     RestaurantOrdersModule,

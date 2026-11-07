@@ -68,6 +68,8 @@ export const queryKeys = {
   counterStock: key('counter-stock'),
   posBill: key('pos-bill'),
   posBills: key('pos-bills'),
+  orderReports: key('order-reports'),
+  orderAmendments: key('order-amendments'),
   posCounters: key('pos-counters'),
   posWhoAmI: key('pos-whoami'),
   posPaymentProviders: key('pos-payment-providers'),

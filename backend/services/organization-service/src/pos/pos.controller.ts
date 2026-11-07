@@ -148,14 +148,18 @@ export class PosController {
   async create(
     @Body() body: CreatePosOrderDto,
     @CurrentUser() user: JwtRequestUser | undefined,
-    @Req() request: RequestContextLike,
+    @Req() request: RequestContextLike & TillRequest,
   ) {
     return {
-      data: await this.pos.createOrder(body, {
-        actorId: getActorId(user),
-        ipAddress: getIpAddress(request),
-        permissions: user?.permissions,
-      }),
+      data: await this.pos.createOrder(
+        body,
+        {
+          actorId: getActorId(user),
+          ipAddress: getIpAddress(request),
+          permissions: user?.permissions,
+        },
+        request.till?.posDeviceId,
+      ),
       message: 'Success',
       success: true,
     };

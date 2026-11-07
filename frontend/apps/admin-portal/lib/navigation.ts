@@ -161,6 +161,12 @@ export const navigationGroups: NavGroup[] = [
         label: 'POS & Payment Machines',
         permissions: ['POS_DEVICE_VIEW', 'PAYMENT_MACHINE_VIEW', 'COUNTER_VIEW'],
       },
+      {
+        href: '/masters/orders',
+        icon: Receipt,
+        label: 'Orders & Reports',
+        permissions: ['ORDER_REPORT_VIEW'],
+      },
     ],
     label: 'Organization',
     section: 'Setup',

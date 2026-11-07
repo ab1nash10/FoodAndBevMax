@@ -12,6 +12,7 @@ import { ShiftsService } from './shifts.service';
 @Module({
   controllers: [PosController, KioskController, ShiftsController, OnlinePaymentsController],
   imports: [CommonModule],
+  exports: [PosService],
   providers: [PosService, KioskService, ShiftsService, OnlinePaymentsService],
 })
 export class PosModule {}

@@ -1,0 +1,474 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`organization setup masters (integration) > POS devices: create with restaurants, read back, update, code and host-name conflicts, entity rule, delete > pos device 1`] = `
+{
+  "data": {
+    "code": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "hostName": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "isInvoicePrintEnabled": "boolean",
+    "isKotPrintEnabled": "boolean",
+    "legalEntityId": null,
+    "name": "string",
+    "restaurantIds": [
+      "string",
+    ],
+    "restaurants": [
+      {
+        "id": "string",
+        "isActive": "boolean",
+        "restaurantCode": "string",
+        "restaurantName": "string",
+      },
+    ],
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > counters: create, read back, update, code unique per restaurant, validation, delete > counter 1`] = `
+{
+  "data": {
+    "counterCode": "string",
+    "counterName": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "paymentDeviceId": null,
+    "pineLabsDeviceId": null,
+    "posDeviceId": null,
+    "restaurant": {
+      "id": "string",
+      "isActive": "boolean",
+      "restaurantCode": "string",
+      "restaurantName": "string",
+    },
+    "restaurantId": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > employee discounts: create, read back, update, archive and restore, validation (no delete) > employee discount 1`] = `
+{
+  "data": {
+    "archivedAt": null,
+    "createdAt": "string",
+    "daysOfWeek": [
+      "string",
+    ],
+    "discountPercent": "number",
+    "employmentType": "string",
+    "endTime": "string",
+    "hospitalId": "string",
+    "id": "string",
+    "name": "string",
+    "restaurant": {
+      "id": "string",
+      "restaurantCode": "string",
+      "restaurantName": "string",
+    },
+    "restaurantId": "string",
+    "startTime": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > employees: create, read back, validate by code, update, code conflict, validation, import, delete > employee 1`] = `
+{
+  "data": {
+    "birthDate": null,
+    "createdAt": "string",
+    "deletedAt": null,
+    "department": "string",
+    "designation": null,
+    "eligibleForDiscount": "boolean",
+    "employeeCode": "string",
+    "employeeLevel": null,
+    "employeeName": "string",
+    "employmentType": "string",
+    "gender": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "joiningDate": null,
+    "legalEntityId": null,
+    "mobile": null,
+    "officialEmail": null,
+    "reportingManager": null,
+    "reportingManagerId": null,
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > employees: create, read back, validate by code, update, code conflict, validation, import, delete > employee validation 1`] = `
+{
+  "department": "string",
+  "designation": null,
+  "eligibleForDiscount": "boolean",
+  "employeeCode": "string",
+  "employeeId": "string",
+  "employeeName": "string",
+  "isActive": "boolean",
+  "mobile": null,
+}
+`;
+
+exports[`organization setup masters (integration) > hospitals: create with a Main Store and Main Kitchen, update, conflicts, validation, delete > hospital 1`] = `
+{
+  "data": {
+    "address": null,
+    "area": null,
+    "billPrefix": "string",
+    "city": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "displayName": "string",
+    "gstApplicable": "boolean",
+    "hospitalCode": "string",
+    "hospitalName": "string",
+    "id": "string",
+    "invoicePrefix": "string",
+    "ipAddress": null,
+    "isActive": "boolean",
+    "latitude": null,
+    "legalEntityId": null,
+    "locationCode": "string",
+    "longitude": null,
+    "onlinePaymentOption": "string",
+    "payuClientId": null,
+    "payuClientSecret": null,
+    "payuMerchantId": null,
+    "postalCode": "string",
+    "razorpayKeyId": null,
+    "razorpayKeySecret": null,
+    "state": "string",
+    "title": "string",
+    "updatedAt": "string",
+    "visitingCardAddress": null,
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > kitchens: create with a generated code, read back, update, code conflict, validation, delete > kitchen 1`] = `
+{
+  "data": {
+    "closingTime": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "kitchenCode": "string",
+    "kitchenName": "string",
+    "location": null,
+    "locationId": null,
+    "openingTime": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > legal entities: create, read back, update, refuse a repeat, validate, delete > legal entity 1`] = `
+{
+  "data": {
+    "createdAt": "string",
+    "deletedAt": null,
+    "entityAddress": "string",
+    "entityName": "string",
+    "gstNumber": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "locationName": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > locations (areas): create, read back, update, no name rule, validation, delete > location 1`] = `
+{
+  "data": {
+    "address": null,
+    "area": null,
+    "building": "string",
+    "createdAt": "string",
+    "deletedAt": null,
+    "floor": "string",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "locationName": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > payment machines: create, masked token, one default per device, update, validation, delete > payment machine 1`] = `
+{
+  "data": {
+    "createdAt": "string",
+    "deletedAt": null,
+    "hasPinelabSecurityToken": "boolean",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "isDefault": "boolean",
+    "name": "string",
+    "pinelabImei": null,
+    "pinelabMerchantId": null,
+    "pinelabMerchantStorePosCode": null,
+    "pinelabSecurityToken": "string",
+    "posDevice": {
+      "code": "string",
+      "id": "string",
+      "isActive": "boolean",
+      "name": "string",
+    },
+    "posDeviceId": "string",
+    "primaryUpi": "string",
+    "serialNumber": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > restaurants: create with store, kitchens and entity, read back, update, conflicts, validation, delete > restaurant 1`] = `
+{
+  "data": {
+    "accountNumber": null,
+    "address": null,
+    "atTableDining": "boolean",
+    "b2cQrEnabled": "boolean",
+    "bankBranch": null,
+    "bankName": null,
+    "bankNameBranch": null,
+    "closingTime": null,
+    "coverImageUrl": null,
+    "createdAt": "string",
+    "deletedAt": null,
+    "delivery": "boolean",
+    "email": null,
+    "fssaiNumber": null,
+    "fssaiNumbers": null,
+    "gstAddress": null,
+    "gstNumber": "string",
+    "homeDelivery": "boolean",
+    "hospital": {
+      "city": "string",
+      "displayName": "string",
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+      "locationCode": "string",
+      "postalCode": null,
+      "state": "string",
+      "title": "string",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "ifscCode": null,
+    "ihcOnly": "boolean",
+    "inCarDining": "boolean",
+    "inRoomDining": "boolean",
+    "inRoomDiningEnabled": "boolean",
+    "inventory": "boolean",
+    "isActive": "boolean",
+    "isAtTableDiningEnabled": "boolean",
+    "isDeliveryEnabled": "boolean",
+    "isHomeDeliveryEnabled": "boolean",
+    "isIhcOnly": "boolean",
+    "isInCarDiningEnabled": "boolean",
+    "isInRoomDiningEnabled": "boolean",
+    "isInventoryEnabled": "boolean",
+    "isOffline": "boolean",
+    "isOnlineOrdersEnabled": "boolean",
+    "isOpen24x7": "boolean",
+    "isPosOrdersEnabled": "boolean",
+    "isRegisteredInGst": "boolean",
+    "isTakeawayEnabled": "boolean",
+    "isVegOnly": "boolean",
+    "kitchen": {
+      "id": "string",
+      "isActive": "boolean",
+      "kitchenCode": "string",
+      "kitchenName": "string",
+    },
+    "kitchenId": "string",
+    "kitchenIds": [
+      "string",
+    ],
+    "kitchens": [
+      {
+        "id": "string",
+        "isActive": "boolean",
+        "kitchenCode": "string",
+        "kitchenName": "string",
+      },
+    ],
+    "legalEntityId": "string",
+    "legalName": null,
+    "location": null,
+    "locationId": null,
+    "mobile": "string",
+    "normalDiscountApplicable": "boolean",
+    "offline": "boolean",
+    "onlineOrderingEnabled": "boolean",
+    "onlineOrders": "boolean",
+    "open24x7": "boolean",
+    "openingTime": null,
+    "panNumber": null,
+    "posOrders": "boolean",
+    "qrUnitName": null,
+    "restaurantCode": "string",
+    "restaurantName": "string",
+    "shiftMode": "string",
+    "shiftTimings": [
+      {
+        "endTime": "string",
+        "name": "string",
+        "startTime": "string",
+      },
+    ],
+    "sodexoMid": null,
+    "sodexoTid": null,
+    "staffDiscountApplicable": "boolean",
+    "store": {
+      "id": "string",
+      "isActive": "boolean",
+      "storeCode": "string",
+      "storeName": "string",
+    },
+    "storeId": "string",
+    "sunBu": null,
+    "sunT1": null,
+    "sunT2": null,
+    "takeaway": "boolean",
+    "thumbnailUrl": null,
+    "unitNameForQr": null,
+    "updatedAt": "string",
+    "upiId": null,
+    "vegOnly": "boolean",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > stores: create with a generated code, read back, update, code conflict, validation, delete > store 1`] = `
+{
+  "data": {
+    "address": null,
+    "createdAt": "string",
+    "deletedAt": null,
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "location": {
+      "id": "string",
+      "isActive": "boolean",
+      "locationName": "string",
+    },
+    "locationId": "string",
+    "storeCode": "string",
+    "storeName": "string",
+    "storeType": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;
+
+exports[`organization setup masters (integration) > time slots: shared or per hospital, read back, update, name conflict, validation; delete fails > time slot 1`] = `
+{
+  "data": {
+    "createdAt": "string",
+    "deletedAt": null,
+    "endTime": "string",
+    "hospital": {
+      "hospitalCode": "string",
+      "hospitalName": "string",
+      "id": "string",
+      "isActive": "boolean",
+    },
+    "hospitalId": "string",
+    "id": "string",
+    "isActive": "boolean",
+    "isAlwaysAvailable": "boolean",
+    "slotName": "string",
+    "startTime": "string",
+    "updatedAt": "string",
+  },
+  "message": "string",
+  "success": "boolean",
+}
+`;

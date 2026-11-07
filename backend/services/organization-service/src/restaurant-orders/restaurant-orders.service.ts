@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { OrderSource, OrderStatus, Prisma } from '@prisma/client';
+import { OrderSource, OrderStatus, Prisma, UserStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -41,6 +41,21 @@ const orderSelect = {
   source: true,
   status: true,
 } satisfies Prisma.RestaurantOrderSelect;
+
+/** The kitchen screen's: also who is taking it to the guest. Not for senders or the board. */
+const kitchenSelect = { ...orderSelect, stewardId: true } satisfies Prisma.RestaurantOrderSelect;
+
+// ponytail: stewards are found by this role's name; give them a permission of their own if roles
+// start being renamed.
+export const STEWARD_ROLE = 'Delivery Operator';
+
+/** Active users with the steward role at a location (their home one or one assigned). */
+export const stewardsAt = (hospitalId: string): Prisma.UserWhereInput => ({
+  deletedAt: null,
+  OR: [{ hospitalId }, { assignedHospitals: { some: { deletedAt: null, hospitalId } } }],
+  roles: { some: { deletedAt: null, role: { deletedAt: null, name: STEWARD_ROLE } } },
+  status: UserStatus.ACTIVE,
+});
 
 export function hashOrderKey(key: string): string {
   return createHash('sha256').update(key).digest('hex');
@@ -211,17 +226,104 @@ export class RestaurantOrdersService {
 
   /** The kitchen screen: today's open orders, oldest first. */
   async listActive(restaurantId: string) {
-    return this.prisma.restaurantOrder.findMany({
-      orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
-      select: orderSelect,
-      take: 300,
-      where: { placedAt: { gte: activeSince() }, restaurantId, status: { in: ACTIVE_STATUSES } },
+    return this.withStewardNames(
+      await this.prisma.restaurantOrder.findMany({
+        orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
+        select: kitchenSelect,
+        take: 300,
+        where: { placedAt: { gte: activeSince() }, restaurantId, status: { in: ACTIVE_STATUSES } },
+      }),
+    );
+  }
+
+  /** Each order with its steward's name (null when it has none). */
+  private async withStewardNames<T extends { stewardId: string | null }>(orders: T[]) {
+    const ids = [...new Set(orders.map((order) => order.stewardId).filter(Boolean))] as string[];
+    const users = ids.length
+      ? await this.prisma.user.findMany({
+          select: { id: true, name: true },
+          where: { id: { in: ids } },
+        })
+      : [];
+    const names = new Map(users.map((user) => [user.id, user.name]));
+
+    return orders.map((order) => ({
+      ...order,
+      stewardName: order.stewardId ? (names.get(order.stewardId) ?? null) : null,
+    }));
+  }
+
+  /** Who may take a restaurant's orders to guests: its location's Delivery Operators. */
+  async stewards(restaurantId: string) {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      select: { hospitalId: true },
+      where: { id: restaurantId },
     });
+
+    if (!restaurant) throw new NotFoundException('Restaurant not found');
+
+    return this.prisma.user.findMany({
+      orderBy: { name: 'asc' },
+      select: { employeeCode: true, id: true, name: true },
+      where: stewardsAt(restaurant.hospitalId),
+    });
+  }
+
+  /** Gives an order to a steward (or, with null, takes it off them) until it is handed over. */
+  async setSteward(id: string, stewardId: string | null, context: ActorContext) {
+    const order = await this.prisma.restaurantOrder.findFirst({
+      select: { hospitalId: true, status: true, stewardId: true },
+      where: { id },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status === OrderStatus.COLLECTED) {
+      throw new ConflictException(
+        'This order is already handed over, so its steward cannot change.',
+      );
+    }
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new ConflictException('This order is cancelled, so it needs no steward.');
+    }
+    if (
+      stewardId &&
+      !(await this.prisma.user.findFirst({
+        select: { id: true },
+        where: { ...stewardsAt(order.hospitalId), id: stewardId },
+      }))
+    ) {
+      throw new ConflictException(
+        'Choose a steward: a Delivery Operator at this order’s location.',
+      );
+    }
+
+    await this.prisma.restaurantOrder.update({
+      data: {
+        stewardAssignedAt: stewardId ? new Date() : null,
+        stewardId,
+        updatedBy: context.actorId,
+      },
+      where: { id },
+    });
+    await this.auditLog.record({
+      action: 'STEWARD_ASSIGN',
+      actorId: context.actorId,
+      entityId: id,
+      entityName: 'restaurant_orders',
+      ipAddress: context.ipAddress,
+      newValue: { stewardId },
+      oldValue: { stewardId: order.stewardId },
+    });
+    const [updated] = await this.withStewardNames([
+      await this.prisma.restaurantOrder.findFirstOrThrow({ select: kitchenSelect, where: { id } }),
+    ]);
+
+    return updated;
   }
 
   async setStatus(id: string, status: OrderStatus, context: ActorContext) {
     const order = await this.prisma.restaurantOrder.findFirst({
-      select: { source: true, status: true },
+      select: { acceptedAt: true, source: true, status: true },
       where: { id },
     });
 
@@ -243,6 +345,9 @@ export class RestaurantOrdersService {
     // Only from the status just read: two screens tapping at once cannot skip a step.
     const { count } = await this.prisma.restaurantOrder.updateMany({
       data: {
+        // The first time the kitchen takes it (a READY sent back keeps it), and the handover.
+        acceptedAt: status === OrderStatus.PREPARING && !order.acceptedAt ? new Date() : undefined,
+        deliveredAt: status === OrderStatus.COLLECTED ? new Date() : undefined,
         readyAt: status === OrderStatus.READY ? new Date() : undefined,
         status,
         updatedBy: context.actorId,
