@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "AAHAR production monorepo for web, services, and shared packages.",
-  "packageManager": "pnpm@10.26.0",
+  "packageManager": "pnpm@10.0.0",
   "engines": {
     "node": ">=22.12.0",
     "pnpm": ">=10.0.0"
@@ -55,5 +55,15 @@
     "turbo": "^2.11.7",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser@2": "^2.4.0",
+      "fast-uri@3": "^3.1.9",
+      "js-yaml@4": "^4.3.2",
+      "mysql2@3": "^3.23.1",
+      "multer@2": "^2.5.0",
+      "qs@6": "^6.16.1"
+    }
   }
 }

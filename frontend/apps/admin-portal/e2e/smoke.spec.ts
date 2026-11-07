@@ -70,49 +70,41 @@ test('every screen opens without errors', async ({ page }) => {
   }
 });
 
-// As on a real kiosk or TV: no admin signed in in that browser. (The sweep above renews the
-// saved session, which retires its refresh token, so loading it here would fail a refresh.)
-test.describe('link screens', () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
-
-  test('the kiosk and the TV board open with their link', async ({ page, request }) => {
-    test.setTimeout(3 * 60_000);
-    page.setDefaultTimeout(30_000);
-    const session = JSON.parse(readFileSync('e2e/.auth.json', 'utf8')) as {
-      origins: { localStorage: { value: string }[] }[];
-    };
-    const { accessToken } = JSON.parse(session.origins[0]?.localStorage[0]?.value ?? '{}') as {
-      accessToken: string;
-    };
-    const headers = { authorization: `Bearer ${accessToken}` };
-    const restaurants = await request.get(
-      `${organizationApi}/restaurants?limit=1&isActive=true&sortBy=createdAt&sortOrder=asc`,
-      { headers },
-    );
-    const restaurant = ((await restaurants.json()) as { data: { items: { id: string }[] } }).data
-      .items[0];
-    test.skip(!restaurant, 'no active restaurant');
-    const link = await request.post(`${organizationApi}/restaurants/${restaurant!.id}/board-link`, {
-      data: { regenerate: false },
-      headers,
-    });
-    const { boardToken } = ((await link.json()) as { data: { boardToken: string } }).data;
-    const query = `${restaurant!.id}?token=${encodeURIComponent(boardToken)}`;
-
-    const kioskProblems = await problemsWhile(page, async () => {
-      await page.goto(`kiosk/${query}`);
-    });
-    await expect
-      .soft(page.getByText(/kiosk is not set up|menu could not be loaded/i))
-      .toHaveCount(0);
-    expect.soft(kioskProblems, 'kiosk').toEqual([]);
-
-    const boardProblems = await problemsWhile(page, async () => {
-      await page.goto(`board/${query}`);
-    });
-    await expect
-      .soft(page.getByText(/needs its board link|no longer valid|Connecting to AAHAR/i))
-      .toHaveCount(0);
-    expect.soft(boardProblems, 'board').toEqual([]);
+test('the kiosk and the TV board open with their link', async ({ page, request }) => {
+  test.setTimeout(3 * 60_000);
+  page.setDefaultTimeout(30_000);
+  const session = JSON.parse(readFileSync('e2e/.auth.json', 'utf8')) as {
+    origins: { localStorage: { value: string }[] }[];
+  };
+  const { accessToken } = JSON.parse(session.origins[0]?.localStorage[0]?.value ?? '{}') as {
+    accessToken: string;
+  };
+  const headers = { authorization: `Bearer ${accessToken}` };
+  const restaurants = await request.get(
+    `${organizationApi}/restaurants?limit=1&isActive=true&sortBy=createdAt&sortOrder=asc`,
+    { headers },
+  );
+  const restaurant = ((await restaurants.json()) as { data: { items: { id: string }[] } }).data
+    .items[0];
+  test.skip(!restaurant, 'no active restaurant');
+  const link = await request.post(`${organizationApi}/restaurants/${restaurant!.id}/board-link`, {
+    data: { regenerate: false },
+    headers,
   });
+  const { boardToken } = ((await link.json()) as { data: { boardToken: string } }).data;
+  const query = `${restaurant!.id}?token=${encodeURIComponent(boardToken)}`;
+
+  const kioskProblems = await problemsWhile(page, async () => {
+    await page.goto(`kiosk/${query}`);
+  });
+  await expect.soft(page.getByText(/kiosk is not set up|menu could not be loaded/i)).toHaveCount(0);
+  expect.soft(kioskProblems, 'kiosk').toEqual([]);
+
+  const boardProblems = await problemsWhile(page, async () => {
+    await page.goto(`board/${query}`);
+  });
+  await expect
+    .soft(page.getByText(/needs its board link|no longer valid|Connecting to AAHAR/i))
+    .toHaveCount(0);
+  expect.soft(boardProblems, 'board').toEqual([]);
 });

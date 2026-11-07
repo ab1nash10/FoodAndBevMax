@@ -5,17 +5,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 function isLoopback(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.startsWith('127.') ||
-    hostname === '[::1]' ||
-    hostname === '::1'
-  );
-}
-
-function isWildcard(hostname: string): boolean {
-  return hostname === '0.0.0.0' || hostname === '::' || hostname === '[::]';
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
 function isPrivateIpv4(address: string): boolean {
@@ -45,52 +35,20 @@ function lanAddress(): string | null {
 }
 
 export function GET(request: Request) {
-  const configuredOrigin = process.env.APP_PUBLIC_ORIGIN || process.env.NEXT_PUBLIC_APP_URL;
-  const requestUrl = new URL(request.url);
-  const host =
-    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
-    request.headers.get('host') ||
-    requestUrl.host;
-  const protocol =
-    request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().replace(/:$/, '') ||
-    requestUrl.protocol.replace(/:$/, '');
-  let url: URL;
+  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL;
+  const url = new URL(configuredOrigin || request.url);
 
-  try {
-    url = new URL(configuredOrigin || `${protocol}://${host}`);
-  } catch {
+  if (!['http:', 'https:'].includes(url.protocol)) {
     return NextResponse.json(
-      { message: 'Restaurant QR links are not configured with a reachable site address.' },
-      { status: 503 },
+      { message: 'The configured app URL must use HTTP or HTTPS.' },
+      { status: 500 },
     );
   }
 
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    (process.env.NODE_ENV !== 'development' && isWildcard(url.hostname))
-  ) {
-    return NextResponse.json(
-      { message: 'Restaurant QR links are not configured with a reachable site address.' },
-      { status: 503 },
-    );
-  }
-
-  if (
-    process.env.NODE_ENV === 'development' &&
-    (isLoopback(url.hostname) || isWildcard(url.hostname))
-  ) {
+  if (process.env.NODE_ENV === 'development' && isLoopback(url.hostname)) {
     const address = lanAddress();
 
     if (address) url.hostname = address;
-  }
-
-  if (isLoopback(url.hostname) || isWildcard(url.hostname)) {
-    return NextResponse.json(
-      { message: 'Restaurant QR links are not configured with a reachable site address.' },
-      { status: 503 },
-    );
   }
 
   return NextResponse.json({ origin: url.origin }, { headers: { 'Cache-Control': 'no-store' } });

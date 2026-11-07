@@ -1560,7 +1560,6 @@ describe.skipIf(!databaseUrl)(
 
         expect(await ok('GET', '/users/me/preferences', undefined, as)).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: null,
           theme: null,
         });
@@ -1591,12 +1590,7 @@ describe.skipIf(!databaseUrl)(
           { startPage: '/inventory/grns', theme: 'dark' },
           as,
         );
-        expect(set).toEqual({
-          defaultLocationId: hA,
-          hasPassword: true,
-          startPage: '/inventory/grns',
-          theme: 'dark',
-        });
+        expect(set).toEqual({ defaultLocationId: hA, startPage: '/inventory/grns', theme: 'dark' });
         expect(await ok('GET', '/users/me/preferences', undefined, as)).toEqual(set);
         expect((await prisma.user.findUniqueOrThrow({ where: { id: me.id } })).preferences).toEqual(
           {
@@ -1608,13 +1602,11 @@ describe.skipIf(!databaseUrl)(
         // Omitted fields are kept; null clears one.
         expect(await ok('PATCH', '/users/me/preferences', { theme: null }, as)).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: '/inventory/grns',
           theme: null,
         });
         expect(await ok('PATCH', '/users/me/preferences', {}, as)).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: '/inventory/grns',
           theme: null,
         });
@@ -1693,14 +1685,16 @@ describe.skipIf(!databaseUrl)(
           password: null,
           roleId: staffRoleId,
         });
-        // Without a password yet, a user sets their first one: no current password is asked for.
-        const first = await api(
-          'POST',
-          '/users/me/password',
-          { newPassword: 'Brandnew123' },
-          signFor(noPassword),
-        );
-        expect([first.status, first.body.message]).toEqual([201, 'Password changed']);
+        expect(
+          refused(
+            await api(
+              'POST',
+              '/users/me/password',
+              { currentPassword: 'anything', newPassword: 'Brandnew123' },
+              signFor(noPassword),
+            ),
+          ),
+        ).toEqual([400, 'Your account has no password yet. Ask an administrator to set one.']);
       });
     });
   },
