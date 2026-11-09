@@ -4,6 +4,7 @@ import {
   OnlinePaymentStatus,
   OrderAmendmentType,
   OrderSource,
+  QrOrderStatus,
   type PaymentMode,
   type Prisma,
 } from '@prisma/client';
@@ -171,10 +172,16 @@ export class OrderReportsService {
         this.prisma,
         orders.flatMap((order) => [order.createdBy, order.stewardId]),
       ),
-      this.prisma.kioskOrder.findMany({
-        select: { billedOrderId: true },
-        where: { billedOrderId: { in: ids } },
-      }),
+      Promise.all([
+        this.prisma.kioskOrder.findMany({
+          select: { billedOrderId: true },
+          where: { billedOrderId: { in: ids } },
+        }),
+        this.prisma.qrOrder.findMany({
+          select: { billedOrderId: true },
+          where: { billedOrderId: { in: ids } },
+        }),
+      ]).then((lists) => lists.flat()),
       this.prisma.erpPosting.findMany({
         select: { businessDate: true, restaurantId: true },
         where: {
@@ -205,7 +212,7 @@ export class OrderReportsService {
         onlineProvider: paidOnline ? (onlinePayment?.provider ?? null) : null,
         operatorName: createdBy ? (operators.get(createdBy) ?? null) : null,
         posDevice: till ? (deviceById.get(till) ?? null) : null,
-        // Billed at the till itself; a kiosk order is ordered at the kiosk and billed there.
+        // Billed at the till itself; a kiosk or QR order was ordered elsewhere and billed there.
         posOrder: !fromKiosk.has(order.id),
         roundOff: money(order.roundOff),
         stewardAssigned: order.stewardId !== null,
@@ -234,6 +241,39 @@ export class OrderReportsService {
       items: [...names]
         .map(([id, name]) => ({ id, name }))
         .sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  }
+
+  /** QR orders the guest paid for but that could not be billed: each to refund at the counter. */
+  async paidNotBilled(query: OperatorsQueryDto) {
+    const orders = await this.prisma.qrOrder.findMany({
+      include: {
+        onlinePayment: {
+          select: { amount: true, paidAt: true, paidReference: true, provider: true },
+        },
+        restaurant: { select: { restaurantName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      where: {
+        status: QrOrderStatus.PAID_NOT_BILLED,
+        ...(query.hospitalId ? { hospitalId: query.hospitalId } : {}),
+      },
+    });
+
+    return {
+      items: orders.map((order) => ({
+        amount: toNumber(order.onlinePayment.amount),
+        channel: order.channel,
+        createdAt: order.createdAt,
+        id: order.id,
+        paidAt: order.onlinePayment.paidAt,
+        paymentReference: order.onlinePayment.paidReference,
+        provider: order.onlinePayment.provider,
+        reason: order.failureReason,
+        restaurantName: order.restaurant.restaurantName,
+        roomNumber: order.roomNumber,
+      })),
     };
   }
 

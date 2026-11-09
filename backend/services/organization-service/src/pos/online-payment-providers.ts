@@ -18,7 +18,13 @@ export interface ProviderState {
 export interface PaymentProvider {
   /** amount: what the payment was for, in rupees (Pine Labs needs it to clear the machine). */
   cancel(providerRef: string, amount: number): Promise<void>;
-  create(input: { amount: number; description: string; reference: string }): Promise<ProviderLink>;
+  /** returnUrl: where the provider sends a guest who paid on their own phone (QR orders). */
+  create(input: {
+    amount: number;
+    description: string;
+    reference: string;
+    returnUrl?: string;
+  }): Promise<ProviderLink>;
   read(providerRef: string): Promise<ProviderState>;
 }
 
@@ -87,13 +93,14 @@ function razorpay(keyId: string, keySecret: string): PaymentProvider {
     async cancel(providerRef) {
       await call('RAZORPAY', `${base}/${providerRef}/cancel`, { headers, method: 'POST' });
     },
-    async create({ amount, description, reference }) {
+    async create({ amount, description, reference, returnUrl }) {
       const body = await call('RAZORPAY', base, {
         body: JSON.stringify({
           amount: Math.round(amount * 100),
           currency: 'INR',
           description,
           reference_id: reference,
+          ...(returnUrl ? { callback_method: 'get', callback_url: returnUrl } : {}),
         }),
         headers,
         method: 'POST',

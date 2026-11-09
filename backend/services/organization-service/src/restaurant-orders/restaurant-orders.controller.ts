@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Put,
   Post,
   Query,
   Req,
@@ -18,6 +19,7 @@ import { getActorId, getIpAddress, type RequestContextLike } from '../common/req
 import {
   BoardLinkDto,
   ListRestaurantOrdersQueryDto,
+  SetQrCounterDto,
   SetStewardDto,
   UpdateOrderStatusDto,
 } from './dto/order-requests.dto';
@@ -168,6 +170,27 @@ export class RestaurantOrdersController {
   ) {
     return {
       data: await this.orders.boardLink(id, body.regenerate ?? false, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Put('restaurants/:id/qr-counter')
+  @ApiBearerAuth('access-token')
+  @Permissions('RESTAURANT_UPDATE')
+  @ApiOperation({ summary: 'The counter QR (phone) orders are billed at; null turns them off' })
+  @ApiOkResponse({ description: 'QR counter saved.' })
+  async setQrCounter(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SetQrCounterDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.orders.setQrCounter(id, body.counterId, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),

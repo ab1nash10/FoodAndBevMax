@@ -281,6 +281,8 @@ export interface Restaurant {
   open24x7: boolean;
   panNumber: string | null;
   posOrders: boolean;
+  /** The counter QR (room-service) orders are billed at; null: QR ordering is off. */
+  qrCounterId: string | null;
   qrUnitName: string | null;
   unitNameForQr: string | null;
   restaurantCode: string;

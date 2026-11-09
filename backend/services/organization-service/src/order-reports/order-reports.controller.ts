@@ -36,6 +36,14 @@ export class OrderReportsController {
     return ok(await this.reports.operators(query));
   }
 
+  @Get('paid-not-billed')
+  @Permissions('ORDER_REPORT_VIEW')
+  @ApiOperation({ summary: 'QR orders paid by the guest but not billed: to refund' })
+  @ApiOkResponse({ description: 'Payments returned.' })
+  async paidNotBilled(@Query() query: OperatorsQueryDto) {
+    return ok(await this.reports.paidNotBilled(query));
+  }
+
   @Get('amendments')
   @Permissions('ORDER_REPORT_VIEW')
   @ApiOperation({ summary: 'Amendments made to bills, newest first' })

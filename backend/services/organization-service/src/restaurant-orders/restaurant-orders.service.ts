@@ -475,6 +475,44 @@ export class RestaurantOrdersService {
   }
 
   /** The restaurant's board secret, made on first use; regenerate turns the old link off. */
+  /** The counter QR (phone) orders are billed at, into its open shift; null turns them off. */
+  async setQrCounter(restaurantId: string, counterId: string | null, context: ActorContext) {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      select: { hospitalId: true, id: true, qrCounterId: true },
+      where: { deletedAt: null, id: restaurantId },
+    });
+
+    if (!restaurant) throw new NotFoundException('Restaurant not found');
+
+    if (
+      counterId &&
+      !(await this.prisma.counter.findFirst({
+        select: { id: true },
+        where: { deletedAt: null, id: counterId, isActive: true, restaurantId },
+      }))
+    ) {
+      throw new BadRequestException('Choose an active counter of this restaurant.');
+    }
+
+    await this.prisma.restaurant.update({
+      data: { qrCounterId: counterId, updatedBy: context.actorId },
+      where: { id: restaurantId },
+    });
+    await this.auditLog.record({
+      action: 'UPDATE',
+      actorId: context.actorId,
+      entityId: restaurantId,
+      entityName: 'restaurants',
+      hospitalId: restaurant.hospitalId,
+      ipAddress: context.ipAddress,
+      newValue: { qrCounterId: counterId },
+      oldValue: { qrCounterId: restaurant.qrCounterId },
+      summary: counterId ? 'QR ordering counter set' : 'QR ordering turned off',
+    });
+
+    return { qrCounterId: counterId };
+  }
+
   async boardLink(restaurantId: string, regenerate: boolean, context: ActorContext) {
     const restaurant = await this.prisma.restaurant.findFirst({
       select: { boardToken: true, id: true },

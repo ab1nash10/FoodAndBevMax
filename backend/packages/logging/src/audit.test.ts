@@ -112,7 +112,13 @@ function fakeClient(failures: number) {
   return { calls: () => calls, client: client as unknown as AuditClient, rows };
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+/** Waits until `done` holds (the background retries ran), for up to a second: a fixed wait
+ * failed on a busy machine, where the retries' timers fire late. */
+const settle = async (done: () => boolean) => {
+  for (const end = Date.now() + 1000; !done() && Date.now() < end;) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+};
 
 void test('with tx the row is written by the transaction, and its failure is thrown', async () => {
   const base = fakeClient(0);
@@ -136,7 +142,7 @@ void test('without tx the write is retried in the background and never throws', 
     entityId: 'e',
     entityName: 'x',
   });
-  await settle();
+  await settle(() => flaky.rows.length === 1);
   assert.equal(flaky.rows.length, 1, 'third attempt saves');
 
   const error = mock.method(logger, 'error', () => {});
@@ -146,7 +152,7 @@ void test('without tx the write is retried in the background and never throws', 
     entityId: 'e',
     entityName: 'x',
   });
-  await settle();
+  await settle(() => error.mock.callCount() === 1);
   assert.equal(down.calls(), 3);
   assert.equal(error.mock.callCount(), 1);
   assert.equal(error.mock.calls[0]?.arguments[1], 'audit_write_failed');

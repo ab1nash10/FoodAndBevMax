@@ -31,6 +31,7 @@ export { HealthCheckService } from './health-check.service';
 export type { ServiceHealthDetails } from './health-check.service';
 export { JwtAuthGuard } from './jwt-auth.guard';
 export { JwtStrategy } from './jwt.strategy';
+export { SmsService } from './sms.service';
 export { ADDRESS_THROTTLER, UserThrottlerGuard, addressThrottler } from './user-throttler.guard';
 export { RbacGuard } from './rbac.guard';
 export { requestLoggingMiddleware } from './request-logging.middleware';

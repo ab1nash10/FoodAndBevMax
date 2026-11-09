@@ -612,3 +612,68 @@ export interface OrderAmendmentInput {
   paymentReference?: string;
   remarks: string;
 }
+
+/** A dish on the QR (room service) menu, at the room price. */
+export interface QrMenuItem extends Omit<KioskMenuItem, 'isFeatured'> {
+  /** Left at the QR counter; null when it keeps no stock of it. */
+  stock: number | null;
+}
+
+export interface QrMenu {
+  items: QrMenuItem[];
+  locationName: string;
+  /** False while the restaurant's QR counter has no shift open: no orders are taken. */
+  open: boolean;
+  restaurantName: string;
+  /** Whether staff get a discount here (Employee ID + OTP). */
+  staffDiscount: boolean;
+}
+
+export interface QrOrderInput {
+  bedNumber?: string;
+  /** The phone's own id for the order, made once: a retry returns the same order. */
+  clientOrderId: string;
+  instructions?: string;
+  lines: Array<{ menuId: string; quantity: number }>;
+  /** The page the payment provider sends the guest back to. */
+  returnUrl?: string;
+  roomNumber: string;
+  /** From a confirmed staff-discount OTP. */
+  staffToken?: string;
+}
+
+export type QrOrderStatus = 'AWAITING_PAYMENT' | 'BILLED' | 'CLOSED' | 'PAID_NOT_BILLED';
+
+/** A guest's QR order as their phone sees it. */
+export interface QrOrderView {
+  billNumber: string | null;
+  channel: PosChannel;
+  grandTotal: number;
+  id: string;
+  /** Reads this order again (GET /qr/orders/:id?key=). */
+  key: string;
+  /** Where the kitchen has it, once billed. */
+  kitchenStatus: OrderStatus | null;
+  message: string | null;
+  orderNumber: string | null;
+  /** The UPI page, while it waits for payment. */
+  paymentUrl: string | null;
+  provider: OnlinePaymentProvider;
+  restaurantName: string;
+  roomNumber: string | null;
+  status: QrOrderStatus;
+}
+
+/** A QR order the guest paid for that could not be billed: refund it at the counter. */
+export interface PaidNotBilled {
+  amount: number;
+  channel: PosChannel;
+  createdAt: string;
+  id: string;
+  paidAt: string | null;
+  paymentReference: string | null;
+  provider: OnlinePaymentProvider;
+  reason: string | null;
+  restaurantName: string;
+  roomNumber: string | null;
+}

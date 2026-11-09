@@ -21,6 +21,17 @@ export class BoardLinkDto {
   regenerate?: boolean;
 }
 
+export class SetQrCounterDto {
+  @ApiProperty({
+    description: 'The counter QR orders are billed at; null turns QR ordering off.',
+    nullable: true,
+    type: String,
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  counterId!: string | null;
+}
+
 export class SetStewardDto {
   @ApiProperty({
     description: 'The steward (a Delivery Operator); null takes the order off them.',

@@ -59,6 +59,10 @@ import type {
   StaffDiscountInput,
   StaffDiscountSettings,
   RestaurantOrder,
+  PaidNotBilled,
+  QrMenu,
+  QrOrderInput,
+  QrOrderView,
   AmendableBill,
   OrderAmendment,
   OrderAmendmentInput,
@@ -366,6 +370,51 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<KioskMenu>>(`/kiosk/${restaurantId}/menu`, {
         query: { token },
       });
+    },
+    /** Public: the room-service menu behind the restaurant's QR, with its board secret. */
+    getQrMenu(restaurantId: string, token: string) {
+      return client.request<ApiResponse<QrMenu>>(`/qr/${restaurantId}/menu`, { query: { token } });
+    },
+    /** Public: sends an OTP to the employee's registered mobile; where it went, masked. */
+    sendQrStaffOtp(restaurantId: string, token: string, employeeCode: string) {
+      return client.request<ApiResponse<{ sentTo: string }>>(`/qr/${restaurantId}/staff-otp`, {
+        body: { employeeCode },
+        method: 'POST',
+        query: { token },
+      });
+    },
+    /** Public: confirms the OTP; the discount and a token for checkout. */
+    verifyQrStaffOtp(restaurantId: string, token: string, employeeCode: string, otp: string) {
+      return client.request<ApiResponse<{ discountPercent: number; staffToken: string }>>(
+        `/qr/${restaurantId}/staff-verify`,
+        { body: { employeeCode, otp }, method: 'POST', query: { token } },
+      );
+    },
+    /** Public: places a room-service order, priced on the server, with a UPI page to pay. */
+    createQrOrder(restaurantId: string, token: string, body: QrOrderInput) {
+      return client.request<ApiResponse<QrOrderView>>(`/qr/${restaurantId}/orders`, {
+        body,
+        method: 'POST',
+        query: { token },
+      });
+    },
+    /** Public: where a QR order stands; once paid, the server bills it. */
+    getQrOrder(id: string, key: string) {
+      return client.request<ApiResponse<QrOrderView>>(`/qr/orders/${id}`, { query: { key } });
+    },
+    /** The counter QR orders are billed at; null turns QR ordering off. */
+    setRestaurantQrCounter(restaurantId: string, counterId: string | null) {
+      return client.request<ApiResponse<{ qrCounterId: string | null }>>(
+        `/restaurants/${restaurantId}/qr-counter`,
+        { body: { counterId }, method: 'PUT' },
+      );
+    },
+    /** QR orders paid by the guest that could not be billed: to refund. */
+    listPaidNotBilled(hospitalId?: string) {
+      return client.request<ApiResponse<{ items: PaidNotBilled[] }>>(
+        '/order-reports/paid-not-billed',
+        { query: { hospitalId } },
+      );
     },
     /** Public: a staff member's discount at the kiosk, by their registered mobile. */
     getKioskStaffDiscount(restaurantId: string, token: string, mobile: string) {

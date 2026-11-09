@@ -66,6 +66,7 @@ import {
   allowsOnlineOrdering,
   isRestaurantOpen,
 } from '@/components/organization/shared/restaurants';
+import { QrCounterPicker } from '@/components/organization/qr-counter-picker';
 import { StaffDiscountPanel } from '@/components/organization/staff-discount-panel';
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
@@ -165,7 +166,7 @@ export function RestaurantsPageClient() {
   });
   const kioskUrl =
     qrRestaurant && qrOrigin && qrLinkQuery.data
-      ? `${qrOrigin}${withBasePath(`/kiosk/${qrRestaurant.id}?token=${qrLinkQuery.data}`)}`
+      ? `${qrOrigin}${withBasePath(`/order/${qrRestaurant.id}?token=${qrLinkQuery.data}`)}`
       : null;
 
   useEffect(() => {
@@ -252,7 +253,7 @@ export function RestaurantsPageClient() {
     image.alt = `QR code for ${qrRestaurant.restaurantName} menu and ordering`;
     image.src = qrImage;
     const instructions = printDocument.createElement('p');
-    instructions.textContent = 'Scan to view the menu and place an order';
+    instructions.textContent = 'Scan to order room service and pay by UPI';
     printDocument.title = `${qrRestaurant.restaurantName} menu QR`;
     printDocument.body.replaceChildren(style, heading, image, instructions);
     void image.decode().then(() => {
@@ -656,8 +657,8 @@ export function RestaurantsPageClient() {
                 {qrRestaurant?.restaurantName ?? 'Restaurant menu QR'}
               </h2>
               <p className="mt-1 text-sm text-ds-muted">
-                Scan to view the current menu and place an order. Payment is completed at the mapped
-                POS counter.
+                Patients and attendants scan this code to order room service on their own phone and
+                pay by UPI. Counter pickup is ordered at the kiosk.
               </p>
             </div>
             <Button
@@ -688,6 +689,9 @@ export function RestaurantsPageClient() {
               <p className="text-sm text-ds-muted">Preparing restaurant QR…</p>
             )}
           </div>
+          {qrRestaurant ? (
+            <QrCounterPicker key={qrRestaurant.id} restaurant={qrRestaurant} />
+          ) : null}
           {qrImage ? (
             <div className="flex flex-wrap gap-2">
               <Button className="flex-1" onClick={printQr} type="button">

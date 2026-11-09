@@ -41,6 +41,7 @@ export const HOSPITAL_SCOPED_MODELS = new Set([
   'OnlinePayment',
   'PaymentMachine',
   'PosDevice',
+  'QrOrder',
   'Restaurant',
   'RestaurantMenu',
   'RestaurantOrder',

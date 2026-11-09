@@ -68,7 +68,8 @@ export class OnlinePaymentsService {
     return machine ? { name: machine.name } : null;
   }
 
-  async start(dto: StartOnlinePaymentDto, context: ActorContext) {
+  /** returnUrl: where a guest paying on their own phone comes back to (QR orders). */
+  async start(dto: StartOnlinePaymentDto, context: ActorContext, returnUrl?: string) {
     const machine =
       dto.provider === 'PINELABS' && this.plutusUrl
         ? await this.findCardMachine({ counterId: dto.counterId })
@@ -103,6 +104,7 @@ export class OnlinePaymentsService {
       amount: grandTotal,
       description: `${counter.restaurant.restaurantName} · ${counter.counterName}`,
       reference: id,
+      returnUrl,
     });
 
     const created = toView(

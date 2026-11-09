@@ -381,6 +381,7 @@ exports[`organization setup masters (integration) > restaurants: create with sto
     "openingTime": null,
     "panNumber": null,
     "posOrders": "boolean",
+    "qrCounterId": null,
     "qrUnitName": null,
     "restaurantCode": "string",
     "restaurantName": "string",

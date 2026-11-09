@@ -63,6 +63,7 @@ export function OrdersReportsPageClient() {
         description="Every bill raised at the counters: its steps, money and payment, the complimentary ones, and amendments made to bills."
         title="Orders & Reports"
       />
+      <PaidNotBilled />
       <Panel className="overflow-hidden">
         <SavedViewTabs
           label="Orders and reports views"
@@ -80,6 +81,74 @@ export function OrdersReportsPageClient() {
         )}
       </Panel>
     </section>
+  );
+}
+
+const paidAt = new Intl.DateTimeFormat('en-GB', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'Asia/Kolkata',
+});
+
+/**
+ * Room-service (QR) orders the guest paid for that could not be billed, say an item sold out
+ * or the shift ended meanwhile: each is refunded by hand. Shown only while there are any.
+ */
+function PaidNotBilled() {
+  const { scopedHospitalId } = useLocationContext();
+  const query = useQuery({
+    queryFn: async () => (await organizationApi.listPaidNotBilled(scopedHospitalId)).data.items,
+    queryKey: queryKeys.orderReports('paid-not-billed', scopedHospitalId ?? 'all'),
+  });
+  const items = query.data ?? [];
+
+  if (items.length === 0) return null;
+
+  return (
+    <Panel className="overflow-hidden border-ds-status-bad-fg/30">
+      <div className="border-b border-ds-divider bg-ds-status-bad-bg px-4 py-3 text-ds-status-bad-fg">
+        <h2 className="text-sm font-bold">
+          Paid, not billed: {items.length} room-service {items.length === 1 ? 'order' : 'orders'} to
+          refund
+        </h2>
+        <p className="text-xs">
+          The guest paid by UPI but the order could not be placed. Refund each through the payment
+          gateway, using its payment reference.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className={cn(tableStyles.table, 'min-w-200')}>
+          <thead className={tableStyles.head}>
+            <tr>
+              <th className={tableStyles.th}>Paid at</th>
+              <th className={tableStyles.th}>Restaurant</th>
+              <th className={tableStyles.th}>Room</th>
+              <th className={cn(tableStyles.th, 'text-right')}>Amount</th>
+              <th className={tableStyles.th}>Payment reference</th>
+              <th className={tableStyles.th}>Why it was not billed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr className={tableStyles.row} key={item.id}>
+                <td className={cn(tableStyles.td, 'whitespace-nowrap')}>
+                  {paidAt.format(new Date(item.paidAt ?? item.createdAt))}
+                </td>
+                <td className={tableStyles.td}>{item.restaurantName}</td>
+                <td className={tableStyles.td}>{item.roomNumber ?? '–'}</td>
+                <td className={cn(tableStyles.td, 'text-right font-semibold tabular-nums')}>
+                  {formatMoney(item.amount)}
+                </td>
+                <td className={cn(tableStyles.td, 'font-mono text-[12px]')}>
+                  {item.provider} · {item.paymentReference ?? '–'}
+                </td>
+                <td className={tableStyles.td}>{item.reason ?? '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   );
 }
 

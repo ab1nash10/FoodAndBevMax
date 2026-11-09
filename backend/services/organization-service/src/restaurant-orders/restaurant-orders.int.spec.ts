@@ -10,6 +10,7 @@
 // Runs only with DATABASE_URL_TEST. Every record is named with `run`; the board link is only
 // ever read or made for this suite's own restaurant, never regenerated.
 import { randomUUID } from 'node:crypto';
+import { SmsService } from '@aahar/auth';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   databaseUrl,
@@ -1159,6 +1160,226 @@ describe.skipIf(!databaseUrl)(
         // No card machine at this counter: a card is typed in.
         expect((await billWith('card-typed', { paymentMode: 'CARD' })).status).toBe(201);
         await h.ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
+      });
+
+      it('QR ordering: a guest orders on their phone, pays by UPI, and the paid order is billed at the QR counter', async () => {
+        // Typed unknown: expect.any() is any, which the lint refuses in object literals.
+        const anyString: unknown = expect.any(String);
+        const anyNumber: unknown = expect.any(Number);
+        const guest = (method: string, path: string, body?: unknown) =>
+          h.api(method, path, body, '');
+        const qr = (path: string) => `/qr/${fx.restaurantId}${path}?token=${fx.boardToken}`;
+        const order = (name: string, extra: Body = {}) =>
+          guest('POST', qr('/orders'), {
+            clientOrderId: `qr-${name}-${run}`,
+            lines: [{ menuId: fx.menuId, quantity: 1 }],
+            returnUrl: 'http://localhost:3000/fandb/order/status',
+            roomNumber: '412',
+            ...extra,
+          });
+        // QR orders are delivered to rooms only (counter pickup is the kiosk's): the dosa is sold
+        // for rooms too, the tea at the counter only.
+        await h.rawQuery(
+          `UPDATE restaurant_menus SET serve_at = 'BOTH' WHERE id = $1::uuid`,
+          fx.menuId,
+        );
+
+        // No QR counter yet: the menu shows, but no order is taken.
+        expect(await h.ok('GET', qr('/menu'), undefined, '')).toMatchObject({
+          open: false,
+          restaurantName: anyString,
+        });
+        expect((await guest('GET', `/qr/${fx.restaurantId}/menu?token=wrong`)).status).toBe(404);
+        const setCounter = (counterId: string | null, token?: string) =>
+          h.api('PUT', `/restaurants/${fx.restaurantId}/qr-counter`, { counterId }, token);
+        expect((await setCounter(fx.counterId, as.cashier)).status).toBe(403);
+        expect((await setCounter(fx.counterId)).status).toBe(200);
+        // The QR counter is set, but no shift is open there: still not taking orders.
+        expect((await h.ok('GET', qr('/menu'), undefined, '')).open).toBe(false);
+        const closed = await order('closed');
+        expect([closed.status, closed.body.message]).toEqual([
+          409,
+          'Room service is closed right now. Please try again later.',
+        ]);
+
+        const shift = await h.ok('POST', '/pos/shifts', {
+          counterId: fx.counterId,
+          openingCash: 0,
+        });
+        const menu = await h.ok('GET', qr('/menu'), undefined, '');
+        expect(menu).toMatchObject({ open: true });
+        // The room menu: what is sold for rooms, at the room price.
+        expect((menu.items as Body[]).map((item) => item.id)).toContain(fx.menuId);
+        expect((menu.items as Body[]).map((item) => item.id)).not.toContain(fx.inclusiveMenuId);
+
+        // Staff discount: the Employee ID gets an OTP on its registered mobile, then a token.
+        await h.rawQuery(
+          `UPDATE restaurant_menus SET is_discountable = true WHERE id = $1::uuid`,
+          fx.menuId,
+        );
+        await h.ok('PUT', `/pos/staff-discounts/${fx.restaurantId}`, {
+          rates: [],
+          staffDiscountApplicable: true,
+        });
+        await h.ok('POST', '/employee-discounts', {
+          discountPercent: 10,
+          employmentType: 'ON_ROLL',
+          name: `Int QR Staff ${run}`,
+          restaurantId: fx.restaurantId,
+        });
+        const staffMobile = `9${String(Date.now()).slice(-9)}`;
+        const staffCode = (
+          await h.ok('POST', '/employees', {
+            employeeCode: `QR${run}`.toUpperCase(),
+            employeeName: `Int QR Staff ${run}`,
+            employmentType: 'ON_ROLL',
+            hospitalId: fx.hospitalId,
+            mobile: staffMobile,
+          })
+        ).employeeCode as string;
+        const sent: Array<{ mobile: string; otp: string }> = [];
+        vi.spyOn(SmsService.prototype, 'isConfigured').mockReturnValue(true);
+        vi.spyOn(SmsService.prototype, 'sendOtp').mockImplementation((mobile, otp) => {
+          sent.push({ mobile, otp });
+          return Promise.resolve();
+        });
+        const unknownStaff = await guest('POST', qr('/staff-otp'), { employeeCode: 'NOPE-1' });
+        expect([unknownStaff.status, unknownStaff.body.message]).toEqual([
+          404,
+          'No employee with this ID gets a staff discount here.',
+        ]);
+        const otpSent = await guest('POST', qr('/staff-otp'), { employeeCode: staffCode });
+        expect([otpSent.status, otpSent.data.sentTo]).toEqual([
+          201,
+          `******${staffMobile.slice(-4)}`,
+        ]);
+        expect(sent.map((entry) => entry.mobile)).toEqual([staffMobile]);
+        const again = await guest('POST', qr('/staff-otp'), { employeeCode: staffCode });
+        expect([again.status, again.body.message]).toEqual([
+          429,
+          'An OTP was just sent. Wait a minute before asking for another.',
+        ]);
+        const wrong = await guest('POST', qr('/staff-verify'), {
+          employeeCode: staffCode,
+          otp: sent[0]!.otp === '111111' ? '222222' : '111111',
+        });
+        expect([wrong.status, wrong.body.message]).toEqual([400, 'That OTP is not right.']);
+        const verified = await guest('POST', qr('/staff-verify'), {
+          employeeCode: staffCode,
+          otp: sent[0]!.otp,
+        });
+        expect(verified.status).toBe(201);
+        expect(verified.data).toMatchObject({
+          discountPercent: 10,
+          staffToken: anyString,
+        });
+        // A used OTP does not work twice.
+        expect(
+          (await guest('POST', qr('/staff-verify'), { employeeCode: staffCode, otp: sent[0]!.otp }))
+            .status,
+        ).toBe(400);
+
+        // The order: priced by the server with the discount, a Razorpay link that comes back here.
+        gatewayCalls.length = 0;
+        gatewayReply = () => created(`plink_${run}_qr`);
+        const placed = await order('paid', { staffToken: verified.data.staffToken });
+        expect(placed.status).toBe(201);
+        expect(placed.data).toMatchObject({
+          discountTotal: anyNumber,
+          grandTotal: 53,
+          paymentUrl: `https://rzp.io/i/plink_${run}_qr`,
+          status: 'AWAITING_PAYMENT',
+        });
+        expect(gatewayCalls[0]?.body).toMatchObject({
+          amount: 5300,
+          callback_method: 'get',
+          callback_url: expect.stringContaining(
+            'http://localhost:3000/fandb/order/status',
+          ) as unknown,
+        });
+        const { id, key } = placed.data as { id: string; key: string };
+        // Sending it again (a double tap) is the same order and no second link.
+        const twice = await order('paid', { staffToken: verified.data.staffToken });
+        expect([twice.data.id, gatewayCalls.length]).toEqual([id, 1]);
+        const status = (orderKey = key) => guest('GET', `/qr/orders/${id}?key=${orderKey}`);
+        expect((await status('wrong-key')).status).toBe(404);
+        gatewayReply = () => ({ body: { status: 'created' }, status: 200 });
+        expect((await status()).data).toMatchObject({ status: 'AWAITING_PAYMENT' });
+
+        // Paid: billed at the QR counter as UPI with the payment, and on the kitchen screen.
+        gatewayReply = () => ({
+          body: { payments: [{ payment_id: `pay_${run}_qr` }], status: 'paid' },
+          status: 200,
+        });
+        const billed = (await status()).data;
+        expect(billed).toMatchObject({
+          billNumber: anyString,
+          kitchenStatus: 'PLACED',
+          orderNumber: anyString,
+          status: 'BILLED',
+        });
+        const [bill] = (
+          await h.ok(
+            'GET',
+            `/pos/orders?counterId=${fx.counterId}&search=${billed.billNumber as string}`,
+          )
+        ).items as Body[];
+        expect(bill).toMatchObject({
+          channel: 'ROOM',
+          employeeCode: staffCode,
+          grandTotal: 53,
+          paymentMode: 'UPI',
+          paymentReference: `pay_${run}_qr`,
+          roomNumber: '412',
+        });
+        expect(billed).toMatchObject({ channel: 'ROOM', roomNumber: '412' });
+        expect((await listOrders()).map((o) => o.billNumber)).toContain(billed.billNumber);
+        const [row] = (await h.ok('GET', `/order-reports?search=${billed.billNumber as string}`))
+          .items as Body[];
+        expect(row).toMatchObject({ online: true, posOrder: false });
+        // Asked again, the same bill: billed once.
+        expect((await status()).data.billNumber).toBe(billed.billNumber);
+
+        // Every QR order is for a room: it needs the room number, and sells only room items.
+        const noRoom = await order('room', { roomNumber: ' ' });
+        expect([noRoom.status, noRoom.body.message]).toEqual([400, 'Enter your room number.']);
+        // Counter pickup is the kiosk's: a QR order for the counter is refused.
+        expect((await order('counter', { channel: 'COUNTER' })).status).toBe(400);
+        gatewayReply = () => created(`plink_${run}_room`);
+        const counterOnly = await order('room-2', {
+          lines: [{ menuId: fx.inclusiveMenuId, quantity: 1 }],
+        });
+        expect([counterOnly.status, counterOnly.body.message]).toEqual([
+          400,
+          expect.stringMatching(/is not sold for rooms\.$/),
+        ]);
+
+        // Paid after the shift ended: kept as paid, not billed, for a refund.
+        gatewayReply = () => created(`plink_${run}_late`);
+        const late = await order('late');
+        expect(late.status).toBe(201);
+        await h.ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
+        gatewayReply = () => ({
+          body: { payments: [{ payment_id: `pay_${run}_late` }], status: 'paid' },
+          status: 200,
+        });
+        const lateStatus = await guest(
+          'GET',
+          `/qr/orders/${late.data.id as string}?key=${late.data.key as string}`,
+        );
+        expect(lateStatus.data).toMatchObject({
+          message:
+            'Your payment was received, but the order could not be placed. Please show this screen at the counter for a refund.',
+          status: 'PAID_NOT_BILLED',
+        });
+        const unbilled = (await h.ok('GET', '/order-reports/paid-not-billed')).items as Body[];
+        expect(unbilled.map((entry) => entry.id)).toContain(late.data.id);
+        expect(unbilled.find((entry) => entry.id === late.data.id)).toMatchObject({
+          amount: 58,
+          paymentReference: `pay_${run}_late`,
+          reason: 'Open a shift at this counter before billing.',
+        });
+        await setCounter(null);
       });
     });
   },
