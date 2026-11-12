@@ -68,3 +68,24 @@ test('Map item asks Readymade or Live, and picks the Main or the counter kitchen
   await expect(kitchen).toHaveValue(main!.id);
   await expect(offered).toHaveText([/^Main Kitchen/]);
 });
+
+test('the Kitchen items list filters by type: Readymade or Live', async ({ page }) => {
+  page.setDefaultTimeout(30_000);
+  await page.goto('masters/item-mapping');
+  await page.getByRole('tab', { name: 'Kitchen items' }).click();
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  const filters = page.getByRole('dialog', { name: 'Filters' });
+
+  const asked = page.waitForRequest(
+    (request) =>
+      request.url().includes('/kitchen-items?') &&
+      new URL(request.url()).searchParams.get('itemType') === 'LIVE',
+  );
+  await filters.getByLabel('Type').selectOption('LIVE');
+  await asked;
+
+  // Every row shown is Live.
+  const rows = page.locator('tbody tr');
+  await expect(rows.first()).toBeVisible();
+  await expect(rows.filter({ hasText: 'Readymade' })).toHaveCount(0);
+});

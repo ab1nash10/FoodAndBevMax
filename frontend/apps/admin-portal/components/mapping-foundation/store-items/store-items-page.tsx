@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, Pencil, Plus, Store as StoreIcon } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import type {
   SortOrder,
@@ -15,12 +15,14 @@ import type {
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
+  FilterChips,
   FilterField,
   FiltersMenu,
   ListToolbar,
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import type { FilterChip } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -94,7 +96,7 @@ export function StoreItemsPageClient({
   embedded = false,
   listTabs,
 }: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
-  const { scopedHospitalId } = useLocationContext();
+  const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -103,9 +105,11 @@ export function StoreItemsPageClient({
     'active',
     'inactive',
   ]);
-  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
-  const [storeFilter, setStoreFilter] = useState('');
-  const [itemFilter, setItemFilter] = useState('');
+  // Filters live in the address, so a refresh, the back button or a shared link keeps them.
+  // The header's location, when one is chosen, wins over the list's own Location filter.
+  const [locationFilter, setLocationFilter] = useUrlParam('location');
+  const hospitalFilter = scopedHospitalId ?? locationFilter;
+  const [storeFilter, setStoreFilter] = useUrlParam('store');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<StoreItem | null>(null);
@@ -130,20 +134,27 @@ export function StoreItemsPageClient({
   const { hasPermission } = useAuth();
   const canEdit = hasPermission('STORE_ITEM_UPDATE');
 
+  // Another header location: the old one's store filter and page no longer apply. Not on the
+  // first load, so the filters in the address survive a refresh.
+  const seenScope = useRef<string | null>(null);
   useEffect(() => {
-    setHospitalFilter(scopedHospitalId ?? '');
-    setFormHospitalId(scopedHospitalId ?? '');
+    if (isLoadingLocations) return;
+    const scope = scopedHospitalId ?? '';
+    const changed = seenScope.current !== null && seenScope.current !== scope;
+    seenScope.current = scope;
+    setFormHospitalId(scope);
+    if (!changed) return;
+    setLocationFilter('');
     setStoreFilter('');
     setPage(1);
     form.setValue('parentId', '', { shouldValidate: true });
-  }, [form, scopedHospitalId]);
+  }, [form, isLoadingLocations, scopedHospitalId, setLocationFilter, setStoreFilter, setPage]);
 
   const mappingsQuery = useEntityList<StoreItem, StoreItemListQuery>(
     'store-items',
     {
       isActive: activeFilterToBoolean(activeFilter),
       hospitalId: hospitalFilter,
-      itemId: itemFilter,
       limit: listLimit,
       page,
       search,
@@ -249,21 +260,49 @@ export function StoreItemsPageClient({
     });
 
   const hasFilters = Boolean(
-    searchInput ||
-    activeFilter ||
-    hospitalFilter !== (scopedHospitalId ?? '') ||
-    storeFilter ||
-    itemFilter,
+    searchInput || activeFilter || (!scopedHospitalId && locationFilter) || storeFilter,
   );
 
   function clearFilters() {
     setSearch('');
     setActiveFilter('');
-    setHospitalFilter(scopedHospitalId ?? '');
+    setLocationFilter('');
     setStoreFilter('');
-    setItemFilter('');
     setPage(1);
   }
+
+  const hospitalName = (id: string) => {
+    const hospital = hospitalsQuery.data?.find((option) => option.id === id);
+    return hospital ? hospital.displayName || hospital.hospitalName : 'Selected location';
+  };
+  const chips = [
+    activeFilter && {
+      label: 'Status',
+      onRemove: () => {
+        setActiveFilter('');
+        setPage(1);
+      },
+      value: activeFilter === 'active' ? 'Active' : 'Inactive',
+    },
+    !scopedHospitalId &&
+      locationFilter && {
+        label: 'Location',
+        onRemove: () => {
+          setLocationFilter('');
+          setStoreFilter('');
+          setPage(1);
+        },
+        value: hospitalName(locationFilter),
+      },
+    storeFilter && {
+      label: 'Store',
+      onRemove: () => {
+        setStoreFilter('');
+        setPage(1);
+      },
+      value: stores.find((option) => option.id === storeFilter)?.name ?? 'Selected store',
+    },
+  ].filter((chip): chip is FilterChip => Boolean(chip));
 
   function startEditingMapping(mapping: StoreItem) {
     setEditingMapping(mapping);
@@ -424,13 +463,10 @@ export function StoreItemsPageClient({
             value={searchInput}
           />
           <FiltersMenu
+            onClear={clearFilters}
             activeCount={
-              [
-                activeFilter,
-                hospitalFilter !== (scopedHospitalId ?? ''),
-                storeFilter,
-                itemFilter,
-              ].filter(Boolean).length
+              [activeFilter, !scopedHospitalId && locationFilter, storeFilter].filter(Boolean)
+                .length
             }
           >
             <FilterField label="Status">
@@ -447,7 +483,7 @@ export function StoreItemsPageClient({
                 disabled={Boolean(scopedHospitalId)}
                 hospitals={hospitalsQuery.data ?? []}
                 onChange={(value) => {
-                  setHospitalFilter(value);
+                  setLocationFilter(value);
                   setStoreFilter('');
                   setPage(1);
                 }}
@@ -470,24 +506,6 @@ export function StoreItemsPageClient({
                 ))}
               </Select>
             </FilterField>
-            <FilterField label="Item">
-              <Select
-                onChange={(event) => {
-                  setItemFilter(event.target.value);
-                  setPage(1);
-                }}
-                value={itemFilter}
-              >
-                <option value="">All packaged items</option>
-                {itemsQuery.data
-                  ?.filter((item) => item.itemType === 'MRP')
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.itemName}
-                    </option>
-                  ))}
-              </Select>
-            </FilterField>
           </FiltersMenu>
           <SortControl
             onOrderChange={(value) => {
@@ -507,9 +525,11 @@ export function StoreItemsPageClient({
             sortBy={sortBy}
           />
           <RefreshButton onClick={() => void mappingsQuery.refetch()} />
-          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          {/* Only the search to clear: with filters set, the chips below have Clear all. */}
+          <ClearFiltersButton active={hasFilters && chips.length === 0} onClear={clearFilters} />
           <ListViewSwitch label="Show store items as" onChange={setView} value={view} />
         </ListToolbar>
+        <FilterChips chips={chips} onClearAll={clearFilters} />
         {/* Cards; an empty or failed list keeps the table's message. */}
         {view === 'cards' && (mappings.length > 0 || mappingsQuery.isLoading) ? (
           <RecordCardGrid isLoading={mappingsQuery.isLoading}>

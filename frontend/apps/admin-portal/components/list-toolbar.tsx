@@ -2,7 +2,7 @@
 
 import type { SortOrder } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
-import { RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { FilterSelect } from '@/components/ui-controls';
@@ -30,15 +30,30 @@ export function ListToolbar({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-/** The Filters button, with how many filters are set, and the panel holding them. */
+// A filter that is set (a select not on its "All …" choice) is outlined in blue in the panel.
+const setField =
+  "[&_select:not(:disabled):not(:has(option[value='']:checked))]:border-ds-primary [&_select:not(:disabled):not(:has(option[value='']:checked))]:shadow-[0_0_0_1px_var(--color-ds-primary)]";
+
+/**
+ * The Filters button, with how many filters are set, and the panel holding them. Picking a
+ * choice in a dropdown applies it and closes the panel, back to the button. Dates and text
+ * apply as typed, and Done (or a click outside, or Esc) closes; Clear all (given `onClear`)
+ * puts every filter back and closes.
+ */
 export function FiltersMenu({
   activeCount,
   children,
-}: Readonly<{ activeCount: number; children: ReactNode }>) {
+  onClear,
+}: Readonly<{ activeCount: number; children: ReactNode; onClear?: () => void }>) {
   const [isOpen, setIsOpen] = useState(false);
+  // Closing: the panel fades back into the button (globals.css .filters-leave), then goes.
+  const [isLeaving, setIsLeaving] = useState(false);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
+
+  useEffect(() => () => clearTimeout(leaveTimer.current), []);
 
   // The panel lives on <body> (a list card clips what overflows it), fixed under the button:
   // right edges lined up on wider screens, left edges on phones, flipped above when there is
@@ -87,13 +102,12 @@ export function FiltersMenu({
       const target = event.target as Node;
 
       if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) {
-        setIsOpen(false);
+        close(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsOpen(false);
-        rootRef.current?.querySelector('button')?.focus();
+        close();
       }
     };
 
@@ -106,12 +120,32 @@ export function FiltersMenu({
     };
   }, [isOpen]);
 
+  function open() {
+    clearTimeout(leaveTimer.current);
+    setIsLeaving(false);
+    setIsOpen(true);
+  }
+
+  function close(refocus = true) {
+    if (refocus) rootRef.current?.querySelector('button')?.focus();
+    setIsLeaving(true);
+    clearTimeout(leaveTimer.current);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    leaveTimer.current = setTimeout(
+      () => {
+        setIsOpen(false);
+        setIsLeaving(false);
+      },
+      reduced ? 0 : 120,
+    );
+  }
+
   return (
     <div className="relative" ref={rootRef}>
       <Button
         aria-controls={panelId}
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen && !isLeaving}
+        onClick={() => (isOpen && !isLeaving ? close() : open())}
         type="button"
         variant="outline"
       >
@@ -128,16 +162,90 @@ export function FiltersMenu({
         ? createPortal(
             <div
               aria-label="Filters"
-              className="fixed z-40 grid w-[min(20rem,calc(100vw-1rem))] content-start gap-3 overflow-y-auto overscroll-contain rounded-tile border border-ds-border bg-ds-surface p-4 shadow-xl shadow-black/10"
+              className={`fixed z-40 grid w-[min(20rem,calc(100vw-1rem))] content-start gap-3 overflow-y-auto overscroll-contain rounded-tile border border-ds-border bg-ds-surface p-4 shadow-xl shadow-black/10 ${setField} ${isLeaving ? 'filters-leave' : ''}`}
+              inert={isLeaving}
               id={panelId}
+              // A dropdown pick is a finished choice: close. Dates and text are still being typed.
+              onChange={(event) => {
+                if (event.target instanceof HTMLSelectElement) close();
+              }}
               ref={panelRef}
               role="dialog"
             >
               {children}
+              <div className="sticky -bottom-4 -mx-4 -mb-4 flex items-center justify-between gap-2 border-t border-ds-divider bg-ds-surface px-4 py-3">
+                {onClear && activeCount > 0 ? (
+                  <Button
+                    onClick={() => {
+                      onClear();
+                      close();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Clear all
+                  </Button>
+                ) : (
+                  <span />
+                )}
+                <Button onClick={() => close()} size="sm" type="button">
+                  Done
+                </Button>
+              </div>
             </div>,
             document.body,
           )
         : null}
+    </div>
+  );
+}
+
+/** A filter in use, shown as a chip under the toolbar: "Type: Live ✕". */
+export interface FilterChip {
+  label: string;
+  onRemove: () => void;
+  value: string;
+}
+
+/**
+ * The filters in use, under the toolbar, so the list says why rows are missing without opening
+ * the panel: one removable chip each, and Clear all. Shows nothing when none is set.
+ */
+export function FilterChips({
+  chips,
+  onClearAll,
+}: Readonly<{ chips: FilterChip[]; onClearAll: () => void }>) {
+  if (chips.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-label="Filters in use"
+      className="flex flex-wrap items-center gap-2 border-b border-ds-divider px-3 py-2"
+      role="group"
+    >
+      {chips.map((chip) => (
+        <button
+          aria-label={`Remove filter ${chip.label}: ${chip.value}`}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-ds-primary-border bg-ds-primary-soft px-2.5 py-1 text-xs font-medium text-ds-text transition-colors hover:border-ds-primary"
+          key={chip.label}
+          onClick={chip.onRemove}
+          type="button"
+        >
+          <span className="text-ds-muted">{chip.label}:</span>
+          <span className="truncate">{chip.value}</span>
+          <X aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        </button>
+      ))}
+      <button
+        className="text-xs font-semibold text-ds-link hover:underline"
+        onClick={onClearAll}
+        type="button"
+      >
+        Clear all
+      </button>
     </div>
   );
 }

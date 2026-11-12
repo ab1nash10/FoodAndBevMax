@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChefHat, Loader2, Pencil, Plus } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import type {
   Kitchen,
@@ -15,12 +15,14 @@ import type {
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
+  FilterChips,
   FilterField,
   FiltersMenu,
   ListToolbar,
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import type { FilterChip } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Badge, Panel, Select } from '@/components/ui';
@@ -109,7 +111,7 @@ export function KitchenItemsPageClient({
   embedded = false,
   listTabs,
 }: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
-  const { scopedHospitalId } = useLocationContext();
+  const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
@@ -118,9 +120,16 @@ export function KitchenItemsPageClient({
     'active',
     'inactive',
   ]);
-  const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
-  const [kitchenFilter, setKitchenFilter] = useState('');
-  const [itemFilter, setItemFilter] = useState('');
+  // Filters live in the address, so a refresh, the back button or a shared link keeps them.
+  // The header's location, when one is chosen, wins over the list's own Location filter.
+  const [locationFilter, setLocationFilter] = useUrlParam('location');
+  const hospitalFilter = scopedHospitalId ?? locationFilter;
+  const [kitchenFilter, setKitchenFilter] = useUrlParam('kitchen');
+  const [typeFilter, setTypeFilter] = useUrlParam<'' | (typeof kitchenTypes)[number]>(
+    'type',
+    '',
+    kitchenTypes,
+  );
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<KitchenItem | null>(null);
@@ -145,20 +154,28 @@ export function KitchenItemsPageClient({
   const { hasPermission } = useAuth();
   const canEdit = hasPermission('KITCHEN_ITEM_UPDATE');
 
+  // Another header location: the old one's kitchen filter and page no longer apply. Not on the
+  // first load, so the filters in the address survive a refresh.
+  const seenScope = useRef<string | null>(null);
   useEffect(() => {
-    setHospitalFilter(scopedHospitalId ?? '');
-    setFormHospitalId(scopedHospitalId ?? '');
+    if (isLoadingLocations) return;
+    const scope = scopedHospitalId ?? '';
+    const changed = seenScope.current !== null && seenScope.current !== scope;
+    seenScope.current = scope;
+    setFormHospitalId(scope);
+    if (!changed) return;
+    setLocationFilter('');
     setKitchenFilter('');
     setPage(1);
     form.setValue('parentId', '', { shouldValidate: true });
-  }, [form, scopedHospitalId]);
+  }, [form, isLoadingLocations, scopedHospitalId, setLocationFilter, setKitchenFilter, setPage]);
 
   const mappingsQuery = useEntityList<KitchenItem, KitchenItemListQuery>(
     'kitchen-items',
     {
       isActive: activeFilterToBoolean(activeFilter),
       hospitalId: hospitalFilter,
-      itemId: itemFilter,
+      itemType: typeFilter,
       kitchenId: kitchenFilter,
       limit: listLimit,
       page,
@@ -267,19 +284,60 @@ export function KitchenItemsPageClient({
   const hasFilters = Boolean(
     searchInput ||
     activeFilter ||
-    hospitalFilter !== (scopedHospitalId ?? '') ||
+    (!scopedHospitalId && locationFilter) ||
     kitchenFilter ||
-    itemFilter,
+    typeFilter,
   );
 
   function clearFilters() {
     setSearch('');
     setActiveFilter('');
-    setHospitalFilter(scopedHospitalId ?? '');
+    setLocationFilter('');
     setKitchenFilter('');
-    setItemFilter('');
+    setTypeFilter('');
     setPage(1);
   }
+
+  const hospitalName = (id: string) => {
+    const hospital = hospitalsQuery.data?.find((option) => option.id === id);
+    return hospital ? hospital.displayName || hospital.hospitalName : 'Selected location';
+  };
+  const chips = [
+    activeFilter && {
+      label: 'Status',
+      onRemove: () => {
+        setActiveFilter('');
+        setPage(1);
+      },
+      value: activeFilter === 'active' ? 'Active' : 'Inactive',
+    },
+    !scopedHospitalId &&
+      locationFilter && {
+        label: 'Location',
+        onRemove: () => {
+          setLocationFilter('');
+          setKitchenFilter('');
+          setPage(1);
+        },
+        value: hospitalName(locationFilter),
+      },
+    kitchenFilter && {
+      label: 'Kitchen',
+      onRemove: () => {
+        setKitchenFilter('');
+        setPage(1);
+      },
+      value: kitchens.find((option) => option.id === kitchenFilter)?.name ?? 'Selected kitchen',
+    },
+    typeFilter && {
+      label: 'Type',
+      onRemove: () => {
+        setTypeFilter('');
+        setPage(1);
+      },
+      value: typeLabels[typeFilter],
+    },
+  ].filter((chip): chip is FilterChip => Boolean(chip));
 
   function startEditingMapping(mapping: KitchenItem) {
     setEditingMapping(mapping);
@@ -447,13 +505,11 @@ export function KitchenItemsPageClient({
             value={searchInput}
           />
           <FiltersMenu
+            onClear={clearFilters}
             activeCount={
-              [
-                activeFilter,
-                hospitalFilter !== (scopedHospitalId ?? ''),
-                kitchenFilter,
-                itemFilter,
-              ].filter(Boolean).length
+              [activeFilter, !scopedHospitalId && locationFilter, kitchenFilter, typeFilter].filter(
+                Boolean,
+              ).length
             }
           >
             <FilterField label="Status">
@@ -470,7 +526,7 @@ export function KitchenItemsPageClient({
                 disabled={Boolean(scopedHospitalId)}
                 hospitals={hospitalsQuery.data ?? []}
                 onChange={(value) => {
-                  setHospitalFilter(value);
+                  setLocationFilter(value);
                   setKitchenFilter('');
                   setPage(1);
                 }}
@@ -493,22 +549,21 @@ export function KitchenItemsPageClient({
                 ))}
               </Select>
             </FilterField>
-            <FilterField label="Item">
+            <FilterField label="Type">
               <Select
                 onChange={(event) => {
-                  setItemFilter(event.target.value);
+                  const type = kitchenTypes.find((value) => value === event.target.value) ?? '';
+                  setTypeFilter(type);
                   setPage(1);
                 }}
-                value={itemFilter}
+                value={typeFilter}
               >
-                <option value="">All kitchen items</option>
-                {itemsQuery.data
-                  ?.filter((item) => item.itemType === 'READYMADE' || item.itemType === 'LIVE')
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.itemName}
-                    </option>
-                  ))}
+                <option value="">All types</option>
+                {kitchenTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {typeLabels[type]}
+                  </option>
+                ))}
               </Select>
             </FilterField>
           </FiltersMenu>
@@ -530,9 +585,11 @@ export function KitchenItemsPageClient({
             sortBy={sortBy}
           />
           <RefreshButton onClick={() => void mappingsQuery.refetch()} />
-          <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          {/* Only the search to clear: with filters set, the chips below have Clear all. */}
+          <ClearFiltersButton active={hasFilters && chips.length === 0} onClear={clearFilters} />
           <ListViewSwitch label="Show kitchen items as" onChange={setView} value={view} />
         </ListToolbar>
+        <FilterChips chips={chips} onClearAll={clearFilters} />
         {/* Cards; an empty or failed list keeps the table's message. */}
         {view === 'cards' && (mappings.length > 0 || mappingsQuery.isLoading) ? (
           <RecordCardGrid isLoading={mappingsQuery.isLoading}>

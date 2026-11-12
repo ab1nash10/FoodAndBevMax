@@ -212,6 +212,7 @@ export type KitchenItemType = 'LIVE' | 'READYMADE';
 export interface KitchenItemListQuery extends ListQuery {
   hospitalId?: string;
   itemId?: string;
+  itemType?: KitchenItemType | '';
   kitchenId?: string;
 }
 

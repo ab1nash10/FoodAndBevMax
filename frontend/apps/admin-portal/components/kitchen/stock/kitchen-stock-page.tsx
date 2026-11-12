@@ -7,7 +7,7 @@ import {
 } from '@/components/inventory/discard-stock-dialog';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { Item, ItemType, SortOrder, StockBalanceStatus } from '@aahar/api-client';
+import type { SortOrder, StockBalanceStatus } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import {
   FilterField,
@@ -72,22 +72,6 @@ function formatEnum(value: string): string {
     .join(' ');
 }
 
-function useItems(itemType?: ItemType) {
-  return useQuery<Item[]>({
-    queryFn: async () => {
-      const response = await organizationApi.listItems({
-        itemType,
-        limit: 100,
-        sortBy: 'itemName',
-        sortOrder: 'asc',
-      });
-
-      return response.data.items;
-    },
-    queryKey: queryKeys.itemOptions('kitchen-stock', itemType ?? 'all'),
-  });
-}
-
 export function KitchenStockPageClient() {
   const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
@@ -98,7 +82,6 @@ export function KitchenStockPageClient() {
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [kitchenFilter, setKitchenFilter] = useState('');
-  const [itemFilter, setItemFilter] = useState('');
   const [businessDateFilter, setBusinessDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useUrlParam<'' | StockBalanceStatus>('view', '', [
     'AVAILABLE',
@@ -111,7 +94,6 @@ export function KitchenStockPageClient() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const hospitalsQuery = useHospitals();
   const kitchensQuery = useKitchens(hospitalFilter);
-  const itemOptionsQuery = useItems('READYMADE');
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
@@ -127,7 +109,6 @@ export function KitchenStockPageClient() {
       const response = await organizationApi.listKitchenStock({
         businessDate: businessDateFilter || undefined,
         hospitalId: hospitalFilter,
-        itemId: itemFilter,
         itemType: 'READYMADE',
         limit: listLimit,
         locationId: kitchenFilter,
@@ -145,7 +126,6 @@ export function KitchenStockPageClient() {
       search,
       hospitalFilter,
       kitchenFilter,
-      itemFilter,
       businessDateFilter,
       statusFilter,
       sortBy,
@@ -184,7 +164,6 @@ export function KitchenStockPageClient() {
     hospitalFilter !== (scopedHospitalId ?? '') ||
     kitchenFilter ||
     statusFilter ||
-    itemFilter ||
     businessDateFilter,
   );
 
@@ -193,7 +172,6 @@ export function KitchenStockPageClient() {
     setHospitalFilter(scopedHospitalId ?? '');
     setKitchenFilter('');
     setStatusFilter('');
-    setItemFilter('');
     setBusinessDateFilter('');
     setPage(1);
   }
@@ -264,7 +242,6 @@ export function KitchenStockPageClient() {
                 hospitalFilter !== (scopedHospitalId ?? ''),
                 kitchenFilter,
                 statusFilter,
-                itemFilter,
                 businessDateFilter,
               ].filter(Boolean).length
             }
@@ -304,22 +281,6 @@ export function KitchenStockPageClient() {
                 {kitchenStockStatuses.map((status) => (
                   <option key={status} value={status}>
                     {formatEnum(status)}
-                  </option>
-                ))}
-              </Select>
-            </FilterField>
-            <FilterField label="Item">
-              <Select
-                onChange={(event) => {
-                  setItemFilter(event.target.value);
-                  setPage(1);
-                }}
-                value={itemFilter}
-              >
-                <option value="">All items</option>
-                {itemOptionsQuery.data?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.itemName}
                   </option>
                 ))}
               </Select>

@@ -322,18 +322,18 @@ export const navigationGroups: NavGroup[] = [
     icon: ChefHat,
     items: [
       {
+        href: '/kitchen/tablet',
+        icon: Tablet,
+        label: 'Kitchen Tablet',
+        permissions: ['KITCHEN_PRODUCTION_CREATE'],
+      },
+      {
         badge: 'productions',
         href: '/kitchen/productions',
         icon: CookingPot,
         label: 'Kitchen Production',
         permissions: ['KITCHEN_PRODUCTION_VIEW'],
         record: 'id',
-      },
-      {
-        href: '/kitchen/tablet',
-        icon: Tablet,
-        label: 'Kitchen Tablet',
-        permissions: ['KITCHEN_PRODUCTION_CREATE'],
       },
       {
         href: '/kitchen/stock',

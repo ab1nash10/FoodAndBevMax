@@ -410,13 +410,14 @@ test('the list shows live mappings, newest first, 20 to a page by default', asyn
   assert.ok(!('secret' in page.items[0]!));
 });
 
-test('the list filters by location, kitchen, item, status and search text', async () => {
+test('the list filters by location, kitchen, item, type, status and search text', async () => {
   const { listed, service } = setup([]);
 
   await service.list({
     hospitalId: 'saket',
     isActive: false,
     itemId: 'thali',
+    itemType: ItemType.LIVE,
     kitchenId: 'k1',
     limit: 10,
     page: 3,
@@ -436,6 +437,8 @@ test('the list filters by location, kitchen, item, status and search text', asyn
       kitchen: { hospitalId: 'saket' },
       isActive: false,
       itemId: 'thali',
+      // Readymade or Live is the item's own type.
+      item: { itemType: ItemType.LIVE },
       kitchenId: 'k1',
       OR: [
         { category: { categoryName: contains } },

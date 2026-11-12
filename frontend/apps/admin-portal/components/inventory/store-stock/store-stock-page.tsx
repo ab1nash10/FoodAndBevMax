@@ -33,7 +33,7 @@ import {
   type DiscardableBatch,
 } from '@/components/inventory/discard-stock-dialog';
 import { useLocationContext } from '@/components/location-context';
-import { Input, Panel, Select } from '@/components/ui';
+import { Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
 import { organizationApi } from '@/lib/api';
@@ -59,7 +59,6 @@ import {
   listLimit,
   stockStatuses,
   useHospitals,
-  useItems,
   useStores,
 } from '@/components/inventory/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
@@ -105,9 +104,7 @@ export function StoreStockPageClient() {
   const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [storeFilter, setStoreFilter] = useState('');
-  const [itemFilter, setItemFilter] = useState('');
   const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('');
-  const [batchFilter, setBatchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useUrlParam<'' | StockBalanceStatus>('view', '', [
     'AVAILABLE',
     'NEAR_EXPIRY',
@@ -120,7 +117,6 @@ export function StoreStockPageClient() {
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
   const hospitalsQuery = useHospitals();
   const storesQuery = useStores(hospitalFilter);
-  const itemOptionsQuery = useItems(itemTypeFilter || undefined);
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
@@ -134,9 +130,7 @@ export function StoreStockPageClient() {
   const stockQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listStoreStockSummaries({
-        batchNumber: batchFilter,
         hospitalId: hospitalFilter,
-        itemId: itemFilter,
         itemType: itemTypeFilter || undefined,
         limit: listLimit,
         locationId: storeFilter,
@@ -155,9 +149,7 @@ export function StoreStockPageClient() {
       search,
       hospitalFilter,
       storeFilter,
-      itemFilter,
       itemTypeFilter,
-      batchFilter,
       statusFilter,
       sortBy,
       sortOrder,
@@ -195,9 +187,7 @@ export function StoreStockPageClient() {
     hospitalFilter !== (scopedHospitalId ?? '') ||
     storeFilter ||
     statusFilter ||
-    itemTypeFilter ||
-    itemFilter ||
-    batchFilter,
+    itemTypeFilter,
   );
 
   function clearFilters() {
@@ -206,8 +196,6 @@ export function StoreStockPageClient() {
     setStoreFilter('');
     setStatusFilter('');
     setItemTypeFilter('');
-    setItemFilter('');
-    setBatchFilter('');
     setPage(1);
   }
 
@@ -287,8 +275,6 @@ export function StoreStockPageClient() {
                 storeFilter,
                 statusFilter,
                 itemTypeFilter,
-                itemFilter,
-                batchFilter,
               ].filter(Boolean).length
             }
           >
@@ -335,7 +321,6 @@ export function StoreStockPageClient() {
               <Select
                 onChange={(event) => {
                   setItemTypeFilter(event.target.value as ItemTypeFilter);
-                  setItemFilter('');
                   setPage(1);
                 }}
                 value={itemTypeFilter}
@@ -347,32 +332,6 @@ export function StoreStockPageClient() {
                   </option>
                 ))}
               </Select>
-            </FilterField>
-            <FilterField label="Item">
-              <Select
-                onChange={(event) => {
-                  setItemFilter(event.target.value);
-                  setPage(1);
-                }}
-                value={itemFilter}
-              >
-                <option value="">All items</option>
-                {itemOptionsQuery.data?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.itemName}
-                  </option>
-                ))}
-              </Select>
-            </FilterField>
-            <FilterField label="Batch">
-              <Input
-                onChange={(event) => {
-                  setBatchFilter(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Batch number"
-                value={batchFilter}
-              />
             </FilterField>
           </FiltersMenu>
           <SortControl

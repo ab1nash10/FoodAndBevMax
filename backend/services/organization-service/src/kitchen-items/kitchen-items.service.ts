@@ -52,6 +52,7 @@ export class KitchenItemsService {
       ...(query.hospitalId ? { kitchen: { hospitalId: query.hospitalId } } : {}),
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.itemId ? { itemId: query.itemId } : {}),
+      ...(query.itemType ? { item: { itemType: query.itemType } } : {}),
       ...(query.kitchenId ? { kitchenId: query.kitchenId } : {}),
       ...(query.search
         ? {

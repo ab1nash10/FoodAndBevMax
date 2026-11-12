@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ItemType } from '@prisma/client';
 import { IsIn, IsOptional, IsUUID } from 'class-validator';
 import { ActivePaginationQueryDto } from '../../common/dto/active-pagination-query.dto';
 
@@ -21,6 +22,11 @@ export class ListKitchenItemsQueryDto extends ActivePaginationQueryDto {
   @IsOptional()
   @IsUUID()
   itemId?: string;
+
+  @ApiPropertyOptional({ enum: [ItemType.READYMADE, ItemType.LIVE] })
+  @IsOptional()
+  @IsIn([ItemType.READYMADE, ItemType.LIVE])
+  itemType?: typeof ItemType.LIVE | typeof ItemType.READYMADE;
 
   @ApiPropertyOptional({ default: 'createdAt', enum: kitchenItemSortFields })
   @IsIn(kitchenItemSortFields)

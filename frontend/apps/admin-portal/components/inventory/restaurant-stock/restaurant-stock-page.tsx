@@ -26,7 +26,7 @@ import {
 } from '@/components/list-toolbar';
 import { RecordAvatar, StatStrip, StatusChip, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
-import { Input, Panel, Select } from '@/components/ui';
+import { Panel, Select } from '@/components/ui';
 import { IfCanOpen, RecordLink } from '@/components/record-link';
 import { Chip, levelChip } from '@/components/inventory/stock-levels/parts';
 import { sendFromStoreHref } from '@/components/inventory/transfers/transfer-prefill';
@@ -53,7 +53,6 @@ import {
   plural,
   stockStatuses,
   useHospitals,
-  useItems,
   useRestaurants,
 } from '@/components/inventory/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
@@ -94,9 +93,7 @@ export function RestaurantStockPageClient() {
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [restaurantFilter, setRestaurantFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'' | 'KITCHEN' | 'STORE'>('');
-  const [itemFilter, setItemFilter] = useState('');
   const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('');
-  const [batchFilter, setBatchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useUrlParam<'' | StockBalanceStatus>('view', '', [
     'AVAILABLE',
     'NEAR_EXPIRY',
@@ -111,7 +108,6 @@ export function RestaurantStockPageClient() {
   const effectiveItemType =
     itemTypeFilter ||
     (sourceFilter === 'STORE' ? 'MRP' : sourceFilter === 'KITCHEN' ? 'READYMADE' : '');
-  const itemOptionsQuery = useItems(effectiveItemType || undefined);
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
@@ -125,9 +121,7 @@ export function RestaurantStockPageClient() {
   const stockQuery = useQuery({
     queryFn: async () => {
       const response = await organizationApi.listRestaurantStock({
-        batchNumber: batchFilter,
         hospitalId: hospitalFilter,
-        itemId: itemFilter,
         itemType: effectiveItemType || undefined,
         limit: listLimit,
         locationId: restaurantFilter,
@@ -146,9 +140,7 @@ export function RestaurantStockPageClient() {
       hospitalFilter,
       restaurantFilter,
       sourceFilter,
-      itemFilter,
       itemTypeFilter,
-      batchFilter,
       statusFilter,
       sortBy,
       sortOrder,
@@ -211,9 +203,7 @@ export function RestaurantStockPageClient() {
     restaurantFilter ||
     statusFilter ||
     sourceFilter ||
-    itemTypeFilter ||
-    itemFilter ||
-    batchFilter,
+    itemTypeFilter,
   );
 
   function clearFilters() {
@@ -223,8 +213,6 @@ export function RestaurantStockPageClient() {
     setStatusFilter('');
     setSourceFilter('');
     setItemTypeFilter('');
-    setItemFilter('');
-    setBatchFilter('');
     setPage(1);
   }
 
@@ -297,8 +285,6 @@ export function RestaurantStockPageClient() {
                 statusFilter,
                 sourceFilter,
                 itemTypeFilter,
-                itemFilter,
-                batchFilter,
               ].filter(Boolean).length
             }
           >
@@ -345,7 +331,6 @@ export function RestaurantStockPageClient() {
               <Select
                 onChange={(event) => {
                   setSourceFilter(event.target.value as '' | 'KITCHEN' | 'STORE');
-                  setItemFilter('');
                   setPage(1);
                 }}
                 value={sourceFilter}
@@ -359,7 +344,6 @@ export function RestaurantStockPageClient() {
               <Select
                 onChange={(event) => {
                   setItemTypeFilter(event.target.value as ItemTypeFilter);
-                  setItemFilter('');
                   setPage(1);
                 }}
                 value={itemTypeFilter}
@@ -368,32 +352,6 @@ export function RestaurantStockPageClient() {
                 <option value="MRP">MRP</option>
                 <option value="READYMADE">READYMADE</option>
               </Select>
-            </FilterField>
-            <FilterField label="Item">
-              <Select
-                onChange={(event) => {
-                  setItemFilter(event.target.value);
-                  setPage(1);
-                }}
-                value={itemFilter}
-              >
-                <option value="">All items</option>
-                {itemOptionsQuery.data?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.itemName}
-                  </option>
-                ))}
-              </Select>
-            </FilterField>
-            <FilterField label="Batch">
-              <Input
-                onChange={(event) => {
-                  setBatchFilter(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Batch number"
-                value={batchFilter}
-              />
             </FilterField>
           </FiltersMenu>
           <SortControl

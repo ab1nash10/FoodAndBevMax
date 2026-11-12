@@ -36,7 +36,6 @@ import {
   formatEnum,
   listLimit,
   useHospitals,
-  useItems,
   useKitchens,
   useRestaurants,
   useStores,
@@ -147,7 +146,6 @@ export function StockLedgersPageClient() {
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
   const [locationTypeFilter, setLocationTypeFilter] = useState<'' | InventoryLocationType>('');
   const [locationFilter, setLocationFilter] = useState('');
-  const [itemFilter, setItemFilter] = useState('');
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<'' | StockTransactionType>('');
   const [referenceTypeFilter, setReferenceTypeFilter] = useState<'' | StockReferenceType>('');
   const [businessDateFilter, setBusinessDateFilter] = useState('');
@@ -159,7 +157,6 @@ export function StockLedgersPageClient() {
   const storesQuery = useStores(hospitalFilter);
   const kitchensQuery = useKitchens(hospitalFilter);
   const restaurantsQuery = useRestaurants(hospitalFilter);
-  const itemOptionsQuery = useItems();
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
@@ -198,7 +195,6 @@ export function StockLedgersPageClient() {
         businessDate: businessDateFilter || undefined,
         fromDate: fromDateFilter || undefined,
         hospitalId: hospitalFilter,
-        itemId: itemFilter,
         limit: listLimit,
         locationId: locationFilter,
         locationType: locationTypeFilter || undefined,
@@ -219,7 +215,6 @@ export function StockLedgersPageClient() {
       hospitalFilter,
       locationTypeFilter,
       locationFilter,
-      itemFilter,
       transactionTypeFilter,
       referenceTypeFilter,
       businessDateFilter,
@@ -260,7 +255,6 @@ export function StockLedgersPageClient() {
     hospitalFilter !== (scopedHospitalId ?? '') ||
     locationTypeFilter ||
     locationFilter ||
-    itemFilter ||
     transactionTypeFilter ||
     referenceTypeFilter ||
     businessDateFilter ||
@@ -273,7 +267,6 @@ export function StockLedgersPageClient() {
     setHospitalFilter(scopedHospitalId ?? '');
     setLocationTypeFilter('');
     setLocationFilter('');
-    setItemFilter('');
     setTransactionTypeFilter('');
     setReferenceTypeFilter('');
     setBusinessDateFilter('');
@@ -348,7 +341,6 @@ export function StockLedgersPageClient() {
                 hospitalFilter !== (scopedHospitalId ?? ''),
                 locationTypeFilter,
                 locationFilter,
-                itemFilter,
                 transactionTypeFilter,
                 referenceTypeFilter,
                 businessDateFilter,
@@ -399,22 +391,6 @@ export function StockLedgersPageClient() {
                 {locationOptions?.map((location) => (
                   <option key={location.id} value={location.id}>
                     {location.name}
-                  </option>
-                ))}
-              </Select>
-            </FilterField>
-            <FilterField label="Item">
-              <Select
-                onChange={(event) => {
-                  setItemFilter(event.target.value);
-                  setPage(1);
-                }}
-                value={itemFilter}
-              >
-                <option value="">All items</option>
-                {itemOptionsQuery.data?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.itemName}
                   </option>
                 ))}
               </Select>

@@ -12,6 +12,9 @@ import { setUrlParams, useUrlParam } from '@/lib/use-url-state';
 
 type MappingTarget = 'kitchen' | 'store';
 
+/** One side's list filters, cleared when switching to the other side. */
+const otherSideClean = { kitchen: null, location: null, store: null, type: null };
+
 const targets: Array<{ label: string; permission: string; tab: string; value: MappingTarget }> = [
   { label: 'Store', permission: 'STORE_ITEM_VIEW', tab: 'Store items', value: 'store' },
   { label: 'Kitchen', permission: 'KITCHEN_ITEM_VIEW', tab: 'Kitchen items', value: 'kitchen' },
@@ -65,13 +68,14 @@ export function ItemMappingPageClient() {
 
   // A switch starts the other side clean: its own search, status and page.
   const choose = (next: MappingTarget) => {
-    if (next !== mode) setUrlParams({ page: null, q: null, status: null, tab: next });
+    if (next !== mode)
+      setUrlParams({ ...otherSideClean, page: null, q: null, status: null, tab: next });
   };
   /** A stat's side, all of it or only its inactive mappings. */
   const show = (next: MappingTarget, inactive: boolean) => {
     setUrlParams({
       page: null,
-      ...(next === mode ? {} : { q: null }),
+      ...(next === mode ? {} : { ...otherSideClean, q: null }),
       status: inactive ? 'inactive' : null,
       tab: next,
     });
