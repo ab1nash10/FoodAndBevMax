@@ -37,10 +37,11 @@ function setup(items: Item[], produced: string[] = []) {
   const updates: string[] = [];
   const failNextCreate: { error?: Error } = {};
   const live = () => mappings.filter((mapping) => !mapping.deletedAt);
-  const kitchens: Record<string, { isActive: boolean }> = {
-    k1: { isActive: true },
-    k2: { isActive: false },
-    k3: { isActive: true },
+  const kitchens: Record<string, { isActive: boolean; kitchenName: string }> = {
+    k1: { isActive: true, kitchenName: 'Main Kitchen' },
+    k2: { isActive: false, kitchenName: 'Main Kitchen' },
+    k3: { isActive: true, kitchenName: 'main kitchen ' },
+    k4: { isActive: true, kitchenName: 'Counter Kitchen' },
   };
   const categories: Record<string, { isActive: boolean }> = {
     mains: { isActive: true },
@@ -55,9 +56,14 @@ function setup(items: Item[], produced: string[] = []) {
         items.find((item) => item.id === where.id)!.itemType = data.itemType;
         return Promise.resolve();
       },
-      updateMany: ({ where }: { where: { id: string; itemType: ItemType } }) => {
+      updateMany: ({
+        where,
+      }: {
+        where: { id: string; itemType: ItemType | { in: ItemType[] } };
+      }) => {
         const item = items.find((stored) => stored.id === where.id)!;
-        if (item.itemType === where.itemType) item.itemType = null;
+        const types = typeof where.itemType === 'string' ? [where.itemType] : where.itemType.in;
+        if (item.itemType && types.includes(item.itemType)) item.itemType = null;
         return Promise.resolve();
       },
     },
@@ -169,6 +175,65 @@ test('mapping an item to a kitchen makes it READYMADE; an exact repeat is a conf
 
   assert.equal(items[0]?.itemType, ItemType.READYMADE);
   await assert.rejects(service.create(map('thali'), actor), isDuplicate);
+});
+
+test('a kitchen item is Readymade or Live; it can be switched, never to or from a store item', async () => {
+  const { items, service } = setup([item('dosa'), item('thali'), item('coke', ItemType.MRP)]);
+
+  await service.create({ ...map('dosa'), itemType: ItemType.LIVE }, actor);
+  await service.create(map('thali'), actor);
+  assert.deepEqual(
+    items.map((stored) => stored.itemType),
+    [ItemType.LIVE, ItemType.READYMADE, ItemType.MRP],
+  );
+
+  // Switched on its mapping: the item is Live (or Readymade) wherever it is mapped.
+  await service.update('map-2', { itemType: ItemType.LIVE }, actor);
+  await service.update('map-1', { itemType: ItemType.READYMADE }, actor);
+  assert.deepEqual(
+    items.map((stored) => stored.itemType),
+    [ItemType.READYMADE, ItemType.LIVE, ItemType.MRP],
+  );
+
+  await assert.rejects(
+    service.create({ ...map('coke'), itemType: ItemType.LIVE }, actor),
+    refusedWith(
+      /^coke is an MRP item \(mapped to stores\), so it cannot be mapped to a kitchen\.$/,
+    ),
+  );
+  // Past the request check (which allows only these two), the service refuses it as well.
+  const store = ItemType.MRP as typeof ItemType.LIVE;
+  await assert.rejects(
+    service.create({ ...map('coke', 'k1', 'snacks'), itemType: store }, actor),
+    refusedWith(/Readymade or Live/),
+  );
+
+  // Its last mapping removed, a Live item never made loses its type too.
+  await service.remove('map-2', actor);
+  assert.equal(items[1]?.itemType, null);
+});
+
+test('a Readymade item is made only in the Main Kitchen; a Live one in any kitchen', async () => {
+  const { items, mappings, service } = setup([item('samosa'), item('dosa')]);
+  const notMain = refusedWith(/^A Readymade item is made in the Main Kitchen\./);
+
+  await assert.rejects(service.create(map('samosa', 'k4'), actor), notMain);
+  await assert.rejects(
+    service.create({ ...map('samosa', 'k4'), itemType: ItemType.READYMADE }, actor),
+    notMain,
+  );
+  assert.equal(mappings.length, 0);
+
+  await service.create({ ...map('dosa', 'k4'), itemType: ItemType.LIVE }, actor);
+  await service.create(map('samosa', 'k1'), actor);
+
+  // Neither a Live item in the counter kitchen made Readymade, nor a Readymade one moved there.
+  await assert.rejects(service.update('map-1', { itemType: ItemType.READYMADE }, actor), notMain);
+  await assert.rejects(service.update('map-2', { kitchenId: 'k4' }, actor), notMain);
+  assert.deepEqual(
+    [items[0]?.itemType, items[1]?.itemType, mappings[1]?.kitchenId],
+    [ItemType.READYMADE, ItemType.LIVE, 'k1'],
+  );
 });
 
 test('a store item, an inactive item or an inactive kitchen cannot be mapped', async () => {

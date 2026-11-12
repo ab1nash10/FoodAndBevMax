@@ -616,13 +616,12 @@ describe.skipIf(!databaseUrl)(
       expect((await board(`?token=${fx.boardToken}`, 'nope')).status).toBe(400);
     });
 
-    it('kiosk: menu and order on the board secret, totals priced by the server, paid at a counter', async () => {
+    it('kiosk: the menu on the board secret, priced by the server', async () => {
       const kiosk = (path: string, token = fx.boardToken) =>
         `/kiosk/${fx.restaurantId}/${path}?token=${token}`;
       const menu = await h.api('GET', kiosk('menu'), undefined, '');
       expect(menu.status).toBe(200);
       expect(menu.data).toMatchObject({
-        canPay: true,
         restaurantName: `Int Orders ${Run}`,
         staffDiscount: false,
       });
@@ -630,212 +629,45 @@ describe.skipIf(!databaseUrl)(
       expect(items.map((i) => i.itemName)).toEqual([`Int Dosa ${Run}`, `Int Tea ${Run}`]);
       expect(firstOf(items)).toMatchObject({ gstPercent: 18, isGstInclusive: false, price: 49.5 });
       expect(shape(menu.body)).toMatchInlineSnapshot(`
-      {
-        "data": {
-          "canPay": "boolean",
-          "items": [
-            {
-              "category": {
-                "categoryName": "string",
+        {
+          "data": {
+            "items": [
+              {
+                "category": {
+                  "categoryName": "string",
+                  "id": "string",
+                  "sortOrder": "number",
+                },
+                "foodType": "string",
+                "gstPercent": "number",
                 "id": "string",
-                "sortOrder": "number",
+                "isDiscountable": "boolean",
+                "isFeatured": "boolean",
+                "isGstInclusive": "boolean",
+                "itemName": "string",
+                "preparationTimeMinutes": null,
+                "price": "number",
               },
-              "foodType": "string",
-              "gstPercent": "number",
-              "id": "string",
-              "isDiscountable": "boolean",
-              "isFeatured": "boolean",
-              "isGstInclusive": "boolean",
-              "itemName": "string",
-              "preparationTimeMinutes": null,
-              "price": "number",
-            },
-          ],
-          "locationName": "string",
-          "restaurantName": "string",
-          "staffDiscount": "boolean",
-        },
-        "message": "string",
-        "success": "boolean",
-      }
-    `);
+            ],
+            "locationName": "string",
+            "open": "boolean",
+            "payWith": [],
+            "restaurantName": "string",
+            "staffDiscount": "boolean",
+          },
+          "message": "string",
+          "success": "boolean",
+        }
+      `);
 
-      const order = {
-        clientOrderId: `kiosk-${run}-1`,
-        lines: [
-          { menuId: fx.menuId, quantity: 2 },
-          { menuId: fx.inclusiveMenuId, quantity: 1 },
-        ],
-        // Ignored: this restaurant gives no staff discount.
-        mobile: '9876543210',
-      };
-      const placed = await h.api('POST', kiosk('orders'), order, '');
-      expect(placed.status).toBe(201);
-      // 2 x 49.50 + 18% = 116.82; 30 inclusive of 5% = 28.58 + 1.42; 146.82 rounds to 147.
-      expect(placed.data).toMatchObject({
-        discountPercent: 0,
-        discountTotal: 0,
-        grandTotal: 147,
-        gstTotal: 19.24,
-        lines: [
-          { itemName: `Int Dosa ${Run}`, lineTotal: 116.82, quantity: 2, unitPrice: 49.5 },
-          { itemName: `Int Tea ${Run}`, lineTotal: 30, quantity: 1, unitPrice: 30 },
-        ],
-        roundOff: 0.18,
-        subtotal: 127.58,
-      });
-      expect(shape(placed.body)).toMatchInlineSnapshot(`
-      {
-        "data": {
-          "discountPercent": "number",
-          "discountTotal": "number",
-          "grandTotal": "number",
-          "gstTotal": "number",
-          "id": "string",
-          "lines": [
-            {
-              "itemName": "string",
-              "lineTotal": "number",
-              "menuId": "string",
-              "quantity": "number",
-              "unitPrice": "number",
-            },
-          ],
-          "number": "number",
-          "roundOff": "number",
-          "subtotal": "number",
-        },
-        "message": "string",
-        "success": "boolean",
-      }
-    `);
-      const number = placed.data.number as number;
-
-      // A double tap returns the same order; the next order takes the next number.
-      const twice = await h.ok('POST', kiosk('orders'), order, '');
-      expect([twice.id, twice.number]).toEqual([placed.data.id, number]);
-      const next = await h.ok(
-        'POST',
-        kiosk('orders'),
-        { clientOrderId: `kiosk-${run}-2`, lines: [{ menuId: fx.menuId, quantity: 1 }] },
-        '',
-      );
-      expect(next).toMatchObject({ grandTotal: 58, number: number + 1 });
-
-      // Refusals.
-      const wrongLink = await h.api('POST', kiosk('orders', 'wrong'), order, '');
+      const wrongLink = await h.api('GET', kiosk('menu', 'wrong'), undefined, '');
       expect([wrongLink.status, wrongLink.body.message]).toEqual([
         404,
         'This kiosk link is no longer valid.',
       ]);
-      expect((await h.api('GET', `/kiosk/${fx.restaurantId}/menu`, undefined, '')).status).toBe(
-        404,
-      );
-      const offMenu = await h.api(
-        'POST',
-        kiosk('orders'),
-        { clientOrderId: `kiosk-${run}-x`, lines: [{ menuId: randomUUID(), quantity: 1 }] },
-        '',
-      );
-      expect([offMenu.status, offMenu.body.message]).toEqual([
-        400,
-        'An item in this order is not on the menu.',
-      ]);
-      const invalid = await h.api(
-        'POST',
-        kiosk('orders'),
-        {
-          clientOrderId: `kiosk-${run}-v`,
-          lines: [{ menuId: fx.menuId, quantity: 21 }],
-          mobile: '12345',
-        },
-        '',
-      );
-      expect(invalid.status).toBe(400);
-      expect(invalid.body.message).toMatchInlineSnapshot(
-        `"lines.0.quantity must not be greater than 20, mobile must be a 10-digit Indian mobile number"`,
-      );
-      expect(
-        (await h.api('POST', kiosk('orders'), { clientOrderId: `kiosk-${run}-e`, lines: [] }, ''))
-          .status,
-      ).toBe(400);
-
-      // The cashier finds it on Waiting to pay, loads it by number and bills it.
-      const waitingPath = `/pos/kiosk-orders?counterId=${fx.counterId}`;
-      const waiting = (await h.ok('GET', waitingPath, undefined, as.cashier)) as unknown as Body[];
-      const mine = waiting.find((o) => o.number === number);
-      expect(mine).toMatchObject({
-        isStaff: false,
-        items: [
-          { name: `Int Dosa ${Run}`, quantity: 2 },
-          { name: `Int Tea ${Run}`, quantity: 1 },
-        ],
-      });
-      const loaded = await h.ok(
-        'GET',
-        `/pos/kiosk-orders/${number}?counterId=${fx.counterId}`,
-        undefined,
-        as.cashier,
-      );
-      expect(loaded).toMatchObject({ employeeCode: null, id: placed.data.id, number });
-
-      const shift = await h.ok('POST', '/pos/shifts', { counterId: fx.counterId, openingCash: 0 });
-      const bill = await h.ok('POST', '/pos/orders', {
-        channel: 'COUNTER',
-        clientOrderId: `kiosk-bill-${run}`,
-        counterId: fx.counterId,
-        kioskOrderId: placed.data.id,
-        lines: loaded.lines,
-        paymentMode: 'CARD',
-        paymentReference: 'KIOSK-CARD',
-      });
-      expect(bill).toMatchObject({ grandTotal: 147, status: 'PLACED' });
-      const billed = await h.api(
-        'GET',
-        `/pos/kiosk-orders/${number}?counterId=${fx.counterId}`,
-        undefined,
-        as.cashier,
-      );
-      expect([billed.status, billed.body.message]).toEqual([
-        409,
-        `Kiosk order ${number} is already billed (${String(bill.billNumber)}).`,
-      ]);
-      expect(
-        ((await h.ok('GET', waitingPath)) as unknown as Body[]).map((o) => o.number),
-      ).not.toContain(number);
-
-      // The bill is on the kitchen screen as a counter order; it is cancelled from its bill only.
-      const onScreen = (await listOrders()).find((o) => o.id === bill.id);
-      expect(onScreen).toMatchObject({ source: 'COUNTER', status: 'PLACED' });
-      const cancel = await h.api('PATCH', `/restaurant-orders/${idOf(bill)}/status`, {
-        status: 'CANCELLED',
-      });
-      expect([cancel.status, cancel.body.message]).toEqual([
-        409,
-        'Cancel a counter bill from Bill History: it records why and restocks the counter.',
-      ]);
-      await h.ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
-
-      const unknown = await h.api('GET', `/pos/kiosk-orders/9999?counterId=${fx.counterId}`);
-      expect([unknown.status, unknown.body.message]).toEqual([
-        404,
-        `No kiosk order 9999 today at Int Orders ${Run}.`,
-      ]);
-      expect((await h.api('GET', `/pos/kiosk-orders/abc?counterId=${fx.counterId}`)).status).toBe(
-        400,
-      );
-      expect((await h.api('GET', '/pos/kiosk-orders')).status).toBe(400);
-      expect((await h.api('GET', waitingPath, undefined, '')).status).toBe(401);
-      expect((await h.api('GET', waitingPath, undefined, as.stock)).status).toBe(403);
-      // Another location's cashier cannot see this counter.
-      const foreign = await h.api('GET', waitingPath, undefined, as.elsewhere);
-      expect([foreign.status, foreign.body.message]).toEqual([
-        404,
-        'Counter not found, or it is switched off.',
-      ]);
     });
 
-    it('kiosk: a restaurant with no active counter shows the menu but takes no orders', async () => {
+    it('kiosk: a restaurant with no kiosk counter shows the menu but takes no orders', async () => {
       const quiet = await h.ok('POST', '/restaurants', {
         hospitalId: fx.hospitalId,
         restaurantName: `Int Orders Quiet ${run}`,
@@ -844,17 +676,7 @@ describe.skipIf(!databaseUrl)(
         await h.ok('POST', `/restaurants/${idOf(quiet)}/board-link`, { regenerate: false })
       ).boardToken as string;
       const menu = await h.ok('GET', `/kiosk/${idOf(quiet)}/menu?token=${token}`, undefined, '');
-      expect(menu).toMatchObject({ canPay: false, items: [] });
-      const refused = await h.api(
-        'POST',
-        `/kiosk/${idOf(quiet)}/orders?token=${token}`,
-        { clientOrderId: `quiet-${run}`, lines: [{ menuId: fx.menuId, quantity: 1 }] },
-        '',
-      );
-      expect([refused.status, refused.body.message]).toEqual([
-        400,
-        'This kiosk is not taking orders yet. Please ask a member of staff.',
-      ]);
+      expect(menu).toMatchObject({ items: [], open: false, payWith: [] });
       // Its board opens on its own secret, and this restaurant's secret does not open it.
       expect((await board(`?token=${token}`, idOf(quiet))).status).toBe(200);
       expect((await board(`?token=${fx.boardToken}`, idOf(quiet))).status).toBe(404);
@@ -1177,29 +999,24 @@ describe.skipIf(!databaseUrl)(
             roomNumber: '412',
             ...extra,
           });
-        // QR orders are delivered to rooms only (counter pickup is the kiosk's): the dosa is sold
-        // for rooms too, the tea at the counter only.
+        // The room menu (a ROOM order; pickup orders use the counter menu): the dosa is sold for
+        // rooms too, the tea at the counter only.
         await h.rawQuery(
           `UPDATE restaurant_menus SET serve_at = 'BOTH' WHERE id = $1::uuid`,
           fx.menuId,
         );
 
-        // No QR counter yet: the menu shows, but no order is taken.
+        // QR orders go to the restaurant's first counter, with nothing to set up; while it has no
+        // shift open the menu shows, but no order is taken.
         expect(await h.ok('GET', qr('/menu'), undefined, '')).toMatchObject({
           open: false,
           restaurantName: anyString,
         });
         expect((await guest('GET', `/qr/${fx.restaurantId}/menu?token=wrong`)).status).toBe(404);
-        const setCounter = (counterId: string | null, token?: string) =>
-          h.api('PUT', `/restaurants/${fx.restaurantId}/qr-counter`, { counterId }, token);
-        expect((await setCounter(fx.counterId, as.cashier)).status).toBe(403);
-        expect((await setCounter(fx.counterId)).status).toBe(200);
-        // The QR counter is set, but no shift is open there: still not taking orders.
-        expect((await h.ok('GET', qr('/menu'), undefined, '')).open).toBe(false);
         const closed = await order('closed');
         expect([closed.status, closed.body.message]).toEqual([
           409,
-          'Room service is closed right now. Please try again later.',
+          'Ordering is closed right now. Please try again later.',
         ]);
 
         const shift = await h.ok('POST', '/pos/shifts', {
@@ -1211,6 +1028,10 @@ describe.skipIf(!databaseUrl)(
         // The room menu: what is sold for rooms, at the room price.
         expect((menu.items as Body[]).map((item) => item.id)).toContain(fx.menuId);
         expect((menu.items as Body[]).map((item) => item.id)).not.toContain(fx.inclusiveMenuId);
+        // Staff and visitors pick up at the counter: the counter menu, the tea on it too.
+        const pickup = await h.ok('GET', `${qr('/menu')}&channel=COUNTER`, undefined, '');
+        expect(pickup).toMatchObject({ open: true, pickupCounter: anyString });
+        expect((pickup.items as Body[]).map((item) => item.id)).toContain(fx.inclusiveMenuId);
 
         // Staff discount: the Employee ID gets an OTP on its registered mobile, then a token.
         await h.rawQuery(
@@ -1340,11 +1161,18 @@ describe.skipIf(!databaseUrl)(
         // Asked again, the same bill: billed once.
         expect((await status()).data.billNumber).toBe(billed.billNumber);
 
-        // Every QR order is for a room: it needs the room number, and sells only room items.
+        // A room order needs the room number, and sells only room items.
         const noRoom = await order('room', { roomNumber: ' ' });
         expect([noRoom.status, noRoom.body.message]).toEqual([400, 'Enter your room number.']);
-        // Counter pickup is the kiosk's: a QR order for the counter is refused.
-        expect((await order('counter', { channel: 'COUNTER' })).status).toBe(400);
+        // Staff and visitors pick up at the counter: no room, and the counter menu (the tea).
+        gatewayReply = () => created(`plink_${run}_pickup`);
+        const pickupOrder = await order('pickup', {
+          channel: 'COUNTER',
+          lines: [{ menuId: fx.inclusiveMenuId, quantity: 1 }],
+          roomNumber: undefined,
+        });
+        expect(pickupOrder.status).toBe(201);
+        expect(pickupOrder.data).toMatchObject({ channel: 'COUNTER', roomNumber: null });
         gatewayReply = () => created(`plink_${run}_room`);
         const counterOnly = await order('room-2', {
           lines: [{ menuId: fx.inclusiveMenuId, quantity: 1 }],
@@ -1379,7 +1207,100 @@ describe.skipIf(!databaseUrl)(
           paymentReference: `pay_${run}_late`,
           reason: 'Open a shift at this counter before billing.',
         });
-        await setCounter(null);
+      });
+
+      it('kiosk: the guest pays at the kiosk by UPI (a QR for the amount) or card, and the paid order is billed at the kiosk counter', async () => {
+        const guest = (method: string, path: string, body?: unknown) =>
+          h.api(method, path, body, '');
+        const kiosk = (path: string) => `/kiosk/${fx.restaurantId}${path}?token=${fx.boardToken}`;
+        const pay = (name: string, method: string) =>
+          guest('POST', kiosk('/paid-orders'), {
+            clientOrderId: `kiosk-pay-${name}-${run}`,
+            lines: [{ menuId: fx.menuId, quantity: 1 }],
+            method,
+          });
+        const setKioskCounter = (counterId: string | null, token?: string) =>
+          h.api('PUT', `/restaurants/${fx.restaurantId}/kiosk-counter`, { counterId }, token);
+
+        // No kiosk counter: the menu shows, the kiosk takes no payment.
+        expect(await h.ok('GET', kiosk('/menu'), undefined, '')).toMatchObject({
+          open: false,
+          payWith: [],
+        });
+        expect((await setKioskCounter(fx.counterId, as.cashier)).status).toBe(403);
+        expect((await setKioskCounter(fx.counterId)).status).toBe(200);
+        const closed = await pay('closed', 'UPI');
+        expect([closed.status, closed.body.message]).toEqual([
+          409,
+          'This kiosk is not taking orders right now. Please order at the counter.',
+        ]);
+
+        // Its counter's shift is open: UPI through the location's gateway; no card machine here.
+        const shift = await h.ok('POST', '/pos/shifts', {
+          counterId: fx.counterId,
+          openingCash: 0,
+        });
+        expect(await h.ok('GET', kiosk('/menu'), undefined, '')).toMatchObject({
+          open: true,
+          payWith: ['UPI'],
+        });
+        const card = await pay('card', 'CARD');
+        expect([card.status, card.body.message]).toEqual([
+          409,
+          'This kiosk has no card machine. Please pay by UPI.',
+        ]);
+
+        gatewayCalls.length = 0;
+        gatewayReply = () => created(`plink_${run}_kiosk`);
+        const placed = await pay('upi', 'UPI');
+        expect(placed.status).toBe(201);
+        expect(placed.data).toMatchObject({
+          grandTotal: 58,
+          paymentUrl: `https://rzp.io/i/plink_${run}_kiosk`,
+          status: 'AWAITING_PAYMENT',
+        });
+        const { id, key } = placed.data as { id: string; key: string };
+        const status = () => guest('GET', `/qr/orders/${id}?key=${key}`);
+
+        // Paid: a counter bill (not a room order) at the kiosk counter, in its open shift.
+        gatewayReply = () => ({
+          body: { payments: [{ payment_id: `pay_${run}_kiosk` }], status: 'paid' },
+          status: 200,
+        });
+        const billed = (await status()).data;
+        expect(billed).toMatchObject({
+          channel: 'COUNTER',
+          kitchenStatus: 'PLACED',
+          status: 'BILLED',
+        });
+        const [bill] = (
+          await h.ok(
+            'GET',
+            `/pos/orders?counterId=${fx.counterId}&search=${billed.billNumber as string}`,
+          )
+        ).items as Body[];
+        expect(bill).toMatchObject({
+          channel: 'COUNTER',
+          grandTotal: 58,
+          paymentMode: 'UPI',
+          paymentReference: `pay_${run}_kiosk`,
+        });
+
+        // The guest walks away from the QR: cancelling closes it, and nothing is billed.
+        gatewayReply = () => created(`plink_${run}_kiosk_x`);
+        const left = await pay('left', 'UPI');
+        gatewayReply = (call) =>
+          call.method === 'POST'
+            ? { body: {}, status: 200 }
+            : { body: { status: 'created' }, status: 200 };
+        const cancelled = await guest(
+          'POST',
+          `/qr/orders/${left.data.id as string}/cancel?key=${left.data.key as string}`,
+        );
+        expect([cancelled.status, cancelled.data.status]).toEqual([201, 'CLOSED']);
+
+        await h.ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
+        await setKioskCounter(null);
       });
     });
   },

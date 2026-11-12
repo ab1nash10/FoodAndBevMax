@@ -1,15 +1,9 @@
 'use client';
 
 import { Fragment } from 'react';
-import type { Item, ItemType } from '@aahar/api-client';
+import type { Item } from '@aahar/api-client';
 import { foodTypeFormLabels } from '@/components/master-data/items/shared';
 import { formatDate } from '@/components/master-data/shared/utils';
-
-const itemTypeLongLabels: Record<ItemType, string> = {
-  LIVE: 'Live (cooked to order)',
-  MRP: 'MRP (packaged)',
-  READYMADE: 'Readymade',
-};
 
 /** Read-only details of the open item. Prices are managed on Item Prices. */
 export function ItemDetails({ item }: Readonly<{ item: Item }>) {
@@ -18,7 +12,6 @@ export function ItemDetails({ item }: Readonly<{ item: Item }>) {
       {[
         ['Item code', item.itemCode],
         ['Food type', foodTypeFormLabels[item.type]],
-        ['Item type', item.itemType ? itemTypeLongLabels[item.itemType] : 'Not mapped yet'],
         ['Preparation', item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '—'],
         ['HSN code', item.hsnCode || '—'],
         ['Status', item.isActive ? 'Active' : 'Inactive'],

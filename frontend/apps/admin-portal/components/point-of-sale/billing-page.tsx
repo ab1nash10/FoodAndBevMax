@@ -12,7 +12,6 @@ import {
   Loader2,
   Maximize,
   Minus,
-  MonitorSmartphone,
   Plus,
   Printer,
   QrCode,
@@ -59,7 +58,7 @@ import {
   usePosCounter,
 } from './shared';
 import { OnlinePaymentDialog, providerLabels } from './online-payment-dialog';
-import { onlineProvider, paymentModesFor } from './payment-collection';
+import { onlineProvider } from './payment-collection';
 import { ShiftChip, ShiftStartPanel } from './shift-controls';
 import { PosClosed } from './pos-gate';
 import { UnsentBillsButton, UnsentBillsDialog, useUnsentBills } from './unsent-bills';
@@ -76,6 +75,7 @@ const paymentIcons: Record<PaymentMode, LucideIcon> = {
   OTHER: Wallet,
   UPI: QrCode,
 };
+const paymentModes: PaymentMode[] = ['CASH', 'UPI', 'CARD', 'OTHER'];
 const allFoodTypes: FoodType[] = ['VEG', 'NON_VEG', 'EGGETARIAN'];
 const foodTypeLabels: Record<FoodType, string> = {
   EGGETARIAN: 'Egg',
@@ -87,13 +87,6 @@ const employmentTypeLabels: Record<EmploymentType, string> = {
   OUTSOURCED: 'Outsourced',
 };
 const mobilePattern = /^[6-9]\d{9}$/;
-
-// When a kiosk order was placed, in the site's time (India), e.g. "11:42 am".
-const waitingTime = new Intl.DateTimeFormat('en-IN', {
-  hour: 'numeric',
-  minute: '2-digit',
-  timeZone: 'Asia/Kolkata',
-});
 
 function newClientOrderId(): string {
   return crypto.randomUUID();
@@ -157,9 +150,6 @@ export function BillingPageClient() {
     summary: string;
     total: number;
   } | null>(null);
-  // A kiosk order loaded by its number: billing it links it, so it is never billed twice.
-  const [kioskNumber, setKioskNumber] = useState('');
-  const [kioskOrder, setKioskOrder] = useState<{ id: string; number: number } | null>(null);
   const upiQrRef = useRef<HTMLDivElement>(null);
 
   // The QR sits in the scrolling bill, above the pinned payment buttons: bring it into view
@@ -194,17 +184,6 @@ export function BillingPageClient() {
     refetchInterval: 60_000,
   });
   const menu = menuQuery.data?.items ?? [];
-  // Kiosk orders waiting to be paid here: a guest walks up, the cashier taps their number.
-  // Only where the restaurant's kiosk took orders lately (the counter says so); elsewhere a
-  // number can still be looked up by hand. Every open till asked: 12-15% of all requests under load.
-  const waitingQuery = useQuery({
-    enabled: Boolean(counter?.kioskInUse),
-    queryFn: async () => (await organizationApi.listWaitingKioskOrders(counter!.id)).data,
-    queryKey: queryKeys.kioskOrderToBill('waiting', counter?.id),
-    // A guest takes longer than this to walk from the kiosk.
-    refetchInterval: 30_000,
-  });
-  const waiting = waitingQuery.data ?? [];
 
   // The cart follows the menu it was picked from: switching Counter / Room re-prices it at that
   // channel's prices, and a refresh carries new prices, availability and stock.
@@ -342,45 +321,9 @@ export function BillingPageClient() {
     setPaymentMode('CASH');
     setPaymentReference('');
     setCashReceived(0);
-    setKioskNumber('');
-    setKioskOrder(null);
     setSubmitted(false);
     setClientOrderId(newClientOrderId());
   }
-
-  // The guest's kiosk order into the bill: its items at this counter's prices, and the staff
-  // member's Employee ID when they gave their mobile (check their ID card before the discount).
-  const loadKiosk = useMutation({
-    mutationFn: async (number: number) =>
-      (await organizationApi.getKioskOrderToBill(counter!.id, number)).data,
-    onError: (error) =>
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Kiosk order not loaded',
-        variant: 'error',
-      }),
-    onSuccess: (order) => {
-      const byId = new Map(menu.map((item) => [item.id, item]));
-      const lines = order.lines.flatMap(({ menuId, quantity }) => {
-        const item = byId.get(menuId);
-        return item && !unavailableReason(item, 0) ? [{ item, note: '', quantity }] : [];
-      });
-
-      setCart(lines);
-      setEmployeeCode(order.employeeCode ?? '');
-      setKioskOrder({ id: order.id, number: order.number });
-      // A kiosk order is never paid in cash: start on UPI.
-      setPaymentMode('UPI');
-      setKioskNumber('');
-      if (lines.length < order.lines.length) {
-        showToast({
-          description: 'Tell the guest; the rest of their order is on the bill.',
-          title: `${order.lines.length - lines.length} item(s) not available here now`,
-          variant: 'info',
-        });
-      }
-    },
-  });
 
   function addItem(item: PosMenuItem) {
     if (unavailableReason(item, quantityInCart(item.id))) return;
@@ -456,7 +399,6 @@ export function BillingPageClient() {
     },
     onSuccess: (saved) => {
       invalidatePosBillQueries(queryClient);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.kioskOrderToBill() });
       setCompleted(saved);
       resetBill();
     },
@@ -485,7 +427,6 @@ export function BillingPageClient() {
         paymentMode: isComplimentary ? undefined : paymentMode,
         paymentReference: isComplimentary ? undefined : paymentReference.trim() || undefined,
         roomNumber: channel === 'ROOM' ? roomNumber.trim() : undefined,
-        kioskOrderId: kioskOrder?.id,
       } satisfies PosBillInput,
       summary: cart.map((line) => `${line.quantity} × ${line.item.itemName}`).join(', '),
       total: totals.grandTotal,
@@ -920,99 +861,6 @@ export function BillingPageClient() {
           className="flex scroll-mt-[calc(var(--app-header-h)+1rem)] flex-col gap-3.5 p-4 pb-24 lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--app-header-h)-11rem)] lg:self-start lg:overflow-y-auto lg:pb-4"
           id="pos-bill"
         >
-          {kioskOrder ? (
-            <div className="flex items-center gap-3 rounded-control-lg bg-ds-primary-soft px-3 py-2 text-sm text-ds-text">
-              <MonitorSmartphone aria-hidden="true" className="h-4 w-4 shrink-0 text-ds-link" />
-              <span className="min-w-0 flex-1">
-                Kiosk order <span className="font-semibold">{kioskOrder.number}</span>
-                {employeeCode.trim() ? (
-                  <span className="block text-xs text-ds-muted">
-                    Staff discount: check their staff ID card.
-                  </span>
-                ) : null}
-              </span>
-              <Button
-                className="pointer-coarse:h-11"
-                onClick={() => {
-                  setCart([]);
-                  setEmployeeCode('');
-                  setKioskOrder(null);
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                Remove
-              </Button>
-            </div>
-          ) : channel === 'COUNTER' ? (
-            <form
-              className="flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const number = Number(kioskNumber);
-                if (Number.isInteger(number) && number > 0) loadKiosk.mutate(number);
-              }}
-            >
-              <Input
-                aria-label="Kiosk order number"
-                className="h-9 min-w-0 flex-1"
-                inputMode="numeric"
-                maxLength={6}
-                onChange={(event) => setKioskNumber(event.target.value.replace(/\D/g, ''))}
-                placeholder="Kiosk order no."
-                value={kioskNumber}
-              />
-              <Button
-                className="h-9 pointer-coarse:h-11"
-                disabled={!kioskNumber || loadKiosk.isPending || !menuQuery.data}
-                type="submit"
-                variant="outline"
-              >
-                <MonitorSmartphone aria-hidden="true" className="h-4 w-4" />
-                Load
-              </Button>
-            </form>
-          ) : null}
-
-          {!kioskOrder && channel === 'COUNTER' && waiting.length > 0 ? (
-            <section aria-label="Kiosk orders waiting to pay" className="space-y-2">
-              <p className="text-xs font-semibold tracking-wide text-ds-muted uppercase">
-                Waiting to pay · {waiting.length}
-                {cart.length > 0 ? (
-                  <span className="ml-1 font-normal tracking-normal normal-case">
-                    (finish this bill first)
-                  </span>
-                ) : null}
-              </p>
-              <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
-                {waiting.map((order) => (
-                  <li key={order.id}>
-                    <button
-                      className="flex w-full items-center gap-3 rounded-control-lg border border-ds-border px-3 py-2 text-left transition hover:bg-ds-subtle disabled:opacity-50 pointer-coarse:min-h-11"
-                      disabled={cart.length > 0 || loadKiosk.isPending || !menuQuery.data}
-                      onClick={() => loadKiosk.mutate(order.number)}
-                      type="button"
-                    >
-                      <span className="grid h-9 min-w-9 place-items-center rounded-control bg-ds-primary-soft px-1.5 text-base font-bold text-ds-link tabular-nums">
-                        {order.number}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-ds-text">
-                          {order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}
-                        </span>
-                        <span className="block text-xs text-ds-muted">
-                          {waitingTime.format(new Date(order.createdAt))}
-                          {order.isStaff ? ' · Staff: check ID card' : ''}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
           <div>
             <Label htmlFor="pos-instructions">
               Any instruction <span className="font-normal text-ds-muted">(optional, max 200)</span>
@@ -1098,13 +946,10 @@ export function BillingPageClient() {
               <p className="text-sm font-medium text-ds-text">Mode of payment</p>
               <div
                 aria-label="Payment mode"
-                className={cn(
-                  'grid gap-1 rounded-control-lg bg-ds-subtle p-1',
-                  kioskOrder ? 'grid-cols-2' : 'grid-cols-4',
-                )}
+                className="grid grid-cols-4 gap-1 rounded-control-lg bg-ds-subtle p-1"
                 role="group"
               >
-                {paymentModesFor({ kioskOrder: Boolean(kioskOrder) }).map((mode) => {
+                {paymentModes.map((mode) => {
                   const Icon = paymentIcons[mode];
 
                   return (

@@ -66,7 +66,6 @@ import {
   allowsOnlineOrdering,
   isRestaurantOpen,
 } from '@/components/organization/shared/restaurants';
-import { QrCounterPicker } from '@/components/organization/qr-counter-picker';
 import { StaffDiscountPanel } from '@/components/organization/staff-discount-panel';
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
@@ -253,7 +252,7 @@ export function RestaurantsPageClient() {
     image.alt = `QR code for ${qrRestaurant.restaurantName} menu and ordering`;
     image.src = qrImage;
     const instructions = printDocument.createElement('p');
-    instructions.textContent = 'Scan to order room service and pay by UPI';
+    instructions.textContent = 'Scan to view the menu and place an order';
     printDocument.title = `${qrRestaurant.restaurantName} menu QR`;
     printDocument.body.replaceChildren(style, heading, image, instructions);
     void image.decode().then(() => {
@@ -646,19 +645,26 @@ export function RestaurantsPageClient() {
       />
       <dialog
         aria-labelledby="restaurant-menu-qr-title"
-        className="m-auto max-h-[90dvh] w-[min(92vw,28rem)] max-w-none overflow-y-auto rounded-md border border-ds-border bg-ds-surface p-0 text-ds-text shadow-xl backdrop:bg-black/55"
+        className="m-auto max-h-[92dvh] w-[min(94vw,56rem)] max-w-none overflow-y-auto rounded-[30px] border border-[#dce6f3] bg-[#f6f9fe] p-0 text-ds-text shadow-[0_32px_100px_-40px_rgba(15,35,65,.5)] backdrop:bg-[#15243a]/55"
         onClose={() => setQrRestaurant(null)}
         ref={qrDialogRef}
       >
-        <div className="space-y-4 p-5 sm:p-6">
+        <div className="p-5 sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold" id="restaurant-menu-qr-title">
+              <p className="text-[11px] font-extrabold uppercase tracking-[.15em] text-[#2563eb]">
+                Guest ordering · QR module
+              </p>
+              <h2
+                className="mt-2 text-[24px] font-extrabold tracking-tight text-[#14233b] sm:text-[32px]"
+                id="restaurant-menu-qr-title"
+              >
                 {qrRestaurant?.restaurantName ?? 'Restaurant menu QR'}
               </h2>
-              <p className="mt-1 text-sm text-ds-muted">
-                Patients and attendants scan this code to order room service on their own phone and
-                pay by UPI. Counter pickup is ordered at the kiosk.
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-ds-muted sm:text-base">
+                Anyone can scan this code to order on their own phone and pay by UPI. Patients and
+                attendants have it delivered to their room; staff and visitors pick it up at the
+                counter.
               </p>
             </div>
             <Button
@@ -671,35 +677,44 @@ export function RestaurantsPageClient() {
               <X aria-hidden="true" className="h-4 w-4" />
             </Button>
           </div>
-          <div className="grid min-h-64 place-items-center rounded-md border border-ds-border bg-white p-4">
+          <div className="mt-6 grid gap-5 rounded-[24px] border border-[#e1e9f3] bg-white p-4 sm:grid-cols-[minmax(0,1fr)_230px] sm:items-center sm:p-6">
+            <div className="order-2 sm:order-1">
+              <p className="text-[18px] font-extrabold text-[#14233b]">Ready to scan</p>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-ds-muted">
+                Point a phone camera at the code. Guests choose room delivery or pickup at the
+                counter, add dishes, confirm a staff discount if they have one, and pay by UPI.
+              </p>
+              <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#eef5ff] px-3 py-2 text-[12px] font-bold text-[#2563eb]">
+                <span className="h-2 w-2 rounded-full bg-[#34a879]" /> Live menu link
+              </div>
+            </div>
             {qrImage ? (
               <Image
                 alt={`QR code for ${qrRestaurant?.restaurantName ?? 'restaurant'} menu and ordering`}
-                className="h-64 w-64 max-w-full object-contain"
+                className="order-1 mx-auto h-56 w-56 max-w-full rounded-2xl bg-white object-contain sm:order-2 sm:h-56 sm:w-56"
                 height={512}
                 src={qrImage}
                 unoptimized
                 width={512}
               />
             ) : qrError ? (
-              <p className="text-sm text-ds-danger">{qrError}</p>
+              <p className="order-1 text-sm text-ds-danger sm:order-2">{qrError}</p>
             ) : qrLinkQuery.isError ? (
-              <p className="text-sm text-ds-danger">{getApiErrorMessage(qrLinkQuery.error)}</p>
+              <p className="order-1 text-sm text-ds-danger sm:order-2">
+                {getApiErrorMessage(qrLinkQuery.error)}
+              </p>
             ) : (
-              <p className="text-sm text-ds-muted">Preparing restaurant QR…</p>
+              <p className="order-1 text-sm text-ds-muted sm:order-2">Preparing restaurant QR…</p>
             )}
           </div>
-          {qrRestaurant ? (
-            <QrCounterPicker key={qrRestaurant.id} restaurant={qrRestaurant} />
-          ) : null}
           {qrImage ? (
-            <div className="flex flex-wrap gap-2">
-              <Button className="flex-1" onClick={printQr} type="button">
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Button className="min-h-11 rounded-xl px-5" onClick={printQr} type="button">
                 <Printer aria-hidden="true" className="h-4 w-4" />
                 Print QR
               </Button>
               <Button
-                className="flex-1"
+                className="min-h-11 rounded-xl px-5"
                 onClick={() => {
                   const link = document.createElement('a');
                   link.download = `restaurant-${qrRestaurant?.id}-menu-qr.png`;

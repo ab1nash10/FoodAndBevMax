@@ -276,7 +276,6 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
       ['POST', '/pos/shifts', { counterId: fx.counterId, openingCash: 0 }],
       ['POST', '/pos/day-closes', { counterId: fx.counterId }],
       ['GET', `/pos/summary?counterId=${fx.counterId}`],
-      ['GET', `/pos/kiosk-orders?counterId=${fx.counterId}`],
     ];
     for (const [method, path, body] of calls) {
       expect([path, (await h.api(method, path, body, '')).status]).toEqual([path, 401]);
@@ -389,7 +388,6 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
         },
         "hospitalId": "string",
         "id": "string",
-        "kioskInUse": "boolean",
         "restaurant": {
           "id": "string",
           "legalName": null,
@@ -1553,7 +1551,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     ]);
   });
 
-  it('kiosk: an order placed at the kiosk is found at the till and billed once', async () => {
+  it('kiosk: the menu opens only with the restaurant’s board link', async () => {
     const link = await h.ok('POST', `/restaurants/${fx.restaurantId}/board-link`, {
       regenerate: false,
     });
@@ -1567,7 +1565,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     ]);
     const menu = await h.api('GET', `${kiosk}/menu?token=${boardToken}`, undefined, '');
     expect(menu.status).toBe(200);
-    expect(menu.data).toMatchObject({ canPay: true, staffDiscount: true });
+    expect(menu.data).toMatchObject({ open: false, payWith: [], staffDiscount: true });
     expect(
       items(menu.data)
         .map((entry) => entry.id)
@@ -1576,7 +1574,6 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     expect(shape(menu.body)).toMatchInlineSnapshot(`
       {
         "data": {
-          "canPay": "boolean",
           "items": [
             {
               "category": {
@@ -1596,6 +1593,8 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
             },
           ],
           "locationName": "string",
+          "open": "boolean",
+          "payWith": [],
           "restaurantName": "string",
           "staffDiscount": "boolean",
         },
@@ -1603,90 +1602,6 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
         "success": "boolean",
       }
     `);
-
-    const staffRate = await h.api(
-      'GET',
-      `${kiosk}/staff?token=${boardToken}&mobile=${staff.onRollMobile}`,
-      undefined,
-      '',
-    );
-    expect([staffRate.status, staffRate.data]).toEqual([200, { discountPercent: 10 }]);
-    expect(
-      (await h.api('GET', `${kiosk}/staff?token=${boardToken}&mobile=${mobile()}`, undefined, ''))
-        .status,
-    ).toBe(404);
-
-    // 2 tea (50) and a sandwich (104.90): 154.90 rounds to 155.
-    const lines = [
-      { menuId: tea.menuId, quantity: 2 },
-      { menuId: sandwich.menuId, quantity: 1 },
-    ];
-    const placed = await h.api(
-      'POST',
-      `${kiosk}/orders?token=${boardToken}`,
-      { clientOrderId: `kiosk-${run}`, lines },
-      '',
-    );
-    expect(placed.status).toBe(201);
-    expect(placed.data).toMatchObject({ discountTotal: 0, grandTotal: 155, number: 1 });
-
-    const waiting = await h.api('GET', `/pos/kiosk-orders?counterId=${fx.counter2Id}`);
-    expect(waiting.status).toBe(200);
-    expect((waiting.data as unknown as Body[]).map((order) => order.number)).toEqual([1]);
-    expect(shape(waiting.body)).toMatchInlineSnapshot(`
-      {
-        "data": [
-          {
-            "createdAt": "string",
-            "id": "string",
-            "isStaff": "boolean",
-            "items": [
-              {
-                "name": "string",
-                "quantity": "number",
-              },
-            ],
-            "number": "number",
-          },
-        ],
-        "message": "string",
-        "success": "boolean",
-      }
-    `);
-    const found = await h.ok('GET', `/pos/kiosk-orders/1?counterId=${fx.counter2Id}`);
-    expect(found).toMatchObject({ employeeCode: null, id: idOf(placed.data), lines, number: 1 });
-    const notFound = await h.api('GET', `/pos/kiosk-orders/99?counterId=${fx.counter2Id}`);
-    expect(notFound.status).toBe(404);
-
-    // Billed at C2, which keeps no stock: the sandwich sells freely there.
-    const shift = await h.ok('POST', '/pos/shifts', { counterId: fx.counter2Id, openingCash: 0 });
-    const billed = await bill('kiosk-bill', {
-      counterId: fx.counter2Id,
-      kioskOrderId: idOf(placed.data),
-      lines,
-      paymentMode: 'CARD',
-      paymentReference: 'KIOSK-CARD',
-    });
-    expect(billed.status).toBe(201);
-    expect(billed.data.grandTotal).toBe(155);
-    const again = await bill('kiosk-bill-2', {
-      counterId: fx.counter2Id,
-      kioskOrderId: idOf(placed.data),
-      lines,
-      paymentMode: 'CARD',
-      paymentReference: 'KIOSK-CARD',
-    });
-    expect([again.status, again.body.message]).toEqual([
-      409,
-      'This kiosk order is already billed. Clear it and start again.',
-    ]);
-    const billedLookup = await h.api('GET', `/pos/kiosk-orders/1?counterId=${fx.counter2Id}`);
-    expect([billedLookup.status, billedLookup.body.message]).toEqual([
-      409,
-      `Kiosk order 1 is already billed (${String(billed.data.billNumber)}).`,
-    ]);
-    expect(await h.ok('GET', `/pos/kiosk-orders?counterId=${fx.counter2Id}`)).toEqual([]);
-    await h.ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
   });
 
   it('a cashier: bills at any counter of their location, not elsewhere; admin actions refused', async () => {

@@ -54,8 +54,11 @@ test('MailService sends the code through Graph, reuses its token, and fails clos
   assert.deepEqual(message.message.toRecipients, [
     { emailAddress: { address: 'user@example.com' } },
   ]);
-  assert.match(message.message.subject, /^042917 is your AAHAR sign-in code$/);
+  // The code stays out of the subject, so it never shows in a lock-screen preview.
+  assert.equal(message.message.subject, 'Here is your AAHAR code');
   assert.match(message.message.body.content, /valid for 5 minutes/);
+  // The same code signs in or resets a forgotten password.
+  assert.match(message.message.body.content, /sign in to AAHAR or reset your password/);
   assert.equal(message.saveToSentItems, false);
 
   // A second code within the token's life asks for no new token.

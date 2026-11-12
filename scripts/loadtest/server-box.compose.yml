@@ -1,0 +1,60 @@
+# The load-test server on a second machine: Postgres, Redis and the production SERVICE=all API image,
+# so the PC that generates the load is not also the one serving it.
+#
+# On the second machine (Docker Desktop, give its VM >= 8 GB in Settings > Resources or .wslconfig):
+#   docker load -i fandb-api.tar
+#   docker compose -f server-box.compose.yml up -d --wait
+#   docker compose -f server-box.compose.yml exec -T postgres psql -U aahar -d aahar_load < aahar_load.sql
+#   docker compose -f server-box.compose.yml restart api
+#   (allow inbound TCP 4100 in Windows Firewall)
+# On the load PC:
+#   set LOADTEST_BASE=http://<second machine's IP>:4100/api/v1
+#   node scripts/loadtest/writes.mjs --users 3000
+#   node scripts/loadtest/run.mjs --users 3000 --ramp 120 --hold 300
+#
+# Throwaway test data only: never point this at a real database. ALLOW_DEV_OTP lets the
+# LOADTEST users sign in with 000000, which is why it must never hold real accounts.
+services:
+  postgres:
+    image: postgres:16-alpine
+    command: ['postgres', '-c', 'max_connections=200', '-c', 'shared_buffers=512MB']
+    environment:
+      POSTGRES_DB: aahar_load
+      POSTGRES_PASSWORD: loadtest
+      POSTGRES_USER: aahar
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U aahar -d aahar_load']
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      retries: 20
+
+  api:
+    image: loadtest/fandb-api:wip
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # The cluster's shape: 3 organization workers, heaps capped (see the Helm values).
+    cpus: 4
+    mem_limit: 4g
+    environment:
+      ALLOW_DEV_OTP: 'true'
+      CORS_ORIGINS: http://localhost:3000
+      DATABASE_URL: postgresql://aahar:loadtest@postgres:5432/aahar_load?schema=public&connection_limit=10
+      JWT_ACCESS_SECRET: loadtest-access-secret-not-for-any-real-environment-0001
+      JWT_REFRESH_SECRET: loadtest-refresh-secret-not-for-any-real-environment-0002
+      NODE_ENV: development
+      NODE_OPTIONS: --max-old-space-size=256
+      ORG_WORKERS: '3'
+      PORT: '4000'
+      REDIS_URL: redis://redis:6379
+      SERVICE: all
+    ports:
+      - '4100:4000'

@@ -92,6 +92,20 @@ void test('no database connection free in time is a 503 "busy", so people retry 
   });
 });
 
+void test('a transaction that found no free connection in time is the same 503 "busy", not a 500', () => {
+  // Prisma's P2028 when an interactive transaction waited past maxWait for a connection.
+  const error = Object.assign(
+    new Error('Transaction API error: Unable to start a transaction in the given time.'),
+    { code: 'P2028', name: 'PrismaClientKnownRequestError' },
+  );
+
+  assert.deepEqual(send(error), {
+    errors: [],
+    message: 'The server is busy right now. Please try again in a moment.',
+    status: 503,
+  });
+});
+
 void test('constraint errors a service left unhandled are 409/404 naming the column, not 500', () => {
   const prisma = (code: string, meta?: Record<string, unknown>) =>
     Object.assign(new Error(`Invalid prisma call: value 'secret@x.in'`), {

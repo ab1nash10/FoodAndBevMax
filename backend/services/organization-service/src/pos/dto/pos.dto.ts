@@ -161,11 +161,6 @@ export class CreatePosOrderDto {
   @MaxLength(100)
   paymentReference?: string;
 
-  @ApiPropertyOptional({ description: 'The kiosk order this bill is for: it can be billed once.' })
-  @IsOptional()
-  @IsUUID()
-  kioskOrderId?: string;
-
   @ApiPropertyOptional({
     description:
       'A paid online payment (UPI through Razorpay or PayU, a card on the Pine Labs machine) for exactly this bill: used once. Required for UPI where Razorpay or PayU is set up and the restaurant has no own UPI ID, and for cards at a counter with a Pine Labs machine.',

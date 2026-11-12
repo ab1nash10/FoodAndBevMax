@@ -58,6 +58,18 @@ export class ShiftsService {
       throw new ForbiddenException('Sign in again to open a shift.');
     }
 
+    // Most cashiers who reach an open counter are turned away here, without a transaction: queued
+    // on the counter's row lock, each held a database connection until the pool ran dry for
+    // everyone (3,000 people at once, 2026-11-11). The check below still settles a real race.
+    if (
+      await this.prisma.counterShift.findFirst({
+        select: { id: true },
+        where: { counterId: counter.id, status: CounterShiftStatus.OPEN },
+      })
+    ) {
+      throw new ConflictException('A shift is already open at this counter. End it first.');
+    }
+
     const now = new Date();
     const shift = await this.prisma.$transaction(async (tx) => {
       // One open shift per counter and per cashier: the counter's row lock queues two cashiers

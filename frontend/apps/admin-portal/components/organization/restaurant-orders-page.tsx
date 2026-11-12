@@ -5,6 +5,7 @@ import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useConfirm } from '@/components/confirm-provider';
 import { AppPageHeader, EmptyState } from '@/components/design-system';
 import { OrderKeyButton } from '@/components/order-key-button';
+import { KioskCounterPicker } from '@/components/organization/kiosk-counter-picker';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select, Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
@@ -437,6 +438,14 @@ export function RestaurantOrdersPageClient({ restaurantId }: Readonly<{ restaura
         eyebrow={restaurantName ?? 'Restaurant'}
         title="Orders"
       />
+      {hasPermission('RESTAURANT_UPDATE') && restaurantQuery.data ? (
+        // The kiosk takes paid orders only once a counter is picked, and while its shift is open.
+        <KioskCounterPicker
+          className="max-w-xl"
+          key={restaurantQuery.data.id}
+          restaurant={restaurantQuery.data}
+        />
+      ) : null}
 
       {ordersQuery.isLoading ? (
         <Panel className="p-4">

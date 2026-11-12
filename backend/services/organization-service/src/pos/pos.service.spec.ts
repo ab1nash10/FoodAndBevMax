@@ -110,7 +110,6 @@ function serviceWith(
       employeeCode: string;
       employmentType: string;
     }>;
-    kioskBilled?: boolean;
     /** Pine Labs machines on the counter's POS device. */
     machines?: Array<Record<string, unknown>>;
     noShift?: boolean;
@@ -203,7 +202,6 @@ function serviceWith(
         return { billSequence };
       },
     },
-    kioskOrder: { updateMany: () => ({ count: options.kioskBilled ? 0 : 1 }) },
     paymentMachine: {
       findMany: () => options.machines ?? [],
     },
@@ -641,7 +639,10 @@ test('a bill paid on the Pine Labs card machine is a card bill, with the card’
 });
 
 test('where the till takes UPI or cards through a provider, a typed reference is not proof', async () => {
-  const razorpay = new ConfigService({ RAZORPAY_KEY_ID: 'rzp_test_fake', RAZORPAY_KEY_SECRET: 'x' });
+  const razorpay = new ConfigService({
+    RAZORPAY_KEY_ID: 'rzp_test_fake',
+    RAZORPAY_KEY_SECRET: 'x',
+  });
   const plutus = new ConfigService({ PINELABS_BASE_URL: 'https://plutus.example.test/V1' });
   const machine = {
     createdAt: new Date('2026-10-01'),
@@ -674,8 +675,7 @@ test('where the till takes UPI or cards through a provider, a typed reference is
       typed('CARD'),
       cashier,
     ),
-    (error: unknown) =>
-      error instanceof BadRequestException && /card machine/.test(error.message),
+    (error: unknown) => error instanceof BadRequestException && /card machine/.test(error.message),
   );
   // A machine missing its Pine Labs details is not offered, so cards stay typed in.
   for (const machines of [[], [{ ...machine, pinelabSecurityToken: ' ' }]]) {
@@ -710,42 +710,6 @@ test('the till’s employee lookup says only what the cashier sees', async () =>
     employeeName: 'Neha',
     employmentType: 'ON_ROLL',
   });
-});
-
-test('a kiosk order already billed cannot be billed again', async () => {
-  await assert.rejects(
-    serviceWith({ kioskBilled: true }).service.createOrder(
-      bill({ kioskOrderId: 'kiosk-1', paymentMode: 'UPI' }),
-      cashier,
-    ),
-    (error: unknown) =>
-      error instanceof ConflictException && /kiosk order is already billed/.test(error.message),
-  );
-});
-
-test('a kiosk order is paid by UPI or card, never cash or other', async () => {
-  for (const paymentMode of ['CASH', 'OTHER'] as const) {
-    const { orders, service } = serviceWith();
-
-    await assert.rejects(
-      service.createOrder(bill({ kioskOrderId: 'kiosk-1', paymentMode }), cashier),
-      (error: unknown) =>
-        error instanceof BadRequestException && /kiosk order is paid by UPI or card/.test(error.message),
-    );
-    assert.equal(orders.length, 0, `no ${paymentMode} bill is made`);
-  }
-
-  for (const paymentMode of ['UPI', 'CARD'] as const) {
-    const { orders, service } = serviceWith();
-
-    await service.createOrder(bill({ kioskOrderId: 'kiosk-1', paymentMode }), cashier);
-    assert.equal(orders.length, 1, `a ${paymentMode} bill is made`);
-  }
-
-  // A counter bill without a kiosk order still takes cash.
-  const { orders, service } = serviceWith();
-  await service.createOrder(bill(), cashier);
-  assert.equal(orders.length, 1);
 });
 
 test('cancelling a bill puts its stock back, once', async () => {
@@ -837,7 +801,7 @@ test('once its shift has ended, only someone who closes days may cancel a bill',
 });
 
 // The till lookup is asked by every POS screen: its counters come from one read, not a count first.
-function tillService(kioskRestaurants: string[] = []) {
+function tillService() {
   const stored = [
     { id: 'c1', posDeviceId: null as string | null, restaurantId: 'cafe' },
     { id: 'c2', posDeviceId: null as string | null, restaurantId: 'canteen' },
@@ -854,6 +818,7 @@ function tillService(kioskRestaurants: string[] = []) {
     tillKeyHash: null as string | null,
   };
   type Where = { OR?: Array<{ posDeviceId?: string; restaurantId?: { in: string[] } }> };
+  const keyLookups = { count: 0 };
   const matches = (where: Where, counter: (typeof stored)[number]) =>
     !where.OR ||
     where.OR.some((condition) =>
@@ -861,7 +826,6 @@ function tillService(kioskRestaurants: string[] = []) {
         ? counter.posDeviceId === condition.posDeviceId
         : condition.restaurantId!.in.includes(counter.restaurantId),
     );
-  const kioskWheres: Array<{ createdAt: { gte: Date } }> = [];
   const prisma = {
     $transaction: (run: (tx: unknown) => Promise<unknown>) => run(prisma),
     counter: {
@@ -875,18 +839,14 @@ function tillService(kioskRestaurants: string[] = []) {
       findFirst: ({ where }: { where: { id: string } }) => byId[where.id] ?? null,
       findMany: () => [],
     },
-    kioskOrder: {
-      groupBy: ({ where }: { where: { createdAt: { gte: Date } } }) => {
-        kioskWheres.push(where);
-        return kioskRestaurants.map((restaurantId) => ({ restaurantId }));
-      },
-    },
     posDevice: {
-      findFirst: ({ where }: { where: { id?: string; tillKeyHash?: string } }) =>
-        (where.id !== undefined && where.id === device.id) ||
-        (where.tillKeyHash !== undefined && where.tillKeyHash === device.tillKeyHash)
+      findFirst: ({ where }: { where: { id?: string; tillKeyHash?: string } }) => {
+        if (where.tillKeyHash !== undefined) keyLookups.count += 1;
+        return (where.id !== undefined && where.id === device.id) ||
+          (where.tillKeyHash !== undefined && where.tillKeyHash === device.tillKeyHash)
           ? device
-          : null,
+          : null;
+      },
       update: ({ data }: { data: { tillKeyHash: string } }) => {
         device.tillKeyHash = data.tillKeyHash;
         return device;
@@ -913,7 +873,7 @@ function tillService(kioskRestaurants: string[] = []) {
     prisma as unknown as PrismaService,
   );
 
-  return { device, kioskWheres, service, stored };
+  return { device, keyLookups, service, stored };
 }
 
 const admin = { actorId: 'admin-1' };
@@ -936,6 +896,19 @@ test('an admin makes a computer a till: its browser gets a key shown once, store
     service.enrollTill('no-such-device', 'MAX-SKT-POS-01', admin),
     NotFoundException,
   );
+});
+
+test('a till’s key is looked up once every few seconds, and a revoked till is refused at once', async () => {
+  // Every POS request checks its till: three to five queries each, for a till that rarely
+  // changes, were a third of what a till's screens cost the database.
+  const { keyLookups, service } = tillService();
+  const { tillKey } = await service.enrollTill('device-1', 'MAX-SKT-POS-01', admin);
+
+  for (let i = 0; i < 5; i++) await service.requireTill(tillKey, { counterId: 'c1' });
+  assert.equal(keyLookups.count, 1);
+
+  await service.revokeTill('device-1', admin);
+  await assert.rejects(service.requireTill(tillKey, { counterId: 'c1' }), ForbiddenException);
 });
 
 test('a till is set up only on the computer its device names: the admin types this computer’s name', async () => {
@@ -1062,20 +1035,4 @@ test('the POS opens only for a user assigned to the location of one of its till�
     (error: unknown) =>
       error instanceof ForbiddenException && /not assigned to the location/.test(error.message),
   );
-});
-
-test('a till looks for waiting kiosk orders only where kiosk orders came in the last 30 days', async () => {
-  const { kioskWheres, service } = tillService(['cafe']);
-  const counters = await service.counters();
-
-  assert.deepEqual(
-    counters.map((counter) => [counter.id, counter.kioskInUse]),
-    [
-      ['c1', true],
-      ['c2', false],
-      ['c3', false],
-    ],
-  );
-  const days = (Date.now() - kioskWheres[0]!.createdAt.gte.getTime()) / 86_400_000;
-  assert.ok(days > 29.9 && days < 30.1, `looked back ${days} days`);
 });

@@ -44,11 +44,22 @@ import { countersWithTill, shiftStates, shiftsOn, tally, userNames } from './shi
 
 type Client = Prisma.TransactionClient | PrismaService;
 
+/** As long as AccessResolver keeps a user's access (ACCESS_CACHE_MS). */
+const TILL_CACHE_MS = 5_000;
+type TillDevice = NonNullable<Awaited<ReturnType<PosService['loadTill']>>>;
+type TillCounter = { id: string; posDeviceId: string | null; restaurantId: string };
+
+/** Sets `key`, dropping the oldest entry past 1,000 so the map cannot grow without bound. */
+function remember<V>(map: Map<string, V>, key: string, value: V) {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > 1_000) map.delete(map.keys().next().value as string);
+}
+
 /** SAC for restaurant food service, printed for items with no HSN of their own. */
 const RESTAURANT_SERVICE_SAC = '996331';
 
 /** A restaurant counts as using its kiosk when a kiosk order came in within this many days. */
-const KIOSK_IN_USE_DAYS = 30;
 
 const notATill =
   'This computer is not set up as a till. An admin opens the POS on it once and sets it up as its POS device.';
@@ -202,6 +213,18 @@ function toOrderResponse(
 
 @Injectable()
 export class PosService {
+  /**
+   * Tills by key, and a till's counters, remembered for TILL_CACHE_MS: every POS request checks
+   * its till, and those three to five queries were a third of what a till's screens cost. Setting
+   * up or revoking a till forgets them here at once; another worker sees it within TILL_CACHE_MS,
+   * as it sees a changed permission (ACCESS_CACHE_MS).
+   */
+  private readonly tills = new Map<string, { at: number; till: Promise<TillDevice | null> }>();
+  private readonly tillCounters = new Map<
+    string,
+    { at: number; counters: Promise<TillCounter[]> }
+  >();
+
   /** Pine Labs' Plutus Cloud API ('' when not set up): a counter's card machine takes cards. */
   private readonly plutusUrl: string;
 
@@ -253,24 +276,13 @@ export class PosService {
         ? found.filter((counter) => counter.posDeviceId === till.id)
         : found;
     const counterIds = counters.map((counter) => counter.id);
-    const [states, kiosks, elsewhere] = await Promise.all([
+    const [states, elsewhere] = await Promise.all([
       shiftStates(this.prisma, counterIds, toDateOnly(siteBusinessDate(new Date()))),
-      // Only a restaurant whose kiosk took orders lately has guests to look for: the other tills
-      // skip the waiting-orders poll (a number can still be looked up by hand).
-      this.prisma.kioskOrder.groupBy({
-        by: ['restaurantId'],
-        where: {
-          createdAt: { gte: new Date(Date.now() - KIOSK_IN_USE_DAYS * 86_400_000) },
-          restaurantId: { in: [...new Set(counters.map((counter) => counter.restaurantId))] },
-        },
-      }),
       actorId ? this.openShiftElsewhere(actorId, counterIds) : null,
     ]);
-    const kioskRestaurants = new Set(kiosks.map((entry) => entry.restaurantId));
 
     return counters.map(({ posDeviceId: _posDeviceId, ...counter }) => ({
       ...counter,
-      kioskInUse: kioskRestaurants.has(counter.restaurantId),
       shift: { ...states.get(counter.id), elsewhere },
     }));
   }
@@ -368,6 +380,7 @@ export class PosService {
     await this.prisma.$transaction(async (tx) => {
       await tx.posDevice.update({
         data: { tillKeyHash: hashOrderKey(tillKey), updatedBy: context.actorId },
+        // (the old key is forgotten below, with every till this process remembers)
         where: { id: device.id },
       });
       await this.auditLog.record(
@@ -382,16 +395,98 @@ export class PosService {
       );
     });
 
+    this.forgetTills();
+
     return { tillKey };
+  }
+
+  /** Revoke browser access immediately; the browser can be enrolled again by an admin. */
+  async revokeTill(posDeviceId: string, context: ActorContext) {
+    const device = await this.prisma.posDevice.findFirst({
+      select: { id: true, name: true, tillKeyHash: true },
+      where: { deletedAt: null, id: posDeviceId },
+    });
+
+    if (!device) throw new NotFoundException('POS device not found');
+
+    if (!device.tillKeyHash) return { revoked: false };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.posDevice.update({
+        data: { tillKeyHash: null, updatedBy: context.actorId },
+        where: { id: device.id },
+      });
+      await this.auditLog.record(
+        {
+          action: 'POS_TILL_REVOKED',
+          actorId: context.actorId,
+          entityId: device.id,
+          entityName: 'pos_devices',
+          ipAddress: context.ipAddress,
+          summary: `Revoked browser till access for ${device.name}`,
+        },
+        tx,
+      );
+    });
+
+    this.forgetTills();
+
+    return { revoked: true };
   }
 
   /**
    * The active POS device whose till key this is, with its restaurants; null for none. Looked up
    * across every location: the counters read after it stay limited to the user's.
    */
-  private async tillByKey(tillKey: string) {
-    if (!tillKey) return null;
+  private forgetTills() {
+    this.tills.clear();
+    this.tillCounters.clear();
+  }
 
+  private tillByKey(tillKey: string): Promise<TillDevice | null> {
+    if (!tillKey) return Promise.resolve(null);
+
+    const hash = hashOrderKey(tillKey);
+    const now = Date.now();
+    const hit = this.tills.get(hash);
+    if (hit && now - hit.at < TILL_CACHE_MS) return hit.till;
+
+    const till = this.loadTill(hash);
+    remember(this.tills, hash, { at: now, till });
+    till.catch(() => this.tills.delete(hash));
+
+    return till;
+  }
+
+  /** The counters a till bills at: its device's named counters if any, else its restaurants'. */
+  private tillCountersOf(till: TillDevice): Promise<TillCounter[]> {
+    const now = Date.now();
+    const hit = this.tillCounters.get(till.id);
+    if (hit && now - hit.at < TILL_CACHE_MS) return hit.counters;
+
+    const counters = hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
+      const found = await this.prisma.counter.findMany({
+        select: { id: true, posDeviceId: true, restaurantId: true },
+        where: {
+          deletedAt: null,
+          OR: [
+            { posDeviceId: till.id },
+            { restaurantId: { in: till.restaurants.map((entry) => entry.restaurantId) } },
+          ],
+        },
+      });
+
+      return found.some((counter) => counter.posDeviceId === till.id)
+        ? found.filter((counter) => counter.posDeviceId === till.id)
+        : found;
+    });
+    remember(this.tillCounters, till.id, { at: now, counters });
+    counters.catch(() => this.tillCounters.delete(till.id));
+
+    return counters;
+  }
+
+  async loadTill(hash: string) {
     return await hospitalScopeStorage.run(
       { allowedHospitalIds: null },
       async () =>
@@ -407,7 +502,7 @@ export class PosService {
               where: { deletedAt: null, isActive: true },
             },
           },
-          where: { deletedAt: null, isActive: true, tillKeyHash: hashOrderKey(tillKey) },
+          where: { deletedAt: null, isActive: true, tillKeyHash: hash },
         }),
     );
   }
@@ -431,21 +526,9 @@ export class PosService {
     const till = tillKey ? await this.tillByKey(tillKey) : null;
     if (!till) throw new ForbiddenException(notATill);
 
+    const counters = await this.tillCountersOf(till);
+
     return await hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
-      const found = await this.prisma.counter.findMany({
-        select: { id: true, posDeviceId: true, restaurantId: true },
-        where: {
-          deletedAt: null,
-          OR: [
-            { posDeviceId: till.id },
-            { restaurantId: { in: till.restaurants.map((entry) => entry.restaurantId) } },
-          ],
-        },
-      });
-      // As counters(): the device's own counters if any name it, else its restaurants'.
-      const counters = found.some((counter) => counter.posDeviceId === till.id)
-        ? found.filter((counter) => counter.posDeviceId === till.id)
-        : found;
       const counterIds = counters.map((counter) => counter.id);
       const lookup = (id: string) => ({ select: { counterId: true }, where: { id } });
 
@@ -861,15 +944,6 @@ export class PosService {
       : null;
 
     if (!online && !isComplimentary && totals.grandTotal > 0) {
-      // A kiosk order is paid by UPI or card (an online payment is one of those), never cash.
-      if (
-        dto.kioskOrderId &&
-        dto.paymentMode !== PaymentMode.UPI &&
-        dto.paymentMode !== PaymentMode.CARD
-      ) {
-        throw new BadRequestException('A kiosk order is paid by UPI or card, not cash.');
-      }
-
       await this.requireOnlineProof(tx, counter, dto.paymentMode);
     }
 
@@ -978,19 +1052,6 @@ export class PosService {
 
       if (count === 0) {
         throw new ConflictException('This payment is already on another bill.');
-      }
-    }
-
-    if (dto.kioskOrderId) {
-      const { count } = await tx.kioskOrder.updateMany({
-        data: { billedOrderId: order.id },
-        where: { billedOrderId: null, id: dto.kioskOrderId, restaurantId: counter.restaurantId },
-      });
-
-      if (count === 0) {
-        throw new ConflictException(
-          'This kiosk order is already billed. Clear it and start again.',
-        );
       }
     }
 

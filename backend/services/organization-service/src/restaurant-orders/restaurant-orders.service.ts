@@ -475,10 +475,13 @@ export class RestaurantOrdersService {
   }
 
   /** The restaurant's board secret, made on first use; regenerate turns the old link off. */
-  /** The counter QR (phone) orders are billed at, into its open shift; null turns them off. */
-  async setQrCounter(restaurantId: string, counterId: string | null, context: ActorContext) {
+  /**
+   * The counter kiosk orders are billed at, into its open shift; null stops them. (QR orders go
+   * to the restaurant's first counter: nothing to set.)
+   */
+  async setKioskCounter(restaurantId: string, counterId: string | null, context: ActorContext) {
     const restaurant = await this.prisma.restaurant.findFirst({
-      select: { hospitalId: true, id: true, qrCounterId: true },
+      select: { hospitalId: true, id: true, kioskCounterId: true },
       where: { deletedAt: null, id: restaurantId },
     });
 
@@ -495,7 +498,7 @@ export class RestaurantOrdersService {
     }
 
     await this.prisma.restaurant.update({
-      data: { qrCounterId: counterId, updatedBy: context.actorId },
+      data: { kioskCounterId: counterId, updatedBy: context.actorId },
       where: { id: restaurantId },
     });
     await this.auditLog.record({
@@ -505,12 +508,12 @@ export class RestaurantOrdersService {
       entityName: 'restaurants',
       hospitalId: restaurant.hospitalId,
       ipAddress: context.ipAddress,
-      newValue: { qrCounterId: counterId },
-      oldValue: { qrCounterId: restaurant.qrCounterId },
-      summary: counterId ? 'QR ordering counter set' : 'QR ordering turned off',
+      newValue: { kioskCounterId: counterId },
+      oldValue: { kioskCounterId: restaurant.kioskCounterId },
+      summary: `Kiosk ${counterId ? 'counter set' : 'turned off'}`,
     });
 
-    return { qrCounterId: counterId };
+    return { kioskCounterId: counterId };
   }
 
   async boardLink(restaurantId: string, regenerate: boolean, context: ActorContext) {

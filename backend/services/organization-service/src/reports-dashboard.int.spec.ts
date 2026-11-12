@@ -44,11 +44,12 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     itemBName: '',
     itemC: '',
     kitchenId: '',
+    kitchenIds: [] as string[],
     menuA: '',
     menuACode: '',
     menuB: '',
     otherHospitalId: '',
-    otherKitchenId: '',
+    otherKitchenIds: [] as string[],
     otherStoreId: '',
     restaurantId: '',
     restaurantName: '',
@@ -115,7 +116,7 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     fx.superAdminName = admin!.name;
     fx.superAdminCode = admin!.code;
 
-    // The location: creating one also makes its Main Store and Main Kitchen.
+    // The location: creating one also makes its Main Store, Main Kitchen and Counter Kitchen.
     const hospital = await ok('POST', '/hospitals', {
       city: 'Gurugram',
       invoicePrefix: `MAXRD${run}`,
@@ -129,7 +130,11 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     fx.hospitalName = hospital.hospitalName as string;
     fx.unit = String(hospital.billPrefix).replace(/^MAX[-_\s]*/i, '');
     fx.storeId = idOf(firstOf(items(await ok('GET', `/stores?hospitalId=${fx.hospitalId}`))));
-    fx.kitchenId = idOf(firstOf(items(await ok('GET', `/kitchens?hospitalId=${fx.hospitalId}`))));
+    const kitchens = items(await ok('GET', `/kitchens?hospitalId=${fx.hospitalId}`));
+    fx.kitchenId = idOf(
+      firstOf(kitchens.filter((kitchen) => kitchen.kitchenName === 'Main Kitchen')),
+    );
+    fx.kitchenIds = kitchens.map(idOf).sort();
 
     const other = await ok('POST', '/hospitals', {
       city: 'Noida',
@@ -141,9 +146,10 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     fx.otherStoreId = idOf(
       firstOf(items(await ok('GET', `/stores?hospitalId=${fx.otherHospitalId}`))),
     );
-    fx.otherKitchenId = idOf(
-      firstOf(items(await ok('GET', `/kitchens?hospitalId=${fx.otherHospitalId}`))),
-    );
+    // Its Main Kitchen and Counter Kitchen.
+    fx.otherKitchenIds = items(await ok('GET', `/kitchens?hospitalId=${fx.otherHospitalId}`))
+      .map(idOf)
+      .sort();
 
     const restaurant = await ok('POST', '/restaurants', {
       hospitalId: fx.hospitalId,
@@ -1102,7 +1108,8 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       const counts = data.counts as Body;
       expect(counts).toMatchObject({
         kitchenItems: 1,
-        kitchens: 1,
+        // The Main Kitchen and the Counter Kitchen every location starts with.
+        kitchens: 2,
         menus: 2,
         restaurants: 1,
         storeItems: 2,
@@ -1160,7 +1167,11 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       const here = (list: unknown) =>
         (list as Body[]).filter((row) => row.hospitalId === fx.hospitalId);
       expect(here(data.stores).map((row) => row.id)).toEqual([fx.storeId]);
-      expect(here(data.kitchens).map((row) => row.id)).toEqual([fx.kitchenId]);
+      expect(
+        here(data.kitchens)
+          .map((row) => row.id)
+          .sort(),
+      ).toEqual(fx.kitchenIds);
       expect(here(data.restaurants).map((row) => row.id)).toEqual([fx.restaurantId]);
       expect(here(data.counters)).toEqual([
         {
@@ -1227,15 +1238,15 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       const names = (await h.api('GET', '/dashboard/location-names', undefined, as)).data;
       expect([
         (names.stores as Body[]).map((row) => row.id),
-        (names.kitchens as Body[]).map((row) => row.id),
+        (names.kitchens as Body[]).map((row) => row.id).sort(),
         names.restaurants,
         names.counters,
-      ]).toEqual([[fx.otherStoreId], [fx.otherKitchenId], [], []]);
+      ]).toEqual([[fx.otherStoreId], fx.otherKitchenIds, [], []]);
       const setup = (await h.api('GET', '/dashboard/setup', undefined, as)).data;
       expect(setup).toMatchInlineSnapshot(`
         {
           "counts": {
-            "kitchens": 1,
+            "kitchens": 2,
             "restaurants": 0,
             "stores": 1,
           },

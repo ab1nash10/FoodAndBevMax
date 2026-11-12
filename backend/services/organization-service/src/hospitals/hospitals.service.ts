@@ -213,6 +213,13 @@ export class HospitalsService {
 
         const defaultStore = await this.createDefaultStore(hospital.id, context.actorId, tx);
         const defaultKitchen = await this.createDefaultKitchen(hospital.id, context.actorId, tx);
+        // A second kitchen for what the counters make themselves (tea, coffee, juices).
+        const counterKitchen = await this.createDefaultKitchen(
+          hospital.id,
+          context.actorId,
+          tx,
+          'Counter Kitchen',
+        );
 
         await this.auditLog.record(
           {
@@ -231,6 +238,11 @@ export class HospitalsService {
                     kitchenName: defaultKitchen.kitchenName,
                   }
                 : null,
+              counterKitchen: {
+                id: counterKitchen.id,
+                kitchenCode: counterKitchen.kitchenCode,
+                kitchenName: counterKitchen.kitchenName,
+              },
               defaultStore: defaultStore
                 ? {
                     id: defaultStore.id,
@@ -466,12 +478,13 @@ export class HospitalsService {
     hospitalId: string,
     actorId: string | undefined,
     client: HospitalClient,
+    kitchenName = 'Main Kitchen',
   ) {
     const existingKitchen = await client.kitchen.findFirst({
       where: {
         deletedAt: null,
         hospitalId,
-        kitchenName: 'Main Kitchen',
+        kitchenName,
       },
     });
 
@@ -485,7 +498,7 @@ export class HospitalsService {
         hospitalId,
         isActive: true,
         kitchenCode: await this.generateDefaultKitchenCode(client),
-        kitchenName: 'Main Kitchen',
+        kitchenName,
         updatedBy: actorId,
       },
     });

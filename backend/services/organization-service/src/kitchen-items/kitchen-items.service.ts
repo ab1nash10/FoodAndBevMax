@@ -9,6 +9,7 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import {
   assertUsableCategory,
   classifyItem,
+  kitchenItemType,
   releaseItemTypeIfUnused,
 } from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
@@ -88,9 +89,10 @@ export class KitchenItemsService {
   async create(dto: CreateKitchenItemDto, context: ActorContext) {
     try {
       const created = await this.kitchenItems.transaction(async (tx) => {
-        await this.assertValidKitchen(dto.kitchenId, tx);
-        // Mapping to a kitchen makes the item READYMADE and sets its category.
-        await classifyItem(tx, dto.itemId, ItemType.READYMADE, context.actorId);
+        // Mapping to a kitchen makes the item Readymade or Live; the category is this mapping's.
+        const itemType = await kitchenItemType(tx, dto.itemId, dto.itemType);
+        await this.assertValidKitchen(dto.kitchenId, itemType, tx);
+        await classifyItem(tx, dto.itemId, itemType, context.actorId);
         await assertUsableCategory(tx, dto.categoryId);
         await this.assertUniqueMapping(
           dto.kitchenId,
@@ -141,17 +143,20 @@ export class KitchenItemsService {
         const nextItemId = dto.itemId ?? existing.itemId;
         const data: Prisma.KitchenItemUpdateInput = {};
 
+        const retyped = dto.itemId !== undefined || dto.itemType !== undefined;
+
+        if (dto.kitchenId !== undefined || retyped) {
+          const itemType = await kitchenItemType(tx, nextItemId, dto.itemType);
+          await this.assertValidKitchen(nextKitchenId, itemType, tx);
+          if (retyped) await classifyItem(tx, nextItemId, itemType, context.actorId);
+        }
+
         if (dto.kitchenId !== undefined) {
-          await this.assertValidKitchen(dto.kitchenId, tx);
           data.kitchen = { connect: { id: dto.kitchenId } };
         }
 
         if (dto.itemId !== undefined) {
           data.item = { connect: { id: dto.itemId } };
-        }
-
-        if (dto.itemId !== undefined) {
-          await classifyItem(tx, dto.itemId, ItemType.READYMADE, context.actorId);
         }
 
         // Only this mapping's category: the item's other mappings keep theirs.
@@ -267,11 +272,26 @@ export class KitchenItemsService {
     }
   }
 
-  private async assertValidKitchen(kitchenId: string, client: KitchenItemClient): Promise<void> {
+  private async assertValidKitchen(
+    kitchenId: string,
+    itemType: ItemType,
+    client: KitchenItemClient,
+  ): Promise<void> {
     const kitchen = await this.kitchenItems.findActiveKitchen(kitchenId, client);
 
     if (!kitchen || !kitchen.isActive) {
       throw new BadRequestException('Kitchen not found or inactive');
+    }
+
+    // ponytail: kitchens have no type, so the Main Kitchen (every location gets one) is known by
+    // its name; add a kitchen type column if locations start renaming it.
+    if (
+      itemType === ItemType.READYMADE &&
+      kitchen.kitchenName.trim().toLowerCase() !== 'main kitchen'
+    ) {
+      throw new BadRequestException(
+        'A Readymade item is made in the Main Kitchen. Pick the Main Kitchen, or make the item Live.',
+      );
     }
   }
 

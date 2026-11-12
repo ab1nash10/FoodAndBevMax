@@ -133,10 +133,28 @@ export function CheckboxLine({
 }
 
 const usedAs: Record<ItemType, string> = {
-  LIVE: 'live item',
+  LIVE: 'live, mapped to kitchens',
   MRP: 'packaged, mapped to stores',
-  READYMADE: 'prepared, mapped to kitchens',
+  READYMADE: 'readymade, mapped to kitchens',
 };
+
+const kitchenTypes = [
+  { hint: 'made ahead in batches, in the Main Kitchen', label: 'Readymade', value: 'READYMADE' },
+  { hint: 'made to order, in the counter kitchen', label: 'Live', value: 'LIVE' },
+] as const;
+
+/**
+ * The Main Kitchen (where a Readymade item must be made), or the counter kitchen (where a Live
+ * item starts). ponytail: matched by name (kitchens have no kind); add a kind to kitchens if names vary.
+ */
+function defaultKitchen(
+  kitchens: Array<{ id: string; name: string }> | undefined,
+  type: 'LIVE' | 'READYMADE',
+) {
+  return kitchens?.find((kitchen) =>
+    type === 'LIVE' ? /counter/i.test(kitchen.name) : /^main kitchen$/i.test(kitchen.name.trim()),
+  )?.id;
+}
 
 export function MappingFormFields({
   categories,
@@ -145,6 +163,7 @@ export function MappingFormFields({
   form,
   itemLabel,
   items,
+  location,
   parentLabel,
   mapsAs,
   parents,
@@ -167,8 +186,18 @@ export function MappingFormFields({
   form: UseFormReturn<MappingFormValues>;
   itemLabel: string;
   items: Item[] | undefined;
-  /** The type mapping here gives an item; items already of another type can't be chosen. */
-  mapsAs: ItemType;
+  /**
+   * The location whose stores or kitchens are offered: the header's location, fixed (`locked`),
+   * or picked here when the header shows all locations. Nothing can be picked before it.
+   */
+  location: {
+    hospitals: Hospital[] | undefined;
+    locked: boolean;
+    onChange: (hospitalId: string) => void;
+    value: string;
+  };
+  /** The types mapping here can give an item; items already of another type can't be chosen. */
+  mapsAs: readonly ItemType[];
   parentLabel: string;
   parents: Array<{ code: string; id: string; name: string }> | undefined;
   /** The type mapping here gives an item, e.g. "MRP". */
@@ -178,8 +207,38 @@ export function MappingFormFields({
   const selectedItem = items?.find((item) => item.id === itemId);
   // Every catalogue item is listed; one already packaged (stores) or prepared (kitchens) can
   // only be mapped that way, so it shows greyed with the reason.
-  const usable = (items ?? []).filter((item) => !item.itemType || item.itemType === mapsAs);
-  const usedElsewhere = (items ?? []).filter((item) => item.itemType && item.itemType !== mapsAs);
+  const usable = (items ?? []).filter((item) => !item.itemType || mapsAs.includes(item.itemType));
+  const usedElsewhere = (items ?? []).filter(
+    (item) => item.itemType && !mapsAs.includes(item.itemType),
+  );
+  // Kitchen Items: the item is Readymade or Live, and that picks its kitchen.
+  const asksKitchenType = mapsAs.includes('LIVE');
+  const kitchenType = form.watch('itemType') ?? 'READYMADE';
+
+  const mainKitchen = defaultKitchen(parents, 'READYMADE');
+  // A Readymade item is made only in the Main Kitchen (the server refuses any other).
+  const mainOnly = asksKitchenType && kitchenType === 'READYMADE';
+
+  /** Live moves out of the Main Kitchen to the counter kitchen, unless another was picked. */
+  function chooseKitchenType(type: 'LIVE' | 'READYMADE') {
+    const current = form.getValues('parentId');
+    const counter = defaultKitchen(parents, 'LIVE');
+    form.setValue('itemType', type);
+    if (type === 'LIVE' && counter && (!current || current === mainKitchen)) {
+      form.setValue('parentId', counter, { shouldValidate: true });
+    }
+  }
+
+  // Readymade sits in the Main Kitchen; a new Live mapping starts in the counter kitchen.
+  useEffect(() => {
+    if (!asksKitchenType || !parents) return;
+    const current = form.getValues('parentId');
+    if (kitchenType === 'READYMADE' && current !== (mainKitchen ?? '')) {
+      form.setValue('parentId', mainKitchen ?? '', { shouldValidate: Boolean(current) });
+    } else if (kitchenType === 'LIVE' && !current) {
+      form.setValue('parentId', defaultKitchen(parents, 'LIVE') ?? '');
+    }
+  }, [asksKitchenType, form, kitchenType, mainKitchen, parents]);
   const parentId = form.watch('parentId');
   const categoryId = form.watch('categoryId');
   // A parent may hold an item once per category: the ones it already has can't be picked again.
@@ -203,6 +262,61 @@ export function MappingFormFields({
 
   return (
     <>
+      <Field label="Location" name="mapping-location-id" required>
+        <Select
+          disabled={location.locked}
+          id="mapping-location-id"
+          onChange={(event) => {
+            location.onChange(event.target.value);
+            // A store or kitchen belongs to one location: the one picked may not be in the new one.
+            form.setValue('parentId', '');
+          }}
+          value={location.value}
+        >
+          <option value="">Select location</option>
+          {location.hospitals?.map((hospital) => (
+            <option key={hospital.id} value={hospital.id}>
+              {hospital.displayName || hospital.hospitalName}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {asksKitchenType ? (
+        <fieldset className="grid gap-2">
+          <legend className="mb-2 text-sm font-bold text-ds-text">
+            Item type <span className="text-ds-status-bad-fg">*</span>
+          </legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {kitchenTypes.map((type) => (
+              <label
+                className={cn(
+                  'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 text-sm shadow-xs',
+                  kitchenType === type.value
+                    ? 'border-ds-primary bg-ds-primary-soft'
+                    : 'border-ds-border bg-ds-surface',
+                )}
+                key={type.value}
+              >
+                <input
+                  checked={kitchenType === type.value}
+                  className="mt-0.5 h-4 w-4"
+                  name="mapping-item-type"
+                  onChange={() => chooseKitchenType(type.value)}
+                  type="radio"
+                  value={type.value}
+                />
+                <span className="grid gap-0.5">
+                  <span className="font-semibold text-ds-text">{type.label}</span>
+                  <span className="text-xs text-ds-muted">{type.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-ds-muted">
+            Applies to the item in every kitchen it is mapped to.
+          </p>
+        </fieldset>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={form.formState.errors.parentId?.message}
@@ -210,10 +324,19 @@ export function MappingFormFields({
           name="parent-id"
           required
         >
-          <Select id="parent-id" {...form.register('parentId')}>
-            <option value="">Select {parentLabel.toLowerCase()}</option>
+          <Select disabled={!location.value} id="parent-id" {...form.register('parentId')}>
+            <option value="">
+              {mainOnly && parents && !mainKitchen
+                ? 'This location has no Main Kitchen'
+                : `Select ${parentLabel.toLowerCase()}`}
+            </option>
+            {/* Greyed, not hidden: switching to Live picks the counter kitchen in the same render. */}
             {parents?.map((parent) => (
-              <option key={parent.id} value={parent.id}>
+              <option
+                disabled={mainOnly && parent.id !== mainKitchen}
+                key={parent.id}
+                value={parent.id}
+              >
                 {parent.name} ({parent.code})
               </option>
             ))}
@@ -225,7 +348,18 @@ export function MappingFormFields({
           name="item-id"
           required
         >
-          <Select id="item-id" {...form.register('itemId')}>
+          <Select
+            id="item-id"
+            {...form.register('itemId', {
+              // An item already Readymade or Live is that type in every kitchen.
+              onChange: (event: { target: { value: string } }) => {
+                const type = items?.find((item) => item.id === event.target.value)?.itemType;
+                if (asksKitchenType && (type === 'LIVE' || type === 'READYMADE')) {
+                  chooseKitchenType(type);
+                }
+              },
+            })}
+          >
             <option value="">Select item</option>
             <optgroup label="Can be mapped here">
               {usable.map((item) => (

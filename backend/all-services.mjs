@@ -35,14 +35,14 @@ const listenHost = process.env.HOST || undefined;
 // The organization service carries almost all the traffic (menus, bills, stock, lists) and a
 // Node process uses one core, so on a pod with more cores it can run as several processes.
 // ORG_WORKERS=1 (the default) is one process, as before; "auto" is one per core left over after
-// the other two services. Each worker gets an equal share of the connection pool it would
-// otherwise have had alone, so more workers do not open more database connections.
-const orgWorkers = Math.max(
-  1,
+// the other two services. AUTH_WORKERS and USER_WORKERS (default 1) do the same for sign-in
+// and the access check: 3,000 people signing in at once queued 20-30 s behind one auth process.
+const workers = (name) => Math.max(1, Number.parseInt(process.env[name] ?? '1', 10) || 1);
+const orgWorkers =
   process.env.ORG_WORKERS === 'auto'
-    ? availableParallelism() - 2
-    : Number.parseInt(process.env.ORG_WORKERS ?? '1', 10) || 1,
-);
+    ? Math.max(1, availableParallelism() - 2)
+    : workers('ORG_WORKERS');
+const portsFor = (first, count) => Array.from({ length: count }, (_, index) => first + index * 10);
 
 // Path table from infra/helm/fandb values.yaml `apiPaths`; organization is the catch-all,
 // so it also serves ${apiPrefix}/health - like the chart, where the ALB health check does.
@@ -50,17 +50,17 @@ const services = [
   {
     name: 'auth-service',
     paths: ['/auth'],
-    ports: [42001],
+    ports: portsFor(42001, workers('AUTH_WORKERS')),
   },
   {
     name: 'user-service',
     paths: ['/users', '/roles', '/permissions'],
-    ports: [42002],
+    ports: portsFor(42002, workers('USER_WORKERS')),
   },
   {
     name: 'organization-service',
     paths: [''],
-    ports: Array.from({ length: orgWorkers }, (_, index) => 42003 + index * 10),
+    ports: portsFor(42003, orgWorkers),
   },
 ];
 const catchAll = services[services.length - 1];
@@ -77,7 +77,12 @@ function portFor(service) {
   return service.ports[nextWorker % service.ports.length];
 }
 
-/** DATABASE_URL with this worker's share of the pool, when the service runs as several. */
+/**
+ * DATABASE_URL with this worker's share of a connection_limit set on purpose (a database's
+ * connection budget). Without one, each worker keeps the default pool: splitting the default
+ * (2 x cores + 1) left 2 connections per worker on a 2-core node, and a burst of requests then
+ * waited on the pool instead of the database. A share is never below 5.
+ */
 function databaseUrlFor(workers) {
   const url = process.env.DATABASE_URL;
 
@@ -87,9 +92,13 @@ function databaseUrlFor(workers) {
 
   try {
     const parsed = new URL(url);
-    const pool =
-      Number(parsed.searchParams.get('connection_limit')) || availableParallelism() * 2 + 1;
-    parsed.searchParams.set('connection_limit', String(Math.max(2, Math.ceil(pool / workers))));
+    const pool = Number(parsed.searchParams.get('connection_limit'));
+
+    if (!pool) {
+      return url;
+    }
+
+    parsed.searchParams.set('connection_limit', String(Math.max(5, Math.ceil(pool / workers))));
 
     return parsed.toString();
   } catch {

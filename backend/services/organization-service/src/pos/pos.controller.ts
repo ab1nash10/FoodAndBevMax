@@ -110,6 +110,25 @@ export class PosController {
     };
   }
 
+  @Post('till/:posDeviceId/revoke')
+  @Permissions('POS_DEVICE_UPDATE')
+  @ApiOperation({ summary: 'Revoke the enrolled browser key for a POS device' })
+  @ApiOkResponse({ description: 'Browser till key revoked.' })
+  async revokeTill(
+    @Param('posDeviceId', ParseUUIDPipe) posDeviceId: string,
+    @CurrentUser() user: JwtRequestUser,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.pos.revokeTill(posDeviceId, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'Till access revoked',
+      success: true,
+    };
+  }
+
   @Get('menu')
   @RequireTill({ from: 'query', kind: 'counterId' })
   @Permissions('POS_ORDER_VIEW')

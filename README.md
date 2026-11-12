@@ -139,13 +139,13 @@ The defaults in `.env.example` are suitable for local development. Before any sh
 ### 3. Start PostgreSQL and Redis
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml up -d postgres redis
+docker compose --env-file .env -f infra/docker/docker-compose.yml up -d postgres redis
 ```
 
 Confirm that both containers are healthy:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml ps
+docker compose --env-file .env -f infra/docker/docker-compose.yml ps
 ```
 
 ### 4. Prepare the database
@@ -168,7 +168,7 @@ Turborepo starts the frontend, all three services, and the shared-package TypeSc
 
 ### 6. Open the platform
 
-- Admin portal: http://localhost:3000
+- Admin portal: http://localhost:3000/fandb
 - Auth health: http://localhost:4001/api/v1/health
 - User health: http://localhost:4002/api/v1/health
 - Organization health: http://localhost:4003/api/v1/health
@@ -226,7 +226,7 @@ Never enable terminal OTP logging or the fixed OTP in production.
 
 | Service              | Base URL                       | Health           | Swagger                          |
 | -------------------- | ------------------------------ | ---------------- | -------------------------------- |
-| Admin Portal         | `http://localhost:3000`        | —                | —                                |
+| Admin Portal         | `http://localhost:3000/fandb`  | —                | —                                |
 | Auth Service         | `http://localhost:4001/api/v1` | `/api/v1/health` | `http://localhost:4001/api/docs` |
 | User Service         | `http://localhost:4002/api/v1` | `/api/v1/health` | `http://localhost:4002/api/docs` |
 | Organization Service | `http://localhost:4003/api/v1` | `/api/v1/health` | `http://localhost:4003/api/docs` |
@@ -273,29 +273,29 @@ reads the database URL (from `.env` locally) and the migrations path from `prism
 Create `.env`, start the database, and prepare it before launching all application containers:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml up -d postgres redis
+docker compose --env-file .env -f infra/docker/docker-compose.yml up -d postgres redis
 pnpm db:generate
 pnpm db:deploy
 pnpm db:seed
-docker compose -f infra/docker/docker-compose.yml up --build -d
+docker compose --env-file .env -f infra/docker/docker-compose.yml up --build -d
 ```
 
 View logs:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml logs -f
+docker compose --env-file .env -f infra/docker/docker-compose.yml logs -f
 ```
 
 Stop the stack while preserving database data:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml down
+docker compose --env-file .env -f infra/docker/docker-compose.yml down
 ```
 
 Remove the containers and local database/Redis volumes:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml down -v
+docker compose --env-file .env -f infra/docker/docker-compose.yml down -v
 ```
 
 The `-v` command permanently deletes the local Docker database and Redis data.
@@ -444,7 +444,7 @@ OTP values are logged only when `NODE_ENV=development`. Make sure the Auth Servi
 Check container health and verify that `DATABASE_URL` uses the host port published by Docker:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml ps
+docker compose --env-file .env -f infra/docker/docker-compose.yml ps
 pnpm exec prisma migrate status --schema prisma/schema.prisma
 ```
 

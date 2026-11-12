@@ -16,7 +16,7 @@ import { useConfirm } from '@/components/confirm-provider';
 import { AppPageHeader, RecordAvatar, StatStrip, tableStyles } from '@/components/design-system';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
-import { slotHours } from '@/components/master-data/time-slots/shared';
+import { hoursRange } from '@/lib/hours';
 import {
   PaginationControls,
   QueryState,
@@ -591,13 +591,7 @@ export function EmployeeDiscountsPageClient() {
                         {serveDays(discount.daysOfWeek)}
                       </td>
                       <td className={cn(tableStyles.td, 'text-ds-text-2 tabular-nums')}>
-                        {timed
-                          ? slotHours({
-                              endTime: discount.endTime,
-                              isAlwaysAvailable: false,
-                              startTime: discount.startTime,
-                            })
-                          : '-'}
+                        {timed ? hoursRange(discount.startTime, discount.endTime) : '-'}
                       </td>
                       <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                         {levelLabels[discount.employmentType ?? '']}

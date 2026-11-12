@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { readdirSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { canOpenPath, homeHref } from './navigation';
+import { canOpenPath, findPage, findSubRoute, homeHref } from './navigation';
 
 const holding =
   (...codes: string[]) =>
@@ -34,4 +34,12 @@ test('a user with no permissions can open no screen but the dashboard, typed URL
 
   expect(routes.length).toBeGreaterThan(50);
   expect(routes.filter((route) => canOpenPath(route, () => false))).toEqual(['/dashboard']);
+});
+
+test('Time Slots is no longer a screen: no tab, no new-slot page, nothing to open', () => {
+  const everything = () => true;
+
+  expect(findPage('/masters/time-slots')).toBeUndefined();
+  expect(findSubRoute('/masters/time-slots/new')).toBeUndefined();
+  expect(canOpenPath('/masters/time-slots', everything)).toBe(false);
 });

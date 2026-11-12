@@ -6,6 +6,7 @@ exports[`organization setup masters (integration) > POS devices: create with res
     "code": "string",
     "createdAt": "string",
     "deletedAt": null,
+    "hasActiveTillKey": "boolean",
     "hospital": {
       "hospitalCode": "string",
       "hospitalName": "string",
@@ -350,6 +351,7 @@ exports[`organization setup masters (integration) > restaurants: create with sto
     "isRegisteredInGst": "boolean",
     "isTakeawayEnabled": "boolean",
     "isVegOnly": "boolean",
+    "kioskCounterId": null,
     "kitchen": {
       "id": "string",
       "isActive": "boolean",

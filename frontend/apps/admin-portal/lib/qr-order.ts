@@ -5,9 +5,9 @@ export type StepState = 'done' | 'now' | 'todo';
 /** Kitchen statuses in order; an order at one has passed every one before it. */
 const kitchenOrder = ['PLACED', 'PREPARING', 'READY', 'COLLECTED'] as const;
 
-/** Paid → being prepared → ready → delivered, as far as the order has gone. */
+/** Paid → being prepared → ready → delivered (or collected), as far as the order has gone. */
 export function progressSteps(
-  order: Pick<QrOrderView, 'kitchenStatus' | 'roomNumber' | 'status'>,
+  order: Pick<QrOrderView, 'channel' | 'kitchenStatus' | 'roomNumber' | 'status'>,
 ): Array<{ label: string; state: StepState }> {
   const reached = kitchenOrder.indexOf(
     (order.kitchenStatus ?? 'PLACED') as (typeof kitchenOrder)[number],
@@ -19,12 +19,18 @@ export function progressSteps(
     at > step || (step === 3 && at === 3) ? 'done' : at === step ? 'now' : 'todo',
   );
 
+  const pickup = order.channel === 'COUNTER';
+
   return [
     { label: 'Paid', state: billed ? 'done' : 'now' },
     { label: 'Being prepared', state: states[0]! },
-    { label: 'Ready', state: states[1]! },
+    { label: pickup ? 'Ready to collect at the counter' : 'Ready', state: states[1]! },
     {
-      label: order.roomNumber ? `Delivered to Room ${order.roomNumber}` : 'Delivered',
+      label: pickup
+        ? 'Collected'
+        : order.roomNumber
+          ? `Delivered to Room ${order.roomNumber}`
+          : 'Delivered',
       state: states[2]!,
     },
   ];

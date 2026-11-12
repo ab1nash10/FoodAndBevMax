@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { HttpException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { hashPassword } from '@aahar/auth';
+import { hashPassword, verifyPassword } from '@aahar/auth';
 import { logger } from '@aahar/logging';
 import { afterEach, test, vi } from 'vitest';
 import type { AuthAuditLogService } from '../common/audit/auth-audit-log.service';
@@ -517,3 +517,89 @@ test(
     assert.ok(await meeraFrom('10.0.0.9'));
   },
 );
+
+/** The new password hash the reset wrote, read from its UPDATE. */
+const resetHash = (executeRaw: ReturnType<typeof authService>['executeRaw']) => {
+  const call = executeRaw.mock.calls.find(([sql]) =>
+    (sql as readonly string[]).join('?').includes('password_hash'),
+  );
+  return call ? { hash: call[1] as string, userId: call.at(-1) } : undefined;
+};
+
+test(
+  'a forgotten password is reset with a code sent to the email: sessions end, the lock lifts',
+  { timeout: 30_000 },
+  async () => {
+    meera.passwordHash = await hashPassword('Meera-old-1');
+    const { executeRaw, mail, record, service } = authService();
+    const login = (password: string) =>
+      service.loginWithPassword({ email: 'meera@max.in', password }, { ipAddress: '10.0.0.1' });
+
+    // Ten wrong guesses lock password sign-in, the usual state of someone who forgot it.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await assert.rejects(login('guess'), wrongPassword);
+    }
+    await assert.rejects(login('Meera-old-1'), lockedOut);
+
+    await service.sendOtp({ email: 'meera@max.in' });
+    const code = mail.sendOtp.mock.calls[0]?.[1] as string;
+
+    assert.deepEqual(
+      await service.resetPassword(
+        { email: 'Meera@Max.in', newPassword: 'Meera-new-2', otp: code },
+        { ipAddress: '10.0.0.1' },
+      ),
+      { reset: true },
+    );
+
+    const written = resetHash(executeRaw);
+    assert.ok(written, 'the password was written');
+    assert.equal(written.userId, 'user-3');
+    assert.ok(await verifyPassword('Meera-new-2', written.hash));
+    // The same UPDATE moves the session version on, so every device signs in again.
+    assert.match(
+      (
+        executeRaw.mock.calls.find(([sql]) =>
+          (sql as readonly string[]).join('?').includes('password_hash'),
+        )?.[0] as readonly string[]
+      ).join('?'),
+      /session_version = session_version \+ 1/,
+    );
+    assert.ok(
+      record.mock.calls.some(
+        ([entry]) => entry.action === 'PASSWORD_CHANGED' && entry.userId === 'user-3',
+      ),
+    );
+
+    meera.passwordHash = written.hash;
+    assert.ok(await login('Meera-new-2'), 'the new password signs in at once: the lock is gone');
+
+    // A code works once.
+    await assert.rejects(
+      service.resetPassword(
+        { email: 'meera@max.in', newPassword: 'Meera-new-3', otp: code },
+        { ipAddress: '10.0.0.1' },
+      ),
+      UnauthorizedException,
+    );
+  },
+);
+
+test('a wrong code or an unregistered email changes no password', async () => {
+  meera.passwordHash = await hashPassword('Meera-old-1');
+  const { executeRaw, service } = authService();
+
+  await service.sendOtp({ email: 'meera@max.in' });
+  await assert.rejects(
+    service.resetPassword({ email: 'meera@max.in', newPassword: 'Meera-new-2', otp: '000001' }, {}),
+    UnauthorizedException,
+  );
+  await assert.rejects(
+    service.resetPassword(
+      { email: 'nobody@max.in', newPassword: 'Meera-new-2', otp: '123456' },
+      {},
+    ),
+    UnauthorizedException,
+  );
+  assert.equal(resetHash(executeRaw), undefined);
+});

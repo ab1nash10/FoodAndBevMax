@@ -54,7 +54,6 @@ import {
 } from '@/components/organization/shared/locations';
 import { onlinePaymentOptions } from '@/components/organization/shared/locations';
 import { useLegalEntityNames } from '@/components/organization/shared/hooks';
-import { LegalEntityCell } from '@/components/organization/shared/legal-entity-select';
 import type { ActiveFilter, OnlinePaymentFilter } from '@/components/organization/shared/types';
 import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
 import {
@@ -390,7 +389,11 @@ export function HospitalsPageClient() {
             <tbody>
               {items.length > 0 ? (
                 items.map((location) => {
-                  const title = getLocationTitle(location);
+                  const entity = location.legalEntityId
+                    ? entityNamesQuery.data?.get(location.legalEntityId)
+                    : undefined;
+                  // Named by its entity's Location column, as the Legal Entities list shows it.
+                  const title = entity?.locationName ?? getLocationTitle(location);
                   const displayName = getLocationDisplayName(location);
                   const place = [location.city, location.state].filter(Boolean).join(', ');
                   const editHref = `/masters/locations/${location.id}/edit`;
@@ -416,13 +419,16 @@ export function HospitalsPageClient() {
                         </span>
                       </td>
                       <td className={tableStyles.td}>
-                        <LegalEntityCell
-                          entity={
-                            location.legalEntityId
-                              ? entityNamesQuery.data?.get(location.legalEntityId)
-                              : undefined
-                          }
-                        />
+                        {entity ? (
+                          <p
+                            className="line-clamp-2 text-ds-text-2"
+                            title={`${entity.entityName} · ${entity.gstNumber}`}
+                          >
+                            {entity.entityName}
+                          </p>
+                        ) : (
+                          <span className="text-ds-text-3">Not set</span>
+                        )}
                       </td>
                       <td className={tableStyles.td}>
                         <p

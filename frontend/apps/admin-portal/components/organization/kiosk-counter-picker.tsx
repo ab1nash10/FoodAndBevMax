@@ -9,15 +9,29 @@ import { Select } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
+const words = {
+  help: "Paid at the kiosk by UPI or this counter's card machine; taken only while this counter has a shift open, and counted in that shift's takings.",
+  label: 'Kiosk orders are billed at',
+  none: 'No counter: the kiosk takes no orders',
+  off: 'The kiosk shows the menu but takes no orders.',
+  offTitle: 'Kiosk turned off',
+  saved: 'Kiosk orders, paid at the kiosk, are billed there while it has a shift open.',
+  savedTitle: 'Kiosk counter saved',
+};
+
 /**
- * Which counter the restaurant's QR (room-service) orders are billed at. They are taken only
- * while that counter has a shift open, and go into that shift's takings. None: QR orders off.
+ * Which counter the restaurant's kiosk orders are billed at. They are taken only while that
+ * counter has a shift open, and go into that shift's takings. None: the kiosk is off.
  */
-export function QrCounterPicker({ restaurant }: Readonly<{ restaurant: Restaurant }>) {
+export function KioskCounterPicker({
+  className = 'mt-5',
+  restaurant,
+}: Readonly<{ className?: string; restaurant: Restaurant }>) {
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const [counterId, setCounterId] = useState(restaurant.qrCounterId ?? '');
+  const current = restaurant.kioskCounterId ?? '';
+  const [counterId, setCounterId] = useState(current);
   const countersQuery = useQuery({
     queryFn: async () =>
       (
@@ -27,56 +41,54 @@ export function QrCounterPicker({ restaurant }: Readonly<{ restaurant: Restauran
           restaurantId: restaurant.id,
         })
       ).data.items,
-    queryKey: queryKeys.restaurants('qr-counters', restaurant.id),
+    queryKey: queryKeys.restaurants('kiosk-counters', restaurant.id),
   });
   const save = useMutation({
-    mutationFn: (next: string) =>
-      organizationApi.setRestaurantQrCounter(restaurant.id, next || null),
+    mutationFn: (next: string): Promise<unknown> =>
+      organizationApi.setRestaurantKioskCounter(restaurant.id, next || null),
     onError: (error) => {
-      setCounterId(restaurant.qrCounterId ?? '');
+      setCounterId(current);
       showToast({
         description: getApiErrorMessage(error),
-        title: 'QR counter not saved',
+        title: 'Kiosk counter not saved',
         variant: 'error',
       });
     },
     onSuccess: (_, next) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.restaurants() });
       showToast({
-        description: next
-          ? 'Room-service orders from the QR are billed there while it has a shift open.'
-          : 'The QR shows the menu but takes no orders.',
-        title: next ? 'QR counter saved' : 'QR ordering turned off',
+        description: next ? words.saved : words.off,
+        title: next ? words.savedTitle : words.offTitle,
       });
     },
   });
   const canEdit = hasPermission('RESTAURANT_UPDATE');
+  const id = 'kiosk-counter';
 
   return (
-    <div className="mt-5 grid gap-2 rounded-[24px] border border-ds-border bg-ds-surface p-4 sm:p-5">
-      <label className="text-sm font-bold text-ds-text" htmlFor="qr-counter">
-        Room-service orders are billed at
+    <div
+      className={`${className} grid gap-2 rounded-[24px] border border-ds-border bg-ds-surface p-4 sm:p-5`}
+    >
+      <label className="text-sm font-bold text-ds-text" htmlFor={id}>
+        {words.label}
       </label>
       <Select
         disabled={!canEdit || save.isPending || countersQuery.isLoading}
-        id="qr-counter"
+        id={id}
         onChange={(event) => {
           setCounterId(event.target.value);
           save.mutate(event.target.value);
         }}
         value={counterId}
       >
-        <option value="">No counter: QR ordering is off</option>
+        <option value="">{words.none}</option>
         {(countersQuery.data ?? []).map((counter) => (
           <option key={counter.id} value={counter.id}>
             {counter.counterName} ({counter.counterCode})
           </option>
         ))}
       </Select>
-      <p className="text-xs leading-relaxed text-ds-muted">
-        Orders are taken only while this counter has a shift open, are paid by UPI on the guest's
-        phone, and count in that shift's takings. Counter pickup is ordered at the kiosk.
-      </p>
+      <p className="text-xs leading-relaxed text-ds-muted">{words.help}</p>
     </div>
   );
 }

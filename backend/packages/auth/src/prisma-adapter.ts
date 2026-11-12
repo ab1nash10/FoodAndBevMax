@@ -25,16 +25,30 @@ export interface PrismaPgSettings {
 /**
  * Prisma 7 connects through node-postgres, which does not read Prisma's URL options. This keeps
  * DATABASE_URL meaning what it did under Prisma 6: `schema`, `connection_limit` (default
- * 2 x CPUs + 1) and `connect_timeout` (seconds, default 5) carry over, and SSL follows
+ * 2 x CPUs + 1), `connect_timeout` (seconds, default 5) and `pool_timeout` (seconds, default
+ * 10; the pool waits the longer of the two) carry over, and SSL follows
  * `sslmode` - `prefer` (the default) uses TLS when the server offers it, `require` insists on
  * it, `disable` never uses it - with certificates verified only under `sslaccept=strict`.
  */
+/**
+ * How long an interactive transaction may wait for a free connection, and run. Prisma's 2 s wait
+ * failed a burst (3,000 people at once) that a few more seconds in the queue would have served;
+ * a request that still cannot start is answered 503 "busy" (P2028), not 500.
+ */
+export const PRISMA_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+
 export function prismaPgSettings(databaseUrl: string): PrismaPgSettings {
   const url = new URL(databaseUrl);
   const option = (name: string) => url.searchParams.get(name) ?? undefined;
   const sslmode = option('sslmode');
   const limit = Number(option('connection_limit'));
-  const connectTimeoutSeconds = Number(option('connect_timeout') ?? 5);
+  // node-postgres has one timeout for opening a connection and for waiting for a free one;
+  // Prisma 6 waited up to pool_timeout (default 10 s) for a free one, so a burst queues.
+  // 0 in either means no limit, as in Prisma 6.
+  const connectTimeout = Number(option('connect_timeout') ?? 5);
+  const poolTimeout = Number(option('pool_timeout') ?? 10);
+  const connectTimeoutSeconds =
+    connectTimeout === 0 || poolTimeout === 0 ? 0 : Math.max(connectTimeout, poolTimeout);
   const verifyCertificate = option('sslaccept') === 'strict';
   const schema = option('schema');
 

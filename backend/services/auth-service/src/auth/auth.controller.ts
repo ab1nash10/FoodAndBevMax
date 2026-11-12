@@ -15,6 +15,7 @@ import { AuthService } from './auth.service';
 import { EmailPasswordLoginDto } from './dto/email-password-login.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -70,6 +71,22 @@ export class AuthController {
         ipAddress: getIpAddress(request),
       }),
       message: 'Success',
+      success: true,
+    };
+  }
+
+  @Public()
+  @Post('reset-password')
+  // Counted per email, like verify-otp; the code's own wrong-attempt limit does the rest.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiOperation({ summary: 'Reset a forgotten password with a code sent to the email' })
+  @ApiOkResponse({ description: 'Password changed; every session ends.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired code, or inactive user.' })
+  async resetPassword(@Body() body: ResetPasswordDto, @Req() request: RequestContextLike) {
+    return {
+      data: await this.auth.resetPassword(body, { ipAddress: getIpAddress(request) }),
+      message: 'Password changed. Sign in with your new password.',
       success: true,
     };
   }

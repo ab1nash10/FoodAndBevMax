@@ -39,6 +39,9 @@ interface AuthContextValue {
   refreshToken: string | null;
   refreshSession: () => Promise<boolean>;
   roles: string[];
+  /** Why the last session ended, until the sign-in page has said so. */
+  sessionNotice: string | null;
+  dismissSessionNotice: () => void;
   signIn: (tokens: AuthTokens) => void;
 }
 
@@ -248,6 +251,8 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     }
   }, [expireSession]);
 
+  const dismissSessionNotice = useCallback(() => setSessionNotice(null), []);
+
   const currentUser = useMemo(
     () => (auth?.accessToken ? sessionUserFromAccessToken(auth.accessToken) : null),
     [auth?.accessToken],
@@ -283,9 +288,13 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       refreshToken: auth?.refreshToken ?? null,
       refreshSession,
       roles,
+      sessionNotice,
+      dismissSessionNotice,
       signIn,
     }),
     [
+      dismissSessionNotice,
+      sessionNotice,
       auth?.accessToken,
       auth?.refreshToken,
       currentUser,
@@ -303,7 +312,9 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
-      {sessionNotice ? (
+      {/* Not on the sign-in page: it says "Signed out" itself (a toast that goes away), and this
+          box's only way out, Login Again, leads to that same page, so it stayed over the form. */}
+      {sessionNotice && !pathname.startsWith('/auth/login') ? (
         <div className="fixed inset-x-4 top-5 z-70 mx-auto max-w-md rounded-card border border-ds-status-pending-fg/20 bg-ds-status-pending-bg p-4 text-ds-status-pending-fg shadow-xl shadow-ds-text/10">
           <p className="text-sm font-semibold">Session expired</p>
           <p className="mt-1 text-sm">{sessionNotice}</p>

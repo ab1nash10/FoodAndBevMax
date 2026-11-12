@@ -54,7 +54,6 @@ export interface RestaurantMenuFormValues {
   roomPrice: string;
   serveAt: MenuServeAt;
   serves: string;
-  subCode: string;
 }
 
 export function formatEnum(value: string): string {

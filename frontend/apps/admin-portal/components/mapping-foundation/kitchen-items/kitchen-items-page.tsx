@@ -23,12 +23,13 @@ import {
 } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Select } from '@/components/ui';
+import { Badge, Panel, Select } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { useAuth } from '@/components/auth-provider';
 import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { cn } from '@/lib/utils';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
@@ -57,8 +58,24 @@ import {
 } from '@/components/mapping-foundation/shared/utils';
 import { useItemCategoryOptions } from '@/components/master-data/items/shared';
 import { queryKeys } from '@/lib/query-keys';
-import { SetupNotice, useLocationName } from '@/components/location-empty-states';
+import { SetupNotice } from '@/components/location-empty-states';
 
+/** Mapping to a kitchen makes an item Readymade (made ahead) or Live (made to order). */
+const kitchenTypes = ['READYMADE', 'LIVE'] as const;
+const typeLabels = { LIVE: 'Live', READYMADE: 'Readymade' } as const;
+
+/** A new kitchen mapping: Readymade unless Live is picked. */
+function newKitchenMapping(): MappingFormValues {
+  return { ...emptyMappingFormValues(), itemType: 'READYMADE' };
+}
+
+function KitchenTypeBadge({ type }: Readonly<{ type: string | null }>) {
+  return type === 'LIVE' || type === 'READYMADE' ? (
+    <Badge variant={type === 'LIVE' ? 'warning' : 'info'}>{typeLabels[type]}</Badge>
+  ) : (
+    <span className="text-ds-muted">—</span>
+  );
+}
 function useKitchenOptions(hospitalId?: string) {
   return useQuery<Kitchen[]>({
     queryFn: async () => {
@@ -93,10 +110,10 @@ export function KitchenItemsPageClient({
   listTabs,
 }: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
   const { scopedHospitalId } = useLocationContext();
-  const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
+  const [view, setView] = useListView('list');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
     'active',
     'inactive',
@@ -108,11 +125,18 @@ export function KitchenItemsPageClient({
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<KitchenItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
+  // The form's location: the header's, fixed, or picked in the form when the header shows them
+  // all. Its kitchens are the only ones offered.
+  const [formHospitalId, setFormHospitalId] = useState(scopedHospitalId ?? '');
+  const [editHospitalId, setEditHospitalId] = useState('');
+  const form = useForm<MappingFormValues>({ defaultValues: newKitchenMapping() });
   // Edit has its own form in a pop-up, so the Create form above keeps what was typed in it.
-  const editForm = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
+  const editForm = useForm<MappingFormValues>({ defaultValues: newKitchenMapping() });
   const hospitalsQuery = useHospitalOptions();
   const kitchensQuery = useKitchenOptions(hospitalFilter);
+  // Usually the same location as the list's filter, so the same cached list: no extra request.
+  const formKitchensQuery = useKitchenOptions(formHospitalId);
+  const editKitchensQuery = useKitchenOptions(editHospitalId);
   // The whole catalogue; the form greys out items already mapped the other way.
   const itemsQuery = useItemOptions();
   const categoriesQuery = useItemCategoryOptions();
@@ -123,6 +147,7 @@ export function KitchenItemsPageClient({
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
+    setFormHospitalId(scopedHospitalId ?? '');
     setKitchenFilter('');
     setPage(1);
     form.setValue('parentId', '', { shouldValidate: true });
@@ -165,7 +190,7 @@ export function KitchenItemsPageClient({
       if (variables.id) {
         setEditingMapping(null);
       } else {
-        form.reset(emptyMappingFormValues());
+        form.reset(newKitchenMapping());
         setIsCreating(false);
       }
     },
@@ -194,6 +219,15 @@ export function KitchenItemsPageClient({
   });
   const confirm = useConfirm();
 
+  const asKitchenChoices = (list: typeof kitchensQuery.data) =>
+    list?.map((kitchen) => ({
+      code: kitchen.kitchenCode,
+      id: kitchen.id,
+      name: kitchen.kitchenName,
+    })) ?? [];
+  const formKitchens = formHospitalId ? asKitchenChoices(formKitchensQuery.data) : [];
+  const formLocation = hospitalsQuery.data?.find((hospital) => hospital.id === formHospitalId);
+  const formLocationName = formLocation?.displayName || formLocation?.hospitalName;
   const kitchens =
     kitchensQuery.data?.map((kitchen) => ({
       code: kitchen.kitchenCode,
@@ -223,6 +257,7 @@ export function KitchenItemsPageClient({
           categoryId: parsed.data.categoryId,
           isActive: parsed.data.isActive,
           itemId: parsed.data.itemId,
+          itemType: values.itemType,
           kitchenId: parsed.data.parentId,
         },
         id,
@@ -248,10 +283,12 @@ export function KitchenItemsPageClient({
 
   function startEditingMapping(mapping: KitchenItem) {
     setEditingMapping(mapping);
+    setEditHospitalId(mapping.kitchen.hospital.id);
     editForm.reset({
       categoryId: mapping.categoryId ?? '',
       isActive: mapping.isActive,
       itemId: mapping.itemId,
+      itemType: mapping.item.itemType === 'LIVE' ? 'LIVE' : 'READYMADE',
       parentId: mapping.kitchenId,
     });
   }
@@ -313,15 +350,17 @@ export function KitchenItemsPageClient({
             Pick an item not mapped yet, or a Readymade item: mapping it here makes it Readymade and
             sets its category. An MRP item cannot be mapped to a kitchen.
           </p>
-          {kitchensQuery.data?.length === 0 ? (
+          {formHospitalId && formKitchensQuery.data?.length === 0 ? (
             <SetupNotice href="/masters/kitchens/new" linkLabel="Create a kitchen">
-              {locationName ? `${locationName} has no kitchen yet` : 'There is no kitchen yet'}, so
-              there is nothing to map items to.
+              {formLocationName
+                ? `${formLocationName} has no kitchen yet`
+                : 'There is no kitchen yet'}
+              , so there is nothing to map items to.
             </SetupNotice>
           ) : null}
           {itemsQuery.data?.length === 0 ? (
             <SetupNotice href="/masters/items/new" linkLabel="Create an item">
-              There are no active READYMADE items to map yet.
+              There are no active items to map yet.
             </SetupNotice>
           ) : null}
           <MappingFormFields
@@ -329,11 +368,17 @@ export function KitchenItemsPageClient({
             existingMappings={existingKitchenMappings}
             form={form}
             itemLabel="Item"
-            mapsAs="READYMADE"
-            typeLabel="Readymade"
+            mapsAs={kitchenTypes}
+            typeLabel={typeLabels[form.watch('itemType') ?? 'READYMADE']}
             items={itemsQuery.data}
+            location={{
+              hospitals: hospitalsQuery.data,
+              locked: Boolean(scopedHospitalId),
+              onChange: setFormHospitalId,
+              value: formHospitalId,
+            }}
             parentLabel="Kitchen"
-            parents={kitchens}
+            parents={formKitchens}
           />
         </form>
       </Modal>
@@ -369,11 +414,17 @@ export function KitchenItemsPageClient({
             existingMappings={existingKitchenMappings}
             form={editForm}
             itemLabel="Item"
-            mapsAs="READYMADE"
-            typeLabel="Readymade"
+            mapsAs={kitchenTypes}
+            typeLabel={typeLabels[editForm.watch('itemType') ?? 'READYMADE']}
             items={itemsQuery.data}
+            location={{
+              hospitals: hospitalsQuery.data,
+              locked: Boolean(scopedHospitalId),
+              onChange: setEditHospitalId,
+              value: editHospitalId,
+            }}
             parentLabel="Kitchen"
-            parents={kitchens}
+            parents={asKitchenChoices(editKitchensQuery.data)}
           />
         </form>
       </Modal>
@@ -450,9 +501,9 @@ export function KitchenItemsPageClient({
                 }}
                 value={itemFilter}
               >
-                <option value="">All readymade items</option>
+                <option value="">All kitchen items</option>
                 {itemsQuery.data
-                  ?.filter((item) => item.itemType === 'READYMADE')
+                  ?.filter((item) => item.itemType === 'READYMADE' || item.itemType === 'LIVE')
                   .map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.itemName}
@@ -480,118 +531,165 @@ export function KitchenItemsPageClient({
           />
           <RefreshButton onClick={() => void mappingsQuery.refetch()} />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          <ListViewSwitch label="Show kitchen items as" onChange={setView} value={view} />
         </ListToolbar>
-        <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'phone-cards min-w-[900px] table-fixed')}>
-            <thead className={tableStyles.head}>
-              <tr>
-                <th className={cn(tableStyles.th, 'w-[22%]')}>Item</th>
-                <th className={cn(tableStyles.th, 'w-[19%]')}>Kitchen</th>
-                <th className={cn(tableStyles.th, 'w-[17%]')}>Location</th>
-                <th className={cn(tableStyles.th, 'w-[13%]')}>Category</th>
-                <th className={cn(tableStyles.th, 'w-[11%]')}>Updated</th>
-                <th className={cn(tableStyles.th, 'w-[13%]')}>Status</th>
-                <th className={cn(tableStyles.th, 'w-[5%]')}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.length > 0 ? (
-                mappings.map((mapping) => (
-                  <tr
-                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                    data-record-id={mapping.id}
-                    key={mapping.id}
-                    onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
-                  >
-                    <td className={tableStyles.td} onClick={keepLinkClicks}>
-                      <span className="flex min-w-0 items-center gap-3">
-                        <RecordAvatar foodType={mapping.item.type} name={mapping.item.itemName} />
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <RecordLink
-                            className={cn('truncate', tableStyles.title)}
-                            href={recordHref('/masters/items', { id: mapping.item.id })}
-                          >
-                            {mapping.item.itemName}
-                          </RecordLink>
-                          <span className={cn('truncate', tableStyles.code)}>
-                            {mapping.item.itemCode}
+        {/* Cards; an empty or failed list keeps the table's message. */}
+        {view === 'cards' && (mappings.length > 0 || mappingsQuery.isLoading) ? (
+          <RecordCardGrid isLoading={mappingsQuery.isLoading}>
+            {mappings.map((mapping) => (
+              <RecordCard
+                edit={
+                  canEdit
+                    ? { label: `Edit ${mapping.item.itemName} in ${mapping.kitchen.kitchenName}` }
+                    : undefined
+                }
+                footer={
+                  <RowSwitch
+                    ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
+                    checked={mapping.isActive}
+                    disabled={toggleMappingStatusMutation.isPending}
+                    offLabel="Inactive"
+                    onChange={() => void toggleMappingStatus(mapping)}
+                    onLabel="Active"
+                  />
+                }
+                foodType={mapping.item.type}
+                id={mapping.id}
+                key={mapping.id}
+                meta={mapping.category?.categoryName}
+                name={mapping.item.itemName}
+                onOpen={canEdit ? () => startEditingMapping(mapping) : undefined}
+                subtitle={mapping.item.itemCode}
+              >
+                <p className="flex items-center gap-2 truncate text-[13px] text-ds-text-2">
+                  <KitchenTypeBadge type={mapping.item.itemType} />
+                  <span className="truncate">
+                    Kitchen: <span className="font-medium">{mapping.kitchen.kitchenName}</span>
+                  </span>
+                </p>
+                <p className="-mt-2 truncate text-xs text-ds-muted">
+                  {mapping.kitchen.hospital.hospitalName}
+                </p>
+              </RecordCard>
+            ))}
+          </RecordCardGrid>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className={cn(tableStyles.table, 'phone-cards min-w-[900px] table-fixed')}>
+              <thead className={tableStyles.head}>
+                <tr>
+                  <th className={cn(tableStyles.th, 'w-[21%]')}>Item</th>
+                  <th className={cn(tableStyles.th, 'w-[10%]')}>Type</th>
+                  <th className={cn(tableStyles.th, 'w-[16%]')}>Kitchen</th>
+                  <th className={cn(tableStyles.th, 'w-[14%]')}>Location</th>
+                  <th className={cn(tableStyles.th, 'w-[11%]')}>Category</th>
+                  <th className={cn(tableStyles.th, 'w-[11%]')}>Updated</th>
+                  <th className={cn(tableStyles.th, 'w-[12%]')}>Status</th>
+                  <th className={cn(tableStyles.th, 'w-[5%]')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {mappings.length > 0 ? (
+                  mappings.map((mapping) => (
+                    <tr
+                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      data-record-id={mapping.id}
+                      key={mapping.id}
+                      onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
+                    >
+                      <td className={tableStyles.td} onClick={keepLinkClicks}>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <RecordAvatar foodType={mapping.item.type} name={mapping.item.itemName} />
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <RecordLink
+                              className={cn('truncate', tableStyles.title)}
+                              href={recordHref('/masters/items', { id: mapping.item.id })}
+                            >
+                              {mapping.item.itemName}
+                            </RecordLink>
+                            <span className={cn('truncate', tableStyles.code)}>
+                              {mapping.item.itemCode}
+                            </span>
                           </span>
                         </span>
-                      </span>
-                    </td>
-                    <td className={tableStyles.td} onClick={keepLinkClicks}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <RecordLink
-                          className="truncate font-medium text-ds-text-2"
-                          href={locationHref(
-                            'KITCHEN',
-                            mapping.kitchen.kitchenCode || mapping.kitchen.kitchenName,
-                          )}
-                        >
-                          {mapping.kitchen.kitchenName}
-                        </RecordLink>
-                        <span className={cn('truncate', tableStyles.code)}>
-                          {mapping.kitchen.kitchenCode}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <KitchenTypeBadge type={mapping.item.itemType} />
+                      </td>
+                      <td className={tableStyles.td} onClick={keepLinkClicks}>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <RecordLink
+                            className="truncate font-medium text-ds-text-2"
+                            href={locationHref(
+                              'KITCHEN',
+                              mapping.kitchen.kitchenCode || mapping.kitchen.kitchenName,
+                            )}
+                          >
+                            {mapping.kitchen.kitchenName}
+                          </RecordLink>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {mapping.kitchen.kitchenCode}
+                          </span>
                         </span>
-                      </span>
-                    </td>
-                    <td className={tableStyles.td}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate text-ds-text-2">
-                          {mapping.kitchen.hospital.hospitalName}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-ds-text-2">
+                            {mapping.kitchen.hospital.hospitalName}
+                          </span>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {mapping.kitchen.hospital.hospitalCode}
+                          </span>
                         </span>
-                        <span className={cn('truncate', tableStyles.code)}>
-                          {mapping.kitchen.hospital.hospitalCode}
+                      </td>
+                      <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
+                        {mapping.category?.categoryName ?? '—'}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <DateTimeCell value={mapping.updatedAt} />
+                      </td>
+                      {/* Its own click: switching the status does not open the mapping. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <RowSwitch
+                          ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
+                          checked={mapping.isActive}
+                          disabled={toggleMappingStatusMutation.isPending}
+                          offLabel="Inactive"
+                          onChange={() => void toggleMappingStatus(mapping)}
+                          onLabel="Active"
+                        />
+                      </td>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end">
+                          {canEdit ? (
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${mapping.item.itemName} in ${mapping.kitchen.kitchenName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEditingMapping(mapping);
+                              }}
+                            />
+                          ) : null}
                         </span>
-                      </span>
-                    </td>
-                    <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
-                      {mapping.category?.categoryName ?? '—'}
-                    </td>
-                    <td className={tableStyles.td}>
-                      <DateTimeCell value={mapping.updatedAt} />
-                    </td>
-                    {/* Its own click: switching the status does not open the mapping. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                      <RowSwitch
-                        ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
-                        checked={mapping.isActive}
-                        disabled={toggleMappingStatusMutation.isPending}
-                        offLabel="Inactive"
-                        onChange={() => void toggleMappingStatus(mapping)}
-                        onLabel="Active"
-                      />
-                    </td>
-                    <td className={cn(tableStyles.td, 'pr-3')}>
-                      <span className="flex justify-end">
-                        {canEdit ? (
-                          <RowAction
-                            icon={Pencil}
-                            label={`Edit ${mapping.item.itemName} in ${mapping.kitchen.kitchenName}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              startEditingMapping(mapping);
-                            }}
-                          />
-                        ) : null}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <QueryState
-                  colSpan={7}
-                  error={mappingsQuery.error}
-                  isError={mappingsQuery.isError}
-                  isLoading={mappingsQuery.isLoading}
-                  label="kitchen item mappings"
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <QueryState
+                    colSpan={7}
+                    error={mappingsQuery.error}
+                    isError={mappingsQuery.isError}
+                    isLoading={mappingsQuery.isLoading}
+                    label="kitchen item mappings"
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         <PaginationControls
           limit={meta.limit}
           onPageChange={setPage}

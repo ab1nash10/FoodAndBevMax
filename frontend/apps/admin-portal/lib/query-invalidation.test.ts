@@ -54,7 +54,6 @@ test('each write invalidates the same query keys', () => {
       ['transfer-kitchen-stock'],
       ['dashboard'],
     ],
-    invalidateTimeSlotQueries: [['time-slots']],
     invalidateTransferQueries: [
       ['transfers'],
       ['transfer-acknowledgements'],

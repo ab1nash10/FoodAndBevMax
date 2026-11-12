@@ -29,13 +29,13 @@ export class QrOrdersController {
   @Get(':restaurantId/menu')
   @Public()
   @Throttle(sharedAddressLimit)
-  @ApiOperation({ summary: 'What a guest can have delivered to their room now' })
+  @ApiOperation({ summary: 'What a guest can order now, for their room or for pickup' })
   @ApiOkResponse({ description: 'Menu returned.' })
   async menu(
     @Param('restaurantId', ParseUUIDPipe) restaurantId: string,
     @Query() query: QrMenuQueryDto,
   ) {
-    return ok(await this.qr.menu(restaurantId, query.token));
+    return ok(await this.qr.menu(restaurantId, query.token, query.channel));
   }
 
   @Post(':restaurantId/staff-otp')
@@ -78,6 +78,17 @@ export class QrOrdersController {
     @Body() body: CreateQrOrderDto,
   ) {
     return ok(await this.qr.createOrder(restaurantId, token, body));
+  }
+
+  @Post('orders/:id/cancel')
+  @Public()
+  @Throttle(sharedAddressLimit)
+  @ApiOperation({
+    summary: 'The guest gives up on paying: cancel the payment (billed if paid meanwhile)',
+  })
+  @ApiOkResponse({ description: 'Order returned.' })
+  async cancel(@Param('id', ParseUUIDPipe) id: string, @Query() query: QrOrderStatusQueryDto) {
+    return ok(await this.qr.cancel(id, query.key));
   }
 
   @Get('orders/:id')

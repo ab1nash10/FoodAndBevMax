@@ -34,6 +34,7 @@ import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import { FilterSearch, Modal } from '@/components/ui-controls';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RestaurantMenuFormFields } from '@/components/mapping-foundation/restaurant-menus/restaurant-menu-form-fields';
@@ -95,7 +96,6 @@ const restaurantMenuSchema = z
     isDiscountable: z.boolean(),
     isFeatured: z.boolean(),
     isGstInclusive: z.boolean(),
-    subCode: z.string().trim().max(50, 'Keep it under 50 characters.'),
     // This menu item's own category; the item's other menus and mappings keep theirs.
     categoryId: z.string().uuid('Select a category.'),
     itemId: z.string().uuid('Select a food item.'),
@@ -217,7 +217,6 @@ function emptyRestaurantMenuFormValues(): RestaurantMenuFormValues {
     roomPrice: '',
     serveAt: 'BOTH',
     serves: '1',
-    subCode: '',
   };
 }
 
@@ -237,7 +236,6 @@ function restaurantMenuToFormValues(menu: RestaurantMenu): RestaurantMenuFormVal
     isDiscountable: menu.isDiscountable,
     isFeatured: menu.isFeatured,
     isGstInclusive: menu.isGstInclusive,
-    subCode: text(menu.subCode),
     itemId: menu.itemId,
     kitchenId: text(menu.kitchenId),
     storeId: text(menu.storeId),
@@ -280,6 +278,7 @@ export function RestaurantMenusPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
+  const [view, setView] = useListView('list');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
     'active',
     'inactive',
@@ -452,7 +451,6 @@ export function RestaurantMenusPageClient() {
       isDiscountable: data.isDiscountable,
       isFeatured: data.isFeatured,
       isGstInclusive: data.isGstInclusive,
-      subCode: data.subCode || null,
       itemId: data.itemId,
       kitchenId: data.kitchenId || null,
       storeId: data.storeId || null,
@@ -718,166 +716,229 @@ export function RestaurantMenusPageClient() {
             </FilterField>
           </FiltersMenu>
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          <ListViewSwitch label="Show menu items as" onChange={setView} value={view} />
         </ListToolbar>
 
-        <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'phone-cards min-w-[960px] table-fixed')}>
-            <thead className={tableStyles.head}>
-              <tr>
-                <th className={cn(tableStyles.th, 'w-[20%]')}>Item</th>
-                <th className={cn(tableStyles.th, 'w-[16%]')}>Restaurant</th>
-                <th className={cn(tableStyles.th, 'w-[12%]')}>Store / Kitchen</th>
-                <th className={cn(tableStyles.th, 'w-[12%]')}>Serving time</th>
-                <th className={cn(tableStyles.th, 'w-[12%]')}>Price</th>
-                <th
-                  className={cn(tableStyles.th, 'w-[12%]')}
-                  title="Can it be ordered right now? Switch off when it is sold out for the day."
-                >
-                  <span className="cursor-help border-b border-dotted border-ds-muted">
-                    Available now
-                  </span>
-                </th>
-                <th
-                  className={cn(tableStyles.th, 'w-[11%]')}
-                  title="Is it on this restaurant's menu at all? Inactive items are hidden from the menu and POS."
-                >
-                  <span className="cursor-help border-b border-dotted border-ds-muted">Status</span>
-                </th>
-                <th className={cn(tableStyles.th, 'w-[5%]')}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {menus.length > 0 ? (
-                menus.map((menu) => {
-                  const prices = priceLines(menu);
+        {/* Cards; an empty or failed list keeps the table's message. */}
+        {view === 'cards' && (menus.length > 0 || menusQuery.isLoading) ? (
+          <RecordCardGrid isLoading={menusQuery.isLoading}>
+            {menus.map((menu) => (
+              <RecordCard
+                edit={canEdit ? { label: `Edit ${menu.item.itemName}` } : undefined}
+                footer={
+                  <>
+                    <RowSwitch
+                      ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} available`}
+                      checked={menu.isAvailable}
+                      disabled={toggleAvailabilityMutation.isPending || !canEdit}
+                      offLabel="Unavailable"
+                      onChange={() => void toggleAvailability(menu)}
+                      onLabel="Available"
+                    />
+                    <RowSwitch
+                      ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
+                      checked={menu.isActive}
+                      disabled={toggleMenuStatusMutation.isPending || !canEdit}
+                      offLabel="Inactive"
+                      onChange={() => void toggleMenuStatus(menu)}
+                      onLabel="Active"
+                    />
+                  </>
+                }
+                foodType={menu.item.type}
+                id={menu.id}
+                key={menu.id}
+                name={menu.item.itemName}
+                onOpen={canEdit ? () => openForm(menu) : undefined}
+                subtitle={`${menu.category ? `${menu.category.categoryName} · ` : ''}${menu.menuItemCode}`}
+              >
+                <div className="-mt-1 grid gap-0.5 text-[13px]">
+                  <p className="truncate font-medium text-ds-text-2">
+                    {menu.restaurant.restaurantName}
+                  </p>
+                  <p className="truncate text-xs text-ds-muted">
+                    {windowText(menu)} · {daysText(menu)}
+                  </p>
+                  {priceLines(menu).map((line) => (
+                    <p className="flex items-baseline justify-between gap-2" key={line.label}>
+                      <span className="text-xs text-ds-muted">{line.label}</span>
+                      {line.value === null ? (
+                        <span className="text-xs font-semibold text-ds-status-pending-fg">
+                          Price not set
+                        </span>
+                      ) : (
+                        <span className={cn('font-medium text-ds-text', tableStyles.num)}>
+                          {rupees.format(line.value)}
+                        </span>
+                      )}
+                    </p>
+                  ))}
+                </div>
+              </RecordCard>
+            ))}
+          </RecordCardGrid>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className={cn(tableStyles.table, 'phone-cards min-w-[960px] table-fixed')}>
+              <thead className={tableStyles.head}>
+                <tr>
+                  <th className={cn(tableStyles.th, 'w-[20%]')}>Item</th>
+                  <th className={cn(tableStyles.th, 'w-[16%]')}>Restaurant</th>
+                  <th className={cn(tableStyles.th, 'w-[12%]')}>Store / Kitchen</th>
+                  <th className={cn(tableStyles.th, 'w-[12%]')}>Serving time</th>
+                  <th className={cn(tableStyles.th, 'w-[12%]')}>Price</th>
+                  <th
+                    className={cn(tableStyles.th, 'w-[12%]')}
+                    title="Can it be ordered right now? Switch off when it is sold out for the day."
+                  >
+                    <span className="cursor-help border-b border-dotted border-ds-muted">
+                      Available now
+                    </span>
+                  </th>
+                  <th
+                    className={cn(tableStyles.th, 'w-[11%]')}
+                    title="Is it on this restaurant's menu at all? Inactive items are hidden from the menu and POS."
+                  >
+                    <span className="cursor-help border-b border-dotted border-ds-muted">
+                      Status
+                    </span>
+                  </th>
+                  <th className={cn(tableStyles.th, 'w-[5%]')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {menus.length > 0 ? (
+                  menus.map((menu) => {
+                    const prices = priceLines(menu);
 
-                  return (
-                    <tr
-                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                      data-record-id={menu.id}
-                      key={menu.id}
-                      onClick={canEdit ? () => openForm(menu) : undefined}
-                    >
-                      <td className={tableStyles.td}>
-                        <span className="flex min-w-0 items-center gap-3">
-                          <RecordAvatar foodType={menu.item.type} name={menu.item.itemName} />
-                          <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className={cn('truncate', tableStyles.title)}>
-                              {menu.item.itemName}
-                            </span>
-                            <span className="truncate text-[12px] text-ds-muted">
-                              {menu.category ? `${menu.category.categoryName} · ` : ''}
-                              <span className={tableStyles.code}>{menu.menuItemCode}</span>
+                    return (
+                      <tr
+                        className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                        data-record-id={menu.id}
+                        key={menu.id}
+                        onClick={canEdit ? () => openForm(menu) : undefined}
+                      >
+                        <td className={tableStyles.td}>
+                          <span className="flex min-w-0 items-center gap-3">
+                            <RecordAvatar foodType={menu.item.type} name={menu.item.itemName} />
+                            <span className="flex min-w-0 flex-col gap-0.5">
+                              <span className={cn('truncate', tableStyles.title)}>
+                                {menu.item.itemName}
+                              </span>
+                              <span className="truncate text-[12px] text-ds-muted">
+                                {menu.category ? `${menu.category.categoryName} · ` : ''}
+                                <span className={tableStyles.code}>{menu.menuItemCode}</span>
+                              </span>
                             </span>
                           </span>
-                        </span>
-                      </td>
-                      <td className={tableStyles.td}>
-                        <span className="block truncate font-medium text-ds-text-2">
-                          {menu.restaurant.restaurantName}
-                        </span>
-                        <span className="block truncate text-[12px] text-ds-muted">
-                          {menu.restaurant.hospital.hospitalName}
-                        </span>
-                      </td>
-                      <td className={tableStyles.td}>
-                        {menu.kitchen || menu.store ? (
-                          <>
-                            <span className="block truncate text-ds-text-2">
-                              {menu.kitchen?.kitchenName ?? menu.store?.storeName}
-                            </span>
-                            <span className="block text-[12px] text-ds-muted">
-                              {menu.kitchen ? 'Kitchen' : 'Store'}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-ds-muted">Not set</span>
-                        )}
-                      </td>
-                      <td className={tableStyles.td}>
-                        <span
-                          className={cn(
-                            'block truncate text-[13px] text-ds-text-2',
-                            tableStyles.num,
+                        </td>
+                        <td className={tableStyles.td}>
+                          <span className="block truncate font-medium text-ds-text-2">
+                            {menu.restaurant.restaurantName}
+                          </span>
+                          <span className="block truncate text-[12px] text-ds-muted">
+                            {menu.restaurant.hospital.hospitalName}
+                          </span>
+                        </td>
+                        <td className={tableStyles.td}>
+                          {menu.kitchen || menu.store ? (
+                            <>
+                              <span className="block truncate text-ds-text-2">
+                                {menu.kitchen?.kitchenName ?? menu.store?.storeName}
+                              </span>
+                              <span className="block text-[12px] text-ds-muted">
+                                {menu.kitchen ? 'Kitchen' : 'Store'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-ds-muted">Not set</span>
                           )}
-                        >
-                          {windowText(menu)}
-                        </span>
-                        <span className="block truncate text-[12px] text-ds-muted">
-                          {daysText(menu)}
-                        </span>
-                      </td>
-                      <td className={tableStyles.td} title={serveAtLabels[menu.serveAt]}>
-                        {prices.map((line) => (
+                        </td>
+                        <td className={tableStyles.td}>
                           <span
-                            className="flex items-baseline justify-between gap-2"
-                            key={line.label}
-                          >
-                            <span className="text-[12px] text-ds-muted">{line.label}</span>
-                            {line.value === null ? (
-                              <span className="text-[12px] font-semibold text-ds-status-pending-fg">
-                                Price not set
-                              </span>
-                            ) : (
-                              <span className={cn('font-medium text-ds-text', tableStyles.num)}>
-                                {rupees.format(line.value)}
-                              </span>
+                            className={cn(
+                              'block truncate text-[13px] text-ds-text-2',
+                              tableStyles.num,
                             )}
+                          >
+                            {windowText(menu)}
                           </span>
-                        ))}
-                      </td>
-                      {/* The switches have their own clicks: they do not open the menu item. */}
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                        <RowSwitch
-                          ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} available`}
-                          checked={menu.isAvailable}
-                          disabled={toggleAvailabilityMutation.isPending || !canEdit}
-                          offLabel="Unavailable"
-                          onChange={() => void toggleAvailability(menu)}
-                          onLabel="Available"
-                        />
-                      </td>
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                        <RowSwitch
-                          ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
-                          checked={menu.isActive}
-                          disabled={toggleMenuStatusMutation.isPending || !canEdit}
-                          offLabel="Inactive"
-                          onChange={() => void toggleMenuStatus(menu)}
-                          onLabel="Active"
-                        />
-                      </td>
-                      <td className={cn(tableStyles.td, 'pr-3')}>
-                        <span className="flex justify-end">
-                          {canEdit ? (
-                            <RowAction
-                              icon={Pencil}
-                              label={`Edit ${menu.item.itemName}`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openForm(menu);
-                              }}
-                            />
-                          ) : null}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <QueryState
-                  colSpan={8}
-                  error={menusQuery.error}
-                  isError={menusQuery.isError}
-                  isLoading={menusQuery.isLoading}
-                  label="menu items"
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+                          <span className="block truncate text-[12px] text-ds-muted">
+                            {daysText(menu)}
+                          </span>
+                        </td>
+                        <td className={tableStyles.td} title={serveAtLabels[menu.serveAt]}>
+                          {prices.map((line) => (
+                            <span
+                              className="flex items-baseline justify-between gap-2"
+                              key={line.label}
+                            >
+                              <span className="text-[12px] text-ds-muted">{line.label}</span>
+                              {line.value === null ? (
+                                <span className="text-[12px] font-semibold text-ds-status-pending-fg">
+                                  Price not set
+                                </span>
+                              ) : (
+                                <span className={cn('font-medium text-ds-text', tableStyles.num)}>
+                                  {rupees.format(line.value)}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </td>
+                        {/* The switches have their own clicks: they do not open the menu item. */}
+                        <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                          <RowSwitch
+                            ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} available`}
+                            checked={menu.isAvailable}
+                            disabled={toggleAvailabilityMutation.isPending || !canEdit}
+                            offLabel="Unavailable"
+                            onChange={() => void toggleAvailability(menu)}
+                            onLabel="Available"
+                          />
+                        </td>
+                        <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                          <RowSwitch
+                            ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
+                            checked={menu.isActive}
+                            disabled={toggleMenuStatusMutation.isPending || !canEdit}
+                            offLabel="Inactive"
+                            onChange={() => void toggleMenuStatus(menu)}
+                            onLabel="Active"
+                          />
+                        </td>
+                        <td className={cn(tableStyles.td, 'pr-3')}>
+                          <span className="flex justify-end">
+                            {canEdit ? (
+                              <RowAction
+                                icon={Pencil}
+                                label={`Edit ${menu.item.itemName}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openForm(menu);
+                                }}
+                              />
+                            ) : null}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <QueryState
+                    colSpan={8}
+                    error={menusQuery.error}
+                    isError={menusQuery.isError}
+                    isLoading={menusQuery.isLoading}
+                    label="menu items"
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         <ListPager
           limit={meta.limit}
           noun="menu item"

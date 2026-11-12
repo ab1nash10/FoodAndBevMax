@@ -36,10 +36,6 @@ import type {
   PosBill,
   PosBillInput,
   KioskMenu,
-  KioskOrder,
-  KioskOrderInput,
-  KioskOrderToBill,
-  KioskOrderWaiting,
   PosBillListQuery,
   PosBillSummary,
   PosChannel,
@@ -60,9 +56,11 @@ import type {
   StaffDiscountSettings,
   RestaurantOrder,
   PaidNotBilled,
+  QrChannel,
   QrMenu,
   QrOrderInput,
   QrOrderView,
+  KioskPaidOrderInput,
   AmendableBill,
   OrderAmendment,
   OrderAmendmentInput,
@@ -372,8 +370,10 @@ export function createOrganizationApi(options: ApiClientOptions) {
       });
     },
     /** Public: the room-service menu behind the restaurant's QR, with its board secret. */
-    getQrMenu(restaurantId: string, token: string) {
-      return client.request<ApiResponse<QrMenu>>(`/qr/${restaurantId}/menu`, { query: { token } });
+    getQrMenu(restaurantId: string, token: string, channel: QrChannel = 'ROOM') {
+      return client.request<ApiResponse<QrMenu>>(`/qr/${restaurantId}/menu`, {
+        query: { channel, token },
+      });
     },
     /** Public: sends an OTP to the employee's registered mobile; where it went, masked. */
     sendQrStaffOtp(restaurantId: string, token: string, employeeCode: string) {
@@ -402,10 +402,25 @@ export function createOrganizationApi(options: ApiClientOptions) {
     getQrOrder(id: string, key: string) {
       return client.request<ApiResponse<QrOrderView>>(`/qr/orders/${id}`, { query: { key } });
     },
-    /** The counter QR orders are billed at; null turns QR ordering off. */
-    setRestaurantQrCounter(restaurantId: string, counterId: string | null) {
-      return client.request<ApiResponse<{ qrCounterId: string | null }>>(
-        `/restaurants/${restaurantId}/qr-counter`,
+    /** Public: a kiosk order paid at the kiosk, by UPI (a QR for the amount) or card. */
+    createKioskPaidOrder(restaurantId: string, token: string, body: KioskPaidOrderInput) {
+      return client.request<ApiResponse<QrOrderView>>(`/kiosk/${restaurantId}/paid-orders`, {
+        body,
+        method: 'POST',
+        query: { token },
+      });
+    },
+    /** Public: the guest gives up on paying; billed instead if they paid meanwhile. */
+    cancelGuestOrder(id: string, key: string) {
+      return client.request<ApiResponse<QrOrderView>>(`/qr/orders/${id}/cancel`, {
+        method: 'POST',
+        query: { key },
+      });
+    },
+    /** The counter kiosk orders are billed at; null stops the kiosk taking orders. */
+    setRestaurantKioskCounter(restaurantId: string, counterId: string | null) {
+      return client.request<ApiResponse<{ kioskCounterId: string | null }>>(
+        `/restaurants/${restaurantId}/kiosk-counter`,
         { body: { counterId }, method: 'PUT' },
       );
     },
@@ -415,33 +430,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
         '/order-reports/paid-not-billed',
         { query: { hospitalId } },
       );
-    },
-    /** Public: a staff member's discount at the kiosk, by their registered mobile. */
-    getKioskStaffDiscount(restaurantId: string, token: string, mobile: string) {
-      return client.request<ApiResponse<{ discountPercent: number }>>(
-        `/kiosk/${restaurantId}/staff`,
-        { query: { mobile, token } },
-      );
-    },
-    /** Public: places a kiosk order, paid at a counter. */
-    createKioskOrder(restaurantId: string, token: string, body: KioskOrderInput) {
-      return client.request<ApiResponse<KioskOrder>>(`/kiosk/${restaurantId}/orders`, {
-        body,
-        method: 'POST',
-        query: { token },
-      });
-    },
-    /** Kiosk orders waiting to be paid at this counter's restaurant, oldest first. */
-    listWaitingKioskOrders(counterId: string) {
-      return client.request<ApiResponse<KioskOrderWaiting[]>>('/pos/kiosk-orders', {
-        query: { counterId },
-      });
-    },
-    /** Today's kiosk order by its number, to load into this counter's till. */
-    getKioskOrderToBill(counterId: string, number: number) {
-      return client.request<ApiResponse<KioskOrderToBill>>(`/pos/kiosk-orders/${number}`, {
-        query: { counterId },
-      });
     },
     /** The restaurant's TV board secret, made on first use; regenerate turns the old link off. */
     getRestaurantBoardLink(restaurantId: string, regenerate = false) {
@@ -498,6 +486,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
     enrollTill(posDeviceId: string, computerName: string) {
       return client.request<ApiResponse<{ tillKey: string }>>('/pos/till', {
         body: { computerName, posDeviceId },
+        method: 'POST',
+      });
+    },
+    /** Revokes the current browser key for a POS device. */
+    revokeTill(posDeviceId: string) {
+      return client.request<ApiResponse<{ revoked: boolean }>>(`/pos/till/${posDeviceId}/revoke`, {
         method: 'POST',
       });
     },

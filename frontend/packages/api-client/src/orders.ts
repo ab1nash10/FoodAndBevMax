@@ -65,8 +65,6 @@ export type PaymentMode = 'CARD' | 'CASH' | 'OTHER' | 'UPI';
 export interface PosCounter {
   counterCode: string;
   counterName: string;
-  /** Its restaurant's kiosk took orders in the last 30 days: worth looking for waiting ones. */
-  kioskInUse?: boolean;
   hospital: {
     billPrefix: string | null;
     gstApplicable: boolean;
@@ -198,8 +196,6 @@ export interface PosBillInput {
   paymentReference?: string;
   /** Required for ROOM. */
   roomNumber?: string;
-  /** The kiosk order this bill is for; it can be billed once. */
-  kioskOrderId?: string;
   /** A paid online payment (UPI, or a card on Pine Labs) for exactly this bill; it pays one bill. */
   onlinePaymentId?: string;
 }
@@ -446,13 +442,24 @@ export interface StaffDiscountInput {
 
 /** What the self-service kiosk sells right now, at the counter price. */
 export interface KioskMenu {
-  /** False while the restaurant has no active counter to pay at: the kiosk takes no orders. */
-  canPay: boolean;
   items: KioskMenuItem[];
   locationName: string;
+  /** Paid at the kiosk: true while its kiosk counter has a shift open and a way to pay. */
+  open: boolean;
+  /** How the guest can pay at the kiosk: UPI (a QR for the amount) and/or the counter's card machine. */
+  payWith: Array<'CARD' | 'UPI'>;
   restaurantName: string;
-  /** Whether staff get a discount here (they give their registered mobile). */
+  /** Whether staff get a discount here. */
   staffDiscount: boolean;
+}
+
+export interface KioskPaidOrderInput {
+  /** The kiosk's own id for the order, made once: a retry returns the same order. */
+  clientOrderId: string;
+  lines: Array<{ menuId: string; quantity: number }>;
+  method: 'CARD' | 'UPI';
+  /** From a confirmed staff-discount OTP (the same as QR ordering's). */
+  staffToken?: string;
 }
 
 export interface KioskMenuItem {
@@ -467,51 +474,6 @@ export interface KioskMenuItem {
   itemName: string;
   preparationTimeMinutes: number | null;
   price: number;
-}
-
-export interface KioskOrderInput {
-  /** The kiosk's own id for the order, made once: a retry returns the same order. */
-  clientOrderId: string;
-  lines: Array<{ menuId: string; quantity: number }>;
-  /** A staff member's registered mobile, for their discount. */
-  mobile?: string;
-}
-
-/** A placed kiosk order: the number the guest reads out at the counter, priced by the server. */
-export interface KioskOrder {
-  discountPercent: number;
-  discountTotal: number;
-  grandTotal: number;
-  gstTotal: number;
-  id: string;
-  lines: Array<{
-    itemName: string;
-    lineTotal: number;
-    menuId: string;
-    quantity: number;
-    unitPrice: number;
-  }>;
-  number: number;
-  roundOff: number;
-  subtotal: number;
-}
-
-/** A kiosk order as the cashier loads it into the till. */
-export interface KioskOrderToBill {
-  employeeCode: string | null;
-  id: string;
-  lines: Array<{ menuId: string; quantity: number }>;
-  number: number;
-}
-
-/** A kiosk order waiting to be paid at the counter, for the till's list. */
-export interface KioskOrderWaiting {
-  createdAt: string;
-  id: string;
-  /** A staff member gave their mobile: check their staff ID card. */
-  isStaff: boolean;
-  items: Array<{ name: string; quantity: number }>;
-  number: number;
 }
 
 /** A bill's row in Orders & Reports: the bill, each step's time and the yes/no columns. */
@@ -624,20 +586,28 @@ export interface QrMenu {
   locationName: string;
   /** False while the restaurant's QR counter has no shift open: no orders are taken. */
   open: boolean;
+  /** The counter pickup orders are collected from (the QR counter), while it is open. */
+  pickupCounter: string | null;
   restaurantName: string;
   /** Whether staff get a discount here (Employee ID + OTP). */
   staffDiscount: boolean;
 }
 
+/** ROOM: delivered to a patient's room. COUNTER: staff and visitors pick it up at the counter. */
+export type QrChannel = 'COUNTER' | 'ROOM';
+
 export interface QrOrderInput {
   bedNumber?: string;
+  /** ROOM when left out. */
+  channel?: QrChannel;
   /** The phone's own id for the order, made once: a retry returns the same order. */
   clientOrderId: string;
   instructions?: string;
   lines: Array<{ menuId: string; quantity: number }>;
   /** The page the payment provider sends the guest back to. */
   returnUrl?: string;
-  roomNumber: string;
+  /** Needed for ROOM. */
+  roomNumber?: string;
   /** From a confirmed staff-discount OTP. */
   staffToken?: string;
 }

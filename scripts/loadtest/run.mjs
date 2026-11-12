@@ -44,9 +44,12 @@ const LOCATION = 'Max-Smart';
 // up moves the till: a browser set up as it before must be set up again afterwards.
 const TILL_DEVICE = process.env.LOADTEST_TILL_DEVICE ?? 'Smart Main Res';
 let tillKey = '';
-const AUTH = target?.base ?? 'http://localhost:4001/api/v1';
-const USER = target?.base ?? 'http://localhost:4002/api/v1';
-const ORG = target?.base ?? process.env.ORG_URL ?? 'http://localhost:4003/api/v1';
+// LOADTEST_BASE: one local API base for all three (the SERVICE=all image's router), so a run can
+// target a production image in Docker instead of the pnpm dev services.
+const BASE = target?.base ?? process.env.LOADTEST_BASE;
+const AUTH = BASE ?? 'http://localhost:4001/api/v1';
+const USER = BASE ?? 'http://localhost:4002/api/v1';
+const ORG = BASE ?? process.env.ORG_URL ?? 'http://localhost:4003/api/v1';
 
 // ---- Who does what. Each screen is the list of GETs the portal fires when it opens (captured from
 // the browser on 2026-10-27); {h} hospital, {c} counter, {r} restaurant, {k} kitchen, {d} today.
@@ -145,7 +148,6 @@ const screens = {
     'ORG/pos/whoami',
     'ORG/pos/counters?till=true',
     'ORG/pos/menu?channel=COUNTER&counterId={c}',
-    'ORG/pos/kiosk-orders?counterId={c}',
     'ORG/restaurant-orders?restaurantId={r}',
   ],
   posMenu: [
@@ -243,13 +245,10 @@ const staleFor = (url) => {
 const roles = {
   cashier: {
     first: 'posBilling',
-    // The billing screen: waiting kiosk orders (now only where the kiosk is in use, which the
-    // test restaurant is not) and its open-orders panel (5 s before, 15 s now).
+    // The billing screen's open-orders panel (5 s before, 15 s now). Kiosk orders are paid at the
+    // kiosk, so the till no longer polls for waiting ones.
     polls: OLD
-      ? [
-          ['ORG/pos/kiosk-orders?counterId={c}', 10],
-          ['ORG/restaurant-orders?restaurantId={r}', 5],
-        ]
+      ? [['ORG/restaurant-orders?restaurantId={r}', 5]]
       : [['ORG/restaurant-orders?restaurantId={r}', 15]],
     screens: { posBilling: 5, posDay: 1, posHistory: 1, posMenu: 1, posOrders: 3, posStock: 1 },
   },

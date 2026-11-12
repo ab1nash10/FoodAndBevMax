@@ -42,6 +42,7 @@ function toPosDeviceResponse(posDevice: PosDeviceWithRelations) {
     isKotPrintEnabled: posDevice.isKotPrintEnabled,
     name: posDevice.name,
     restaurantIds: posDevice.restaurants.map((mapping) => mapping.restaurantId),
+    hasActiveTillKey: Boolean(posDevice.tillKeyHash),
     restaurants: posDevice.restaurants.map((mapping) => ({
       id: mapping.restaurant.id,
       isActive: mapping.restaurant.isActive,

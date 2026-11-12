@@ -19,6 +19,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   CounterShiftStatus,
+  GuestOrderSource,
   OnlinePaymentStatus,
   OrderChannel,
   PaymentMode,
@@ -28,8 +29,10 @@ import {
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { optionalText, toNumber } from '../common/values';
-import type { CreateQrOrderDto } from './dto/qr.dto';
+import type { CreateKioskPaidOrderDto, CreateQrOrderDto, QrChannel } from './dto/qr.dto';
 import { providersAt } from './online-payment-providers';
+
+type PaymentProviderName = 'PAYU' | 'PINELABS' | 'RAZORPAY';
 import { OnlinePaymentsService } from './online-payments.service';
 import { siteBusinessDate } from './pos-pricing';
 import { PosService } from './pos.service';
@@ -42,7 +45,8 @@ const MAX_WRONG_TRIES = 5;
 /** How long a confirmed staff discount stays good at checkout. */
 const STAFF_TOKEN_MS = 30 * 60_000;
 
-const notTaking = 'Room service is closed right now. Please try again later.';
+const notTaking = 'Ordering is closed right now. Please try again later.';
+const kioskNotTaking = 'This kiosk is not taking orders right now. Please order at the counter.';
 const noStaff = 'No employee with this ID gets a staff discount here.';
 const notBilled =
   'Your payment was received, but the order could not be placed. Please show this screen at the counter for a refund.';
@@ -64,7 +68,8 @@ function returnAddress(base: string | undefined, id: string, key: string): strin
 }
 
 /**
- * Ordering from the restaurant's QR on a guest's own phone: the live menu (counter or room),
+ * Ordering from the restaurant's QR on a guest's own phone: delivered to a patient's room, or
+ * picked up at the QR counter by staff and visitors. The live menu for either,
  * a staff discount confirmed by an OTP on the employee's registered mobile, and payment by UPI
  * through the location's gateway. Only a paid order is billed, at the restaurant's QR counter
  * and into its open shift, as a counter bill would be (prices, stock, GST, kitchen, board).
@@ -96,11 +101,18 @@ export class QrOrdersService {
     const restaurant = token
       ? await this.prisma.restaurant.findFirst({
           select: {
+            // QR orders are billed at the restaurant's first counter: nothing to set up.
+            counters: {
+              orderBy: { createdAt: 'asc' },
+              select: { id: true },
+              take: 1,
+              where: { deletedAt: null, isActive: true },
+            },
             hospital: { select: { hospitalName: true } },
             hospitalId: true,
             id: true,
             location: { select: { locationName: true } },
-            qrCounterId: true,
+            kioskCounterId: true,
             restaurantName: true,
             staffDiscountApplicable: true,
           },
@@ -116,39 +128,41 @@ export class QrOrdersService {
 
     if (!restaurant) throw new NotFoundException('This QR code is no longer valid.');
 
-    return restaurant;
+    const { counters, ...rest } = restaurant;
+
+    return { ...rest, qrCounterId: counters[0]?.id ?? null };
   }
 
-  /** The QR counter, when it is active and has a shift open now; null: no QR orders. */
-  private async openCounter(restaurant: { id: string; qrCounterId: string | null }) {
-    if (!restaurant.qrCounterId) return null;
+  /** The QR (or kiosk) counter, when it is active and has a shift open now; null: no orders. */
+  private async openCounter(restaurant: { id: string }, counterId: string | null) {
+    if (!counterId) return null;
 
-    const counter = await this.prisma.counter.findFirst({
-      select: { id: true },
+    return this.prisma.counter.findFirst({
+      select: { counterName: true, id: true },
       where: {
         deletedAt: null,
-        id: restaurant.qrCounterId,
+        id: counterId,
         isActive: true,
         restaurantId: restaurant.id,
         shifts: { some: { status: CounterShiftStatus.OPEN } },
       },
     });
-
-    return counter?.id ?? null;
   }
 
-  /** What can be delivered to a room now, at the room price. */
-  async menu(restaurantId: string, token: string | undefined) {
+  /** What can be ordered now: for a room at the room price, or for pickup at the counter's. */
+  async menu(restaurantId: string, token: string | undefined, channel: QrChannel = 'ROOM') {
     const restaurant = await this.restaurant(restaurantId, token);
-    const counterId = await this.openCounter(restaurant);
+    const counter = await this.openCounter(restaurant, restaurant.qrCounterId);
     const menu = restaurant.qrCounterId
-      ? await this.pos.menu({ channel: OrderChannel.ROOM, counterId: restaurant.qrCounterId })
+      ? await this.pos.menu({ channel, counterId: restaurant.qrCounterId })
       : null;
 
     return {
       locationName: restaurant.location?.locationName ?? restaurant.hospital.hospitalName,
       /** False while the QR counter has no shift open: the page then takes no orders. */
-      open: counterId !== null,
+      open: counter !== null,
+      /** Where pickup orders are collected: the QR counter. */
+      pickupCounter: counter?.counterName ?? null,
       restaurantName: restaurant.restaurantName,
       staffDiscount: restaurant.staffDiscountApplicable,
       items: (menu?.items ?? [])
@@ -335,22 +349,19 @@ export class QrOrdersService {
 
     if (existing) return this.view(existing.id);
 
-    const counterId = await this.openCounter(restaurant);
+    const channel = dto.channel ?? OrderChannel.ROOM;
+    const roomNumber = channel === OrderChannel.ROOM ? optionalText(dto.roomNumber) : undefined;
 
-    if (!counterId) throw new ConflictException(notTaking);
+    if (channel === OrderChannel.ROOM && !roomNumber) {
+      throw new BadRequestException('Enter your room number.');
+    }
 
-    const employeeCode = await this.staffFor(restaurant.id, dto.staffToken);
-    const lines = dto.lines.map(({ menuId, quantity }) => ({ menuId, quantity }));
-    const counter = await this.pos.findCounter(counterId);
-    // Prices it as the bill will be, and refuses what is not sold for rooms now.
-    const totals = await this.pos.quoteBill(counter, {
-      channel: OrderChannel.ROOM,
-      employeeCode,
-      lines,
-    });
-    const provider = [
-      ...(await providersAt(this.prisma, this.config, counter.hospitalId)).keys(),
-    ].find((name) => name !== 'PINELABS');
+    const open = await this.openCounter(restaurant, restaurant.qrCounterId);
+
+    if (!open) throw new ConflictException(notTaking);
+
+    const counter = await this.pos.findCounter(open.id);
+    const provider = await this.upiProvider(counter.hospitalId);
 
     if (!provider) {
       throw new ConflictException(
@@ -358,37 +369,154 @@ export class QrOrdersService {
       );
     }
 
+    return this.place({
+      bedNumber: roomNumber ? (optionalText(dto.bedNumber) ?? null) : null,
+      channel,
+      clientOrderId,
+      counter,
+      instructions: optionalText(dto.instructions) ?? null,
+      lines: dto.lines,
+      provider,
+      restaurantId: restaurant.id,
+      returnUrl: dto.returnUrl,
+      roomNumber: roomNumber ?? null,
+      source: GuestOrderSource.QR,
+      staffToken: dto.staffToken,
+    });
+  }
+
+  /** The location's UPI gateway (Razorpay or PayU), if it has one set up. */
+  private async upiProvider(hospitalId: string) {
+    return [...(await providersAt(this.prisma, this.config, hospitalId)).keys()].find(
+      (name) => name !== 'PINELABS',
+    );
+  }
+
+  /** Whether the kiosk takes orders now, and how it can be paid: UPI, the counter's card machine. */
+  async kioskPayment(restaurant: {
+    hospitalId: string;
+    id: string;
+    kioskCounterId: string | null;
+  }) {
+    const counterId = (await this.openCounter(restaurant, restaurant.kioskCounterId))?.id;
+
+    if (!counterId) return { open: false, payWith: [] as Array<'CARD' | 'UPI'> };
+
+    const [upi, card] = await Promise.all([
+      this.upiProvider(restaurant.hospitalId),
+      this.onlinePayments.cardMachine(counterId),
+    ]);
+    const payWith: Array<'CARD' | 'UPI'> = [];
+
+    if (upi) payWith.push('UPI');
+    if (card) payWith.push('CARD');
+
+    return { open: payWith.length > 0, payWith };
+  }
+
+  /**
+   * A kiosk order the guest pays at the kiosk: by UPI (the gateway's QR for the amount, shown on
+   * the kiosk) or a card on the kiosk counter's machine. Billed there once paid.
+   */
+  async createKioskOrder(
+    restaurantId: string,
+    token: string | undefined,
+    dto: CreateKioskPaidOrderDto,
+  ) {
+    const restaurant = await this.restaurant(restaurantId, token);
+    const clientOrderId = dto.clientOrderId.trim();
+    const existing = await this.prisma.qrOrder.findUnique({
+      where: { restaurantId_clientOrderId: { clientOrderId, restaurantId: restaurant.id } },
+    });
+
+    if (existing) return this.view(existing.id);
+
+    const counterId = (await this.openCounter(restaurant, restaurant.kioskCounterId))?.id;
+
+    if (!counterId) throw new ConflictException(kioskNotTaking);
+
+    const counter = await this.pos.findCounter(counterId);
+    let provider: PaymentProviderName | undefined;
+
+    if (dto.method === 'CARD') {
+      if (!(await this.onlinePayments.cardMachine(counterId))) {
+        throw new ConflictException('This kiosk has no card machine. Please pay by UPI.');
+      }
+      provider = 'PINELABS';
+    } else {
+      provider = await this.upiProvider(counter.hospitalId);
+      if (!provider) {
+        throw new ConflictException('This kiosk cannot take UPI right now. Please pay by card.');
+      }
+    }
+
+    return this.place({
+      bedNumber: null,
+      channel: OrderChannel.COUNTER,
+      clientOrderId,
+      counter,
+      instructions: null,
+      lines: dto.lines,
+      provider,
+      restaurantId: restaurant.id,
+      roomNumber: null,
+      source: GuestOrderSource.KIOSK,
+      staffToken: dto.staffToken,
+    });
+  }
+
+  /** Prices the order as the bill will be, opens its payment, and keeps the order. */
+  private async place(input: {
+    bedNumber: string | null;
+    channel: OrderChannel;
+    clientOrderId: string;
+    counter: Awaited<ReturnType<PosService['findCounter']>>;
+    instructions: string | null;
+    lines: Array<{ menuId: string; quantity: number }>;
+    provider: PaymentProviderName;
+    restaurantId: string;
+    returnUrl?: string;
+    roomNumber: string | null;
+    source: GuestOrderSource;
+    staffToken?: string;
+  }) {
+    const { channel, clientOrderId, counter, provider, restaurantId } = input;
+    const employeeCode = await this.staffFor(restaurantId, input.staffToken);
+    const lines = input.lines.map(({ menuId, quantity }) => ({ menuId, quantity }));
+    // Refuses what is not sold for this channel now, before any payment is opened.
+    const totals = await this.pos.quoteBill(counter, { channel, employeeCode, lines });
     const id = randomUUID();
     const key = this.keyFor(id);
     const payment = await this.onlinePayments.start(
-      { channel: OrderChannel.ROOM, counterId, employeeCode, lines, provider },
+      { channel, counterId: counter.id, employeeCode, lines, provider },
       { actorId: undefined },
-      returnAddress(dto.returnUrl, id, key),
+      returnAddress(input.returnUrl, id, key),
     );
 
     try {
       await this.prisma.qrOrder.create({
         data: {
-          bedNumber: optionalText(dto.bedNumber) ?? null,
-          channel: OrderChannel.ROOM,
+          bedNumber: input.bedNumber,
+          channel,
           clientOrderId,
-          counterId,
+          counterId: counter.id,
           employeeCode: employeeCode ?? null,
           grandTotal: payment.amount,
           hospitalId: counter.hospitalId,
           id,
-          instructions: optionalText(dto.instructions) ?? null,
+          instructions: input.instructions,
           lines,
           onlinePaymentId: payment.id,
-          restaurantId: restaurant.id,
-          roomNumber: optionalText(dto.roomNumber) ?? null,
+          restaurantId,
+          roomNumber: input.roomNumber,
+          source: input.source,
         },
       });
     } catch (error) {
       // A double tap that raced past the check above: the first one's order is the answer.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const raced = await this.prisma.qrOrder.findUniqueOrThrow({
-          where: { restaurantId_clientOrderId: { clientOrderId, restaurantId: restaurant.id } },
+          where: { restaurantId_clientOrderId: { clientOrderId, restaurantId } },
         });
         return this.view(raced.id);
       }
@@ -401,7 +529,7 @@ export class QrOrdersService {
       entityName: 'qr_orders',
       hospitalId: counter.hospitalId,
       newValue: { employeeCode, grandTotal: payment.amount, lines },
-      summary: `QR order placed: ₹${payment.amount} by UPI`,
+      summary: `${input.source === GuestOrderSource.KIOSK ? 'Kiosk' : 'QR'} order placed: ₹${payment.amount} by ${provider === 'PINELABS' ? 'card' : 'UPI'}`,
     });
 
     return { ...(await this.view(id)), ...totals };
@@ -413,6 +541,26 @@ export class QrOrdersService {
    * payment is kept as paid but not billed, for a refund at the counter.
    */
   async status(id: string, key: string) {
+    const order = await this.ownOrder(id, key);
+
+    if (order.status === QrOrderStatus.AWAITING_PAYMENT) {
+      const payment = await this.onlinePayments.check(order.onlinePaymentId);
+
+      if (payment.status === OnlinePaymentStatus.PAID) {
+        await this.bill(order);
+      } else if (payment.status !== OnlinePaymentStatus.PENDING) {
+        await this.prisma.qrOrder.updateMany({
+          data: { status: QrOrderStatus.CLOSED },
+          where: { id, status: QrOrderStatus.AWAITING_PAYMENT },
+        });
+      }
+    }
+
+    return this.view(id);
+  }
+
+  /** The order a guest's key opens; any other key (or none) finds nothing. */
+  private async ownOrder(id: string, key: string) {
     const expected = Buffer.from(this.keyFor(id));
     const given = Buffer.from(key);
 
@@ -424,8 +572,18 @@ export class QrOrdersService {
 
     if (!order) throw new NotFoundException('Order not found.');
 
+    return order;
+  }
+
+  /**
+   * The guest gives up on paying (the kiosk's Cancel, or it times out). If they paid meanwhile,
+   * the order is billed as usual; otherwise the payment is cancelled and nothing is ordered.
+   */
+  async cancel(id: string, key: string) {
+    const order = await this.ownOrder(id, key);
+
     if (order.status === QrOrderStatus.AWAITING_PAYMENT) {
-      const payment = await this.onlinePayments.check(order.onlinePaymentId);
+      const payment = await this.onlinePayments.cancel(order.onlinePaymentId);
 
       if (payment.status === OnlinePaymentStatus.PAID) {
         await this.bill(order);

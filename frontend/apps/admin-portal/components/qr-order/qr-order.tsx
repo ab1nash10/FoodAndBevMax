@@ -1,6 +1,6 @@
 'use client';
 
-import type { KioskMenuItem, QrMenu } from '@aahar/api-client';
+import type { KioskMenuItem, QrChannel, QrMenu } from '@aahar/api-client';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, ChevronLeft, Loader2, Minus, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -38,9 +38,10 @@ const rupeesShort = new Intl.NumberFormat('en-IN', {
 const money = (value: number) => rupees.format(value);
 
 /**
- * Room service from the restaurant's QR, on a patient's or attendant's own phone: the room
- * menu, the room number, an optional staff discount (Employee ID + OTP to the registered
- * mobile), UPI through the location's gateway, then the order's progress to the room.
+ * Ordering from the restaurant's QR on the guest's own phone: patients and attendants have it
+ * delivered to their room, staff and visitors pick it up at the counter. The menu for either,
+ * an optional staff discount (Employee ID + OTP to the registered mobile), UPI through the
+ * location's gateway, then the order's progress.
  */
 export function QrOrder({
   orderId,
@@ -159,9 +160,12 @@ function Ordering({
   const [step, setStep] = useState<'checkout' | 'menu'>('menu');
   const [category, setCategory] = useState('');
   const [dropped, setDropped] = useState<string[]>([]);
+  const [channel, setChannel] = useState<QrChannel>('ROOM');
   const menuQuery = useQuery({
-    queryFn: async () => (await publicOrganizationApi.getQrMenu(restaurantId, token)).data,
-    queryKey: ['qr-menu', restaurantId, token],
+    // Switching room/pickup keeps this menu up until the other one is in: no blank page.
+    placeholderData: (previous) => previous,
+    queryFn: async () => (await publicOrganizationApi.getQrMenu(restaurantId, token, channel)).data,
+    queryKey: ['qr-menu', restaurantId, token, channel],
     refetchInterval: 60_000,
   });
   const menu = menuQuery.data;
@@ -203,6 +207,8 @@ function Ordering({
     <MenuStep
       cart={cart}
       category={category}
+      channel={channel}
+      onChannel={setChannel}
       dropped={dropped}
       items={items}
       menu={menu}
@@ -213,6 +219,7 @@ function Ordering({
   ) : (
     <CheckoutStep
       cart={cart}
+      channel={channel}
       menu={menu}
       onBack={() => setStep('menu')}
       onChange={change}
@@ -250,15 +257,19 @@ function Header({ children, menu }: Readonly<{ children?: ReactNode; menu: QrMen
 function MenuStep({
   cart,
   category,
+  channel,
   dropped,
   items,
   menu,
   onCategory,
   onChange,
+  onChannel,
   onCheckout,
 }: Readonly<{
   cart: KioskCartLine[];
   category: string;
+  channel: QrChannel;
+  onChannel: (channel: QrChannel) => void;
   dropped: string[];
   items: Array<KioskMenuItem & { stock: number | null }>;
   menu: QrMenu;
@@ -278,9 +289,38 @@ function MenuStep({
   return (
     <>
       <Header menu={menu}>
-        <p className="rounded-xl bg-ds-primary-soft px-3 py-2 text-center text-[13px] font-semibold text-ds-link">
-          Room service · a steward brings it to your room
-        </p>
+        <div className="grid gap-1.5">
+          <div
+            aria-label="How you get your order"
+            className="grid grid-cols-2 gap-1 rounded-xl bg-ds-subtle p-1"
+            role="group"
+          >
+            {(
+              [
+                ['ROOM', 'Deliver to my room'],
+                ['COUNTER', 'Pick up at counter'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                aria-pressed={channel === value}
+                className={cn(
+                  'rounded-lg px-2 py-2 text-[13px] font-bold',
+                  channel === value ? 'bg-ds-surface text-ds-link shadow-xs' : 'text-ds-text-2',
+                )}
+                key={value}
+                onClick={() => onChannel(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-xs text-ds-muted">
+            {channel === 'ROOM'
+              ? 'For patients and attendants: a steward brings it to your room.'
+              : `For staff and visitors: collect it at ${menu.pickupCounter ?? 'the counter'} when it is ready.`}
+          </p>
+        </div>
         {categories.length > 1 ? (
           <div
             className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5"
@@ -307,7 +347,7 @@ function MenuStep({
         ) : null}
       </Header>
       {!menu.open ? (
-        <Notice tone="warn" title="Room service is closed right now">
+        <Notice tone="warn" title="Ordering is closed right now">
           Please try again later.
         </Notice>
       ) : null}
@@ -319,7 +359,7 @@ function MenuStep({
       <main className="flex-1 px-4 pb-28 pt-2">
         {items.length === 0 ? (
           <p className="py-12 text-center text-sm text-ds-muted">
-            Nothing is on the room-service menu right now.
+            Nothing is on the menu right now.
           </p>
         ) : (
           groups.map((group) => (
@@ -383,7 +423,7 @@ function MenuStep({
             <span>
               {totals.itemCount} {totals.itemCount === 1 ? 'item' : 'items'}
               <span className="block text-xs font-medium opacity-85">
-                Room number and payment next
+                {channel === 'ROOM' ? 'Room number and payment next' : 'Payment next'}
               </span>
             </span>
             <span className="tabular-nums">
@@ -401,6 +441,7 @@ const inputClass =
 
 function CheckoutStep({
   cart,
+  channel,
   menu,
   onBack,
   onChange,
@@ -409,6 +450,7 @@ function CheckoutStep({
   token,
 }: Readonly<{
   cart: KioskCartLine[];
+  channel: QrChannel;
   menu: QrMenu;
   onBack: () => void;
   onChange: (item: KioskMenuItem, quantity: number) => void;
@@ -425,17 +467,20 @@ function CheckoutStep({
   const clientOrderId = useRef(crypto.randomUUID());
   const totals = cartTotals(cart, staff?.percent ?? 0);
   const itemsTotal = cart.reduce((sum, { item, quantity }) => sum + item.price * quantity, 0);
+  const toRoom = channel === 'ROOM';
+  const pickupAt = menu.pickupCounter ?? 'the counter';
 
   const place = useMutation({
     mutationFn: async () =>
       (
         await publicOrganizationApi.createQrOrder(restaurantId, token, {
-          bedNumber: bedNumber.trim() || undefined,
+          bedNumber: (toRoom && bedNumber.trim()) || undefined,
+          channel,
           clientOrderId: clientOrderId.current,
           instructions: instructions.trim() || undefined,
           lines: cart.map(({ item, quantity }) => ({ menuId: item.id, quantity })),
           returnUrl: returnUrlFor(window.location.href),
-          roomNumber: roomNumber.trim(),
+          roomNumber: toRoom ? roomNumber.trim() : undefined,
           staffToken: staff?.token,
         })
       ).data,
@@ -467,7 +512,7 @@ function CheckoutStep({
         id="qr-checkout"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!roomNumber.trim()) {
+          if (toRoom && !roomNumber.trim()) {
             setError('Enter your room number.');
             return;
           }
@@ -475,34 +520,40 @@ function CheckoutStep({
           place.mutate();
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-room">
-            Room
-            <input
-              autoComplete="off"
-              className={inputClass}
-              id="qr-room"
-              inputMode="text"
-              maxLength={20}
-              onChange={(event) => {
-                setRoomNumber(event.target.value);
-                setError('');
-              }}
-              value={roomNumber}
-            />
-          </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-bed">
-            Bed (optional)
-            <input
-              autoComplete="off"
-              className={inputClass}
-              id="qr-bed"
-              maxLength={20}
-              onChange={(event) => setBedNumber(event.target.value)}
-              value={bedNumber}
-            />
-          </label>
-        </div>
+        {toRoom ? (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-room">
+              Room
+              <input
+                autoComplete="off"
+                className={inputClass}
+                id="qr-room"
+                inputMode="text"
+                maxLength={20}
+                onChange={(event) => {
+                  setRoomNumber(event.target.value);
+                  setError('');
+                }}
+                value={roomNumber}
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-bed">
+              Bed (optional)
+              <input
+                autoComplete="off"
+                className={inputClass}
+                id="qr-bed"
+                maxLength={20}
+                onChange={(event) => setBedNumber(event.target.value)}
+                value={bedNumber}
+              />
+            </label>
+          </div>
+        ) : (
+          <p className="rounded-xl bg-ds-primary-soft px-3 py-2.5 text-[13px] font-semibold text-ds-link">
+            Pick up at {pickupAt}. Show your order number when it is ready.
+          </p>
+        )}
         <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-note">
           Note for the kitchen (optional)
           <input
@@ -577,9 +628,11 @@ function CheckoutStep({
           <span>
             {place.isPending ? 'Opening the payment page…' : 'Pay by UPI'}
             <span className="block text-xs font-medium opacity-85">
-              {roomNumber.trim()
-                ? `Delivered to Room ${roomNumber.trim()}${bedNumber.trim() ? ` / Bed ${bedNumber.trim()}` : ''}`
-                : 'Google Pay, PhonePe, Paytm or any UPI app'}
+              {!toRoom
+                ? `Pick up at ${pickupAt}`
+                : roomNumber.trim()
+                  ? `Delivered to Room ${roomNumber.trim()}${bedNumber.trim() ? ` / Bed ${bedNumber.trim()}` : ''}`
+                  : 'Google Pay, PhonePe, Paytm or any UPI app'}
             </span>
           </span>
           {place.isPending ? (

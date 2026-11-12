@@ -596,6 +596,8 @@ model Restaurant {
   boardToken               String?   @unique @map("board_token")
   /// The counter QR (phone) orders are billed at, into its open shift; none: no QR orders.
   qrCounterId              String?   @map("qr_counter_id") @db.Uuid
+  /// The counter kiosk orders, paid at the kiosk, are billed at; none: the kiosk takes no orders.
+  kioskCounterId           String?   @map("kiosk_counter_id") @db.Uuid
   /// SHA-256 of the key kiosks, QR ordering and other apps send this restaurant's orders with.
   orderKeyHash             String?   @unique @map("order_key_hash")
   isActive                 Boolean   @default(true) @map("is_active")
@@ -1002,6 +1004,12 @@ model OrderAmendment {
   @@map("order_amendments")
 }
 
+/// Where a guest paid for their own order: the QR on their phone, or the kiosk.
+enum GuestOrderSource {
+  QR
+  KIOSK
+}
+
 /// Where a guest's QR (phone) order stands.
 enum QrOrderStatus {
   /// The UPI link is with the guest.
@@ -1016,29 +1024,30 @@ enum QrOrderStatus {
 
 /// A guest's order from the restaurant's QR, paid by UPI on their phone before it is billed.
 model QrOrder {
-  id              String        @id @default(uuid()) @db.Uuid
-  hospitalId      String        @map("hospital_id") @db.Uuid
-  restaurantId    String        @map("restaurant_id") @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
+  hospitalId      String           @map("hospital_id") @db.Uuid
+  restaurantId    String           @map("restaurant_id") @db.Uuid
   /// The QR counter when it was placed: it is billed there.
-  counterId       String        @map("counter_id") @db.Uuid
+  counterId       String           @map("counter_id") @db.Uuid
   /// The phone's own id for the order: sending it again returns the same order.
-  clientOrderId   String        @map("client_order_id")
+  clientOrderId   String           @map("client_order_id")
+  source          GuestOrderSource @default(QR)
   channel         OrderChannel
-  roomNumber      String?       @map("room_number")
-  bedNumber       String?       @map("bed_number")
+  roomNumber      String?          @map("room_number")
+  bedNumber       String?          @map("bed_number")
   instructions    String?
   /// [{ menuId, quantity }] as ordered; priced by the server.
   lines           Json
   /// The employee whose OTP was confirmed, for the staff discount.
-  employeeCode    String?       @map("employee_code")
-  grandTotal      Decimal       @map("grand_total") @db.Decimal(12, 2)
-  onlinePaymentId String        @unique @map("online_payment_id") @db.Uuid
-  billedOrderId   String?       @unique @map("billed_order_id") @db.Uuid
-  status          QrOrderStatus @default(AWAITING_PAYMENT)
+  employeeCode    String?          @map("employee_code")
+  grandTotal      Decimal          @map("grand_total") @db.Decimal(12, 2)
+  onlinePaymentId String           @unique @map("online_payment_id") @db.Uuid
+  billedOrderId   String?          @unique @map("billed_order_id") @db.Uuid
+  status          QrOrderStatus    @default(AWAITING_PAYMENT)
   /// Why a paid order could not be billed.
-  failureReason   String?       @map("failure_reason")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  failureReason   String?          @map("failure_reason")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
   hospital      Hospital         @relation(fields: [hospitalId], references: [id])
   restaurant    Restaurant       @relation(fields: [restaurantId], references: [id])

@@ -65,4 +65,7 @@ void test('the address ceiling counts by address and skips signed-in requests', 
   assert.equal(options.limit, 3_000);
   assert.equal(options.skipIf?.(context({ user: { id: 'user-a' } })), true);
   assert.equal(options.skipIf?.(context({})), false);
+  // 3,000 staff behind one hospital address signing in within a minute, with room to spare:
+  // at exactly 3,000 the load test's 3,001st sign-in was refused (2026-11-11).
+  assert.equal(addressThrottler().limit, 6_000);
 });

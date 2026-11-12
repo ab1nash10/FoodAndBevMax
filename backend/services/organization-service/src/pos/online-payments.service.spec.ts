@@ -76,7 +76,7 @@ const plutusConfig = new ConfigService({ PINELABS_BASE_URL: 'https://plutus.exam
 // Stands in for Prisma's onlinePayment table and PosService's pricing.
 // The counter’s location: Razorpay picked, on the shared keys (none of its own).
 const location = {
-  onlinePaymentOption: "RAZORPAY" as "NONE" | "PAYU" | "RAZORPAY",
+  onlinePaymentOption: 'RAZORPAY' as 'NONE' | 'PAYU' | 'RAZORPAY',
   payuClientId: null,
   payuClientSecret: null,
   payuMerchantId: null,

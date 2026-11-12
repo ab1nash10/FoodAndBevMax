@@ -6,7 +6,7 @@ import { useLocationContext } from '@/components/location-context';
 import { Badge, Select } from '@/components/ui';
 
 /**
- * Items, item categories, time slots and employees belong to one location or, with no location,
+ * Items, item categories and employees belong to one location or, with no location,
  * are shared by every location. In forms the shared choice is the empty value.
  */
 export const SHARED_LOCATION = '';

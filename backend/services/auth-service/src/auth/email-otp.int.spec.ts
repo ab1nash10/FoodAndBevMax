@@ -506,5 +506,54 @@ describe.skipIf(!databaseUrl)(
         ]);
       });
     });
+
+    it('resets a forgotten password with an emailed code; the old one and every session stop', async () => {
+      const user = await portalUser('reset');
+      const email = user.email ?? '';
+      const signedIn = (await post('/auth/login-with-password', { email, password })).data;
+
+      const { otp } = await sendCode(email);
+      // The new password follows the same rule as everywhere else.
+      expect(
+        (await post('/auth/reset-password', { email, newPassword: 'short', otp })).status,
+      ).toBe(400);
+      expect(
+        refused(
+          await post('/auth/reset-password', {
+            email,
+            newPassword: 'Reset-new-1',
+            otp: wrongCode(otp),
+          }),
+        ),
+      ).toEqual([401, INVALID_OTP]);
+
+      const reset = await post('/auth/reset-password', {
+        email: email.toUpperCase(),
+        newPassword: 'Reset-new-1',
+        otp,
+      });
+      expect(reset.status).toBe(201);
+      expect(reset.body).toMatchObject({ data: { reset: true }, success: true });
+
+      expect((await post('/auth/login-with-password', { email, password })).status).toBe(401);
+      expect(
+        (await post('/auth/login-with-password', { email, password: 'Reset-new-1' })).status,
+      ).toBe(201);
+      // The session from before the reset is over.
+      expect((await post('/auth/refresh', { refreshToken: signedIn.refreshToken })).status).toBe(
+        401,
+      );
+      // The code is spent.
+      expect(
+        refused(await post('/auth/reset-password', { email, newPassword: 'Reset-new-2', otp })),
+      ).toEqual([401, INVALID_OTP]);
+      await vi.waitFor(async () => {
+        expect(
+          await prisma.auditLog.count({
+            where: { action: 'PASSWORD_CHANGED', entityId: user.id, entityName: 'users' },
+          }),
+        ).toBe(1);
+      });
+    });
   },
 );

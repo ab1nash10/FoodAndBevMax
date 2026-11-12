@@ -67,10 +67,10 @@ export function SortableTable<Row>({
 
   return (
     <div aria-label={caption} className="flex flex-1 flex-col" role="table">
-      <div className="flex-1 overflow-x-auto">
+      <div className="freeze-pane flex-1 overflow-x-auto">
         <div style={{ minWidth }}>
           <div
-            className="grid h-[38px] items-center gap-3 border-y border-ds-divider bg-ds-subtle px-[18px]"
+            className="sticky top-0 z-2 grid h-[38px] items-center gap-3 border-y border-ds-divider bg-ds-subtle px-[18px]"
             role="row"
             style={grid}
           >

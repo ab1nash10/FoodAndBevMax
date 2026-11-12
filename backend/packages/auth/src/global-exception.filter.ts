@@ -87,9 +87,11 @@ function normalizeException(exception: unknown): {
 
   // node-postgres's pool, when every connection stayed busy past connect_timeout: the service is
   // overloaded, not broken, and a retry a moment later usually works.
+  // P2028 is the same for an interactive transaction: it waited past maxWait for a connection.
   if (
-    exception instanceof Error &&
-    exception.message === 'timeout exceeded when trying to connect'
+    (exception instanceof Error &&
+      exception.message === 'timeout exceeded when trying to connect') ||
+    prismaCode(exception) === 'P2028'
   ) {
     return {
       errors: [],

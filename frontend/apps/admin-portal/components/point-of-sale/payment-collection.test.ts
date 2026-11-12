@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { onlineProvider, paymentModesFor } from './payment-collection';
+import { onlineProvider } from './payment-collection';
 
 const bill = {
   cardMachine: true,
@@ -26,12 +26,5 @@ describe('which provider takes a bill’s payment before it is made', () => {
     expect(
       onlineProvider({ ...bill, isComplimentary: true, paymentMode: 'UPI', upiVia: 'PAYU' }),
     ).toBeNull();
-  });
-});
-
-describe('which payment modes the till offers', () => {
-  test('a kiosk order is paid by UPI or card only; a counter bill also by cash or other', () => {
-    expect(paymentModesFor({ kioskOrder: true })).toEqual(['UPI', 'CARD']);
-    expect(paymentModesFor({ kioskOrder: false })).toEqual(['CASH', 'UPI', 'CARD', 'OTHER']);
   });
 });

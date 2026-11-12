@@ -7,11 +7,11 @@ export const ADDRESS_THROTTLER = 'address';
 
 /**
  * Sign-in traffic from one address: a hospital's staff reach the API from one public address,
- * so a shift change (hundreds signing in, then renewing their sessions together 30 minutes
+ * so a shift change (thousands signing in, then renewing their sessions together 30 minutes
  * later) must fit. Only signed-out requests count towards it; per-identity limits (see
  * UserThrottlerGuard) are what stop guessing.
  */
-export function addressThrottler(limit = 3_000): ThrottlerOptions {
+export function addressThrottler(limit = 6_000): ThrottlerOptions {
   return {
     limit,
     name: ADDRESS_THROTTLER,

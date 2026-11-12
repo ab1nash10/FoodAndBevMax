@@ -82,6 +82,9 @@ const serviceEnvSchema = z
         z.string().regex(/^rediss?:\/\/\S+$/, 'REDIS_URL must start with redis:// or rediss://'),
       ])
       .optional(),
+    // Signed-out (sign-in) requests a minute from one network address, per step. A hospital shares
+    // one public address, so this must sit above a shift change; it caps SMS and code-guessing abuse.
+    THROTTLE_ADDRESS_LIMIT: z.coerce.number().int().positive().default(6000),
     THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
     THROTTLE_TTL: z.coerce.number().int().positive().default(60000),
   })

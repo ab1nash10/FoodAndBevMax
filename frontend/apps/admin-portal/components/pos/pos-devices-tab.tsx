@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus, Utensils } from 'lucide-react';
+import { KeyRound, Loader2, Pencil, Plus, Utensils } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -436,6 +436,24 @@ export function PosDevicesTab() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.paymentMachinePosDeviceOptions() });
     },
   });
+  const revokeTillMutation = useMutation({
+    mutationFn: (posDeviceId: string) => organizationApi.revokeTill(posDeviceId),
+    onError(error) {
+      showToast({
+        description: getApiErrorMessage(error),
+        title: 'Browser till access was not revoked',
+        variant: 'error',
+      });
+    },
+    onSuccess(_result, posDeviceId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.posDevices() });
+      showToast({
+        recordId: posDeviceId,
+        title: 'Browser till access revoked',
+        variant: 'success',
+      });
+    },
+  });
 
   async function toggleDeviceStatus(device: PosDevice) {
     const isActive = !device.isActive;
@@ -453,6 +471,18 @@ export function PosDevicesTab() {
           }),
       },
     );
+  }
+
+  async function revokeTill(device: PosDevice) {
+    const confirmed = await confirm({
+      confirmLabel: 'Revoke access',
+      description: `The browser enrolled as ${device.name} will lose POS access immediately. An admin can enroll a browser again later.`,
+      icon: KeyRound,
+      title: `Revoke browser access for ${device.name}?`,
+      tone: 'danger',
+    });
+
+    if (confirmed) revokeTillMutation.mutate(device.id);
   }
 
   const openCreateForm = () => {
@@ -537,6 +567,11 @@ export function PosDevicesTab() {
                         <span className="flex min-w-0 flex-col gap-0.5">
                           <span className={cn('truncate', tableStyles.title)}>{device.name}</span>
                           <span className={cn('truncate', tableStyles.code)}>{device.code}</span>
+                          {device.hasActiveTillKey ? (
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-ds-status-ok-fg">
+                              <KeyRound aria-hidden="true" className="h-3 w-3" /> Browser enrolled
+                            </span>
+                          ) : null}
                         </span>
                       </span>
                     </td>
@@ -620,6 +655,13 @@ export function PosDevicesTab() {
                           label={`Edit ${device.name}`}
                           onClick={() => openEditForm(device)}
                         />
+                        {device.hasActiveTillKey ? (
+                          <RowAction
+                            icon={KeyRound}
+                            label={`Revoke browser till access for ${device.name}`}
+                            onClick={() => void revokeTill(device)}
+                          />
+                        ) : null}
                         <OrderKeyButton
                           issue={async () =>
                             (await organizationApi.issuePosDeviceKey(device.id)).data.apiKey

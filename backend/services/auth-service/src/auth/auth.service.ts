@@ -16,6 +16,7 @@ import type { AuthContext, AuthTokens } from './auth.types';
 import { LogoutDto } from './dto/logout.dto';
 import { EmailPasswordLoginDto } from './dto/email-password-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { OtpService } from './services/otp.service';
@@ -25,6 +26,7 @@ import { RefreshTokenReusedError, TokenService } from './services/token.service'
 // thirty from one address within 10 minutes (one guess at many accounts) lock that address for
 // 10. Code (OTP) sign-in stays open throughout.
 const PASSWORD_FAILURES_PER_ACCOUNT = { max: 10, seconds: 15 * 60 };
+const passwordFailuresKey = (email: string) => `auth:password-failures:${email}`;
 const PASSWORD_FAILURES_PER_ADDRESS = { max: 30, seconds: 10 * 60 };
 // However often it is refreshed, a session ends 30 days after its sign-in.
 const MAX_SESSION_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -168,7 +170,7 @@ export class AuthService {
     const target = { channel: 'email', value: dto.email.toLowerCase() } as const;
     // Counted per email typed, registered or not, so a lock tells a caller nothing about who exists.
     const failureCounters = [
-      { key: `auth:password-failures:${target.value}`, ...PASSWORD_FAILURES_PER_ACCOUNT },
+      { key: passwordFailuresKey(target.value), ...PASSWORD_FAILURES_PER_ACCOUNT },
       ...(context.ipAddress
         ? [
             {
@@ -226,6 +228,44 @@ export class AuthService {
     });
 
     return tokens;
+  }
+
+  /**
+   * A forgotten password: the code sent to the account's email (send-otp) proves who it is, and
+   * the new password replaces the old one. Every session ends, as with any password change, and
+   * the wrong-password lock on that email lifts so the new password works at once. Email only:
+   * the password belongs to the email, and a mobile number never signs in with one.
+   */
+  async resetPassword(dto: ResetPasswordDto, context: AuthContext): Promise<{ reset: true }> {
+    const target = { channel: 'email', value: dto.email.trim().toLowerCase() } as const;
+    let user: Awaited<ReturnType<AuthService['findLoginUser']>>;
+
+    try {
+      await this.otp.verify({ email: target.value, otp: dto.otp });
+      user = await this.findLoginUser(target);
+    } catch (error) {
+      this.recordFailure('OTP_FAILED', target, failureReason(error));
+      throw error;
+    }
+
+    // Hashed first, so the scrypt work holds no database connection.
+    const passwordHash = await hashPassword(dto.newPassword);
+
+    await this.prisma.$executeRaw`
+      UPDATE users SET password_hash = ${passwordHash}, session_version = session_version + 1,
+        last_active_at = NULL, updated_at = now(), updated_by = ${user.id}::uuid
+      WHERE id = ${user.id}::uuid`;
+    await this.redis.delete(passwordFailuresKey(target.value));
+    await this.auditLog.record({
+      action: 'PASSWORD_CHANGED',
+      entityId: user.id,
+      entityName: 'users',
+      ipAddress: context.ipAddress,
+      newValue: { via: 'email-code' },
+      userId: user.id,
+    });
+
+    return { reset: true };
   }
 
   async refresh(dto: RefreshTokenDto, context: AuthContext): Promise<AuthTokens> {

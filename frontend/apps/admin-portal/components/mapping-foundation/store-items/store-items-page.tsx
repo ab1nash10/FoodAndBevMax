@@ -29,6 +29,7 @@ import { useAuth } from '@/components/auth-provider';
 import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { cn } from '@/lib/utils';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { RecordLink } from '@/components/record-link';
 import { locationHref, recordHref } from '@/lib/navigation';
@@ -57,8 +58,10 @@ import {
 } from '@/components/mapping-foundation/shared/utils';
 import { useItemCategoryOptions } from '@/components/master-data/items/shared';
 import { queryKeys } from '@/lib/query-keys';
-import { SetupNotice, useLocationName } from '@/components/location-empty-states';
+import { SetupNotice } from '@/components/location-empty-states';
 
+/** Mapping to a store makes an item MRP (packaged). */
+const storeTypes = ['MRP'] as const;
 function useStoreOptions(hospitalId?: string) {
   return useQuery<Store[]>({
     queryFn: async () => {
@@ -92,10 +95,10 @@ export function StoreItemsPageClient({
   listTabs,
 }: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
   const { scopedHospitalId } = useLocationContext();
-  const locationName = useLocationName();
   const [page, setPage] = useUrlNumberParam('page');
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
+  const [view, setView] = useListView('list');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
     'active',
     'inactive',
@@ -107,11 +110,18 @@ export function StoreItemsPageClient({
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<StoreItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  // The form's location: the header's, fixed, or picked in the form when the header shows them
+  // all. Its stores are the only ones offered.
+  const [formHospitalId, setFormHospitalId] = useState(scopedHospitalId ?? '');
+  const [editHospitalId, setEditHospitalId] = useState('');
   const form = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   // Edit has its own form in a pop-up, so the Create form above keeps what was typed in it.
   const editForm = useForm<MappingFormValues>({ defaultValues: emptyMappingFormValues() });
   const hospitalsQuery = useHospitalOptions();
   const storesQuery = useStoreOptions(hospitalFilter);
+  // Usually the same location as the list's filter, so the same cached list: no extra request.
+  const formStoresQuery = useStoreOptions(formHospitalId);
+  const editStoresQuery = useStoreOptions(editHospitalId);
   // The whole catalogue; the form greys out items already mapped the other way.
   const itemsQuery = useItemOptions();
   const categoriesQuery = useItemCategoryOptions();
@@ -122,6 +132,7 @@ export function StoreItemsPageClient({
 
   useEffect(() => {
     setHospitalFilter(scopedHospitalId ?? '');
+    setFormHospitalId(scopedHospitalId ?? '');
     setStoreFilter('');
     setPage(1);
     form.setValue('parentId', '', { shouldValidate: true });
@@ -193,6 +204,15 @@ export function StoreItemsPageClient({
   });
   const confirm = useConfirm();
 
+  const asStoreChoices = (list: typeof storesQuery.data) =>
+    list?.map((store) => ({
+      code: store.storeCode,
+      id: store.id,
+      name: store.storeName,
+    })) ?? [];
+  const formStores = formHospitalId ? asStoreChoices(formStoresQuery.data) : [];
+  const formLocation = hospitalsQuery.data?.find((hospital) => hospital.id === formHospitalId);
+  const formLocationName = formLocation?.displayName || formLocation?.hospitalName;
   const stores =
     storesQuery.data?.map((store) => ({
       code: store.storeCode,
@@ -247,6 +267,7 @@ export function StoreItemsPageClient({
 
   function startEditingMapping(mapping: StoreItem) {
     setEditingMapping(mapping);
+    setEditHospitalId(mapping.store.hospital.id);
     editForm.reset({
       categoryId: mapping.categoryId ?? '',
       isActive: mapping.isActive,
@@ -308,10 +329,10 @@ export function StoreItemsPageClient({
             Pick an item not mapped yet, or an MRP item: mapping it here makes it MRP and sets its
             category. A Readymade item cannot be mapped to a store.
           </p>
-          {storesQuery.data?.length === 0 ? (
+          {formHospitalId && formStoresQuery.data?.length === 0 ? (
             <SetupNotice href="/masters/stores/new" linkLabel="Create a store">
-              {locationName ? `${locationName} has no store yet` : 'There is no store yet'}, so
-              there is nothing to map items to.
+              {formLocationName ? `${formLocationName} has no store yet` : 'There is no store yet'},
+              so there is nothing to map items to.
             </SetupNotice>
           ) : null}
           {itemsQuery.data?.length === 0 ? (
@@ -324,11 +345,17 @@ export function StoreItemsPageClient({
             existingMappings={existingStoreMappings}
             form={form}
             itemLabel="Item"
-            mapsAs="MRP"
+            mapsAs={storeTypes}
             typeLabel="MRP"
             items={itemsQuery.data}
+            location={{
+              hospitals: hospitalsQuery.data,
+              locked: Boolean(scopedHospitalId),
+              onChange: setFormHospitalId,
+              value: formHospitalId,
+            }}
             parentLabel="Store"
-            parents={stores}
+            parents={formStores}
           />
         </form>
       </Modal>
@@ -364,11 +391,17 @@ export function StoreItemsPageClient({
             existingMappings={existingStoreMappings}
             form={editForm}
             itemLabel="Item"
-            mapsAs="MRP"
+            mapsAs={storeTypes}
             typeLabel="MRP"
             items={itemsQuery.data}
+            location={{
+              hospitals: hospitalsQuery.data,
+              locked: Boolean(scopedHospitalId),
+              onChange: setEditHospitalId,
+              value: editHospitalId,
+            }}
             parentLabel="Store"
-            parents={stores}
+            parents={asStoreChoices(editStoresQuery.data)}
           />
         </form>
       </Modal>
@@ -475,118 +508,158 @@ export function StoreItemsPageClient({
           />
           <RefreshButton onClick={() => void mappingsQuery.refetch()} />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          <ListViewSwitch label="Show store items as" onChange={setView} value={view} />
         </ListToolbar>
-        <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'phone-cards min-w-[900px] table-fixed')}>
-            <thead className={tableStyles.head}>
-              <tr>
-                <th className={cn(tableStyles.th, 'w-[22%]')}>Item</th>
-                <th className={cn(tableStyles.th, 'w-[19%]')}>Store</th>
-                <th className={cn(tableStyles.th, 'w-[17%]')}>Location</th>
-                <th className={cn(tableStyles.th, 'w-[13%]')}>Category</th>
-                <th className={cn(tableStyles.th, 'w-[11%]')}>Updated</th>
-                <th className={cn(tableStyles.th, 'w-[13%]')}>Status</th>
-                <th className={cn(tableStyles.th, 'w-[5%]')}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.length > 0 ? (
-                mappings.map((mapping) => (
-                  <tr
-                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                    data-record-id={mapping.id}
-                    key={mapping.id}
-                    onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
-                  >
-                    <td className={tableStyles.td} onClick={keepLinkClicks}>
-                      <span className="flex min-w-0 items-center gap-3">
-                        <RecordAvatar foodType={mapping.item.type} name={mapping.item.itemName} />
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <RecordLink
-                            className={cn('truncate', tableStyles.title)}
-                            href={recordHref('/masters/items', { id: mapping.item.id })}
-                          >
-                            {mapping.item.itemName}
-                          </RecordLink>
-                          <span className={cn('truncate', tableStyles.code)}>
-                            {mapping.item.itemCode}
+        {/* Cards; an empty or failed list keeps the table's message. */}
+        {view === 'cards' && (mappings.length > 0 || mappingsQuery.isLoading) ? (
+          <RecordCardGrid isLoading={mappingsQuery.isLoading}>
+            {mappings.map((mapping) => (
+              <RecordCard
+                edit={
+                  canEdit
+                    ? { label: `Edit ${mapping.item.itemName} in ${mapping.store.storeName}` }
+                    : undefined
+                }
+                footer={
+                  <RowSwitch
+                    ariaLabel={`${mapping.item.itemName} in ${mapping.store.storeName} active`}
+                    checked={mapping.isActive}
+                    disabled={toggleMappingStatusMutation.isPending}
+                    offLabel="Inactive"
+                    onChange={() => void toggleMappingStatus(mapping)}
+                    onLabel="Active"
+                  />
+                }
+                foodType={mapping.item.type}
+                id={mapping.id}
+                key={mapping.id}
+                meta={mapping.category?.categoryName}
+                name={mapping.item.itemName}
+                onOpen={canEdit ? () => startEditingMapping(mapping) : undefined}
+                subtitle={mapping.item.itemCode}
+              >
+                <p className="truncate text-[13px] text-ds-text-2">
+                  Store: <span className="font-medium">{mapping.store.storeName}</span>
+                </p>
+                <p className="-mt-2 truncate text-xs text-ds-muted">
+                  {mapping.store.hospital.hospitalName}
+                </p>
+              </RecordCard>
+            ))}
+          </RecordCardGrid>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className={cn(tableStyles.table, 'phone-cards min-w-[900px] table-fixed')}>
+              <thead className={tableStyles.head}>
+                <tr>
+                  <th className={cn(tableStyles.th, 'w-[22%]')}>Item</th>
+                  <th className={cn(tableStyles.th, 'w-[19%]')}>Store</th>
+                  <th className={cn(tableStyles.th, 'w-[17%]')}>Location</th>
+                  <th className={cn(tableStyles.th, 'w-[13%]')}>Category</th>
+                  <th className={cn(tableStyles.th, 'w-[11%]')}>Updated</th>
+                  <th className={cn(tableStyles.th, 'w-[13%]')}>Status</th>
+                  <th className={cn(tableStyles.th, 'w-[5%]')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {mappings.length > 0 ? (
+                  mappings.map((mapping) => (
+                    <tr
+                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      data-record-id={mapping.id}
+                      key={mapping.id}
+                      onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
+                    >
+                      <td className={tableStyles.td} onClick={keepLinkClicks}>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <RecordAvatar foodType={mapping.item.type} name={mapping.item.itemName} />
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <RecordLink
+                              className={cn('truncate', tableStyles.title)}
+                              href={recordHref('/masters/items', { id: mapping.item.id })}
+                            >
+                              {mapping.item.itemName}
+                            </RecordLink>
+                            <span className={cn('truncate', tableStyles.code)}>
+                              {mapping.item.itemCode}
+                            </span>
                           </span>
                         </span>
-                      </span>
-                    </td>
-                    <td className={tableStyles.td} onClick={keepLinkClicks}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <RecordLink
-                          className="truncate font-medium text-ds-text-2"
-                          href={locationHref(
-                            'STORE',
-                            mapping.store.storeCode || mapping.store.storeName,
-                          )}
-                        >
-                          {mapping.store.storeName}
-                        </RecordLink>
-                        <span className={cn('truncate', tableStyles.code)}>
-                          {mapping.store.storeCode}
+                      </td>
+                      <td className={tableStyles.td} onClick={keepLinkClicks}>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <RecordLink
+                            className="truncate font-medium text-ds-text-2"
+                            href={locationHref(
+                              'STORE',
+                              mapping.store.storeCode || mapping.store.storeName,
+                            )}
+                          >
+                            {mapping.store.storeName}
+                          </RecordLink>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {mapping.store.storeCode}
+                          </span>
                         </span>
-                      </span>
-                    </td>
-                    <td className={tableStyles.td}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate text-ds-text-2">
-                          {mapping.store.hospital.hospitalName}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-ds-text-2">
+                            {mapping.store.hospital.hospitalName}
+                          </span>
+                          <span className={cn('truncate', tableStyles.code)}>
+                            {mapping.store.hospital.hospitalCode}
+                          </span>
                         </span>
-                        <span className={cn('truncate', tableStyles.code)}>
-                          {mapping.store.hospital.hospitalCode}
+                      </td>
+                      <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
+                        {mapping.category?.categoryName ?? '—'}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <DateTimeCell value={mapping.updatedAt} />
+                      </td>
+                      {/* Its own click: switching the status does not open the mapping. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <RowSwitch
+                          ariaLabel={`${mapping.item.itemName} in ${mapping.store.storeName} active`}
+                          checked={mapping.isActive}
+                          disabled={toggleMappingStatusMutation.isPending}
+                          offLabel="Inactive"
+                          onChange={() => void toggleMappingStatus(mapping)}
+                          onLabel="Active"
+                        />
+                      </td>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end">
+                          {canEdit ? (
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${mapping.item.itemName} in ${mapping.store.storeName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEditingMapping(mapping);
+                              }}
+                            />
+                          ) : null}
                         </span>
-                      </span>
-                    </td>
-                    <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
-                      {mapping.category?.categoryName ?? '—'}
-                    </td>
-                    <td className={tableStyles.td}>
-                      <DateTimeCell value={mapping.updatedAt} />
-                    </td>
-                    {/* Its own click: switching the status does not open the mapping. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                      <RowSwitch
-                        ariaLabel={`${mapping.item.itemName} in ${mapping.store.storeName} active`}
-                        checked={mapping.isActive}
-                        disabled={toggleMappingStatusMutation.isPending}
-                        offLabel="Inactive"
-                        onChange={() => void toggleMappingStatus(mapping)}
-                        onLabel="Active"
-                      />
-                    </td>
-                    <td className={cn(tableStyles.td, 'pr-3')}>
-                      <span className="flex justify-end">
-                        {canEdit ? (
-                          <RowAction
-                            icon={Pencil}
-                            label={`Edit ${mapping.item.itemName} in ${mapping.store.storeName}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              startEditingMapping(mapping);
-                            }}
-                          />
-                        ) : null}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <QueryState
-                  colSpan={7}
-                  error={mappingsQuery.error}
-                  isError={mappingsQuery.isError}
-                  isLoading={mappingsQuery.isLoading}
-                  label="store item mappings"
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <QueryState
+                    colSpan={7}
+                    error={mappingsQuery.error}
+                    isError={mappingsQuery.isError}
+                    isLoading={mappingsQuery.isLoading}
+                    label="store item mappings"
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         <PaginationControls
           limit={meta.limit}
           onPageChange={setPage}

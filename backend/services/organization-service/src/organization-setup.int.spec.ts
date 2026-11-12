@@ -67,8 +67,15 @@ describe.skipIf(!databaseUrl)(
 
     const ids = async (path: string, as?: string) =>
       items(await h.ok('GET', path, undefined, as)).map(idOf);
+    // Its Main Store or Main Kitchen (a location also gets a Counter Kitchen).
     const mainOf = async (master: 'kitchens' | 'stores', hospitalId: string) =>
-      idOf(firstOf(items(await h.ok('GET', `/${master}?hospitalId=${hospitalId}`))));
+      idOf(
+        firstOf(
+          items(await h.ok('GET', `/${master}?hospitalId=${hospitalId}`)).filter((record) =>
+            String(record.kitchenName ?? record.storeName).startsWith('Main '),
+          ),
+        ),
+      );
     const hospitalBody = (label: string, extra: Body = {}) => ({
       city: 'New Delhi',
       invoicePrefix: `I${label}${RUN}`,
@@ -124,7 +131,7 @@ describe.skipIf(!databaseUrl)(
         await h.ok('POST', '/hospitals', hospitalBody('A', { legalEntityId: fx.entityId })),
       );
       fx.hospitalB = idOf(await h.ok('POST', '/hospitals', hospitalBody('B')));
-      // A new hospital comes with a Main Store and a Main Kitchen.
+      // A new hospital comes with a Main Store, a Main Kitchen and a Counter Kitchen.
       fx.storeA = await mainOf('stores', fx.hospitalA);
       fx.storeB = await mainOf('stores', fx.hospitalB);
       fx.kitchenA = await mainOf('kitchens', fx.hospitalA);
@@ -263,8 +270,14 @@ describe.skipIf(!databaseUrl)(
       expect(items(mainStore).map((store) => store.storeName)).toEqual(['Main Store']);
       expect(String(firstOf(items(mainStore)).storeCode)).toMatch(/^STR\d{4,}$/);
       const mainKitchen = await h.ok('GET', `/kitchens?hospitalId=${id}`);
-      expect(items(mainKitchen).map((kitchen) => kitchen.kitchenName)).toEqual(['Main Kitchen']);
-      expect(String(firstOf(items(mainKitchen)).kitchenCode)).toMatch(/^KIT\d{4,}$/);
+      expect(
+        items(mainKitchen)
+          .map((kitchen) => kitchen.kitchenName)
+          .sort(),
+      ).toEqual(['Counter Kitchen', 'Main Kitchen']);
+      for (const kitchen of items(mainKitchen)) {
+        expect(String(kitchen.kitchenCode)).toMatch(/^KIT\d{4,}$/);
+      }
 
       expect(await ids(`/hospitals?search=${run}&limit=100`)).toEqual(
         expect.arrayContaining([id, fx.hospitalA, fx.hospitalB]),
@@ -1035,7 +1048,10 @@ describe.skipIf(!databaseUrl)(
       // Their manager cannot then report to them.
       expect(
         err(await h.api('PUT', `/employees/${id}`, { reportingManagerId: idOf(uncoded) })),
-      ).toEqual([400, 'An employee cannot report to themselves or to someone who reports to them.']);
+      ).toEqual([
+        400,
+        'An employee cannot report to themselves or to someone who reports to them.',
+      ]);
 
       expect(
         err(

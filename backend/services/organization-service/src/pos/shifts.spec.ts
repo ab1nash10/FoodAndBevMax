@@ -208,7 +208,14 @@ function serviceWith(
       ],
     },
   };
-  const prisma = { ...tx, $transaction: (handler: (client: unknown) => unknown) => handler(tx) };
+  const transactions = { count: 0 };
+  const prisma = {
+    ...tx,
+    $transaction: (handler: (client: unknown) => unknown) => {
+      transactions.count += 1;
+      return handler(tx);
+    },
+  };
   const pos = {
     findCounter: () => Promise.resolve(counter),
     summary: () =>
@@ -235,7 +242,7 @@ function serviceWith(
     prisma as unknown as PrismaService,
   );
 
-  return { audits, service, shifts, summaries };
+  return { audits, service, shifts, summaries, transactions };
 }
 
 const cashier = { actorId: 'cashier-1', ipAddress: '127.0.0.1' };
@@ -256,6 +263,22 @@ test('a shift opens with its till cash; a second one at the same counter is refu
     ConflictException,
   );
   assert.equal(shifts.length, 1);
+});
+
+test('cashiers who find the counter already open are turned away before any lock or transaction', async () => {
+  // Thirty cashiers opening one counter at once used to queue on its row lock, each holding a
+  // database connection while it waited, until the pool ran dry for everyone else.
+  const { service, transactions } = serviceWith({
+    shifts: [shift({ counterId: counter.id, id: 'open-one', openedBy: 'cashier-2' })],
+  });
+
+  await assert.rejects(
+    service.open({ counterId: counter.id, openingCash: 0 }, cashier),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message === 'A shift is already open at this counter. End it first.',
+  );
+  assert.equal(transactions.count, 0);
 });
 
 test('a cashier has one open shift at a time: another counter waits until it ends', async () => {

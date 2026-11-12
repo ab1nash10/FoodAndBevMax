@@ -16,6 +16,8 @@ export interface PosDevice {
   createdAt: string;
   deletedAt: string | null;
   hostName: string | null;
+  /** Whether this POS device currently has an enrolled browser till key. */
+  hasActiveTillKey?: boolean;
   hospital: HospitalSummary;
   hospitalId: string;
   id: string;

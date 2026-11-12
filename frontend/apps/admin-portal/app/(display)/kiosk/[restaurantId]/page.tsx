@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Kiosk } from '@/components/kiosk/kiosk';
+import { KioskScreen } from '@/components/kiosk-screen/kiosk-screen';
 
 // A kiosk's secret link: never indexed, never sent on as a referrer.
 export const metadata: Metadata = {
@@ -29,5 +29,5 @@ export default async function KioskPage({ params, searchParams }: KioskPageProps
   const { restaurantId } = await params;
   const query = await searchParams;
 
-  return <Kiosk restaurantId={restaurantId} token={first(query.token)} />;
+  return <KioskScreen restaurantId={restaurantId} token={first(query.token)} />;
 }

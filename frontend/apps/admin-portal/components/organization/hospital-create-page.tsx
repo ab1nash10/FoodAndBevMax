@@ -43,7 +43,7 @@ export function HospitalCreatePageClient() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
       showToast({
         action: { href, label: `View ${response.data.hospitalName}` },
-        description: 'Main Store and Main Kitchen were created automatically.',
+        description: 'Main Store, Main Kitchen and Counter Kitchen were created automatically.',
         title: 'Location created',
         variant: 'success',
       });
@@ -66,7 +66,7 @@ export function HospitalCreatePageClient() {
     <FormShell
       backHref="/masters/locations"
       icon={MapPin}
-      subtitle="Creating a Location will auto-create Main Store and Main Kitchen."
+      subtitle="Creating a Location will auto-create Main Store, Main Kitchen and Counter Kitchen."
       title="Add Location"
     >
       <form

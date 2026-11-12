@@ -60,7 +60,7 @@ import { UsersModule } from './users/users.module';
             ttl: config.get<number>('THROTTLE_TTL') ?? 60000,
           },
           // Signed-out traffic per network address; signed-in requests never count here.
-          addressThrottler(),
+          addressThrottler(config.get<number>('THROTTLE_ADDRESS_LIMIT')),
         ],
       }),
     }),

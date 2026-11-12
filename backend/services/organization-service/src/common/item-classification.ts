@@ -3,20 +3,45 @@ import { ItemType, type Prisma } from '@prisma/client';
 
 /**
  * An item's type comes from where it is mapped: to a store it becomes MRP, to a kitchen
- * READYMADE; until its first mapping it has none. Categories are not the item's: each store
+ * READYMADE (made ahead) or LIVE (made to order), as its kitchen mapping says; until its first
+ * mapping it has none. Categories are not the item's: each store
  * mapping, kitchen mapping and restaurant menu item has its own (assertUsableCategory).
  */
 
 const typeLabels: Record<ItemType, string> = {
-  LIVE: 'a Live item',
+  LIVE: 'a Live item (mapped to kitchens)',
   MRP: 'an MRP item (mapped to stores)',
   READYMADE: 'a Readymade item (mapped to kitchens)',
 };
 const mappedTo: Record<ItemType, string> = {
-  LIVE: 'a restaurant',
+  LIVE: 'a kitchen',
   MRP: 'a store',
   READYMADE: 'a kitchen',
 };
+
+/** The types a kitchen item can have: made ahead, or made to order. */
+const kitchenTypes: readonly ItemType[] = [ItemType.READYMADE, ItemType.LIVE];
+
+/**
+ * The type a kitchen mapping gives its item: the one asked for (Readymade or Live), else the one
+ * the item already has in kitchens, else READYMADE.
+ */
+export async function kitchenItemType(
+  tx: Prisma.TransactionClient,
+  itemId: string,
+  asked: ItemType | undefined,
+): Promise<ItemType> {
+  if (asked) {
+    if (!kitchenTypes.includes(asked)) {
+      throw new BadRequestException('A kitchen item is Readymade or Live.');
+    }
+    return asked;
+  }
+
+  const item = await tx.item.findFirst({ select: { itemType: true }, where: { id: itemId } });
+
+  return item?.itemType === ItemType.LIVE ? ItemType.LIVE : ItemType.READYMADE;
+}
 
 /**
  * An item's type for stock: stock only exists for classified items (a GRN brings MRP items in,
@@ -55,7 +80,10 @@ export async function classifyItem(
     throw new BadRequestException('This item is inactive and cannot be used.');
   }
 
-  if (item.itemType && item.itemType !== as) {
+  // A kitchen item may switch between Readymade and Live; never to or from a store item.
+  const switching = kitchenTypes.includes(as) && kitchenTypes.includes(item.itemType!);
+
+  if (item.itemType && item.itemType !== as && !switching) {
     throw new BadRequestException(
       `${item.itemName} is ${typeLabels[item.itemType]}, so it cannot be mapped to ${mappedTo[as]}.`,
     );
@@ -106,6 +134,12 @@ export async function releaseItemTypeIfUnused(
   ]);
 
   if (mappings + documents + ledgers === 0) {
-    await tx.item.updateMany({ data: { itemType: null }, where: { id: itemId, itemType: type } });
+    await tx.item.updateMany({
+      data: { itemType: null },
+      where: {
+        id: itemId,
+        itemType: type === ItemType.MRP ? type : { in: [...kitchenTypes] },
+      },
+    });
   }
 }

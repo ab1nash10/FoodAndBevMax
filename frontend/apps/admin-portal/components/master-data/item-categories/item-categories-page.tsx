@@ -40,6 +40,9 @@ import {
   StatStrip,
   tableStyles,
 } from '@/components/design-system';
+import { RowSwitch } from '@/components/mapping-foundation/shared/components';
+import { formatDateOnly } from '@/components/master-data/shared/utils';
+import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { useToast } from '@/components/toast-provider';
 import { Panel } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
@@ -147,6 +150,7 @@ export function ItemCategoriesPageClient() {
     'inactive',
   ]);
   // In menu order by default: the order the till, the kiosk and the menus show them in.
+  const [view, setView] = useListView('list');
   const [sortBy, setSortBy] = useState('sortOrder');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [editingCategory, setEditingCategory] = useState<ItemCategory | null>(null);
@@ -454,89 +458,116 @@ export function ItemCategoriesPageClient() {
           />
           <RefreshButton onClick={() => void categoriesQuery.refetch()} />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          <ListViewSwitch label="Show categories as" onChange={setView} value={view} />
         </ListToolbar>
-        <div className="overflow-x-auto">
-          <table className={cn(tableStyles.table, 'phone-cards min-w-[720px] table-fixed')}>
-            <thead className={tableStyles.head}>
-              <tr>
-                <th className={cn(tableStyles.th, 'w-[38%]')}>Category</th>
-                <th className={cn(tableStyles.th, 'w-[19%]')}>Created</th>
-                <th className={cn(tableStyles.th, 'w-[19%]')}>Updated</th>
-                <th className={cn(tableStyles.th, 'w-[17%]')}>Status</th>
-                <th className={cn(tableStyles.th, 'w-[7%]')}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length > 0 ? (
-                items.map((category) => (
-                  <tr
-                    className={cn(tableStyles.row, !canEditCategories && 'cursor-default')}
-                    data-record-id={category.id}
-                    key={category.id}
-                    onClick={canEditCategories ? () => startEditingCategory(category) : undefined}
-                  >
-                    <td className={cn(tableStyles.td, tableStyles.title)}>
-                      <span className="flex min-w-0 items-center gap-3">
-                        <RecordAvatar name={category.categoryName} />
-                        <span className="truncate">{category.categoryName}</span>
-                      </span>
-                    </td>
-                    <td className={tableStyles.td}>
-                      <DateTimeCell value={category.createdAt} />
-                    </td>
-                    <td className={tableStyles.td}>
-                      <DateTimeCell value={category.updatedAt} />
-                    </td>
-                    {/* Its own click: switching the status does not open the category. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
-                      <span className="flex items-center gap-2">
-                        <Toggle
-                          ariaLabel={`${category.categoryName} active`}
-                          checked={category.isActive}
-                          disabled={toggleCategoryStatusMutation.isPending}
-                          onChange={() => void toggleCategoryStatus(category)}
-                        />
-                        <span
-                          className={cn(
-                            'text-xs font-bold',
-                            category.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
-                          )}
-                        >
-                          {category.isActive ? 'Active' : 'Inactive'}
+        {/* Cards; an empty or failed list keeps the table's message. */}
+        {view === 'cards' && (items.length > 0 || categoriesQuery.isLoading) ? (
+          <RecordCardGrid isLoading={categoriesQuery.isLoading}>
+            {items.map((category) => (
+              <RecordCard
+                edit={canEditCategories ? { label: `Edit ${category.categoryName}` } : undefined}
+                footer={
+                  <RowSwitch
+                    ariaLabel={`${category.categoryName} active`}
+                    checked={category.isActive}
+                    disabled={toggleCategoryStatusMutation.isPending}
+                    offLabel="Inactive"
+                    onChange={() => void toggleCategoryStatus(category)}
+                    onLabel="Active"
+                  />
+                }
+                id={category.id}
+                key={category.id}
+                subtitle={`Updated ${formatDateOnly(category.updatedAt)}`}
+                name={category.categoryName}
+                onOpen={canEditCategories ? () => startEditingCategory(category) : undefined}
+              />
+            ))}
+          </RecordCardGrid>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className={cn(tableStyles.table, 'phone-cards min-w-[720px] table-fixed')}>
+              <thead className={tableStyles.head}>
+                <tr>
+                  <th className={cn(tableStyles.th, 'w-[38%]')}>Category</th>
+                  <th className={cn(tableStyles.th, 'w-[19%]')}>Created</th>
+                  <th className={cn(tableStyles.th, 'w-[19%]')}>Updated</th>
+                  <th className={cn(tableStyles.th, 'w-[17%]')}>Status</th>
+                  <th className={cn(tableStyles.th, 'w-[7%]')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length > 0 ? (
+                  items.map((category) => (
+                    <tr
+                      className={cn(tableStyles.row, !canEditCategories && 'cursor-default')}
+                      data-record-id={category.id}
+                      key={category.id}
+                      onClick={canEditCategories ? () => startEditingCategory(category) : undefined}
+                    >
+                      <td className={cn(tableStyles.td, tableStyles.title)}>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <RecordAvatar name={category.categoryName} />
+                          <span className="truncate">{category.categoryName}</span>
                         </span>
-                      </span>
-                    </td>
-                    <td className={cn(tableStyles.td, 'pr-3')}>
-                      <span className="flex justify-end">
-                        {canEditCategories ? (
-                          <RowAction
-                            icon={Pencil}
-                            label={`Edit ${category.categoryName}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              startEditingCategory(category);
-                            }}
+                      </td>
+                      <td className={tableStyles.td}>
+                        <DateTimeCell value={category.createdAt} />
+                      </td>
+                      <td className={tableStyles.td}>
+                        <DateTimeCell value={category.updatedAt} />
+                      </td>
+                      {/* Its own click: switching the status does not open the category. */}
+                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <span className="flex items-center gap-2">
+                          <Toggle
+                            ariaLabel={`${category.categoryName} active`}
+                            checked={category.isActive}
+                            disabled={toggleCategoryStatusMutation.isPending}
+                            onChange={() => void toggleCategoryStatus(category)}
                           />
-                        ) : null}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <QueryState
-                  colSpan={5}
-                  error={categoriesQuery.error}
-                  isError={categoriesQuery.isError}
-                  isLoading={categoriesQuery.isLoading}
-                  atLocation={false}
-                  label="item categories"
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+                          <span
+                            className={cn(
+                              'text-xs font-bold',
+                              category.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+                            )}
+                          >
+                            {category.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </span>
+                      </td>
+                      <td className={cn(tableStyles.td, 'pr-3')}>
+                        <span className="flex justify-end">
+                          {canEditCategories ? (
+                            <RowAction
+                              icon={Pencil}
+                              label={`Edit ${category.categoryName}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEditingCategory(category);
+                              }}
+                            />
+                          ) : null}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <QueryState
+                    colSpan={5}
+                    error={categoriesQuery.error}
+                    isError={categoriesQuery.isError}
+                    isLoading={categoriesQuery.isLoading}
+                    atLocation={false}
+                    label="item categories"
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         <PaginationControls
           limit={meta.limit}
           onPageChange={setPage}

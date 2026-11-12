@@ -63,3 +63,15 @@ void test('ALLOW_DEV_OTP is only "true" or "false"', () => {
     refused(/ALLOW_DEV_OTP/),
   );
 });
+
+void test('THROTTLE_ADDRESS_LIMIT is a whole number of sign-in requests a minute, 6,000 when unset', () => {
+  assert.equal(validateServiceEnv(valid).THROTTLE_ADDRESS_LIMIT, 6_000);
+  assert.equal(
+    validateServiceEnv({ ...valid, THROTTLE_ADDRESS_LIMIT: '20000' }).THROTTLE_ADDRESS_LIMIT,
+    20_000,
+  );
+  assert.throws(
+    () => validateServiceEnv({ ...valid, THROTTLE_ADDRESS_LIMIT: '0' }),
+    refused(/THROTTLE_ADDRESS_LIMIT/),
+  );
+});

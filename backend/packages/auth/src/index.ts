@@ -37,7 +37,12 @@ export { RbacGuard } from './rbac.guard';
 export { requestLoggingMiddleware } from './request-logging.middleware';
 export { countPrismaQueries, prismaQueryLogOptions } from './query-log';
 export { hashPassword, verifyPassword } from './passwords';
-export { createPrismaAdapter, prismaPgSettings, uniqueViolationTarget } from './prisma-adapter';
+export {
+  createPrismaAdapter,
+  PRISMA_TRANSACTION_OPTIONS,
+  prismaPgSettings,
+  uniqueViolationTarget,
+} from './prisma-adapter';
 export type { PrismaPgSettings } from './prisma-adapter';
 export {
   closeSharedRedis,

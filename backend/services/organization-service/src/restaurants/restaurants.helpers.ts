@@ -89,8 +89,8 @@ export function toRestaurantResponse(restaurant: RestaurantWithRelations) {
     open24x7: restaurant.open24x7,
     panNumber: restaurant.panNumber,
     posOrders: restaurant.posOrders,
-    /** The counter QR (phone) orders are billed at; null: QR ordering is off. */
-    qrCounterId: restaurant.qrCounterId,
+    /** The counter kiosk orders are billed at; null: the kiosk takes no orders. */
+    kioskCounterId: restaurant.kioskCounterId,
     qrUnitName: restaurant.qrUnitName,
     unitNameForQr: restaurant.qrUnitName,
     restaurantCode: restaurant.restaurantCode,

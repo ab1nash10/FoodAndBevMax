@@ -178,19 +178,21 @@ export class RestaurantOrdersController {
     };
   }
 
-  @Put('restaurants/:id/qr-counter')
+  @Put('restaurants/:id/kiosk-counter')
   @ApiBearerAuth('access-token')
   @Permissions('RESTAURANT_UPDATE')
-  @ApiOperation({ summary: 'The counter QR (phone) orders are billed at; null turns them off' })
-  @ApiOkResponse({ description: 'QR counter saved.' })
-  async setQrCounter(
+  @ApiOperation({
+    summary: 'The counter kiosk orders are billed at; null stops the kiosk taking them',
+  })
+  @ApiOkResponse({ description: 'Kiosk counter saved.' })
+  async setKioskCounter(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: SetQrCounterDto,
     @CurrentUser() user: JwtRequestUser | undefined,
     @Req() request: RequestContextLike,
   ) {
     return {
-      data: await this.orders.setQrCounter(id, body.counterId, {
+      data: await this.orders.setKioskCounter(id, body.counterId, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),

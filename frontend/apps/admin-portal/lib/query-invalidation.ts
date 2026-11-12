@@ -7,11 +7,6 @@ function invalidate(queryClient: QueryClient, keys: QueryKey[]): void {
   });
 }
 
-/** Time slots: their list and the slot picker on restaurant menu items. */
-export function invalidateTimeSlotQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [queryKeys.timeSlots()]);
-}
-
 export function invalidateItemCategoryQueries(queryClient: QueryClient): void {
   // Items carry their category's name and status, so their lists and pickers refresh too.
   invalidate(queryClient, [

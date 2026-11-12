@@ -92,7 +92,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
   return (
     <FormShell
       backHref="/masters/locations"
-      subtitle="Creating a Location will auto-create Main Store and Main Kitchen."
+      subtitle="Creating a Location will auto-create Main Store, Main Kitchen and Counter Kitchen."
       title={hospital ? `Edit ${getLocationTitle(hospital)}` : 'Edit location'}
     >
       {hospitalQuery.isLoading ? (

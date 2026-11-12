@@ -4,7 +4,6 @@ import {
   BookOpenText,
   Boxes,
   Building2,
-  Clock3,
   ChefHat,
   ClipboardList,
   CookingPot,
@@ -199,12 +198,6 @@ export const navigationGroups: NavGroup[] = [
         icon: Utensils,
         label: 'Restaurant Menus',
         permissions: ['RESTAURANT_MENU_VIEW'],
-      },
-      {
-        href: '/masters/time-slots',
-        icon: Clock3,
-        label: 'Time Slots',
-        permissions: ['TIME_SLOT_VIEW'],
       },
     ],
     label: 'Item & Menu Setup',
@@ -508,12 +501,6 @@ export const subRoutes: SubRoute[] = [
     parent: '/masters/item-categories',
     pattern: '/masters/item-categories/new',
     permissions: ['ITEM_CATEGORY_CREATE'],
-  },
-  {
-    label: 'New time slot',
-    parent: '/masters/time-slots',
-    pattern: '/masters/time-slots/new',
-    permissions: ['TIME_SLOT_CREATE'],
   },
   {
     label: 'New item',

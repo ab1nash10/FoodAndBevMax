@@ -9,6 +9,8 @@ export interface MappingFormValues {
   categoryId: string;
   isActive: boolean;
   itemId: string;
+  /** Kitchen Items only: Readymade (made ahead) or Live (made to order). */
+  itemType?: 'LIVE' | 'READYMADE';
   parentId: string;
 }
 

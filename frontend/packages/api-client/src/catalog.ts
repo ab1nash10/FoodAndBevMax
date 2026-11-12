@@ -202,8 +202,12 @@ export interface KitchenItemInput {
   categoryId: string;
   isActive?: boolean;
   itemId: string;
+  /** Readymade (made ahead) or Live (made to order); applies to the item in every kitchen. */
+  itemType?: KitchenItemType;
   kitchenId: string;
 }
+
+export type KitchenItemType = 'LIVE' | 'READYMADE';
 
 export interface KitchenItemListQuery extends ListQuery {
   hospitalId?: string;

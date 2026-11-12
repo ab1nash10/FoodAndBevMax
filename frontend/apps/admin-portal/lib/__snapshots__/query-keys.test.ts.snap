@@ -97,9 +97,6 @@ exports[`every prefix stays as it is 1`] = `
   "kioskMenu": [
     "kiosk-menu",
   ],
-  "kioskOrderToBill": [
-    "kiosk-order-to-bill",
-  ],
   "kitchenOptions": [
     "kitchen-options",
   ],
@@ -232,9 +229,6 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "stores": [
     "stores",
-  ],
-  "timeSlots": [
-    "time-slots",
   ],
   "transferAcknowledgements": [
     "transfer-acknowledgements",

@@ -2,12 +2,12 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChefHat, Package, Pencil, Plus, Sprout, type LucideIcon } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { Item, ItemInput, ItemType, SortOrder } from '@aahar/api-client';
+import type { Item, ItemInput, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { ImportButton } from '@/components/import/import-dialog';
@@ -22,9 +22,11 @@ import {
   RecordAvatar,
   RowAction,
   StatStrip,
+  tableStyles,
 } from '@/components/design-system';
+import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Select, Skeleton } from '@/components/ui';
+import { Panel, Select } from '@/components/ui';
 import { FilterSearch, Modal, SegmentedControl, Toggle } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
@@ -62,53 +64,6 @@ import {
 import { queryKeys } from '@/lib/query-keys';
 import { sortChoices } from '@/lib/sort-choices';
 
-const itemKinds: Record<ItemType, { className: string; icon: LucideIcon; label: string }> = {
-  LIVE: {
-    className: 'bg-ds-status-neutral-bg text-ds-status-neutral-fg',
-    icon: Sprout,
-    label: 'Live',
-  },
-  MRP: {
-    className: 'bg-ds-status-info-bg text-ds-status-info-fg',
-    icon: Package,
-    label: 'Packaged',
-  },
-  READYMADE: { className: 'bg-ds-primary-soft text-ds-link', icon: ChefHat, label: 'Prepared' },
-};
-
-/** Packaged (mapped to a store), prepared (to a kitchen), or not mapped yet. */
-function ItemKind({ kind }: Readonly<{ kind: ItemType | null }>) {
-  const shown = kind ? itemKinds[kind] : null;
-
-  return shown ? (
-    <span
-      className={cn(
-        'inline-flex h-6 items-center gap-1.5 rounded-full pr-2.5 pl-2 text-xs font-medium',
-        shown.className,
-      )}
-    >
-      <shown.icon aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-      {shown.label}
-    </span>
-  ) : (
-    <span className="text-[13px] text-ds-muted">Not mapped</span>
-  );
-}
-
-// The cards' pastel tops, picked by name so an item keeps its colour.
-const itemTiles = ['tile-blue', 'tile-violet', 'tile-green', 'tile-rose', 'tile-amber'];
-
-function initialsOf(name: string) {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0]!.toUpperCase())
-      .join('') || '?'
-  );
-}
-
 function itemToFormValues(item: Item): ItemFormValues {
   return {
     hsnCode: item.hsnCode ?? '',
@@ -137,16 +92,6 @@ const itemColumns: Array<CsvColumn<Item>> = [
   { header: 'HSN code', value: (item) => item.hsnCode },
   { header: 'Prep time (min)', value: (item) => item.preparationTimeMinutes },
   { header: 'Status', value: (item) => (item.isActive ? 'Active' : 'Inactive') },
-  {
-    header: 'Type',
-    readOnly: true,
-    value: (item) =>
-      item.itemType === 'MRP'
-        ? 'Packaged (stores)'
-        : item.itemType === 'READYMADE'
-          ? 'Prepared (kitchens)'
-          : 'Not mapped yet',
-  },
 ];
 
 export function ItemsPageClient() {
@@ -167,11 +112,6 @@ export function ItemsPageClient() {
     '',
     foodTypeValues,
   );
-  // Packaged (mapped to a store) or prepared (mapped to a kitchen): the stat strip's filter.
-  const [kindFilter, setKindFilter] = useUrlParam<'' | 'MRP' | 'READYMADE'>('kind', '', [
-    'MRP',
-    'READYMADE',
-  ]);
   const [sort, setSort] = useUrlParam(
     'sort',
     'createdAt:desc',
@@ -179,6 +119,8 @@ export function ItemsPageClient() {
   );
   const [sortBy = 'createdAt', sortDirection] = sort.split(':');
   const sortOrder: SortOrder = sortDirection === 'asc' ? 'asc' : 'desc';
+  // A list (the default) or cards; in the URL like the filters, so a reload keeps it.
+  const [view, setView] = useListView('list');
   const [isEditing, setIsEditing] = useState(false);
   // The open item lives in the URL (?id=), so links from the palette open its pop-up.
   const selectedItemId = searchParams.get('id');
@@ -198,7 +140,6 @@ export function ItemsPageClient() {
         search,
         sortBy,
         sortOrder,
-        itemType: kindFilter || undefined,
         type: foodTypeFilter || undefined,
       });
 
@@ -207,7 +148,6 @@ export function ItemsPageClient() {
     queryKey: queryKeys.items({
       activeFilter,
       foodTypeFilter,
-      kindFilter,
       page,
       pageSize,
       search,
@@ -218,16 +158,11 @@ export function ItemsPageClient() {
 
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (query: { isActive?: boolean; itemType?: ItemType }) =>
+      const count = async (query: { isActive?: boolean }) =>
         (await organizationApi.listItems({ ...query, limit: 0 })).data.meta.total;
-      const [all, packaged, prepared, inactive] = await Promise.all([
-        count({}),
-        count({ itemType: 'MRP' }),
-        count({ itemType: 'READYMADE' }),
-        count({ isActive: false }),
-      ]);
+      const [all, inactive] = await Promise.all([count({}), count({ isActive: false })]);
 
-      return { all, inactive, packaged, prepared };
+      return { all, inactive };
     },
     queryKey: queryKeys.items('stats'),
   });
@@ -347,18 +282,50 @@ export function ItemsPageClient() {
     setSearch('');
     setActiveFilter('');
     setFoodTypeFilter('');
-    setKindFilter('');
     setPage(1);
   }
 
-  const hasFilters = Boolean(searchInput || activeFilter || foodTypeFilter || kindFilter);
+  /** An item's active switch and its state in words; switching it does not open the item. */
+  function itemStatusControl(item: Item) {
+    return (
+      <span className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+        <Toggle
+          ariaLabel={`${item.itemName} active`}
+          checked={item.isActive}
+          disabled={toggleItemStatusMutation.isPending}
+          onChange={() => void toggleItemStatus(item)}
+        />
+        <span
+          className={cn(
+            'text-xs font-medium',
+            item.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
+          )}
+        >
+          {item.isActive ? 'Active' : 'Inactive'}
+        </span>
+      </span>
+    );
+  }
 
-  /** A stat's filter alone: the kind or the inactive status, the other cleared. */
-  function showOnly(kind: '' | 'MRP' | 'READYMADE', status: ActiveFilter) {
-    changeFilter(() => {
-      setKindFilter(kind);
-      setActiveFilter(status);
-    });
+  function itemEditAction(item: Item) {
+    return canEditItems ? (
+      <RowAction
+        icon={Pencil}
+        id={`item-edit-${item.id}`}
+        label={`Edit ${item.itemName}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          editItem(item);
+        }}
+      />
+    ) : null;
+  }
+
+  const hasFilters = Boolean(searchInput || activeFilter || foodTypeFilter);
+
+  /** A stat's filter: every item, or the inactive ones. */
+  function showOnly(status: ActiveFilter) {
+    changeFilter(() => setActiveFilter(status));
   }
 
   return (
@@ -377,7 +344,6 @@ export function ItemsPageClient() {
                     search,
                     sortBy,
                     sortOrder,
-                    itemType: kindFilter || undefined,
                     type: foodTypeFilter || undefined,
                   }),
                 )
@@ -406,30 +372,16 @@ export function ItemsPageClient() {
         label="Items at a glance"
         stats={[
           {
-            active: !kindFilter && activeFilter !== 'inactive',
+            active: activeFilter !== 'inactive',
             label: 'All items',
-            onSelect: () => showOnly('', ''),
+            onSelect: () => showOnly(''),
             share: stats?.all ? 1 : undefined,
             value: stats?.all ?? '–',
           },
           {
-            active: kindFilter === 'MRP',
-            label: 'Packaged · in stores',
-            onSelect: () => showOnly('MRP', ''),
-            share: stats?.all ? stats.packaged / stats.all : undefined,
-            value: stats?.packaged ?? '–',
-          },
-          {
-            active: kindFilter === 'READYMADE',
-            label: 'Prepared · in kitchens',
-            onSelect: () => showOnly('READYMADE', ''),
-            share: stats?.all ? stats.prepared / stats.all : undefined,
-            value: stats?.prepared ?? '–',
-          },
-          {
             active: activeFilter === 'inactive',
             label: 'Inactive',
-            onSelect: () => showOnly('', 'inactive'),
+            onSelect: () => showOnly('inactive'),
             share: stats?.all ? stats.inactive / stats.all : undefined,
             tone: 'pending',
             value: stats?.inactive ?? '–',
@@ -486,19 +438,13 @@ export function ItemsPageClient() {
               sortBy={sortBy}
             />
             <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+            <ListViewSwitch label="Show items as" onChange={setView} value={view} />
           </ListToolbar>
 
           {/* The catalogue as cards: a pastel top with the food mark and the item's initials,
               then its name, code and status. A card opens the item, as a row did. */}
           {itemsQuery.isLoading ? (
-            <div
-              aria-hidden="true"
-              className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4"
-            >
-              {Array.from({ length: 8 }, (_, index) => (
-                <Skeleton className="h-[188px] rounded-[20px]" key={index} />
-              ))}
-            </div>
+            <RecordCardGrid isLoading />
           ) : itemsQuery.isError ? (
             <div className="px-4 py-8">
               <LoadError error={itemsQuery.error} />
@@ -521,92 +467,78 @@ export function ItemsPageClient() {
                 title={hasFilters ? 'No items match' : 'No items yet'}
               />
             </div>
+          ) : view === 'list' ? (
+            <div className="overflow-x-auto">
+              <table className={cn(tableStyles.table, 'min-w-200 table-fixed')}>
+                <thead className={tableStyles.head}>
+                  <tr>
+                    <th className={cn(tableStyles.th, 'w-[48%]')}>Item</th>
+                    <th className={cn(tableStyles.th, 'w-[10%]')}>HSN</th>
+                    <th className={cn(tableStyles.th, 'w-[10%]')}>Prep time</th>
+                    <th className={cn(tableStyles.th, 'w-[14%]')}>Status</th>
+                    <th className={cn(tableStyles.th, 'w-[12%]')}>Updated</th>
+                    <th className={cn(tableStyles.th, 'w-14')}>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr
+                      className={cn(tableStyles.row, !canEditItems && 'cursor-default')}
+                      data-record-id={item.id}
+                      key={item.id}
+                      onClick={canEditItems ? () => editItem(item) : undefined}
+                    >
+                      <td className={tableStyles.td}>
+                        <span className="flex min-w-0 items-center gap-3">
+                          {item.type ? <FoodTypeMarker type={item.type} /> : null}
+                          <span className="min-w-0">
+                            <p className={cn('truncate', tableStyles.title)}>{item.itemName}</p>
+                            <p className={cn('truncate', tableStyles.code)}>{item.itemCode}</p>
+                          </span>
+                        </span>
+                      </td>
+                      <td className={cn(tableStyles.td, tableStyles.code)}>
+                        {item.hsnCode ?? '–'}
+                      </td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                        {item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '–'}
+                      </td>
+                      <td className={tableStyles.td}>{itemStatusControl(item)}</td>
+                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                        {formatDateOnly(item.updatedAt)}
+                      </td>
+                      <td className={tableStyles.td}>{itemEditAction(item)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4">
+            <RecordCardGrid>
               {items.map((item) => (
-                <li
-                  className={cn(
-                    'group flex flex-col overflow-hidden rounded-[20px] border border-ds-border bg-ds-surface shadow-card transition-shadow duration-150',
-                    canEditItems && 'cursor-pointer hover:shadow-card-hover',
-                  )}
-                  data-record-id={item.id}
+                <RecordCard
+                  edit={
+                    canEditItems
+                      ? { id: `item-edit-${item.id}`, label: `Edit ${item.itemName}` }
+                      : undefined
+                  }
+                  footer={itemStatusControl(item)}
+                  foodType={item.type}
+                  id={item.id}
                   key={item.id}
-                  onClick={canEditItems ? () => editItem(item) : undefined}
-                >
-                  <div
-                    className={cn(
-                      'relative flex h-[104px] items-start justify-between gap-2 overflow-hidden p-3.5',
-                      itemTiles[
-                        [...item.itemName].reduce((sum, char) => sum + char.charCodeAt(0), 0) %
-                          itemTiles.length
-                      ],
-                    )}
-                  >
-                    {item.type ? (
-                      <span className="rounded-[5px] bg-ds-surface p-px shadow-xs">
-                        <FoodTypeMarker type={item.type} />
-                      </span>
-                    ) : (
-                      <span />
-                    )}
-                    <ItemKind kind={item.itemType} />
-                    <span
-                      aria-hidden="true"
-                      className="absolute -bottom-3.5 right-3.5 text-[64px] font-semibold leading-none tracking-[-0.03em] text-ds-text opacity-[0.12]"
-                    >
-                      {initialsOf(item.itemName)}
-                    </span>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-2.5 px-4 pb-3 pt-3.5">
-                    <div className="min-w-0">
-                      <h2 className="truncate text-base font-semibold text-ds-text">
-                        {item.itemName}
-                      </h2>
-                      <p className="truncate font-mono text-xs text-ds-muted">
-                        {item.itemCode}
-                        {item.hsnCode ? ` · HSN ${item.hsnCode}` : ''}
-                      </p>
-                    </div>
-                    {/* Its own click: switching the status does not open the item. */}
-                    <div
-                      className="mt-auto flex items-center gap-2"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Toggle
-                        ariaLabel={`${item.itemName} active`}
-                        checked={item.isActive}
-                        disabled={toggleItemStatusMutation.isPending}
-                        onChange={() => void toggleItemStatus(item)}
-                      />
-                      <span
-                        className={cn(
-                          'text-xs font-medium',
-                          item.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
-                        )}
-                      >
-                        {item.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                      <span className="ml-auto truncate text-xs text-ds-muted">
-                        {item.preparationTimeMinutes
-                          ? `${item.preparationTimeMinutes} min prep`
-                          : formatDateOnly(item.updatedAt)}
-                      </span>
-                      {canEditItems ? (
-                        <RowAction
-                          icon={Pencil}
-                          id={`item-edit-${item.id}`}
-                          label={`Edit ${item.itemName}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            editItem(item);
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
+                  meta={
+                    item.preparationTimeMinutes
+                      ? `${item.preparationTimeMinutes} min prep`
+                      : formatDateOnly(item.updatedAt)
+                  }
+                  name={item.itemName}
+                  onOpen={canEditItems ? () => editItem(item) : undefined}
+                  subtitle={`${item.itemCode}${item.hsnCode ? ` · HSN ${item.hsnCode}` : ''}`}
+                />
               ))}
-            </ul>
+            </RecordCardGrid>
           )}
           <ListPager
             limit={meta.limit}
@@ -634,7 +566,6 @@ export function ItemsPageClient() {
               <span className="rounded-md bg-ds-subtle px-2 py-0.5 font-mono text-[11.5px] text-ds-text-3">
                 {selectedItem.itemCode}
               </span>
-              <ItemKind kind={selectedItem.itemType} />
               <span
                 className={cn(
                   'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium',

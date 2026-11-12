@@ -108,8 +108,7 @@ function PaidNotBilled() {
     <Panel className="overflow-hidden border-ds-status-bad-fg/30">
       <div className="border-b border-ds-divider bg-ds-status-bad-bg px-4 py-3 text-ds-status-bad-fg">
         <h2 className="text-sm font-bold">
-          Paid, not billed: {items.length} room-service {items.length === 1 ? 'order' : 'orders'} to
-          refund
+          Paid, not billed: {items.length} QR {items.length === 1 ? 'order' : 'orders'} to refund
         </h2>
         <p className="text-xs">
           The guest paid by UPI but the order could not be placed. Refund each through the payment

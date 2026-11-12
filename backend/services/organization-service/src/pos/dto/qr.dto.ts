@@ -16,12 +16,21 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+const qrChannels = [OrderChannel.ROOM, OrderChannel.COUNTER] as const;
+/** ROOM: delivered to a patient's room. COUNTER: staff and visitors pick it up at the QR counter. */
+export type QrChannel = (typeof qrChannels)[number];
+
 export class QrMenuQueryDto {
   @ApiPropertyOptional({ description: "The restaurant's board link secret." })
   @IsOptional()
   @IsString()
   @MaxLength(200)
   token?: string;
+
+  @ApiPropertyOptional({ default: OrderChannel.ROOM, enum: qrChannels })
+  @IsOptional()
+  @IsIn(qrChannels)
+  channel?: QrChannel;
 }
 
 export class QrStaffOtpDto {
@@ -59,13 +68,14 @@ export class CreateQrOrderDto {
   @Matches(/\S/)
   clientOrderId!: string;
 
-  // Counter pickup is ordered at the kiosk: a QR order is always delivered to a room.
-  @ApiPropertyOptional({ default: OrderChannel.ROOM, enum: [OrderChannel.ROOM] })
-  @IsOptional()
-  @IsIn([OrderChannel.ROOM], {
-    message: 'The QR is for room delivery. Order for the counter at the kiosk.',
+  @ApiPropertyOptional({
+    default: OrderChannel.ROOM,
+    description: 'ROOM: delivered to the room. COUNTER: picked up at the QR counter.',
+    enum: qrChannels,
   })
-  channel?: typeof OrderChannel.ROOM;
+  @IsOptional()
+  @IsIn(qrChannels)
+  channel?: QrChannel;
 
   @ApiProperty({ type: [QrOrderLineDto] })
   @ArrayMinSize(1)
@@ -74,11 +84,11 @@ export class CreateQrOrderDto {
   @ValidateNested({ each: true })
   lines!: QrOrderLineDto[];
 
-  @ApiProperty({ description: 'The room the order is delivered to.' })
+  @ApiPropertyOptional({ description: 'The room a ROOM order is delivered to.' })
+  @IsOptional()
   @IsString()
   @MaxLength(20)
-  @Matches(/\S/, { message: 'Enter your room number.' })
-  roomNumber!: string;
+  roomNumber?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -110,4 +120,34 @@ export class QrOrderStatusQueryDto {
   @IsString()
   @MaxLength(200)
   key!: string;
+}
+
+export class CreateKioskPaidOrderDto {
+  @ApiProperty({
+    description: "The kiosk's own id for this order: sending it again is the same order.",
+  })
+  @IsString()
+  @MaxLength(64)
+  @Matches(/\S/)
+  clientOrderId!: string;
+
+  @ApiProperty({ type: [QrOrderLineDto] })
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @Type(() => QrOrderLineDto)
+  @ValidateNested({ each: true })
+  lines!: QrOrderLineDto[];
+
+  @ApiProperty({
+    description: "UPI: the gateway's QR on the kiosk; CARD: the counter's machine.",
+    enum: ['CARD', 'UPI'],
+  })
+  @IsIn(['CARD', 'UPI'])
+  method!: 'CARD' | 'UPI';
+
+  @ApiPropertyOptional({ description: 'From a confirmed staff-discount OTP.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  staffToken?: string;
 }

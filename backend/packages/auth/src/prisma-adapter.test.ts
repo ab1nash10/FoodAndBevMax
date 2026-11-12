@@ -5,7 +5,7 @@ import { prismaPgSettings, uniqueViolationTarget } from './prisma-adapter';
 
 void test('carries the Prisma 6 URL options over and strips them from the pg URL', () => {
   const settings = prismaPgSettings(
-    'postgresql://u:p%40ss@db.example.com:5432/aahar?schema=public&connection_limit=10&connect_timeout=8&application_name=fandb',
+    'postgresql://u:p%40ss@db.example.com:5432/aahar?schema=public&connection_limit=10&connect_timeout=8&pool_timeout=20&application_name=fandb',
   );
 
   assert.equal(
@@ -13,7 +13,8 @@ void test('carries the Prisma 6 URL options over and strips them from the pg URL
     'postgresql://u:p%40ss@db.example.com:5432/aahar?application_name=fandb',
   );
   assert.equal(settings.pool.max, 10);
-  assert.equal(settings.pool.connectionTimeoutMillis, 8000);
+  // The longer of the two: node-postgres uses this one timeout for both.
+  assert.equal(settings.pool.connectionTimeoutMillis, 20_000);
   assert.equal(settings.schema, 'public');
   assert.equal(settings.sslmode, 'prefer');
   assert.deepEqual(settings.pool.ssl, { rejectUnauthorized: false });
@@ -23,7 +24,9 @@ void test('defaults match Prisma 6 when the URL has no options', () => {
   const settings = prismaPgSettings('postgresql://u:p@localhost:5433/aahar');
 
   assert.equal(settings.pool.max, availableParallelism() * 2 + 1);
-  assert.equal(settings.pool.connectionTimeoutMillis, 5000);
+  // node-postgres has one timeout for connecting and for waiting for a free connection; Prisma 6
+  // waited up to pool_timeout (10 s) for one, so a burst queues instead of failing at 5 s.
+  assert.equal(settings.pool.connectionTimeoutMillis, 10_000);
   assert.equal(settings.schema, undefined);
   assert.equal(settings.sslmode, 'prefer');
 });

@@ -121,7 +121,7 @@ const lucknow = {
 const withMessage = (type: new (...args: never[]) => Error, message: string) => (error: unknown) =>
   error instanceof type && error.message === message;
 
-test('a new location gets a Main Store and a Main Kitchen, skipping codes already taken', async () => {
+test('a new location gets a Main Store, a Main Kitchen and a Counter Kitchen, skipping codes already taken', async () => {
   // STR0001 is already used by another location's store.
   const { kitchens, service, stores } = serviceWith([], {
     stores: [{ deletedAt: null, hospitalId: 'other', storeCode: 'STR0001', storeName: 'Old' }],
@@ -141,7 +141,10 @@ test('a new location gets a Main Store and a Main Kitchen, skipping codes alread
   );
   assert.deepEqual(
     kitchens.map((kitchen) => [kitchen.kitchenName, kitchen.kitchenCode]),
-    [['Main Kitchen', 'KIT0001']],
+    [
+      ['Main Kitchen', 'KIT0001'],
+      ['Counter Kitchen', 'KIT0002'],
+    ],
   );
 });
 
@@ -307,11 +310,7 @@ test('a location keeps its own gateway keys; the secrets come back only masked, 
   );
   assert.equal(edited?.razorpayKeySecret, '••••cret');
   assert.equal(edited?.payuClientSecret, '••••cret');
-  const cleared = await service.update(
-    created.id,
-    { razorpayKeySecret: ' ' },
-    actor,
-  );
+  const cleared = await service.update(created.id, { razorpayKeySecret: ' ' }, actor);
   assert.equal(cleared?.razorpayKeySecret, null);
 
   assert.doesNotMatch(JSON.stringify(audits), /lucknow-(razorpay|payu)-secret/);

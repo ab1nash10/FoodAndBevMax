@@ -17,8 +17,3 @@ export function onlineProvider(bill: {
 
   return null;
 }
-
-/** The modes the till offers: a kiosk order is paid by UPI or card (online included), never cash. */
-export function paymentModesFor(bill: { kioskOrder: boolean }): PaymentMode[] {
-  return bill.kioskOrder ? ['UPI', 'CARD'] : ['CASH', 'UPI', 'CARD', 'OTHER'];
-}

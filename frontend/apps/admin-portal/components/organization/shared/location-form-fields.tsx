@@ -8,6 +8,7 @@ import { CheckboxLine, Textarea } from '@/components/organization/shared/form-co
 import { SectionHeading } from '@/components/organization/shared/list-controls';
 import { onlinePaymentOptions } from '@/components/organization/shared/locations';
 import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
+import { useLegalEntityOptions } from '@/components/organization/shared/hooks';
 import type { HospitalFormValues } from '@/components/organization/shared/types';
 
 type GatewayField =
@@ -105,6 +106,7 @@ export function LocationMasterFormFields({
   const selectedState = form.watch('state');
   const selectedCity = form.watch('city');
   const cityOptions = getCitiesForState(selectedState);
+  const entities = useLegalEntityOptions().data;
 
   useEffect(() => {
     if (selectedCity && cityOptions.length > 0 && !cityOptions.includes(selectedCity)) {
@@ -115,6 +117,33 @@ export function LocationMasterFormFields({
   return (
     <div className="grid gap-6">
       <SectionHeading title="Add/Update Location" />
+      {/* First: the location's name and address follow from its entity. */}
+      <Field
+        error={form.formState.errors.legalEntityId?.message}
+        label="Entity"
+        name="location-legal-entity"
+      >
+        <LegalEntitySelect
+          disabled={disabled}
+          id="location-legal-entity"
+          value={form.watch('legalEntityId')}
+          {...form.register('legalEntityId', {
+            onChange: (event: { target: { value: string } }) => {
+              const entity = entities?.find((option) => option.id === event.target.value);
+              const set = { shouldDirty: true, shouldValidate: true };
+              if (entity?.locationName) form.setValue('title', entity.locationName, set);
+              // An address typed by hand stays; one an entity filled in is replaced.
+              const address = form.getValues('address')?.trim();
+              const fromEntity = entities?.some(
+                (option) => option.entityAddress.trim() === address,
+              );
+              if (entity && (!address || fromEntity)) {
+                form.setValue('address', entity.entityAddress, set);
+              }
+            },
+          })}
+        />
+      </Field>
       <div className="grid gap-4 md:grid-cols-2">
         <Field
           error={form.formState.errors.title?.message}
@@ -233,18 +262,6 @@ export function LocationMasterFormFields({
           name="location-ip-address"
         >
           <Input disabled={disabled} id="location-ip-address" {...form.register('ipAddress')} />
-        </Field>
-        <Field
-          error={form.formState.errors.legalEntityId?.message}
-          label="Entity"
-          name="location-legal-entity"
-        >
-          <LegalEntitySelect
-            disabled={disabled}
-            id="location-legal-entity"
-            value={form.watch('legalEntityId')}
-            {...form.register('legalEntityId')}
-          />
         </Field>
       </div>
       <Field

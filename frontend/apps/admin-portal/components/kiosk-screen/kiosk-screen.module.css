@@ -1,0 +1,23 @@
+/* Sheets rise and the menu dims behind them; quick, so a tap never waits on them. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sheet {
+    animation: sheet-up 150ms ease-out;
+  }
+
+  .scrim {
+    animation: fade-in 120ms ease-out;
+  }
+}
