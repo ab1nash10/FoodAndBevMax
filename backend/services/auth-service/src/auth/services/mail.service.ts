@@ -9,12 +9,12 @@ const TOKEN_MARGIN_MS = 60_000;
 
 function otpEmail(otp: string, minutes: number) {
   return {
-    subject: 'Here is your AAHAR code',
+    subject: `${otp} is your AAHAR sign-in code`,
     html: `<div style="font-family:Segoe UI,Arial,sans-serif;color:#101828;max-width:480px">
-<p style="font-size:15px">Use this code to sign in to AAHAR or reset your password:</p>
+<p style="font-size:15px">Use this code to sign in to AAHAR:</p>
 <p style="font-size:34px;font-weight:700;letter-spacing:6px;margin:16px 0">${otp}</p>
 <p style="font-size:14px;color:#475467">It is valid for ${minutes} minutes. Do not share it with anyone.</p>
-<p style="font-size:13px;color:#667085">If you did not ask for it, you can ignore this email.</p>
+<p style="font-size:13px;color:#667085">If you did not try to sign in, you can ignore this email.</p>
 <p style="font-size:13px;color:#667085">Max Healthcare · AAHAR</p>
 </div>`,
   };
