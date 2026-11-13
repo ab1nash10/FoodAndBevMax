@@ -26,7 +26,8 @@ export function BulkLocationBar({
   const queryClient = useQueryClient();
 
   const hospitalsQuery = useQuery({
-    queryFn: async () => (await organizationApi.listHospitals({ limit: 100, page: 1 })).data,
+    queryFn: async () =>
+      (await organizationApi.listHospitals({ isActive: true, limit: 100, page: 1 })).data,
     queryKey: queryKeys.accessHospitals(),
   });
   const hospitals = hospitalsQuery.data?.items ?? [];

@@ -90,9 +90,18 @@ export class PosController {
   }
 
   @Post('till')
-  @Permissions('POS_DEVICE_UPDATE')
+  // Anyone who uses a POS screen: typing the right computer name is what opens the POS.
+  @Permissions(
+    'POS_DEVICE_UPDATE',
+    'POS_ORDER_CREATE',
+    'POS_ORDER_VIEW',
+    'COUNTER_STOCK_VIEW',
+    'COUNTER_STOCK_RECEIVE',
+  )
+  // Ten names a minute per user: enough for typos, too few to try many computer names.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
-    summary: 'Set up the calling browser as a POS device’s till; its key is returned once',
+    summary: 'Make the calling browser the till of the POS device with this computer’s name',
   })
   @ApiOkResponse({ description: 'Till key returned.' })
   async enrollTill(

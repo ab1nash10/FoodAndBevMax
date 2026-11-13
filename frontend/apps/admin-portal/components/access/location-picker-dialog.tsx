@@ -42,8 +42,14 @@ export function LocationPickerDialog({
   const query = useQuery({
     placeholderData: keepPreviousData,
     queryFn: async () =>
-      (await organizationApi.listHospitals({ limit: PAGE_SIZE, page, search: search || undefined }))
-        .data,
+      (
+        await organizationApi.listHospitals({
+          isActive: true,
+          limit: PAGE_SIZE,
+          page,
+          search: search || undefined,
+        })
+      ).data,
     queryKey: queryKeys.locationPicker(page, search),
   });
 

@@ -483,9 +483,10 @@ export function createOrganizationApi(options: ApiClientOptions) {
      * Sets up this browser as the POS device's till; the key comes back once. The computer's
      * name must be the device's Host Name.
      */
-    enrollTill(posDeviceId: string, computerName: string) {
+    /** Makes this browser the till of the POS device (at the user's locations) with this name. */
+    enrollTill(computerName: string) {
       return client.request<ApiResponse<{ tillKey: string }>>('/pos/till', {
-        body: { computerName, posDeviceId },
+        body: { computerName },
         method: 'POST',
       });
     },

@@ -43,9 +43,12 @@ export class PosCountersQueryDto {
 }
 
 export class EnrollTillDto {
-  @ApiProperty({ description: 'The POS device this computer is the till of.' })
+  @ApiPropertyOptional({
+    description: 'The POS device; without it, the one whose Host Name is the computer name.',
+  })
+  @IsOptional()
   @IsUUID()
-  posDeviceId!: string;
+  posDeviceId?: string;
 
   @ApiProperty({
     description: 'This computer’s name, as Windows shows it; must be the device’s Host Name.',

@@ -109,7 +109,8 @@ export function UserDialog({
 
   // Only the assigned locations are fetched by name; the full list lives in the picker dialog.
   const hospitalsQuery = useQuery({
-    queryFn: async () => (await organizationApi.listHospitals({ limit: 100, page: 1 })).data,
+    queryFn: async () =>
+      (await organizationApi.listHospitals({ isActive: true, limit: 100, page: 1 })).data,
     queryKey: queryKeys.accessHospitals(),
   });
   const hospitals = hospitalsQuery.data?.items ?? [];
@@ -403,6 +404,10 @@ export function UserDialog({
               value={homeId}
             >
               <option value="">Select default location</option>
+              {/* Only active locations are offered; a user's current one made inactive since stays. */}
+              {homeId && !hospitals.some((hospital) => hospital.id === homeId) ? (
+                <option value={homeId}>{nameOf(homeId)} (inactive)</option>
+              ) : null}
               {hospitals.map((hospital) => (
                 <option key={hospital.id} value={hospital.id}>
                   {hospital.hospitalCode} - {hospital.hospitalName}

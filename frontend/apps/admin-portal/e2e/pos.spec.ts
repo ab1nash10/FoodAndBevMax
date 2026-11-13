@@ -51,7 +51,7 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
   }, session);
   const title = page.getByRole('heading', { level: 1 });
 
-  await test.step('an admin sets this computer up as the till, by its name', async () => {
+  await test.step('this computer becomes the till by typing its name', async () => {
     // The device's Host Name, as the admin would read it off the computer.
     const devices = (await (
       await fetch(`${orgUrl}/pos-devices?limit=100`, {
@@ -64,34 +64,24 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     const hostName = device?.hostName;
     expect(hostName, `${tillDevice} has a Host Name`).toBeTruthy();
 
-    // Till setup lists only the picked location's POS devices, so pick the till's location.
+    // No device to pick and no location to choose: the name alone finds the POS device.
     await page.goto('pos/billing');
-    await page.evaluate(
-      (id) => window.localStorage.setItem('aahar.location-context', id),
-      device!.hospitalId,
-    );
-    await page.reload();
     const notATill = page.getByText('This computer is not set up as a till');
     await expect(notATill).toBeVisible();
-    const setUp = page.getByRole('button', {
-      name: `Make this computer the till of ${tillDevice}`,
-    });
+    const open = page.getByRole('button', { name: 'Open POS' });
     const name = page.getByLabel('This computer’s name');
-    await expect(setUp, 'nothing to check until a name is typed').toBeDisabled();
-    // Another computer's name is refused: the device names a different one.
+    await expect(open, 'nothing to check until a name is typed').toBeDisabled();
+    // A name no POS device has is refused, without saying which name would have worked.
     await name.fill('NOT-THIS-PC');
-    await setUp.click();
-    // Without saying which name was expected.
+    await open.click();
     await expect(
-      page.getByText('This computer’s name doesn’t match the POS device’s Host Name.', {
+      page.getByText('No POS device at your locations has this computer’s name.', {
         exact: false,
       }),
     ).toBeVisible();
     await name.fill(hostName!.toLowerCase());
-    await setUp.click();
+    await name.press('Enter');
     await expect(notATill).toHaveCount(0);
-    // Back to every location for the screens and the bill history.
-    await page.evaluate(() => window.localStorage.setItem('aahar.location-context', 'all'));
   });
 
   for (const [path, name] of screens) {

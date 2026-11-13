@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { getAllowedHospitalIds, hospitalScopeStorage } from '@aahar/auth';
 import {
   BadRequestException,
@@ -350,39 +350,57 @@ export class PosService {
    * The admin types the computer's name, which must be the device's Host Name: a browser cannot
    * read it, so this is where a wrong Host Name or the wrong computer is caught.
    */
-  async enrollTill(posDeviceId: string, computerName: string, context: ActorContext) {
-    // Read under the admin's own locations: a device elsewhere is not found.
-    const device = await this.prisma.posDevice.findFirst({
-      select: { hostName: true, id: true },
-      where: { deletedAt: null, id: posDeviceId, isActive: true },
+  async enrollTill(posDeviceId: string | undefined, computerName: string, context: ActorContext) {
+    // Read under the user's own locations: a device elsewhere is not found. Without an id, the
+    // device is the one whose Host Name is this computer's name.
+    const devices = await this.prisma.posDevice.findMany({
+      select: { hostName: true, id: true, tillKeyHash: true },
+      where: { deletedAt: null, isActive: true, ...(posDeviceId ? { id: posDeviceId } : {}) },
     });
 
-    if (!device) {
+    if (posDeviceId && !devices.length) {
       throw new NotFoundException('POS device not found');
     }
 
     // Windows shows the name with or without the domain, in any case.
     const shortName = (name: string | null) => (name ?? '').trim().split('.')[0]!.toLowerCase();
-    if (!shortName(device.hostName)) {
+    if (posDeviceId && !shortName(devices[0]!.hostName)) {
       throw new BadRequestException(
         'This POS device has no Host Name yet. Add the till computer’s name to it under POS & Payment Machines first.',
       );
     }
+    const wanted = shortName(computerName);
+    const matching = devices.filter((device) => wanted && shortName(device.hostName) === wanted);
     // Never name the expected computer: whoever typed a wrong name learns nothing from it.
-    if (shortName(computerName) !== shortName(device.hostName)) {
+    if (!matching.length) {
       throw new BadRequestException(
-        'This computer’s name doesn’t match the POS device’s Host Name. Set the till up on that computer, or check the Host Name under POS & Payment Machines.',
+        posDeviceId
+          ? 'This computer’s name doesn’t match the POS device’s Host Name. Set the till up on that computer, or check the Host Name under POS & Payment Machines.'
+          : 'No POS device at your locations has this computer’s name. Check the name (Windows: Settings → System → About → Device name), or ask an admin to add it as a POS device’s Host Name.',
       );
     }
+    if (matching.length > 1) {
+      throw new BadRequestException(
+        'More than one POS device has this computer’s name. Ask an admin to give each its own Host Name.',
+      );
+    }
+    const device = matching[0]!;
 
-    const tillKey = `till_${randomBytes(24).toString('base64url')}`;
+    // ponytail: one key per device and Host Name (not per browser), so every browser that types
+    // the name shares it and none is pushed out. Revoking stops them all; changing the Host
+    // Name or JWT_ACCESS_SECRET re-keys them. Per-browser keys need a keys table.
+    const tillKey = `till_${createHmac('sha256', process.env.JWT_ACCESS_SECRET ?? '')
+      .update(`pos-till:${device.id}:${shortName(device.hostName)}`)
+      .digest('base64url')}`;
+    const tillKeyHash = hashOrderKey(tillKey);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.posDevice.update({
-        data: { tillKeyHash: hashOrderKey(tillKey), updatedBy: context.actorId },
-        // (the old key is forgotten below, with every till this process remembers)
-        where: { id: device.id },
-      });
+      if (device.tillKeyHash !== tillKeyHash) {
+        await tx.posDevice.update({
+          data: { tillKeyHash, updatedBy: context.actorId },
+          where: { id: device.id },
+        });
+      }
       await this.auditLog.record(
         {
           action: 'POS_TILL_SET_UP',
@@ -486,8 +504,14 @@ export class PosService {
     return counters;
   }
 
+  /**
+   * The live device a till key belongs to. Deleted restaurants (or ones at a deleted location)
+   * are not its; a device left with none, or at a deleted location, is no till, so the computer
+   * says "not set up as a till" and an admin sets it up again. Before, such a till stayed
+   * invisible in every list yet told its cashier they were "not assigned" to a deleted place.
+   */
   async loadTill(hash: string) {
-    return await hospitalScopeStorage.run(
+    const device = await hospitalScopeStorage.run(
       { allowedHospitalIds: null },
       async () =>
         await this.prisma.posDevice.findFirst({
@@ -499,12 +523,23 @@ export class PosService {
                 restaurant: { select: { hospitalId: true, restaurantName: true } },
                 restaurantId: true,
               },
-              where: { deletedAt: null, isActive: true },
+              where: {
+                deletedAt: null,
+                isActive: true,
+                restaurant: { deletedAt: null, hospital: { deletedAt: null } },
+              },
             },
           },
-          where: { deletedAt: null, isActive: true, tillKeyHash: hash },
+          where: {
+            deletedAt: null,
+            hospital: { deletedAt: null },
+            isActive: true,
+            tillKeyHash: hash,
+          },
         }),
     );
+
+    return device?.restaurants.length ? device : null;
   }
 
   /**
