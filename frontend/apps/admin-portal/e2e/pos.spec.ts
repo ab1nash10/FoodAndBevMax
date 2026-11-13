@@ -137,19 +137,30 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     await expect(page.getByText(billNumber)).toBeVisible();
   });
 
-  await test.step('logging out with the shift open asks to end or hand it over first', async () => {
-    await page.goto('pos/billing');
-    await page.locator('summary[aria-label^="Account menu"]:visible').first().click();
-    await page.locator('[role="menuitem"]:visible', { hasText: 'Log out' }).click();
+  // Log out asks only about the user's own open shift. On a counter where someone else's shift
+  // was already open, the test billed on theirs and has none of its own: Log out rightly signs
+  // straight out, so there is nothing to check.
+  if (openedShift) {
+    await test.step('logging out with the shift open asks to end or hand it over first', async () => {
+      await page.goto('pos/billing');
+      await page.locator('summary[aria-label^="Account menu"]:visible').first().click();
+      await page.locator('[role="menuitem"]:visible', { hasText: 'Log out' }).click();
 
-    const asked = page.getByRole('dialog', { name: 'End your shift before you log out' });
-    await expect(asked).toBeVisible();
-    await expect(asked.getByText('You still have a POS shift open.')).toBeVisible();
-    await asked.getByRole('button', { name: 'Stay signed in' }).click();
-    await expect(asked).toHaveCount(0);
-    // Still signed in, on the till.
-    await expect(title).toHaveText(/^Billing/);
-  });
+      const asked = page.getByRole('dialog', { name: 'End your shift before you log out' });
+      await expect(asked).toBeVisible();
+      await expect(asked.getByText('You still have a POS shift open.')).toBeVisible();
+      await asked.getByRole('button', { name: 'Stay signed in' }).click();
+      await expect(asked).toHaveCount(0);
+      // Still signed in, on the till.
+      await expect(title).toHaveText(/^Billing/);
+    });
+  } else {
+    test.info().annotations.push({
+      description:
+        'the counter already had another user’s shift open, so no own shift to ask about',
+      type: 'skipped: log out asks about the open shift',
+    });
+  }
 
   if (openedShift) {
     await test.step('end the shift this test started', async () => {
