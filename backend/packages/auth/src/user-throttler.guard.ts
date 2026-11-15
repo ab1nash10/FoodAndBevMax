@@ -44,14 +44,18 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     const body = (request.body ?? {}) as Record<string, unknown>;
     const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
-    // Kiosks and order boards are counted per restaurant, and order pushes per order key: every
-    // one of them behind a hospital network shares its public address, so a per-address limit
-    // let a few busy boards lock out the rest. The address ceiling still caps any one address.
+    // Kiosks and order boards are counted per restaurant and address, and order pushes per order
+    // key: one busy restaurant behind a hospital network must not lock out the others there. The
+    // address is part of the key because the restaurant id is printed on every room QR card: a
+    // caller elsewhere hammering it may only use up its own bucket (security audit 2026-11-14).
     // Before the body: a kiosk order naming a staff mobile would otherwise get a fresh bucket per
     // number tried, enough to find out who is staff.
     const params = (request.params ?? {}) as Record<string, unknown>;
-    if (text(params.restaurantId))
-      return Promise.resolve(`restaurant:${text(params.restaurantId)}`);
+    if (text(params.restaurantId)) {
+      return super
+        .getTracker(request)
+        .then((address) => `restaurant:${text(params.restaurantId)}:${address}`);
+    }
 
     if (text(body.mobile)) return Promise.resolve(`mobile:${text(body.mobile)}`);
     if (text(body.email)) return Promise.resolve(`email:${text(body.email).toLowerCase()}`);

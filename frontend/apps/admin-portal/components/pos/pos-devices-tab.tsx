@@ -2,9 +2,9 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Loader2, Pencil, Plus, Utensils } from 'lucide-react';
+import { KeyRound, Loader2, Pencil, Plus, UserPlus, Utensils, X } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PosDevice, PosDeviceInput } from '@aahar/api-client';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
@@ -12,7 +12,7 @@ import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Modal, Toggle } from '@/components/ui-controls';
-import { Field, Input, Panel, Select, Skeleton } from '@/components/ui';
+import { Field, FieldError, Input, Panel, Select, Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { OrderKeyButton } from '@/components/order-key-button';
@@ -66,6 +66,18 @@ const posDeviceSchema = z.object({
   isKotPrintEnabled: z.boolean(),
   name: deviceText(150).min(1, 'Name is required.'),
   restaurantIds: z.array(z.string().uuid()).default([]),
+  // Who may open its till, each only on their own computer.
+  users: z
+    .array(
+      z.object({
+        hostName: hostNameText.min(1, 'Enter their computer’s name.'),
+        userId: z.string().uuid('Select a user.'),
+      }),
+    )
+    .refine(
+      (users) => new Set(users.map((user) => user.userId)).size === users.length,
+      'List each user once.',
+    ),
 });
 
 type PosDeviceFormValues = z.infer<typeof posDeviceSchema>;
@@ -103,8 +115,10 @@ function PosDeviceForm({
       isKotPrintEnabled: false,
       name: '',
       restaurantIds: [],
+      users: [],
     },
   });
+  const userRows = useFieldArray({ control: form.control, name: 'users' });
   const hospitalsQuery = useHospitalOptions();
   const { isAllLocations, scopedHospitalId } = useLocationContext();
   const queryClient = useQueryClient();
@@ -117,6 +131,19 @@ function PosDeviceForm({
   // Same query as the Restaurant's Accessibility pop-up, so both list the same restaurants.
   const restaurantsQuery = useRestaurantOptions(selectedHospitalId || undefined);
   const hospitals = hospitalsQuery.data;
+  const pickedUsers = form.watch('users');
+  const userOptionsQuery = useQuery({
+    enabled: open && Boolean(selectedHospitalId),
+    queryFn: async () => (await organizationApi.listPosDeviceUserOptions(selectedHospitalId)).data,
+    queryKey: queryKeys.posDeviceUserOptions(selectedHospitalId),
+  });
+  // A listed user no longer at the location still shows by name, to be kept or removed.
+  const userOptions = [
+    ...(userOptionsQuery.data ?? []),
+    ...(editingDevice?.users ?? [])
+      .filter((user) => !userOptionsQuery.data?.some((option) => option.id === user.userId))
+      .map((user) => ({ employeeCode: user.employeeCode, id: user.userId, name: user.name })),
+  ];
   // A device bills under its location's entity unless another one is chosen.
   const locationEntityId = (hospitalId: string) =>
     hospitals?.find((hospital) => hospital.id === hospitalId)?.legalEntityId ?? '';
@@ -146,6 +173,7 @@ function PosDeviceForm({
         isKotPrintEnabled: editingDevice.isKotPrintEnabled,
         name: editingDevice.name,
         restaurantIds: editingDevice.restaurantIds,
+        users: editingDevice.users.map(({ hostName, userId }) => ({ hostName, userId })),
       });
     } else {
       form.reset({
@@ -158,6 +186,7 @@ function PosDeviceForm({
         isKotPrintEnabled: false,
         name: '',
         restaurantIds: [],
+        users: [],
       });
     }
     // hospitals: the location's entity is known once the locations have loaded.
@@ -219,6 +248,7 @@ function PosDeviceForm({
       isKotPrintEnabled: parsed.data.isKotPrintEnabled,
       name: parsed.data.name,
       restaurantIds,
+      users: parsed.data.users,
     });
   });
 
@@ -349,7 +379,7 @@ function PosDeviceForm({
         <Field error={form.formState.errors.hostName?.message} label="Host Name" name="pos-host">
           <Input
             id="pos-host"
-            placeholder="Optional"
+            placeholder="Optional, for reference"
             {...form.register('hostName', {
               validate: (value) => {
                 const result = hostNameText.safeParse(value);
@@ -360,6 +390,76 @@ function PosDeviceForm({
               },
             })}
           />
+        </Field>
+        <Field error={form.formState.errors.users?.message} label="Users" name="pos-users">
+          <div aria-label="Users" className="grid gap-2" role="group">
+            <p className="text-xs text-ds-muted">
+              Only these users can open this POS, each on their own computer. Its name is in
+              Windows: Settings → System → About → Device name.
+            </p>
+            {userRows.fields.map((row, index) => {
+              const errors = form.formState.errors.users?.[index];
+
+              return (
+                <div
+                  className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                  key={row.id}
+                >
+                  <div className="[&>*+*]:mt-1">
+                    <Select
+                      aria-label={`User ${index + 1}`}
+                      disabled={!selectedHospitalId}
+                      {...form.register(`users.${index}.userId`)}
+                    >
+                      <option value="">Select user</option>
+                      {userOptions
+                        .filter(
+                          (option) =>
+                            option.id === pickedUsers[index]?.userId ||
+                            !pickedUsers.some((picked) => picked.userId === option.id),
+                        )
+                        .map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.name} ({option.employeeCode})
+                          </option>
+                        ))}
+                    </Select>
+                    <FieldError>{errors?.userId?.message}</FieldError>
+                  </div>
+                  <div className="[&>*+*]:mt-1">
+                    <Input
+                      aria-label={`User ${index + 1}’s computer name`}
+                      placeholder="Computer name"
+                      {...form.register(`users.${index}.hostName`)}
+                    />
+                    <FieldError>{errors?.hostName?.message}</FieldError>
+                  </div>
+                  <Button
+                    className="justify-self-end"
+                    aria-label={`Remove user ${index + 1}`}
+                    onClick={() => userRows.remove(index)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
+            {selectedHospitalId ? null : (
+              <p className="text-sm text-ds-muted">Select a location to choose its users.</p>
+            )}
+            <Button
+              className="justify-self-start"
+              disabled={!selectedHospitalId}
+              onClick={() => userRows.append({ hostName: '', userId: '' })}
+              type="button"
+              variant="outline"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add user
+            </Button>
+          </div>
         </Field>
         <ToggleField
           label="KOT Print"
@@ -476,7 +576,7 @@ export function PosDevicesTab() {
   async function revokeTill(device: PosDevice) {
     const confirmed = await confirm({
       confirmLabel: 'Revoke access',
-      description: `The browser enrolled as ${device.name} will lose POS access immediately. An admin can enroll a browser again later.`,
+      description: `Every computer set up as ${device.name} loses POS access at once. Its listed users can type their computer’s name to open it again; to keep someone out, remove them from the device’s users.`,
       icon: KeyRound,
       title: `Revoke browser access for ${device.name}?`,
       tone: 'danger',
@@ -598,6 +698,9 @@ export function PosDevicesTab() {
                       )}
                     >
                       {device.hostName ?? 'Not set'}
+                      <span className="block font-sans text-xs text-ds-muted">
+                        {device.users.length === 1 ? '1 user' : `${device.users.length} users`}
+                      </span>
                     </td>
                     {/* The switches have their own clicks: they do not open the device. */}
                     <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>

@@ -41,8 +41,14 @@ void test('kiosks, order boards and order pushes are counted per restaurant or k
   // Every kiosk and board behind one hospital network shares its public address.
   const at = (request: Record<string, unknown>) => tracker({ ip: '203.0.113.7', ...request });
 
-  assert.equal(await at({ params: { restaurantId: 'cafe' } }), 'restaurant:cafe');
-  assert.equal(await at({ params: { restaurantId: 'canteen' } }), 'restaurant:canteen');
+  assert.equal(await at({ params: { restaurantId: 'cafe' } }), 'restaurant:cafe:203.0.113.7');
+  assert.equal(await at({ params: { restaurantId: 'canteen' } }), 'restaurant:canteen:203.0.113.7');
+  // The restaurant id is printed on every room QR card: a caller elsewhere hammering it must
+  // use up only its own bucket, not the one the hospital's kiosks, boards and guests share.
+  assert.equal(
+    await tracker({ ip: '198.51.100.4', params: { restaurantId: 'cafe' } }),
+    'restaurant:cafe:198.51.100.4',
+  );
   const push = await at({ headers: { 'x-order-key': 'rsk_one' } });
   assert.match(push, /^order-key:[0-9a-f]{32}$/);
   assert.notEqual(push, await at({ headers: { 'x-order-key': 'rsk_two' } }));
@@ -50,7 +56,7 @@ void test('kiosks, order boards and order pushes are counted per restaurant or k
   // buy a fresh bucket to find out who is staff.
   assert.equal(
     await at({ body: { mobile: '9876543210' }, params: { restaurantId: 'cafe' } }),
-    'restaurant:cafe',
+    'restaurant:cafe:203.0.113.7',
   );
   // A signed-in user stays counted as themselves.
   assert.equal(await at({ params: { restaurantId: 'cafe' }, user: { id: 'u' } }), 'user:u');

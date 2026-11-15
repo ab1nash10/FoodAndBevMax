@@ -97,6 +97,11 @@ function authService(env: Record<string, unknown> = { NODE_ENV: 'test' }) {
     return store.get(key);
   };
   const redis = {
+    decrement: (key: string) => {
+      const entry = live(key);
+      if (entry) entry.value = String(Number(entry.value) - 1);
+      return Promise.resolve();
+    },
     delete: (key: string) => Promise.resolve(live(key) ? store.delete(key) : false),
     get: (key: string) => Promise.resolve(live(key)?.value ?? null),
     increment: (key: string, ttlSeconds: number) => {
@@ -515,6 +520,59 @@ test(
 
     vi.advanceTimersByTime(10 * 60 * 1000 + 1);
     assert.ok(await meeraFrom('10.0.0.9'));
+  },
+);
+
+test(
+  'wrong passwords sent all at once still stop at the lock: each attempt is counted before its check',
+  { timeout: 60_000 },
+  async () => {
+    meera.passwordHash = await hashPassword('Meera-right-1');
+    const { service } = authService();
+    const outcomes = async (attempts: Promise<unknown>[]) => {
+      const results = await Promise.allSettled(attempts);
+      return {
+        checked: results.filter((r) => r.status === 'rejected' && wrongPassword(r.reason)).length,
+        locked: results.filter((r) => r.status === 'rejected' && lockedOut(r.reason)).length,
+      };
+    };
+
+    // Spraying in one burst: one guess at each of sixty accounts from one address.
+    const spray = Array.from({ length: 60 }, (_, account) =>
+      service.loginWithPassword(
+        { email: `user${account}@max.in`, password: 'Summer2026' },
+        { ipAddress: '10.0.0.9' },
+      ),
+    );
+    assert.deepEqual(await outcomes(spray), { checked: 30, locked: 30 });
+
+    // Twenty guesses at one account in one burst, from different addresses.
+    const burst = Array.from({ length: 20 }, (_, i) =>
+      service.loginWithPassword(
+        { email: 'meera@max.in', password: `guess-${i}` },
+        { ipAddress: `10.0.1.${i}` },
+      ),
+    );
+    assert.deepEqual(await outcomes(burst), { checked: 10, locked: 10 });
+  },
+);
+
+test(
+  'right passwords from one hospital address never add up to its lock',
+  { timeout: 60_000 },
+  async () => {
+    meera.passwordHash = await hashPassword('Meera-right-1');
+    const { service } = authService();
+
+    // A shift's worth of correct sign-ins behind one public address.
+    for (let i = 0; i < 31; i += 1) {
+      assert.ok(
+        await service.loginWithPassword(
+          { email: 'meera@max.in', password: 'Meera-right-1' },
+          { ipAddress: '10.0.0.5' },
+        ),
+      );
+    }
   },
 );
 

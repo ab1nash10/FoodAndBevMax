@@ -1,13 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { DisplayName } from '../../common/display-name.decorator';
 
@@ -22,6 +25,19 @@ export const hostNamePattern =
   /^$|^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/;
 const hostNameMessage =
   'Enter a valid host name: letters, numbers and hyphens, with dots between parts (e.g. MAX-LKO-POS-01).';
+
+export class PosDeviceUserDto {
+  @ApiProperty()
+  @IsUUID()
+  userId!: string;
+
+  @ApiProperty({ example: 'MAX-LKO-LT-042', description: 'The user’s own computer name.' })
+  @IsString()
+  @IsNotEmpty({ message: 'Enter the user’s computer name.' })
+  @Matches(hostNamePattern, { message: hostNameMessage })
+  @MaxLength(253)
+  hostName!: string;
+}
 
 export class CreatePosDeviceDto {
   @ApiProperty({ example: 'd2d2f99b-0d2d-4c94-8c8a-21d4f90c4f80' })
@@ -66,6 +82,17 @@ export class CreatePosDeviceDto {
   @IsOptional()
   @IsUUID('4', { each: true })
   restaurantIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Who may open this POS, each from their own computer; replaces the list when sent.',
+    type: [PosDeviceUserDto],
+  })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => PosDeviceUserDto)
+  users?: PosDeviceUserDto[];
 
   @ApiPropertyOptional({ default: false })
   @IsBoolean()

@@ -20,7 +20,11 @@ interface Device {
   legalEntityId: string | null;
   name: string;
   restaurantIds: string[];
+  /** Who may open its till, from which computer. */
+  users?: Array<{ hostName: string; tillKeyHash: string | null; userId: string }>;
 }
+
+const people: Record<string, string> = { 'am-1': 'Area Manager', 'cashier-1': 'Cashier One' };
 
 const hospitals = [
   { id: 'saket', isActive: true, legalEntityId: 'entity-a' },
@@ -49,6 +53,10 @@ function serviceWith(devices: Device[]) {
     },
     isInvoicePrintEnabled: false,
     isKotPrintEnabled: false,
+    users: (device.users ?? []).map((row) => ({
+      ...row,
+      user: { employeeCode: row.userId, name: people[row.userId] },
+    })),
     restaurants: device.restaurantIds.map((restaurantId) => ({
       restaurant: {
         ...restaurants.find((entry) => entry.id === restaurantId)!,
@@ -59,6 +67,30 @@ function serviceWith(devices: Device[]) {
     })),
   });
   const tx = {
+    // Every listed user here is active, except 'gone'.
+    user: {
+      count: ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.filter((id) => id in people).length,
+    },
+    // Users' rows on the other live devices.
+    posDeviceUser: {
+      findMany: ({
+        where,
+      }: {
+        where: { posDeviceId?: { not: string }; userId: { in: string[] } };
+      }) =>
+        devices
+          .filter((device) => !device.deletedAt && device.id !== where.posDeviceId?.not)
+          .flatMap((device) =>
+            (device.users ?? [])
+              .filter((row) => where.userId.in.includes(row.userId))
+              .map((row) => ({
+                ...row,
+                posDevice: { name: device.name },
+                user: { name: people[row.userId] },
+              })),
+          ),
+    },
     legalEntity: {
       findFirst: ({ where }: { where: { id: string } }) =>
         ['entity-a', 'entity-b'].includes(where.id) ? { id: where.id } : null,
@@ -124,6 +156,14 @@ function serviceWith(devices: Device[]) {
     syncRestaurants: (id: string, restaurantIds: string[]) => {
       synced.push({ id, restaurantIds });
       devices.find((entry) => entry.id === id)!.restaurantIds = restaurantIds;
+    },
+    // As the real one: a changed computer loses its key, a dropped user their row.
+    syncUsers: (id: string, users: Array<{ hostName: string; userId: string }>) => {
+      const device = devices.find((entry) => entry.id === id)!;
+      device.users = users.map((user) => {
+        const row = device.users?.find((entry) => entry.userId === user.userId);
+        return row?.hostName === user.hostName ? row : { ...user, tillKeyHash: null };
+      });
     },
     transaction: <T>(handler: (client: unknown) => Promise<T>) => handler(tx),
     update: (id: string, data: Record<string, unknown>) => {
@@ -298,4 +338,89 @@ test('only a Super Admin may move a POS device to another legal entity', async (
     { ...actor, roles: ['Super Admin'] },
   );
   assert.equal(moved.legalEntityId, 'entity-b');
+});
+
+test('a device lists who may open its till, each with their own computer, once and active', async () => {
+  const devices: Device[] = [
+    {
+      code: 'P1',
+      deletedAt: null,
+      hospitalId: 'saket',
+      hostName: null,
+      id: 'device-1',
+      isActive: true,
+      legalEntityId: 'entity-a',
+      name: 'Cafe Till',
+      restaurantIds: [],
+      users: [{ hostName: 'SKT-POS-01', tillKeyHash: 'hash-1', userId: 'cashier-1' }],
+    },
+  ];
+  const { service } = serviceWith(devices);
+  const actor = { actorId: 'admin' };
+
+  // The area manager is added with his laptop; the cashier's computer and key stay as they were.
+  const saved = await service.update(
+    'device-1',
+    {
+      users: [
+        { hostName: 'SKT-POS-01', userId: 'cashier-1' },
+        { hostName: 'HO-LAP-1651', userId: 'am-1' },
+      ],
+    },
+    actor,
+  );
+  assert.deepEqual(
+    saved.users.map((user) => [user.name, user.hostName, user.enrolled]),
+    [
+      ['Cashier One', 'SKT-POS-01', true],
+      ['Area Manager', 'HO-LAP-1651', false],
+    ],
+  );
+  assert.equal(saved.hasActiveTillKey, true);
+
+  // Each user once; only active users.
+  await assert.rejects(
+    service.update(
+      'device-1',
+      {
+        users: [
+          { hostName: 'A', userId: 'am-1' },
+          { hostName: 'B', userId: 'am-1' },
+        ],
+      },
+      actor,
+    ),
+    BadRequestException,
+  );
+  await assert.rejects(
+    service.update('device-1', { users: [{ hostName: 'A', userId: 'gone' }] }, actor),
+    BadRequestException,
+  );
+
+  // A user's computer opens one device: typing its name must say which.
+  await assert.rejects(
+    service.create(
+      {
+        code: 'P2',
+        hospitalId: 'saket',
+        name: 'Canteen Till',
+        users: [{ hostName: 'ho-lap-1651.maxhealthcare.com', userId: 'am-1' }],
+      },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      /Area Manager already opens POS device Cafe Till/.test(error.message),
+  );
+
+  // A new computer name loses the old key; a user left off is removed.
+  const moved = await service.update(
+    'device-1',
+    { users: [{ hostName: 'SKT-POS-02', userId: 'cashier-1' }] },
+    actor,
+  );
+  assert.deepEqual(
+    moved.users.map((user) => [user.userId, user.enrolled]),
+    [['cashier-1', false]],
+  );
 });

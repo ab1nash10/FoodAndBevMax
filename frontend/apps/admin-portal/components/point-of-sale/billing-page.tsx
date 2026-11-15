@@ -101,6 +101,79 @@ function unavailableReason(item: PosMenuItem, inCart: number): string | null {
   return null;
 }
 
+// The most one bill line takes (the server refuses more).
+const MAX_QUANTITY = 999;
+
+/** Tapping an item's count: type how many instead of pressing + over and over. */
+function QuantityDialog({
+  inCart,
+  item,
+  onClose,
+  onSet,
+}: {
+  inCart: number;
+  item: PosMenuItem;
+  onClose: () => void;
+  onSet: (quantity: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(inCart));
+  const wanted = Number(draft);
+  const reason = wanted > inCart ? unavailableReason(item, wanted - 1) : null;
+  const error =
+    draft.trim() === '' || !Number.isInteger(wanted) || wanted < 0
+      ? 'Type a whole number.'
+      : wanted > MAX_QUANTITY
+        ? `At most ${MAX_QUANTITY} at a time.`
+        : reason === 'Out of stock'
+          ? `Only ${item.stock} left.`
+          : reason;
+
+  return (
+    <Modal
+      description={wanted === 0 ? '0 takes it off the bill.' : undefined}
+      onClose={onClose}
+      open
+      title={`How many ${item.itemName}?`}
+    >
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!error) onSet(wanted);
+        }}
+      >
+        <Input
+          aria-invalid={Boolean(error)}
+          aria-label="Quantity"
+          autoFocus
+          className="h-14 text-center font-mono text-2xl font-bold tabular-nums"
+          inputMode="numeric"
+          max={MAX_QUANTITY}
+          min={0}
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={(event) => event.target.select()}
+          step={1}
+          type="number"
+          value={draft}
+        />
+        {error ? (
+          <p className="text-sm text-ds-status-bad-fg" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose} type="button" variant="outline">
+            Cancel
+          </Button>
+          <Button disabled={Boolean(error)} type="submit">
+            Set quantity
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // The menu's "All items" tile; '' is the uncategorised items' own category (Other).
 const ALL_ITEMS = '*';
 // The notes and coins a guest hands over, tapped to add up what was received.
@@ -162,6 +235,7 @@ export function BillingPageClient() {
   const [submitted, setSubmitted] = useState(false);
   // The cart line whose kitchen-note box was opened ("Add note"); lines with a note keep theirs.
   const [noteOpenFor, setNoteOpenFor] = useState<number | null>(null);
+  const [quantityFor, setQuantityFor] = useState<PosMenuItem | null>(null);
   // An emptied bill (completed, cleared, cancelled) forgets it, so the next bill's first line
   // never opens a note box and takes the focus from search.
   if (cart.length === 0 && noteOpenFor !== null) setNoteOpenFor(null);
@@ -349,6 +423,25 @@ export function BillingPageClient() {
         if (delta > 0 && unavailableReason(line.item, quantityInCart(line.item.id))) return [line];
         return [{ ...line, quantity }];
       }),
+    );
+  }
+
+  /** A typed quantity: 0 takes the item off; otherwise its last line (no note, usually its
+   * only one) takes up the difference. */
+  function setItemQuantity(item: PosMenuItem, quantity: number) {
+    const index = lastLineOf(item.id);
+    const delta = quantity - quantityInCart(item.id);
+
+    setCart((lines) =>
+      quantity === 0
+        ? lines.filter((line) => line.item.id !== item.id)
+        : lines.flatMap((line, at) =>
+            at !== index
+              ? [line]
+              : line.quantity + delta > 0
+                ? [{ ...line, quantity: line.quantity + delta }]
+                : [],
+          ),
     );
   }
 
@@ -797,13 +890,20 @@ export function BillingPageClient() {
                             >
                               <Minus className="h-4 w-4" />
                             </button>
-                            {/* Keyed by the count, so each add pops it again. */}
-                            <span
-                              className="pop font-mono text-sm font-bold tabular-nums"
-                              key={inCart}
+                            <button
+                              aria-label={`Type how many ${item.itemName} (now ${inCart})`}
+                              className="grid h-full flex-1 place-items-center hover:bg-ds-primary-hover"
+                              onClick={() => setQuantityFor(item)}
+                              type="button"
                             >
-                              {inCart}
-                            </span>
+                              {/* Keyed by the count, so each add pops it again. */}
+                              <span
+                                className="pop font-mono text-sm font-bold tabular-nums"
+                                key={inCart}
+                              >
+                                {inCart}
+                              </span>
+                            </button>
                             <button
                               aria-label={`Add ${item.itemName}`}
                               className="grid h-full w-12 place-items-center rounded-r-control hover:bg-ds-primary-hover disabled:opacity-40"
@@ -1248,6 +1348,17 @@ export function BillingPageClient() {
           </div>
         ) : null}
       </Modal>
+      {quantityFor ? (
+        <QuantityDialog
+          inCart={quantityInCart(quantityFor.id)}
+          item={quantityFor}
+          onClose={() => setQuantityFor(null)}
+          onSet={(quantity) => {
+            setItemQuantity(quantityFor, quantity);
+            setQuantityFor(null);
+          }}
+        />
+      ) : null}
       <UnsentBillsDialog unsent={unsent} />
       <OnlinePaymentDialog
         onClose={() => setOnlinePayment(null)}

@@ -30,6 +30,24 @@ export interface PosDevice {
   restaurantIds: string[];
   restaurants: PosDeviceRestaurantSummary[];
   updatedAt: string;
+  /** Who may open its till, each only from their own computer. */
+  users: PosDeviceUser[];
+}
+
+export interface PosDeviceUser {
+  employeeCode: string;
+  /** They typed the computer's name there, so it is their till now. */
+  enrolled: boolean;
+  hostName: string;
+  name: string;
+  userId: string;
+}
+
+/** A user who may be listed on a POS device: active, at its location. */
+export interface PosDeviceUserOption {
+  employeeCode: string;
+  id: string;
+  name: string;
 }
 
 export interface PosDeviceInput {
@@ -43,6 +61,8 @@ export interface PosDeviceInput {
   isKotPrintEnabled?: boolean;
   name: string;
   restaurantIds?: string[];
+  /** Replaces the list when sent. */
+  users?: Array<{ hostName: string; userId: string }>;
 }
 
 export interface PosDeviceListQuery extends ListQuery {

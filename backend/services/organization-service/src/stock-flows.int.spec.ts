@@ -9,6 +9,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { listOnTill } from './testing/int-harness.js';
 import { superAdminForRun } from './testing/super-admin-for-run.js';
 
 type Body = Record<string, unknown>;
@@ -242,17 +243,17 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       ),
     );
     // A till of this run's own for that restaurant, set up by its computer's name.
-    const till = await ok('POST', '/pos-devices', {
+    await ok('POST', '/pos-devices', {
       code: `ST${run}`,
       hospitalId: fx.hospitalId,
       hostName: `STOCK-TILL-${run}`,
       name: `Stock Till ${run}`,
       restaurantIds: [fx.restaurantId],
+      users: [{ hostName: `STOCK-TILL-${run}`, userId: superAdmin.id }],
     });
     tillKey = (
       (await ok('POST', '/pos/till', {
         computerName: `STOCK-TILL-${run}`,
-        posDeviceId: idOf(till),
       })) as { tillKey: string }
     ).tillKey;
     const categoryId = (fx.categoryId = idOf(
@@ -1096,9 +1097,12 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       cashier!.id,
       fx.hospitalId,
     );
+    // The cashier works this run's till: listed on it, they typed its computer's name there.
+    await listOnTill({ rawQuery }, tillKey, cashier!.id);
     const admin = token;
     token = signFor(cashier!);
     try {
+      await ok('POST', '/pos/till', { computerName: `STOCK-TILL-${run}` });
       expect(await ok('GET', `/pos/employee?counterId=${counterId}&code=X${run}`)).toMatchObject({
         discountPercent: 5,
         employeeName: 'Elsewhere Staff',

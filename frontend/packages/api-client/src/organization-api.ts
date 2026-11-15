@@ -137,6 +137,7 @@ import type {
   PosDevice,
   PosDeviceInput,
   PosDeviceListQuery,
+  PosDeviceUserOption,
 } from './pos';
 
 export function createOrganizationApi(options: ApiClientOptions) {
@@ -759,6 +760,11 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     listPosDevices(query?: PosDeviceListQuery) {
       return client.request<ApiResponse<ApiList<PosDevice>>>('/pos-devices', { query });
+    },
+    listPosDeviceUserOptions(hospitalId: string) {
+      return client.request<ApiResponse<PosDeviceUserOption[]>>('/pos-devices/user-options', {
+        query: { hospitalId },
+      });
     },
     listEmployees(query?: EmployeeListQuery) {
       return client.request<ApiResponse<ApiList<Employee>>>('/employees', { query });

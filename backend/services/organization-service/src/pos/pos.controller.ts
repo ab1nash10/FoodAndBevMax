@@ -66,9 +66,9 @@ export class PosController {
     summary: 'The till this browser was set up as (X-Till-Key), and whether the user may work it',
   })
   @ApiOkResponse({ description: 'Till returned.' })
-  async whoami(@Req() request: RequestContextLike) {
+  async whoami(@Req() request: RequestContextLike, @CurrentUser() user: JwtRequestUser) {
     return {
-      data: await this.pos.tillAccess(tillKeyOf(request)),
+      data: await this.pos.tillAccess(tillKeyOf(request), getActorId(user)),
       message: 'Success',
       success: true,
     };
@@ -110,7 +110,7 @@ export class PosController {
     @Req() request: RequestContextLike,
   ) {
     return {
-      data: await this.pos.enrollTill(body.posDeviceId, body.computerName, {
+      data: await this.pos.enrollTill(body.computerName, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),

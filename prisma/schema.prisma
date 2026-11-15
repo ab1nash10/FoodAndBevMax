@@ -249,6 +249,7 @@ model User {
   grnEntriesVerified       GrnEntry[]
   kitchenProductionsAsChef KitchenProduction[] @relation("KitchenProductionChef")
   permissionOverrides      UserPermission[]
+  posDevices               PosDeviceUser[]
   roles                    UserRole[]
 
   @@index([hospitalId])
@@ -750,8 +751,7 @@ model PosDevice {
   isInvoicePrintEnabled Boolean   @default(false) @map("is_invoice_print_enabled")
   /// SHA-256 of the key the POS sends orders with; the key itself is shown once and never stored.
   apiKeyHash            String?   @unique @map("api_key_hash")
-  /// SHA-256 of the key the till's browser holds after an admin sets the computer up as this
-  /// device; the POS opens only in that browser. Setting it up again replaces it.
+  /// No longer read: a till's key is now kept per user and computer (PosDeviceUser.tillKeyHash).
   tillKeyHash           String?   @unique @map("till_key_hash")
   isActive              Boolean   @default(true) @map("is_active")
   createdAt             DateTime  @default(now()) @map("created_at")
@@ -765,6 +765,7 @@ model PosDevice {
   paymentMachines PaymentMachine[]
   restaurants     PosDeviceRestaurant[]
   orders          RestaurantOrder[]
+  users           PosDeviceUser[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId])
@@ -1129,6 +1130,31 @@ model PosDeviceRestaurant {
   @@index([posDeviceId])
   @@index([restaurantId])
   @@map("pos_device_restaurants")
+}
+
+/// Who may open a POS device's till, and from which computer: only a listed user, only in a
+/// browser where they typed this computer name.
+model PosDeviceUser {
+  id          String   @id @default(uuid()) @db.Uuid
+  posDeviceId String   @map("pos_device_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  /// The user's computer, as Windows names it (compared without domain and case).
+  hostName    String   @map("host_name")
+  /// SHA-256 of the till key, set once the user typed the computer name; cleared by a revoke or a
+  /// new name. One key per device and computer, so users listed with the same computer share it.
+  tillKeyHash String?  @map("till_key_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdBy   String?  @map("created_by") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedBy   String?  @map("updated_by") @db.Uuid
+
+  posDevice PosDevice @relation(fields: [posDeviceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([posDeviceId, userId])
+  @@index([userId])
+  @@index([tillKeyHash])
+  @@map("pos_device_users")
 }
 
 model PaymentMachine {

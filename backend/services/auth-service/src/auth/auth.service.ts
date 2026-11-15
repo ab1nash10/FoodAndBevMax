@@ -180,9 +180,17 @@ export class AuthService {
           ]
         : []),
     ];
-    const failures = await Promise.all(failureCounters.map(({ key }) => this.redis.get(key)));
+    // Every attempt takes its place in the counts before it is checked (one atomic INCR each),
+    // so a burst sent at once cannot all read "not locked" and get a full check: the attempts
+    // past a limit are refused. An attempt that turns out not to be a wrong password gives its
+    // place back below.
+    const counts = await Promise.all(
+      failureCounters.map(({ key, seconds }) => this.redis.increment(key, seconds)),
+    );
+    const giveBack = (counters: typeof failureCounters) =>
+      Promise.all(counters.map(({ key }) => this.redis.decrement(key)));
 
-    if (failureCounters.some(({ max }, index) => Number(failures[index]) >= max)) {
+    if (failureCounters.some(({ max }, index) => counts[index]! > max)) {
       this.recordFailure('LOGIN_FAILED', target, 'locked');
       throw new HttpException(
         'Too many failed sign-in attempts. Please try again later, or sign in with a code.',
@@ -190,32 +198,41 @@ export class AuthService {
       );
     }
 
-    // Passwords are an email-only credential; a mobile number always signs in through OTP.
-    const user = await this.findLoginUserOrNull(target);
+    let user: Awaited<ReturnType<AuthService['findLoginUserOrNull']>>;
+    let passwordMatches: boolean;
 
-    // Always pay for one scrypt, so an unknown email is not answered measurably faster than a
-    // wrong password; otherwise response time alone enumerates registered addresses.
-    const passwordMatches = await verifyPassword(
-      dto.password,
-      user?.passwordHash ?? (await this.dummyPasswordHash),
-    );
+    try {
+      // Passwords are an email-only credential; a mobile number always signs in through OTP.
+      user = await this.findLoginUserOrNull(target);
+
+      // Always pay for one scrypt, so an unknown email is not answered measurably faster than a
+      // wrong password; otherwise response time alone enumerates registered addresses.
+      passwordMatches = await verifyPassword(
+        dto.password,
+        user?.passwordHash ?? (await this.dummyPasswordHash),
+      );
+    } catch (error) {
+      // An outage is not a wrong password: staff retrying it must not lock their address.
+      await giveBack(failureCounters);
+      throw error;
+    }
 
     if (!user?.passwordHash || !passwordMatches) {
-      // Atomic counts; the failure that reaches a limit restarts its window, so the lock runs
-      // its full length from there.
+      // The failure that reaches a limit restarts its window, so the lock runs its full length
+      // from there.
       await Promise.all(
-        failureCounters.map(async ({ key, max, seconds }) => {
-          if ((await this.redis.increment(key, seconds)) === max) {
-            await this.redis.setWithExpiry(key, String(max), seconds);
-          }
+        failureCounters.map(async ({ key, max, seconds }, index) => {
+          if (counts[index] === max) await this.redis.setWithExpiry(key, String(max), seconds);
         }),
       );
       this.recordFailure('LOGIN_FAILED', target, 'invalid_credentials', user?.id);
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Only the account's own count: one right password must not wipe an address's spraying.
+    // The account's own count clears; the address only gets this attempt's place back, since one
+    // right password must not wipe an address's spraying.
     await this.redis.delete(failureCounters[0]!.key);
+    await giveBack(failureCounters.slice(1));
 
     const tokens = await this.startSession(user);
 

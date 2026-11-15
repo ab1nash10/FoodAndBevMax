@@ -1,5 +1,7 @@
 import { Injectable, SetMetadata, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { JwtRequestUser } from '@aahar/auth';
+import { getActorId } from '../common/request-context';
 import { PosService } from './pos.service';
 
 /** What a POS route acts on, and where the request carries it. */
@@ -19,6 +21,8 @@ export interface TillRequest {
   query?: Record<string, unknown>;
   /** The till's counters, once TillGuard has let a request through from a till. */
   till?: { counterIds: string[]; posDeviceId: string };
+  /** The signed-in user: a till opens only for users listed with its computer. */
+  user?: JwtRequestUser;
 }
 
 const TILL_TARGET = 'aahar:till-target';
@@ -61,6 +65,7 @@ export class TillGuard implements CanActivate {
     request.till = await this.pos.requireTill(
       tillKey,
       target.kind && id ? { [target.kind]: id } : {},
+      getActorId(request.user),
     );
     return true;
   }

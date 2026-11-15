@@ -13,6 +13,10 @@ export const posDeviceInclude = {
       isActive: true,
     },
   },
+  users: {
+    include: { user: { select: { employeeCode: true, name: true } } },
+    orderBy: { createdAt: 'asc' },
+  },
 } satisfies Prisma.PosDeviceInclude;
 
 export type PosDeviceWithRelations = Prisma.PosDeviceGetPayload<{
@@ -225,6 +229,60 @@ export class PosDevicesRepository {
           }),
         ),
     );
+  }
+
+  /**
+   * Makes the device's users exactly these. A user whose computer name changes loses their till
+   * key (it was for the old computer); one dropped from the list loses it with their row.
+   */
+  async syncUsers(
+    posDeviceId: string,
+    users: Array<{ hostName: string; userId: string }>,
+    actorId: string | undefined,
+    client: PosDeviceClient,
+  ): Promise<void> {
+    const existing = await client.posDeviceUser.findMany({ where: { posDeviceId } });
+    const wanted = new Map(users.map((user) => [user.userId, user.hostName.trim()]));
+
+    await client.posDeviceUser.deleteMany({
+      where: { posDeviceId, userId: { notIn: [...wanted.keys()] } },
+    });
+    await Promise.all(
+      [...wanted].map(([userId, hostName]) => {
+        const row = existing.find((entry) => entry.userId === userId);
+        if (!row) {
+          return client.posDeviceUser.create({
+            data: { createdBy: actorId, hostName, posDeviceId, updatedBy: actorId, userId },
+          });
+        }
+        if (row.hostName === hostName) return Promise.resolve();
+
+        return client.posDeviceUser.update({
+          data: { hostName, tillKeyHash: null, updatedBy: actorId },
+          where: { id: row.id },
+        });
+      }),
+    );
+  }
+
+  /**
+   * Active users who work at the location (home or assigned), or whose role reaches every
+   * location (a Super Admin), for the device's user picker.
+   */
+  async findUserOptions(hospitalId: string) {
+    return this.prisma.user.findMany({
+      orderBy: { name: 'asc' },
+      select: { employeeCode: true, id: true, name: true },
+      where: {
+        deletedAt: null,
+        OR: [
+          { hospitalId },
+          { assignedHospitals: { some: { deletedAt: null, hospitalId } } },
+          { roles: { some: { deletedAt: null, role: { deletedAt: null, locationScope: 'ALL' } } } },
+        ],
+        status: 'ACTIVE',
+      },
+    });
   }
 
   async update(

@@ -12,6 +12,7 @@ import {
   databaseUrl,
   day,
   firstOf,
+  listOnTill,
   run,
   shape,
   startHarness,
@@ -198,17 +199,17 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     const restaurantTwoId = idOf(await restaurant('Int Pos Two'));
     fx.counter3Id = idOf(await counter('PC', restaurantTwoId));
     // This run's browser is the till of a POS device for both its restaurants, set up by name.
-    const till = await h.ok('POST', '/pos-devices', {
+    await h.ok('POST', '/pos-devices', {
       code: `IT${run}`,
       hospitalId: fx.hospitalId,
       hostName: `INT-TILL-${run}`,
       name: `Int Till ${run}`,
       restaurantIds: [fx.restaurantId, restaurantTwoId],
+      users: [{ hostName: `INT-TILL-${run}`, userId: h.superAdmin.id }],
     });
     h.tillKey = (
       (await h.ok('POST', '/pos/till', {
         computerName: `INT-TILL-${run}`,
-        posDeviceId: idOf(till),
       })) as { tillKey: string }
     ).tillKey;
 
@@ -262,6 +263,9 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     const cashier = await newUser('POS Cashier', 'IC');
     users.cashier = cashier.token;
     users.cashierId = cashier.id;
+    // The cashier works this run's till: listed on it, they typed its computer's name there.
+    await listOnTill(h, h.tillKey, cashier.id);
+    await h.ok('POST', '/pos/till', { computerName: `INT-TILL-${run}` }, cashier.token);
     users.kitchen = (await newUser('Kitchen Operator', 'IK')).token;
   }, 120_000);
 

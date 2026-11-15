@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   databaseUrl,
   firstOf,
+  listOnTill,
   run,
   startHarness,
   type Body,
@@ -100,10 +101,10 @@ describe.skipIf(!databaseUrl)('stuck shifts (integration)', { timeout: 30_000 },
         hostName: `INT-${code}-${run}`,
         name: `Int ${code} ${run}`,
         restaurantIds: [restaurantId],
+        users: [{ hostName: `INT-${code}-${run}`, userId: h.superAdmin.id }],
       });
       const { tillKey } = (await h.ok('POST', '/pos/till', {
         computerName: `INT-${code}-${run}`,
-        posDeviceId: idOf(device),
       })) as { tillKey: string };
       return { id: idOf(device), tillKey };
     };
@@ -132,6 +133,14 @@ describe.skipIf(!databaseUrl)('stuck shifts (integration)', { timeout: 30_000 },
     );
     cashier.id = user!.id;
     cashier.token = h.signFor(user!);
+    // The cashier works both tills: listed on each, they typed its computer's name there.
+    for (const [key, code] of [
+      [fx.keptTillKey, 'TK'],
+      [doomed.tillKey, 'TS'],
+    ] as const) {
+      await listOnTill(h, key, cashier.id);
+      await h.ok('POST', '/pos/till', { computerName: `INT-${code}-${run}` }, cashier.token);
+    }
 
     // The cashier opens a shift and bills twice; then the till is removed with the shift open.
     await withTill(doomed.tillKey, async () => {

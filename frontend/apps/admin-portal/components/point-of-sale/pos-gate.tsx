@@ -47,14 +47,14 @@ export function PosClosed({
 }
 
 /**
- * On a computer that is no till yet: anyone who may use the POS types the computer's name, and
- * this browser becomes the till of the POS device (at their locations) with that Host Name. The
- * server hands it a key, kept here; every browser typing the same name shares the till.
+ * On a computer that is no till yet (for this user): they type the computer's name, and this
+ * browser becomes the till of the POS device an admin listed them on with that computer. The
+ * server hands it a key, kept here; users listed with the same computer share it.
  */
 function TillSetup() {
   const queryClient = useQueryClient();
   // A browser cannot read the computer's name: the user types it, and the server finds the
-  // POS device whose Host Name it is.
+  // POS device that lists them with it.
   const [computerName, setComputerName] = useState('');
   const enroll = useMutation({
     mutationFn: async () => (await organizationApi.enrollTill(computerName.trim())).data.tillKey,
@@ -95,8 +95,8 @@ function TillSetup() {
         </Button>
       </div>
       <p className="mt-1 text-xs text-ds-muted" id="till-computer-name-hint">
-        Windows: Settings → System → About → Device name. It must be the Host Name of a POS device
-        at your locations.
+        Windows: Settings → System → About → Device name. An admin must have added you with this
+        name to a POS device at your locations.
       </p>
       {enroll.isError ? (
         <p className="mt-2 text-sm text-ds-status-bad-fg" role="alert">

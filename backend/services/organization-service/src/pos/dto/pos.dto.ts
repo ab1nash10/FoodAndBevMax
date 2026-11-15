@@ -43,15 +43,9 @@ export class PosCountersQueryDto {
 }
 
 export class EnrollTillDto {
-  @ApiPropertyOptional({
-    description: 'The POS device; without it, the one whose Host Name is the computer name.',
-  })
-  @IsOptional()
-  @IsUUID()
-  posDeviceId?: string;
-
   @ApiProperty({
-    description: 'This computer’s name, as Windows shows it; must be the device’s Host Name.',
+    description:
+      'This computer’s name, as Windows shows it; an admin must have listed the user with it on a POS device.',
   })
   @IsString()
   @IsNotEmpty()

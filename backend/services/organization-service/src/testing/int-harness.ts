@@ -2,7 +2,7 @@
 // DATABASE_URL_TEST (migrated and seeded), signed in as the seeded Super Admin. Each suite names
 // its own records with `run`, so suites never touch existing data and need no cleanup.
 // Kept out of the build (tsconfig.build.json excludes src/testing).
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { superAdminForRun } from './super-admin-for-run.js';
@@ -39,6 +39,25 @@ function signAccessToken(secret: string, user: { id: string; sessionVersion: num
   const claims = { exp: now + 3600, iat: now, sub: user.id, sv: user.sessionVersion };
   const unsigned = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(claims)}`;
   return `${unsigned}.${createHmac('sha256', secret).update(unsigned).digest('base64url')}`;
+}
+
+/**
+ * Lists a user on the POS device of this till, with its computer, as an admin would in the
+ * device's form. They still type the computer's name (POST /pos/till as them) to work it.
+ */
+export async function listOnTill(
+  db: { rawQuery(sql: string, ...values: unknown[]): Promise<unknown> },
+  tillKey: string,
+  userId: string,
+): Promise<void> {
+  await db.rawQuery(
+    `INSERT INTO pos_device_users (id, pos_device_id, user_id, host_name, updated_at)
+     SELECT gen_random_uuid(), pos_device_id, $2::uuid, host_name, now()
+     FROM pos_device_users WHERE till_key_hash = $1 LIMIT 1
+     ON CONFLICT (pos_device_id, user_id) DO NOTHING`,
+    createHash('sha256').update(tillKey).digest('hex'),
+    userId,
+  );
 }
 
 export interface Harness {

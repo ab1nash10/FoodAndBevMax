@@ -225,7 +225,7 @@ export async function countersWithTill(
         id: true,
         restaurants: { select: { restaurantId: true }, where: { deletedAt: null, isActive: true } },
       },
-      where: { deletedAt: null, isActive: true, tillKeyHash: { not: null } },
+      where: { deletedAt: null, isActive: true, users: { some: { tillKeyHash: { not: null } } } },
     });
     const named = await client.counter.findMany({
       distinct: ['posDeviceId'],

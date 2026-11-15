@@ -82,6 +82,7 @@ export const queryKeys = {
   paymentMachinePosDeviceOptions: key('payment-machine-pos-device-options'),
   paymentMachines: key('payment-machines'),
   posDevices: key('pos-devices'),
+  posDeviceUserOptions: key('pos-device-user-options'),
   posLocationOptions: key('pos-location-options'),
   posRestaurantOptions: key('pos-restaurant-options'),
 

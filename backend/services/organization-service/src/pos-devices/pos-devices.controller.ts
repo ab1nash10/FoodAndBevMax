@@ -44,6 +44,19 @@ export class PosDevicesController {
     };
   }
 
+  // Before ':id', which would take "user-options" for an id.
+  @Get('user-options')
+  @Permissions('POS_DEVICE_VIEW')
+  @ApiOperation({ summary: 'Active users at a location, who may be listed on its POS devices' })
+  @ApiOkResponse({ description: 'Users returned successfully.' })
+  async userOptions(@Query('hospitalId', ParseUUIDPipe) hospitalId: string) {
+    return {
+      data: await this.posDevices.userOptions(hospitalId),
+      message: 'Success',
+      success: true,
+    };
+  }
+
   @Get(':id')
   @Permissions('POS_DEVICE_VIEW')
   @ApiOperation({ summary: 'Get POS device by ID' })

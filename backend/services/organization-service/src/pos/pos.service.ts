@@ -40,6 +40,7 @@ import type {
 import { hashOrderKey, itemCount } from '../restaurant-orders/restaurant-orders.service';
 import { findCardMachine, plutusBaseUrl, providersAt } from './online-payment-providers';
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
+import { computerName } from './computer-name';
 import { countersWithTill, shiftStates, shiftsOn, tally, userNames } from './shifts';
 
 type Client = Prisma.TransactionClient | PrismaService;
@@ -245,7 +246,7 @@ export class PosService {
    * opening one here.
    */
   async counters(tillKey?: string, actorId?: string) {
-    const till = tillKey === undefined ? undefined : await this.tillByKey(tillKey);
+    const till = tillKey === undefined ? undefined : await this.tillByKey(tillKey, actorId);
     if (till === null) {
       throw new NotFoundException(notATill);
     }
@@ -327,13 +328,16 @@ export class PosService {
    * The till this browser's key belongs to, its restaurants and their locations (the portal opens
    * the POS only while one of them is the picked location), and whether the user may work it.
    */
-  async tillAccess(tillKey: string | undefined): Promise<{
+  async tillAccess(
+    tillKey: string | undefined,
+    actorId: string | undefined,
+  ): Promise<{
     allowed: boolean;
     hospitalIds: string[];
     restaurants: string[];
     till: string | null;
   }> {
-    const device = tillKey ? await this.tillByKey(tillKey) : null;
+    const device = tillKey ? await this.tillByKey(tillKey, actorId) : null;
     if (!device) return { allowed: false, hospitalIds: [], restaurants: [], till: null };
 
     return {
@@ -345,60 +349,51 @@ export class PosService {
   }
 
   /**
-   * Makes the calling browser the till of this POS device: a new key, returned once and kept
-   * only hashed. Setting a device up again replaces the key, so the old browser is no till.
-   * The admin types the computer's name, which must be the device's Host Name: a browser cannot
-   * read it, so this is where a wrong Host Name or the wrong computer is caught.
+   * Makes the calling browser a till: the user types this computer's name, and it must be the one
+   * an admin listed for them on a POS device (a browser cannot read it, so this is where the
+   * wrong computer is caught). The key is one per device and computer, returned to every user
+   * listed with that computer, and kept only hashed on their row.
    */
-  async enrollTill(posDeviceId: string | undefined, computerName: string, context: ActorContext) {
-    // Read under the user's own locations: a device elsewhere is not found. Without an id, the
-    // device is the one whose Host Name is this computer's name.
-    const devices = await this.prisma.posDevice.findMany({
-      select: { hostName: true, id: true, tillKeyHash: true },
-      where: { deletedAt: null, isActive: true, ...(posDeviceId ? { id: posDeviceId } : {}) },
-    });
-
-    if (posDeviceId && !devices.length) {
-      throw new NotFoundException('POS device not found');
-    }
-
-    // Windows shows the name with or without the domain, in any case.
-    const shortName = (name: string | null) => (name ?? '').trim().split('.')[0]!.toLowerCase();
-    if (posDeviceId && !shortName(devices[0]!.hostName)) {
-      throw new BadRequestException(
-        'This POS device has no Host Name yet. Add the till computer’s name to it under POS & Payment Machines first.',
-      );
-    }
-    const wanted = shortName(computerName);
-    const matching = devices.filter((device) => wanted && shortName(device.hostName) === wanted);
+  async enrollTill(typedName: string, context: ActorContext) {
+    const wanted = computerName(typedName);
+    // Read under the user's own locations: a device elsewhere is not found.
+    const devices = context.actorId
+      ? await this.prisma.posDevice.findMany({
+          select: {
+            id: true,
+            users: {
+              select: { hostName: true, id: true, tillKeyHash: true },
+              where: { userId: context.actorId },
+            },
+          },
+          where: { deletedAt: null, isActive: true, users: { some: { userId: context.actorId } } },
+        })
+      : [];
+    const matching = devices.filter(
+      (device) => wanted && computerName(device.users[0]?.hostName) === wanted,
+    );
     // Never name the expected computer: whoever typed a wrong name learns nothing from it.
     if (!matching.length) {
       throw new BadRequestException(
-        posDeviceId
-          ? 'This computer’s name doesn’t match the POS device’s Host Name. Set the till up on that computer, or check the Host Name under POS & Payment Machines.'
-          : 'No POS device at your locations has this computer’s name. Check the name (Windows: Settings → System → About → Device name), or ask an admin to add it as a POS device’s Host Name.',
-      );
-    }
-    if (matching.length > 1) {
-      throw new BadRequestException(
-        'More than one POS device has this computer’s name. Ask an admin to give each its own Host Name.',
+        'You are not listed with this computer’s name on any POS device at your locations. Check the name (Windows: Settings → System → About → Device name), or ask an admin to add you with it to the POS device under POS & Payment Machines.',
       );
     }
     const device = matching[0]!;
+    const row = device.users[0]!;
 
-    // ponytail: one key per device and Host Name (not per browser), so every browser that types
-    // the name shares it and none is pushed out. Revoking stops them all; changing the Host
-    // Name or JWT_ACCESS_SECRET re-keys them. Per-browser keys need a keys table.
+    // ponytail: one key per device and computer (not per browser), so users sharing a computer
+    // share it and none is pushed out. Revoking stops them all; a new computer name or
+    // JWT_ACCESS_SECRET re-keys them. Per-browser keys need a keys table.
     const tillKey = `till_${createHmac('sha256', process.env.JWT_ACCESS_SECRET ?? '')
-      .update(`pos-till:${device.id}:${shortName(device.hostName)}`)
+      .update(`pos-till:${device.id}:${wanted}`)
       .digest('base64url')}`;
     const tillKeyHash = hashOrderKey(tillKey);
 
     await this.prisma.$transaction(async (tx) => {
-      if (device.tillKeyHash !== tillKeyHash) {
-        await tx.posDevice.update({
+      if (row.tillKeyHash !== tillKeyHash) {
+        await tx.posDeviceUser.update({
           data: { tillKeyHash, updatedBy: context.actorId },
-          where: { id: device.id },
+          where: { id: row.id },
         });
       }
       await this.auditLog.record(
@@ -421,19 +416,18 @@ export class PosService {
   /** Revoke browser access immediately; the browser can be enrolled again by an admin. */
   async revokeTill(posDeviceId: string, context: ActorContext) {
     const device = await this.prisma.posDevice.findFirst({
-      select: { id: true, name: true, tillKeyHash: true },
+      select: { id: true, name: true },
       where: { deletedAt: null, id: posDeviceId },
     });
 
     if (!device) throw new NotFoundException('POS device not found');
 
-    if (!device.tillKeyHash) return { revoked: false };
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.posDevice.update({
+    const revoked = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.posDeviceUser.updateMany({
         data: { tillKeyHash: null, updatedBy: context.actorId },
-        where: { id: device.id },
+        where: { posDeviceId: device.id, tillKeyHash: { not: null } },
       });
+      if (!count) return false;
       await this.auditLog.record(
         {
           action: 'POS_TILL_REVOKED',
@@ -445,11 +439,12 @@ export class PosService {
         },
         tx,
       );
+      return true;
     });
 
     this.forgetTills();
 
-    return { revoked: true };
+    return { revoked };
   }
 
   /**
@@ -461,7 +456,16 @@ export class PosService {
     this.tillCounters.clear();
   }
 
-  private tillByKey(tillKey: string): Promise<TillDevice | null> {
+  /** The till of this key, for a user listed with its computer; null for anyone else. */
+  private async tillByKey(
+    tillKey: string,
+    actorId: string | undefined,
+  ): Promise<TillDevice | null> {
+    const till = await this.tillOfKey(tillKey);
+    return till && till.users.some((user) => user.userId === actorId) ? till : null;
+  }
+
+  private tillOfKey(tillKey: string): Promise<TillDevice | null> {
     if (!tillKey) return Promise.resolve(null);
 
     const hash = hashOrderKey(tillKey);
@@ -518,6 +522,8 @@ export class PosService {
           select: {
             id: true,
             name: true,
+            // The users listed with this key's computer who typed its name there.
+            users: { select: { userId: true }, where: { tillKeyHash: hash } },
             restaurants: {
               select: {
                 restaurant: { select: { hospitalId: true, restaurantName: true } },
@@ -534,7 +540,7 @@ export class PosService {
             deletedAt: null,
             hospital: { deletedAt: null },
             isActive: true,
-            tillKeyHash: hash,
+            users: { some: { tillKeyHash: hash } },
           },
         }),
     );
@@ -557,11 +563,17 @@ export class PosService {
       paymentId?: string;
       shiftId?: string;
     },
+    actorId?: string,
   ): Promise<{ counterIds: string[]; posDeviceId: string }> {
-    const till = tillKey ? await this.tillByKey(tillKey) : null;
+    const till = tillKey ? await this.tillByKey(tillKey, actorId) : null;
     if (!till) throw new ForbiddenException(notATill);
 
-    const counters = await this.tillCountersOf(till);
+    let counters = await this.tillCountersOf(till);
+    if (target.counterId && !counters.some((counter) => counter.id === target.counterId)) {
+      // Perhaps a counter added since they were read (kept TILL_CACHE_MS): read them once more.
+      this.tillCounters.delete(till.id);
+      counters = await this.tillCountersOf(till);
+    }
 
     return await hospitalScopeStorage.run({ allowedHospitalIds: null }, async () => {
       const counterIds = counters.map((counter) => counter.id);

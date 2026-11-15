@@ -12,6 +12,14 @@ end
 return count
 `;
 
+// Only a live counter goes down: a DECR on an expired key would leave one that never expires.
+const DECREMENT_SCRIPT = `
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return redis.call('DECR', KEYS[1])
+end
+return 0
+`;
+
 /**
  * Key-value store for OTPs, their cooldowns and attempt counters, and the refresh tokens.
  *
@@ -65,6 +73,17 @@ export class RedisService implements OnModuleDestroy {
     this.entries.delete(key);
 
     return Boolean(entry);
+  }
+
+  /** Takes one back from a live counter (one that has expired stays gone). */
+  async decrement(key: string): Promise<void> {
+    if (this.client) {
+      await this.reach(this.client.eval(DECREMENT_SCRIPT, 1, key));
+      return;
+    }
+
+    const entry = this.live(key);
+    if (entry) entry.value = String(Number(entry.value) - 1);
   }
 
   async get(key: string): Promise<string | null> {

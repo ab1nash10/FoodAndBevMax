@@ -19,9 +19,9 @@ const screens: Array<[string, string]> = [
   ['inventory/grns/new', 'Receive a delivery'],
 ];
 
-// The POS opens only in a browser an admin set up as a POS device's till. The test does that on
-// the screen, as an admin would, for a local POS device mapped to a restaurant with a counter.
-// (Setting a device up again moves its till: any other browser set up as it stops being one.)
+// The POS opens only for a user an admin listed on a POS device with this computer's name, once
+// they typed it here. The test does both on the screen, for a local POS device mapped to a
+// restaurant with a counter: it lists its own user there (kept for later runs).
 const tillDevice = process.env.E2E_POS_DEVICE ?? 'Smart Main Res';
 const orgUrl = process.env.E2E_ORG_URL ?? 'http://localhost:4003/api/v1';
 let openedShift = false;
@@ -51,19 +51,58 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
   }, session);
   const title = page.getByRole('heading', { level: 1 });
 
-  await test.step('this computer becomes the till by typing its name', async () => {
-    // The device's Host Name, as the admin would read it off the computer.
+  // The computer this test plays: the device's own Host Name, or a made-up one.
+  let hostName = '';
+
+  await test.step('an admin adds this user, with this computer’s name, to the POS device', async () => {
     const devices = (await (
       await fetch(`${orgUrl}/pos-devices?limit=100`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       })
-    ).json()) as {
-      data: { items: Array<{ hospitalId: string; hostName: string | null; name: string }> };
-    };
+    ).json()) as { data: { items: Array<{ hostName: string | null; name: string }> } };
     const device = devices.data.items.find((option) => option.name === tillDevice);
-    const hostName = device?.hostName;
-    expect(hostName, `${tillDevice} has a Host Name`).toBeTruthy();
+    expect(device, `a POS device named ${tillDevice}`).toBeTruthy();
+    hostName = device?.hostName || 'E2E-TILL-01';
+    const me = (
+      JSON.parse(Buffer.from(session.accessToken.split('.')[1]!, 'base64url').toString()) as {
+        sub: string;
+      }
+    ).sub;
 
+    await page.goto(`masters/pos?q=${encodeURIComponent(tillDevice)}`);
+    await page.getByRole('button', { name: `Edit ${tillDevice}` }).click();
+    const form = page.getByRole('dialog', { name: 'Edit Pos Device' });
+    const users = form.getByRole('group', { name: 'Users' });
+    await expect(users).toBeVisible();
+    const pickers = users.getByRole('combobox', { name: /^User \d+$/ });
+    // Listed already by an earlier run: its computer name is kept as it is.
+    const listed = await pickers.evaluateAll(
+      (selects, id) => selects.some((select) => (select as HTMLSelectElement).value === id),
+      me,
+    );
+    if (!listed) {
+      await users.getByRole('button', { name: 'Add user' }).click();
+      const row = await pickers.count();
+      await pickers.nth(row - 1).selectOption(me);
+      await users.getByRole('textbox', { name: `User ${row}’s computer name` }).fill(hostName);
+    } else {
+      const row =
+        (await pickers.evaluateAll(
+          (selects, id) =>
+            selects.findIndex((select) => (select as HTMLSelectElement).value === id),
+          me,
+        )) + 1;
+      hostName = await users
+        .getByRole('textbox', { name: `User ${row}’s computer name` })
+        .inputValue();
+    }
+    await form.getByRole('button', { name: 'Submit' }).click();
+    // Saved: the form closes, and the list counts the device's users.
+    await expect(form).toHaveCount(0);
+    await expect(page.getByRole('cell', { name: /\d+ users?$/ })).toBeVisible();
+  });
+
+  await test.step('this computer becomes the till by typing its name', async () => {
     // No device to pick and no location to choose: the name alone finds the POS device.
     await page.goto('pos/billing');
     const notATill = page.getByText('This computer is not set up as a till');
@@ -75,11 +114,11 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     await name.fill('NOT-THIS-PC');
     await open.click();
     await expect(
-      page.getByText('No POS device at your locations has this computer’s name.', {
+      page.getByText('You are not listed with this computer’s name on any POS device', {
         exact: false,
       }),
     ).toBeVisible();
-    await name.fill(hostName!.toLowerCase());
+    await name.fill(hostName.toLowerCase());
     await name.press('Enter');
     await expect(notATill).toHaveCount(0);
   });
@@ -117,6 +156,16 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
     await expect(sellable, 'the counter has an item it can sell now').toBeVisible();
     await sellable.click();
     await expect(page.getByRole('button', { name: 'Back to categories' })).toBeVisible();
+    // Tapping the count opens a box to type how many; past the line limit it is refused.
+    await page.getByRole('button', { name: /^Type how many .+ \(now 1\)$/ }).click();
+    const howMany = page.getByRole('dialog', { name: /^How many / });
+    await howMany.getByLabel('Quantity').fill('1000');
+    await expect(howMany.getByText('At most 999 at a time.')).toBeVisible();
+    await expect(howMany.getByRole('button', { name: 'Set quantity' })).toBeDisabled();
+    await howMany.getByLabel('Quantity').fill('1');
+    await howMany.getByLabel('Quantity').press('Enter');
+    await expect(howMany).toHaveCount(0);
+    await expect(page.getByText('Total (1 item)')).toBeVisible();
     await page.getByRole('button', { exact: true, name: 'Cash' }).click();
     // Notes the guest hands over add up; the change due shows once they cover the bill.
     await page.getByRole('button', { exact: true, name: '₹500' }).click();

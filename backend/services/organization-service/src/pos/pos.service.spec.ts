@@ -808,20 +808,31 @@ function tillService() {
     { id: 'c3', posDeviceId: null as string | null, restaurantId: 'elsewhere' },
   ];
   const device = {
-    hostName: 'MAX-SKT-POS-01',
     id: 'device-1',
     name: 'Saket Cafe Till',
     restaurants: [
       { restaurant: { hospitalId: 'saket', restaurantName: 'Cafe' }, restaurantId: 'cafe' },
       { restaurant: { hospitalId: 'saket', restaurantName: 'Canteen' }, restaurantId: 'canteen' },
     ],
-    tillKeyHash: null as string | null,
+    // Who may open it, each from their own computer (an admin lists them on the device).
+    users: [
+      {
+        hostName: 'MAX-SKT-POS-01',
+        id: 'row-1',
+        tillKeyHash: null as string | null,
+        userId: 'admin-1',
+      },
+    ],
   };
   // What an admin deleted: the device's location, or some of its restaurants (by id).
   const deleted = { location: false, restaurants: new Set<string>() };
   type DeviceRead = {
     select?: { restaurants?: { where?: { restaurant?: { deletedAt?: null } } } };
-    where: { hospital?: { deletedAt?: null }; id?: string; tillKeyHash?: string };
+    where: {
+      hospital?: { deletedAt?: null };
+      id?: string;
+      users?: { some: { tillKeyHash: string } };
+    };
   };
   type Where = { OR?: Array<{ posDeviceId?: string; restaurantId?: { in: string[] } }> };
   const keyLookups = { count: 0 };
@@ -846,27 +857,36 @@ function tillService() {
       findMany: () => [],
     },
     posDevice: {
-      // The user's locations' live devices (one here), or the one asked for by id.
-      findMany: ({ where }: { where: { id?: string } }) =>
-        where.id !== undefined && where.id !== device.id ? [] : [device],
-      // Honours the filters the real query would apply to what an admin deleted.
+      // The user's locations' live devices that list them (one here), with only their own row.
+      findMany: ({ where }: { where: { users: { some: { userId: string } } } }) => {
+        const mine = device.users.filter((row) => row.userId === where.users.some.userId);
+        return mine.length ? [{ ...device, users: mine }] : [];
+      },
+      // By a till key: honours the filters the real query applies to what an admin deleted.
       findFirst: ({ select, where }: DeviceRead) => {
-        if (where.tillKeyHash !== undefined) keyLookups.count += 1;
-        const found =
-          (where.id !== undefined && where.id === device.id) ||
-          (where.tillKeyHash !== undefined && where.tillKeyHash === device.tillKeyHash);
-        if (!found || (deleted.location && where.hospital?.deletedAt === null)) return null;
+        if (where.id !== undefined) return where.id === device.id ? device : null;
+        const hash = where.users?.some.tillKeyHash;
+        keyLookups.count += 1;
+        const users = device.users.filter((row) => row.tillKeyHash === hash);
+        if (!users.length || (deleted.location && where.hospital?.deletedAt === null)) return null;
         const liveOnly = select?.restaurants?.where?.restaurant?.deletedAt === null;
         return {
           ...device,
           restaurants: device.restaurants.filter(
             (entry) => !liveOnly || !deleted.restaurants.has(entry.restaurantId),
           ),
+          users: users.map((row) => ({ userId: row.userId })),
         };
       },
-      update: ({ data }: { data: { tillKeyHash: string } }) => {
-        device.tillKeyHash = data.tillKeyHash;
-        return device;
+    },
+    posDeviceUser: {
+      update: ({ data, where }: { data: { tillKeyHash: string }; where: { id: string } }) => {
+        device.users.find((row) => row.id === where.id)!.tillKeyHash = data.tillKeyHash;
+      },
+      updateMany: () => {
+        const set = device.users.filter((row) => row.tillKeyHash);
+        for (const row of set) row.tillKeyHash = null;
+        return { count: set.length };
       },
     },
     onlinePayment: { findFirst: ({ where }: { where: { id: string } }) => byId[where.id] ?? null },
@@ -895,81 +915,83 @@ function tillService() {
 
 const admin = { actorId: 'admin-1' };
 
-test('anyone typing a POS device’s Host Name makes the browser its till: one key for all, stored hashed', async () => {
+test('only a user listed on a POS device, typing their own computer’s name, makes the browser its till', async () => {
   const { device, service } = tillService();
+  const access = async (key: string, userId: string) =>
+    (await service.tillAccess(key, userId)).till;
 
-  // Found by the name alone, among the user's locations' devices: no device to pick.
-  const { tillKey } = await service.enrollTill(undefined, 'MAX-SKT-POS-01', admin);
+  // Found by the name alone, among the devices that list the user: no device to pick.
+  const { tillKey } = await service.enrollTill('MAX-SKT-POS-01', admin);
   assert.match(tillKey, /^till_[A-Za-z0-9_-]{43}$/);
-  assert.notEqual(device.tillKeyHash, null);
-  assert.notEqual(device.tillKeyHash, tillKey, 'never the key itself');
-  assert.equal((await service.tillAccess(tillKey)).till, 'Saket Cafe Till');
+  assert.notEqual(device.users[0]!.tillKeyHash, null);
+  assert.notEqual(device.users[0]!.tillKeyHash, tillKey, 'never the key itself');
+  assert.equal(await access(tillKey, 'admin-1'), 'Saket Cafe Till');
 
-  // A second browser (an area manager's laptop) gets the same key: the first keeps working.
-  const { tillKey: again } = await service.enrollTill(undefined, 'max-skt-pos-01', admin);
-  assert.equal(again, tillKey);
-  assert.equal((await service.tillAccess(tillKey)).till, 'Saket Cafe Till');
+  // Any case, with or without the domain (Windows shows either): the same key, still working.
+  for (const name of ['max-skt-pos-01', ' MAX-SKT-POS-01.Maxhealthcare.com ']) {
+    assert.equal((await service.enrollTill(name, admin)).tillKey, tillKey);
+  }
+  assert.equal(await access(tillKey, 'admin-1'), 'Saket Cafe Till');
 
-  // A name no device at the user's locations has is refused, naming no device.
-  await assert.rejects(
-    service.enrollTill(undefined, 'HO-LAP-1651', admin),
-    (error: unknown) =>
-      error instanceof BadRequestException &&
-      /No POS device at your locations/.test(error.message) &&
-      !/MAX-SKT-POS-01/i.test(error.message),
+  // Another computer's name is refused, without naming the one that would have worked.
+  const refused = (error: unknown) =>
+    error instanceof BadRequestException &&
+    /not listed with this computer’s name/.test(error.message) &&
+    !/MAX-SKT-POS-01/i.test(error.message);
+  await assert.rejects(service.enrollTill('HO-LAP-1651', admin), refused);
+  // Someone not listed is refused even with the right name, and is no till in this browser.
+  await assert.rejects(service.enrollTill('MAX-SKT-POS-01', { actorId: 'cashier-9' }), refused);
+  assert.equal(await access(tillKey, 'cashier-9'), null);
+
+  // A second user listed with the same computer shares its key once they typed the name there.
+  device.users.push({
+    hostName: 'max-skt-pos-01',
+    id: 'row-2',
+    tillKeyHash: null,
+    userId: 'cashier-2',
+  });
+  assert.equal(await access(tillKey, 'cashier-2'), null);
+  assert.equal(
+    (await service.enrollTill('MAX-SKT-POS-01', { actorId: 'cashier-2' })).tillKey,
+    tillKey,
   );
-  await assert.rejects(
-    service.enrollTill('no-such-device', 'MAX-SKT-POS-01', admin),
-    NotFoundException,
-  );
+  assert.equal(await access(tillKey, 'cashier-2'), 'Saket Cafe Till');
+  assert.equal(await access(tillKey, 'admin-1'), 'Saket Cafe Till', 'the first user keeps it');
 });
 
 test('a till’s key is looked up once every few seconds, and a revoked till is refused at once', async () => {
   // Every POS request checks its till: three to five queries each, for a till that rarely
   // changes, were a third of what a till's screens cost the database.
-  const { keyLookups, service } = tillService();
-  const { tillKey } = await service.enrollTill('device-1', 'MAX-SKT-POS-01', admin);
+  const { keyLookups, service, stored } = tillService();
+  const { tillKey } = await service.enrollTill('MAX-SKT-POS-01', admin);
 
-  for (let i = 0; i < 5; i++) await service.requireTill(tillKey, { counterId: 'c1' });
+  for (let i = 0; i < 5; i++) await service.requireTill(tillKey, { counterId: 'c1' }, 'admin-1');
   assert.equal(keyLookups.count, 1);
 
-  await service.revokeTill('device-1', admin);
-  await assert.rejects(service.requireTill(tillKey, { counterId: 'c1' }), ForbiddenException);
-});
-
-test('a till is set up only on the computer its device names: the admin types this computer’s name', async () => {
-  const { device, service } = tillService();
-
-  // Any case, with or without the domain: Windows shows either.
-  for (const name of ['max-skt-pos-01', ' MAX-SKT-POS-01.Maxhealthcare.com ']) {
-    assert.match((await service.enrollTill('device-1', name, admin)).tillKey, /^till_/);
-  }
-  await assert.rejects(
-    service.enrollTill('device-1', 'HO-LAP-1651', admin),
-    (error: unknown) =>
-      error instanceof BadRequestException &&
-      /doesn’t match/.test(error.message) &&
-      // Never tells the typist which name would have worked.
-      !/MAX-SKT-POS-01/i.test(error.message),
+  // A counter added to one of its restaurants meanwhile works at once, not seconds later.
+  stored.push({ id: 'c4', posDeviceId: null, restaurantId: 'cafe' });
+  assert.deepEqual(
+    (await service.requireTill(tillKey, { counterId: 'c4' }, 'admin-1')).counterIds,
+    ['c1', 'c2', 'c4'],
   );
-  device.hostName = '';
+
+  await service.revokeTill('device-1', admin);
   await assert.rejects(
-    service.enrollTill('device-1', 'MAX-SKT-POS-01', admin),
-    (error: unknown) =>
-      error instanceof BadRequestException && /no Host Name yet/.test(error.message),
+    service.requireTill(tillKey, { counterId: 'c1' }, 'admin-1'),
+    ForbiddenException,
   );
 });
 
 test('every POS request comes from a till, and only for its own counters', async () => {
   const { service } = tillService();
-  const { tillKey } = await service.enrollTill('device-1', 'MAX-SKT-POS-01', admin);
+  const { tillKey } = await service.enrollTill('MAX-SKT-POS-01', admin);
   const refused = (reason: RegExp) => (error: unknown) =>
     error instanceof ForbiddenException && reason.test(error.message);
 
   // No till, or a key that is no till's: refused whatever it asks for.
   for (const key of [undefined, '', 'till_not-a-real-key']) {
     await assert.rejects(
-      service.requireTill(key, { counterId: 'c1' }),
+      service.requireTill(key, { counterId: 'c1' }, 'admin-1'),
       refused(/not set up as a till/),
     );
   }
@@ -982,7 +1004,10 @@ test('every POS request comes from a till, and only for its own counters', async
     { menuId: 'menu-here' },
     {},
   ]) {
-    assert.deepEqual((await service.requireTill(tillKey, target)).counterIds, ['c1', 'c2']);
+    assert.deepEqual((await service.requireTill(tillKey, target, 'admin-1')).counterIds, [
+      'c1',
+      'c2',
+    ]);
   }
   for (const target of [
     { counterId: 'c3' },
@@ -990,10 +1015,16 @@ test('every POS request comes from a till, and only for its own counters', async
     { paymentId: 'payment-there' },
     { menuId: 'menu-there' },
   ]) {
-    await assert.rejects(service.requireTill(tillKey, target), refused(/not this till’s/));
+    await assert.rejects(
+      service.requireTill(tillKey, target, 'admin-1'),
+      refused(/not this till’s/),
+    );
   }
   // A route that acts on a counter but names none is refused, not let through.
-  await assert.rejects(service.requireTill(tillKey, { counterId: '' }), refused(/not this till’s/));
+  await assert.rejects(
+    service.requireTill(tillKey, { counterId: '' }, 'admin-1'),
+    refused(/not this till’s/),
+  );
   // What does not exist at all is let through, for the route to answer its own 404.
   for (const target of [
     { billId: 'no-such-bill' },
@@ -1002,14 +1033,18 @@ test('every POS request comes from a till, and only for its own counters', async
     { paymentId: 'no-such-payment' },
     { shiftId: 'no-such-shift' },
   ]) {
-    assert.deepEqual((await service.requireTill(tillKey, target)).counterIds, ['c1', 'c2']);
+    assert.deepEqual((await service.requireTill(tillKey, target, 'admin-1')).counterIds, [
+      'c1',
+      'c2',
+    ]);
   }
 });
 
 test('a till bills at its device’s named counters, else its restaurants’; anywhere else is no till', async () => {
   const { service, stored } = tillService();
-  const { tillKey } = await service.enrollTill('device-1', 'MAX-SKT-POS-01', admin);
-  const ids = async (key?: string) => (await service.counters(key)).map((counter) => counter.id);
+  const { tillKey } = await service.enrollTill('MAX-SKT-POS-01', admin);
+  const ids = async (key?: string) =>
+    (await service.counters(key, 'admin-1')).map((counter) => counter.id);
 
   assert.deepEqual(await ids(tillKey), ['c1', 'c2']);
   stored[2]!.posDeviceId = 'device-1';
@@ -1018,7 +1053,7 @@ test('a till bills at its device’s named counters, else its restaurants’; an
   assert.deepEqual(await ids(), ['c1', 'c2', 'c3']);
   for (const key of ['', 'till_not-a-real-key']) {
     await assert.rejects(
-      service.counters(key),
+      service.counters(key, 'admin-1'),
       (error: unknown) =>
         error instanceof NotFoundException && /not set up as a till/.test(error.message),
     );
@@ -1027,7 +1062,7 @@ test('a till bills at its device’s named counters, else its restaurants’; an
 
 test('the POS opens only for a user assigned to the location of one of its till’s restaurants', async () => {
   const { service } = tillService();
-  const { tillKey } = await service.enrollTill('device-1', 'MAX-SKT-POS-01', admin);
+  const { tillKey } = await service.enrollTill('MAX-SKT-POS-01', admin);
   const as = <T>(allowed: string[] | null, run: () => Promise<T>) =>
     hospitalScopeStorage.run({ allowedHospitalIds: allowed }, run);
   // Its locations: the POS opens only while one of them is the location picked in the portal.
@@ -1037,27 +1072,27 @@ test('the POS opens only for a user assigned to the location of one of its till�
     till: 'Saket Cafe Till',
   };
 
-  assert.deepEqual(await as(['saket'], () => service.tillAccess(tillKey)), {
+  assert.deepEqual(await as(['saket'], () => service.tillAccess(tillKey, 'admin-1')), {
     ...saketTill,
     allowed: true,
   });
   // A Super Admin reaches every location.
-  assert.deepEqual(await as(null, () => service.tillAccess(tillKey)), {
+  assert.deepEqual(await as(null, () => service.tillAccess(tillKey, 'admin-1')), {
     ...saketTill,
     allowed: true,
   });
-  assert.deepEqual(await as(['patparganj'], () => service.tillAccess(tillKey)), {
+  assert.deepEqual(await as(['patparganj'], () => service.tillAccess(tillKey, 'admin-1')), {
     ...saketTill,
     allowed: false,
   });
-  assert.deepEqual(await as(['saket'], () => service.tillAccess(undefined)), {
+  assert.deepEqual(await as(['saket'], () => service.tillAccess(undefined, 'admin-1')), {
     allowed: false,
     hospitalIds: [],
     restaurants: [],
     till: null,
   });
   await assert.rejects(
-    as(['patparganj'], () => service.counters(tillKey)),
+    as(['patparganj'], () => service.counters(tillKey, 'admin-1')),
     (error: unknown) =>
       error instanceof ForbiddenException && /not assigned to the location/.test(error.message),
   );
@@ -1067,10 +1102,10 @@ test('a till whose restaurants or location were deleted is no till: the computer
   // A fresh service per case: the till lookup is cached for 5 s.
   async function tillAfter(remove: (deleted: ReturnType<typeof tillService>['deleted']) => void) {
     const { deleted, service } = tillService();
-    const { tillKey } = await service.enrollTill('device-1', 'MAX-SKT-POS-01', admin);
+    const { tillKey } = await service.enrollTill('MAX-SKT-POS-01', admin);
     remove(deleted);
     return hospitalScopeStorage.run({ allowedHospitalIds: ['saket'] }, () =>
-      service.tillAccess(tillKey),
+      service.tillAccess(tillKey, 'admin-1'),
     );
   }
 

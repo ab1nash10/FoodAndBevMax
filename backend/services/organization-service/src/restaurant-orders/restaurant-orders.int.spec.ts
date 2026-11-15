@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   databaseUrl,
   firstOf,
+  listOnTill,
   run,
   shape,
   startHarness,
@@ -162,17 +163,17 @@ describe.skipIf(!databaseUrl)(
       fx.restaurantId = idOf(restaurant);
       fx.restaurantCode = restaurant.restaurantCode as string;
       // This run's browser is the till of a POS device for its restaurant, set up by name.
-      const till = await h.ok('POST', '/pos-devices', {
+      await h.ok('POST', '/pos-devices', {
         code: `OT${run}`,
         hospitalId: fx.hospitalId,
         hostName: `ORD-TILL-${run}`,
         name: `Orders Till ${run}`,
         restaurantIds: [fx.restaurantId],
+        users: [{ hostName: `ORD-TILL-${run}`, userId: h.superAdmin.id }],
       });
       h.tillKey = (
         (await h.ok('POST', '/pos/till', {
           computerName: `ORD-TILL-${run}`,
-          posDeviceId: idOf(till),
         })) as { tillKey: string }
       ).tillKey;
       const categoryId = idOf(
@@ -213,6 +214,13 @@ describe.skipIf(!databaseUrl)(
       );
       fx.elsewhereId = elsewhere!.id;
       as.cashier = await userWith('POS Cashier', fx.hospitalId, 'C');
+      // The cashier works this run's till: listed on it, they typed its computer's name there.
+      const [cashier] = await h.rawQuery<{ id: string }>(
+        'SELECT id FROM users WHERE employee_code = $1',
+        `ROC${run}`.toUpperCase(),
+      );
+      await listOnTill(h, h.tillKey, cashier!.id);
+      await h.ok('POST', '/pos/till', { computerName: `ORD-TILL-${run}` }, as.cashier);
       as.elsewhere = await userWith('POS Cashier', fx.elsewhereId, 'E');
       as.stock = await userWith('Inventory Manager', fx.hospitalId, 'S');
 
@@ -907,13 +915,12 @@ describe.skipIf(!databaseUrl)(
         expect((await h.api('POST', '/pos/online-payments', draft(), '')).status).toBe(401);
         expect((await h.api('POST', '/pos/online-payments', draft(), as.stock)).status).toBe(403);
 
-        // Another location's cashier can neither start one at this counter nor read one made here.
+        // Another location's cashier can neither start one at this counter nor read one made here:
+        // not listed on this till's POS device, this browser is no till for them.
         gatewayCalls.length = 0;
         const foreignStart = await h.api('POST', '/pos/online-payments', draft(), as.elsewhere);
-        expect([foreignStart.status, foreignStart.body.message]).toEqual([
-          404,
-          'Counter not found, or it is switched off.',
-        ]);
+        expect(foreignStart.status).toBe(403);
+        expect(String(foreignStart.body.message)).toMatch(/not set up as a till/);
         expect(gatewayCalls).toEqual([]);
         gatewayReply = () => created(`plink_${run}_l`);
         const id = idOf(await h.ok('POST', '/pos/online-payments', draft()));
@@ -924,7 +931,10 @@ describe.skipIf(!databaseUrl)(
             undefined,
             as.elsewhere,
           );
-          expect([foreign.status, foreign.body.message]).toEqual([404, 'Payment not found.']);
+          expect([foreign.status, String(foreign.body.message)]).toEqual([
+            403,
+            expect.stringMatching(/not set up as a till/),
+          ]);
         }
       });
 

@@ -33,6 +33,7 @@ exports[`organization setup masters (integration) > POS devices: create with res
       },
     ],
     "updatedAt": "string",
+    "users": [],
   },
   "message": "string",
   "success": "boolean",

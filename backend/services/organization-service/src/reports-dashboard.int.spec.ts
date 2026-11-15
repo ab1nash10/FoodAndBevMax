@@ -159,17 +159,17 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     fx.restaurantId = idOf(restaurant);
     fx.restaurantName = restaurant.restaurantName as string;
     // This run's browser is the till of a POS device for the restaurant, set up by name.
-    const till = await ok('POST', '/pos-devices', {
+    await ok('POST', '/pos-devices', {
       code: `RT${run}`,
       hospitalId: fx.hospitalId,
       hostName: `REPORT-TILL-${run}`,
       name: `Report Till ${run}`,
       restaurantIds: [fx.restaurantId],
+      users: [{ hostName: `REPORT-TILL-${run}`, userId: h.superAdmin.id }],
     });
     h.tillKey = (
       (await ok('POST', '/pos/till', {
         computerName: `REPORT-TILL-${run}`,
-        posDeviceId: idOf(till),
       })) as { tillKey: string }
     ).tillKey;
 

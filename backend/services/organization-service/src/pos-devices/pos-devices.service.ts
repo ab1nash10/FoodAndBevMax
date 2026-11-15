@@ -15,6 +15,7 @@ import { ListPosDevicesQueryDto } from './dto/list-pos-devices-query.dto';
 import { UpdatePosDeviceDto } from './dto/update-pos-device.dto';
 import { PosDevicesRepository, PosDeviceWithRelations } from './pos-devices.repository';
 import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
+import { computerName } from '../pos/computer-name';
 
 type PosDeviceClient = Prisma.TransactionClient;
 
@@ -42,7 +43,7 @@ function toPosDeviceResponse(posDevice: PosDeviceWithRelations) {
     isKotPrintEnabled: posDevice.isKotPrintEnabled,
     name: posDevice.name,
     restaurantIds: posDevice.restaurants.map((mapping) => mapping.restaurantId),
-    hasActiveTillKey: Boolean(posDevice.tillKeyHash),
+    hasActiveTillKey: posDevice.users.some((entry) => entry.tillKeyHash),
     restaurants: posDevice.restaurants.map((mapping) => ({
       id: mapping.restaurant.id,
       isActive: mapping.restaurant.isActive,
@@ -50,6 +51,14 @@ function toPosDeviceResponse(posDevice: PosDeviceWithRelations) {
       restaurantName: mapping.restaurant.restaurantName,
     })),
     updatedAt: posDevice.updatedAt,
+    // Who may open its till, each from their own computer; enrolled once they typed its name.
+    users: posDevice.users.map((entry) => ({
+      employeeCode: entry.user.employeeCode,
+      enrolled: Boolean(entry.tillKeyHash),
+      hostName: entry.hostName,
+      name: entry.user.name,
+      userId: entry.userId,
+    })),
   };
 }
 
@@ -130,6 +139,10 @@ export class PosDevicesService {
     };
   }
 
+  userOptions(hospitalId: string) {
+    return this.posDevices.findUserOptions(hospitalId);
+  }
+
   async getById(id: string) {
     return toPosDeviceResponse(await this.findActivePosDevice(id));
   }
@@ -143,6 +156,7 @@ export class PosDevicesService {
         await this.assertRestaurantsBelongToHospital(restaurantIds, dto.hospitalId, tx);
         await this.assertUniqueCode(dto.hospitalId, dto.code, undefined, tx);
         await this.assertUniqueHostName(dto.hostName, undefined, tx);
+        await this.assertUsers(dto.users, undefined, tx);
 
         if (dto.legalEntityId) {
           await assertActiveLegalEntity(tx, dto.legalEntityId);
@@ -166,6 +180,9 @@ export class PosDevicesService {
 
         if (restaurantIds.length > 0) {
           await this.posDevices.syncRestaurants(posDevice.id, restaurantIds, context.actorId, tx);
+        }
+        if (dto.users?.length) {
+          await this.posDevices.syncUsers(posDevice.id, dto.users, context.actorId, tx);
         }
 
         await assertPosEntitiesMatch(tx, { posDeviceId: posDevice.id });
@@ -229,6 +246,8 @@ export class PosDevicesService {
           await this.assertRestaurantsBelongToHospital(restaurantIds, hospitalId, tx);
         }
 
+        await this.assertUsers(dto.users, id, tx);
+
         if (dto.code !== undefined) {
           data.code = dto.code;
         }
@@ -276,6 +295,9 @@ export class PosDevicesService {
 
         if (shouldSyncRestaurants) {
           await this.posDevices.syncRestaurants(id, restaurantIds, context.actorId, tx);
+        }
+        if (dto.users !== undefined) {
+          await this.posDevices.syncUsers(id, dto.users, context.actorId, tx);
         }
 
         // Its restaurants, or its own entity or location, may have changed.
@@ -415,6 +437,55 @@ export class PosDevicesService {
     throw new ConflictException(
       `Host name ${normalizedHostName} is already tagged to ${describeHostNameOwner(posDevice)}`,
     );
+  }
+
+  /** The users a device may list: each once, active, and not on another device with the same computer. */
+  private async assertUsers(
+    users: Array<{ hostName: string; userId: string }> | undefined,
+    posDeviceId: string | undefined,
+    client: PosDeviceClient,
+  ): Promise<void> {
+    if (!users?.length) return;
+
+    const ids = users.map((user) => user.userId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException(
+        'A user is listed twice. List each user once, with their computer.',
+      );
+    }
+    const found = await client.user.count({
+      where: { deletedAt: null, id: { in: ids }, status: 'ACTIVE' },
+    });
+    if (found !== ids.length) {
+      throw new BadRequestException('One or more users were not found or are inactive.');
+    }
+
+    // A user's computer opens one POS device: otherwise typing its name could not say which.
+    const elsewhere = await client.posDeviceUser.findMany({
+      select: {
+        hostName: true,
+        posDevice: { select: { name: true } },
+        user: { select: { name: true } },
+        userId: true,
+      },
+      where: {
+        posDevice: { deletedAt: null },
+        userId: { in: ids },
+        ...(posDeviceId ? { posDeviceId: { not: posDeviceId } } : {}),
+      },
+    });
+    for (const user of users) {
+      const clash = elsewhere.find(
+        (entry) =>
+          entry.userId === user.userId &&
+          computerName(entry.hostName) === computerName(user.hostName),
+      );
+      if (clash) {
+        throw new ConflictException(
+          `${clash.user.name} already opens POS device ${clash.posDevice.name} on computer ${clash.hostName}. Remove them there first, or use another computer.`,
+        );
+      }
+    }
   }
 
   private async findActivePosDevice(
