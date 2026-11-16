@@ -2,8 +2,12 @@ import { logger } from '@aahar/logging';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-const DEFAULT_SMS_API_URL = 'https://bulkpush.mytoday.com/BulkSms/SingleMsgApi';
+const DEFAULT_SMS_API_URL = 'https://iqsms.airtel.in/api/v1/send-sms';
 const REQUEST_TIMEOUT_MS = 10_000;
+
+// Max Healthcare's DLT registration. The template ID belongs to the exact wording below.
+const DLT_ENTITY_ID = '1401730220000010116';
+const DLT_TEMPLATE_ID = '1177179007636464708';
 
 /**
  * The OTP text registered with the operator (DLT). Only the code is a variable: any other change
@@ -15,42 +19,42 @@ function otpMessage(otp: string): string {
 }
 
 /**
- * Sends OTPs through the Max Healthcare bulk SMS gateway (mytoday / BulkPush, SingleMsgApi).
- *
- * The gateway takes its credentials in the query string, so the URL is never logged, and the
- * default is the HTTPS endpoint so they do not cross the network in clear text.
+ * Sends OTPs through Airtel IQ (send-sms API). SMS_USERNAME is the Airtel customer ID, which is
+ * also the Basic-auth user; SMS_PASSWORD is its password.
  */
 @Injectable()
 export class SmsService {
   constructor(private readonly config: ConfigService) {}
 
   isConfigured(): boolean {
-    return ['SMS_FEED_ID', 'SMS_USERNAME', 'SMS_PASSWORD', 'SMS_SENDER_ID'].every((key) =>
+    return ['SMS_USERNAME', 'SMS_PASSWORD', 'SMS_SENDER_ID'].every((key) =>
       Boolean(this.setting(key)),
     );
   }
 
   async sendOtp(mobile: string, otp: string): Promise<void> {
-    const params: Record<string, string> = {
-      feedid: this.setting('SMS_FEED_ID'),
-      password: this.setting('SMS_PASSWORD'),
-      senderid: this.setting('SMS_SENDER_ID'),
-      Text: otpMessage(otp),
-      To: mobile,
-      username: this.setting('SMS_USERNAME'),
-    };
-    // encodeURIComponent rather than URLSearchParams: spaces go out as %20, exactly as the
-    // provider's own sample request does, instead of `+`.
-    const query = Object.entries(params)
-      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-      .join('&');
-    const url = `${this.config.get<string>('SMS_API_URL') || DEFAULT_SMS_API_URL}?${query}`;
+    const customerId = this.setting('SMS_USERNAME');
+    const login = Buffer.from(`${customerId}:${this.setting('SMS_PASSWORD')}`).toString('base64');
 
     let status: number;
     let body: string;
 
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      const response = await fetch(this.config.get<string>('SMS_API_URL') || DEFAULT_SMS_API_URL, {
+        body: JSON.stringify({
+          customerId,
+          destinationAddress: mobile,
+          dltTemplateId: DLT_TEMPLATE_ID,
+          entityId: DLT_ENTITY_ID,
+          message: otpMessage(otp),
+          messageType: 'SERVICE_IMPLICIT',
+          otp: true,
+          sourceAddress: this.setting('SMS_SENDER_ID'),
+        }),
+        headers: { Authorization: `Basic ${login}`, 'Content-Type': 'application/json' },
+        method: 'POST',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       status = response.status;
       body = await response.text();
     } catch (error) {
@@ -58,13 +62,10 @@ export class SmsService {
       throw new ServiceUnavailableException('Could not send the OTP. Please try again.');
     }
 
-    // The gateway answers errors with HTTP 200 and a <REQUEST-ERROR><ERROR> block.
-    if (status >= 400 || /<ERROR\b/i.test(body)) {
-      this.logFailure({
-        code: /<CODE>([^<]*)<\/CODE>/i.exec(body)?.[1]?.trim(),
-        description: /<DESC>([^<]*)<\/DESC>/i.exec(body)?.[1]?.trim(),
-        status,
-      });
+    // A number Airtel will not text still gets HTTP 200, listed in incorrectNum.
+    if (status >= 400 || /"incorrectNum"\s*:\s*\[\s*"/.test(body)) {
+      // The reply may echo the message, so the code is masked before the body is logged.
+      this.logFailure({ body: body.replaceAll(otp, '******').slice(0, 500), status });
       throw new ServiceUnavailableException('Could not send the OTP. Please try again.');
     }
   }

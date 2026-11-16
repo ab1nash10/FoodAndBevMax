@@ -7,6 +7,7 @@ import Image from 'next/image';
 import QRCode from 'qrcode';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getApiErrorMessage, publicOrganizationApi } from '@/lib/api';
+import { newClientId as newClientOrderId } from '@/lib/client-id';
 import { reconcile, setQuantity, type KioskCartLine } from '@/lib/kiosk';
 import { useBoardTheme, useWakeLock } from '@/lib/order-board/live';
 import { queryKeys } from '@/lib/query-keys';
@@ -23,11 +24,6 @@ const WARNING_MS = 15_000;
 const DONE_MS = 30_000;
 /** A payment left this long is given up: the QR (or card machine) is cancelled. */
 const PAY_MS = 4 * 60_000;
-
-// crypto.randomUUID needs https; a kiosk on a plain http address still needs an id.
-function newClientOrderId(): string {
-  return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function isInvalidLink(error: unknown): boolean {
   return error instanceof ApiClientError && (error.status === 404 || error.status === 400);

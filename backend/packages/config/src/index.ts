@@ -39,6 +39,10 @@ const serviceEnvSchema = z
     // Sending a restaurant's day to the ERP's revenue API (organization-service), e.g.
     // https://iwebmax.maxhealthcare.in/MaxLabEMS/api/fnb/revenue. Both are needed; unset, the
     // ERP Posting screen says sending is not set up. The token is a secret.
+    // The ERP's key and shared secret for signing calls to /erp/grns (organization-service).
+    // Both are needed; unset, those calls are refused as not set up. The secret is a secret.
+    ERP_API_KEY: z.string().optional(),
+    ERP_API_SECRET: z.string().optional(),
     ERP_REVENUE_TOKEN: z.string().optional(),
     ERP_REVENUE_URL: z.union([z.literal(''), z.string().url()]).optional(),
     MAIL_CLIENT_ID: z.string().optional(),
@@ -60,11 +64,10 @@ const serviceEnvSchema = z
     PORT: z.coerce.number().int().min(1).max(65535),
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
-    // Bulk SMS gateway for mobile OTPs (auth-service). All four of feed id, username, password
-    // and sender id are needed; with any missing, OTP sign-in works only in development with
+    // Airtel IQ SMS for mobile OTPs (auth-service). Username (the Airtel customer ID), password
+    // and sender id are all needed; with any missing, OTP sign-in works only in development with
     // ALLOW_DEV_OTP (fixed code 000000) and is refused elsewhere. Username and password are secrets.
     SMS_API_URL: z.string().url().optional(),
-    SMS_FEED_ID: z.string().optional(),
     SMS_PASSWORD: z.string().optional(),
     SMS_SENDER_ID: z.string().optional(),
     SMS_USERNAME: z.string().optional(),

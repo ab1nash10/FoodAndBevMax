@@ -13,3 +13,4 @@ export * from './organization-api';
 export * from './reports';
 export * from './audit';
 export * from './erp-postings';
+export * from './grn-entries';

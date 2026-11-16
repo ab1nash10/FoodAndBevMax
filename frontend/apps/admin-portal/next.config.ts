@@ -11,10 +11,18 @@ const apiOrigins = [
   process.env.NEXT_PUBLIC_ORGANIZATION_API_URL,
   process.env.NEXT_PUBLIC_USER_API_URL,
 ].flatMap((url) => (url && /^https?:\/\//.test(url) ? [new URL(url).origin] : []));
-const localDevOrigins = Object.values(networkInterfaces())
-  .flatMap((interfaces) => interfaces ?? [])
-  .filter((address) => address.family === 'IPv4' && !address.internal)
-  .map((address) => address.address);
+// A phone opening the QR page reaches the dev server by this PC's address. Read once at start,
+// that list missed a network joined later (a phone hotspot, 2026-11-16), and the page reloaded
+// forever as its live-reload connection was refused: private ranges cover any such network.
+const localDevOrigins = [
+  ...Object.values(networkInterfaces())
+    .flatMap((interfaces) => interfaces ?? [])
+    .filter((address) => address.family === 'IPv4' && !address.internal)
+    .map((address) => address.address),
+  '10.*.*.*',
+  '172.*.*.*',
+  '192.168.*.*',
+];
 
 // Tokens live in localStorage, so this limits what an injected script could do with them: it
 // can send nothing to, or load anything from, another site (connect-src, img-src and the
@@ -80,6 +88,12 @@ const nextConfig: NextConfig = {
         basePath: false,
         destination: `${organizationApiBase}/order-board/:path*`,
         source: `${BASE_PATH}/api/v1/order-board/:path*`,
+      },
+      // The QR order page on a guest's phone: without it the page found no menu in development.
+      {
+        basePath: false,
+        destination: `${organizationApiBase}/qr/:path*`,
+        source: `${BASE_PATH}/api/v1/qr/:path*`,
       },
     ]);
   },

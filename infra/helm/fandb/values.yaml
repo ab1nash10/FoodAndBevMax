@@ -38,8 +38,7 @@ config:
     # listed because the ALB listens on 80 and 443 with no redirect, so a user who types
     # the bare hostname arrives over http and would otherwise be unable to sign in.
     corsOrigins: https://k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com,http://k8s-devexternal-e58b3c8396-903158879.ap-south-1.elb.amazonaws.com
-    # Bulk SMS gateway for mobile OTPs. Not secret; the login is under secrets below.
-    smsFeedId: '354105'
+    # Airtel IQ SMS sender for mobile OTPs. Not secret; the login is under secrets below.
     smsSenderId: MAXHSP
   # Never commit real values. Pass them at install time:
   #   helm upgrade ... -f secrets.yaml      (git-ignored)
@@ -49,8 +48,8 @@ config:
     DATABASE_URL: ''
     JWT_ACCESS_SECRET: ''
     JWT_REFRESH_SECRET: ''
-    # Bulk SMS gateway login. Left empty, mobile OTP sign-in is refused; email + password
-    # sign-in is unaffected.
+    # Airtel IQ login: SMS_USERNAME is the customer ID. Left empty, mobile OTP sign-in is
+    # refused; email + password sign-in is unaffected.
     # The Super Admin's first password (aahar@admin.local), applied by the seed only while the
     # account has none, so a later change survives upgrades. At least 8 characters with a
     # letter and a digit. Left empty, the account signs in by OTP until one is set.

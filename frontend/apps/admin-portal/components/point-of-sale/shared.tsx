@@ -13,6 +13,7 @@ import { useToast } from '@/components/toast-provider';
 import { Field, Input, Select, Skeleton } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { isNetworkError } from '@/lib/pos-offline-queue';
 import { escapeHtml, printHtml } from '@/lib/print';
 import { invalidatePosBillQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
@@ -84,7 +85,9 @@ export function usePosTill() {
   return useQuery({
     queryFn: async () => (await organizationApi.posWhoAmI(readTillKey())).data,
     queryKey: queryKeys.posWhoAmI(),
-    retry: false,
+    // No answer (the services restarting under pnpm dev, a deploy): keep asking for about half a
+    // minute instead of leaving "Unable to connect" up until a refresh. A refusal shows at once.
+    retry: (failures, error) => isNetworkError(error) && failures < 5,
     staleTime: Infinity,
   });
 }

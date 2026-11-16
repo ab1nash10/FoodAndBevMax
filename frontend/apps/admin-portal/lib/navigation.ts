@@ -6,6 +6,7 @@ import {
   Building2,
   ChefHat,
   ClipboardList,
+  FileInput,
   CookingPot,
   CreditCard,
   FileSpreadsheet,
@@ -276,6 +277,12 @@ export const navigationGroups: NavGroup[] = [
         label: 'Deliveries (GRN)',
         permissions: ['GRN_VIEW'],
         record: 'id',
+      },
+      {
+        href: '/inventory/erp-grns',
+        icon: FileInput,
+        label: 'ERP GRNs',
+        permissions: ['GRN_VIEW'],
       },
       {
         href: '/inventory/store-stock',

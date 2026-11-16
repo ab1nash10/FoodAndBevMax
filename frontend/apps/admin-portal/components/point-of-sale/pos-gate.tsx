@@ -51,7 +51,7 @@ export function PosClosed({
  * browser becomes the till of the POS device an admin listed them on with that computer. The
  * server hands it a key, kept here; users listed with the same computer share it.
  */
-function TillSetup() {
+function TillSetup({ again = false }: Readonly<{ again?: boolean }>) {
   const queryClient = useQueryClient();
   // A browser cannot read the computer's name: the user types it, and the server finds the
   // POS device that lists them with it.
@@ -75,6 +75,11 @@ function TillSetup() {
         if (computerName.trim()) enroll.mutate();
       }}
     >
+      {again ? (
+        <p className="mb-3 text-sm text-ds-text-3">
+          Is this computer now a till somewhere else? Type its name again to set it up there.
+        </p>
+      ) : null}
       <label className="block text-sm font-medium text-ds-text" htmlFor="till-computer-name">
         This computer’s name
       </label>
@@ -133,7 +138,11 @@ export function PosGate({ children }: Readonly<{ children: ReactNode }>) {
     return (
       <section className="space-y-4">
         <AppPageHeader title="Point of Sale" />
-        <PosClosed problem={problem}>{notATill ? <TillSetup /> : null}</PosClosed>
+        {/* A till another location's (or a restaurant's this user is not at) can be set up again:
+            an admin moved this user to another POS device for this computer (2026-11-16). */}
+        <PosClosed problem={problem}>
+          {till.isError ? null : <TillSetup again={!notATill} />}
+        </PosClosed>
       </section>
     );
   }

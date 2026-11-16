@@ -1,6 +1,6 @@
 import { GrnEntryStatus } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -20,156 +20,173 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
-/** One batch the ERP sent: one row of grn_entries. */
-export class ErpGrnBatchDto {
+/** The ERP writes numbers as text ("9.80"): a numeric string counts as the number. */
+const AsNumber = () =>
+  Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))
+      ? Number(value)
+      : value,
+  );
+
+/** And a code may come as a number (12344): it counts as the text. */
+const AsText = () =>
+  Transform(({ value }: { value: unknown }) => (typeof value === 'number' ? String(value) : value));
+
+/**
+ * One row the ERP sends: one batch of one item of a GRN, in the ERP's own field names. A GRN
+ * is every row with its grn_No; the GRN-wide fields repeat on each row.
+ */
+export class ErpGrnRowDto {
+  @ApiProperty({ description: "The ERP's own id for this row; never reused.", example: '724630' })
+  @AsText()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  transaction_number!: string;
+
   @ApiProperty({
-    description: "The ERP's own id for this batch row; never reused.",
-    example: '724630',
+    description: 'The AAHAR location: its code, or its name. The GRN goes to its Main Store.',
+    example: 'BLK',
   })
+  @AsText()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  location!: string;
+
+  @ApiProperty({ description: 'The AAHAR item code.', example: 'FNB01921' })
+  @AsText()
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
-  transactionNumber!: string;
+  part_item_code!: string;
 
-  @ApiProperty({ example: 'B123' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  batchNumber!: string;
-
-  @ApiProperty({ example: '2027-10-26' })
-  @IsDateString()
-  expiryDate!: string;
-
-  @ApiProperty({ description: 'Quantity sent, in the item’s unit.', example: 60 })
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @IsPositive()
-  qty!: number;
-
-  @ApiPropertyOptional({ example: 693.84 })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsOptional()
-  @Min(0)
-  totalValue?: number;
-}
-
-export class ErpGrnItemDto {
-  @ApiProperty({ description: 'The AAHAR item code.', example: 'ITM0042' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  itemCode!: string;
-
-  @ApiPropertyOptional({ example: 'Kinley Water - 1000 Ml' })
+  @ApiPropertyOptional({
+    description: 'Left out, the Item master name is used.',
+    example: 'Kinley Water - 1000 Ml',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  itemName?: string;
+  item_name?: string;
+
+  @ApiProperty({ description: 'Quantity sent, in the item’s unit.', example: '5' })
+  @AsNumber()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @IsPositive()
+  transaction_qty!: number;
 
   @ApiPropertyOptional({ example: 'No.' })
   @IsOptional()
   @IsString()
   @MaxLength(20)
-  uom?: string;
+  UOM?: string;
 
-  @ApiPropertyOptional({ example: '998313' })
+  @ApiPropertyOptional({
+    description: 'Left out, the Item master HSN code is used.',
+    example: '998313',
+  })
+  @AsText()
   @IsOptional()
   @IsString()
   @MaxLength(20)
-  hsnCode?: string;
+  'HSN No'?: string;
 
-  @ApiPropertyOptional({ example: 9.8 })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsOptional()
-  @Min(0)
-  unitRate?: number;
+  @ApiProperty({
+    description: 'When the goods moved. With no time zone it is India time.',
+    example: '2026-10-26 15:50:00',
+  })
+  @IsDateString()
+  date!: string;
 
-  @ApiPropertyOptional({ example: 15 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @ApiPropertyOptional({ example: '9.80' })
+  @AsNumber()
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  mrp?: number;
+  'Unit Rate'?: number;
+
+  @ApiPropertyOptional({ example: '15' })
+  @AsNumber()
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  MRP?: number;
 
   @ApiPropertyOptional({ example: 'IGST@18%' })
   @IsOptional()
   @IsString()
   @MaxLength(30)
-  taxRate?: string;
+  'Tax Rate'?: string;
 
-  @ApiPropertyOptional({ example: 0 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @ApiPropertyOptional({ example: '0' })
+  @AsNumber()
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  'Discount/Extra Charges'?: number;
+
+  @ApiPropertyOptional({ example: '9.257' })
+  @AsNumber()
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
   @Min(0)
-  discount?: number;
-
-  @ApiProperty({ type: [ErpGrnBatchDto] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(500)
-  @ValidateNested({ each: true })
-  @Type(() => ErpGrnBatchDto)
-  batches!: ErpGrnBatchDto[];
-}
-
-/** One GRN from the ERP, with every item and every batch. */
-export class ErpGrnDto {
-  @ApiProperty({ example: '12344' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  grnNumber!: string;
-
-  @ApiProperty({ description: '0 = goods in, 1 = return to vendor.', enum: [0, 1], example: 0 })
-  @IsIn([0, 1])
-  flag!: 0 | 1;
-
-  @ApiProperty({ description: 'The AAHAR hospital (location) code.', example: 'BLK' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(32)
-  hospitalCode!: string;
-
-  @ApiProperty({ description: 'The AAHAR store code in that hospital.', example: 'MAIN' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(32)
-  storeCode!: string;
-
-  @ApiProperty({ example: '2026-10-26T15:50:00+05:30' })
-  @IsDateString()
-  transactionDate!: string;
+  'Total Value'?: number;
 
   @ApiPropertyOptional({ example: 'M030634' })
+  @AsText()
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  issuedBy?: string;
+  issued_by?: string;
 
   @ApiPropertyOptional({ example: '392851' })
+  @AsText()
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  purchaseOrder?: string;
+  purchase_order?: string;
 
   @ApiPropertyOptional({ example: '918590' })
+  @AsText()
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  requisitionNumber?: string;
+  requisition?: string;
 
-  @ApiPropertyOptional({ example: 'CAGR0008' })
+  @ApiProperty({ example: '12344' })
+  @AsText()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  grn_No!: string;
+
+  @ApiPropertyOptional({ description: 'The vendor code.', example: 'CAGR0008' })
+  @AsText()
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  vendorCode?: string;
+  supplier?: string;
 
-  @ApiProperty({ type: [ErpGrnItemDto] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(500)
-  @ValidateNested({ each: true })
-  @Type(() => ErpGrnItemDto)
-  items!: ErpGrnItemDto[];
+  @ApiProperty({ example: '*' })
+  @AsText()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  batch!: string;
+
+  @ApiProperty({ example: '2027-10-26 15:50:00' })
+  @IsDateString()
+  expiry_date!: string;
+
+  @ApiPropertyOptional({
+    description: '0 = goods in (the default), 1 = return to vendor.',
+    enum: [0, 1],
+    example: 0,
+  })
+  @AsNumber()
+  @IsOptional()
+  @IsIn([0, 1])
+  flag?: 0 | 1;
 }
 
 export class VerifyGrnEntryBatchDto {

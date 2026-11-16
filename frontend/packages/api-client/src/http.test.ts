@@ -48,6 +48,34 @@ void test('a write is never retried: a second POST could place an order twice', 
   assert.deepEqual(calls, ['POST']);
 });
 
+void test('a payment provider’s refusal (502 with our message) reaches the cashier; a crash does not', async () => {
+  const answer = (status: number, message: string) =>
+    createApiClient({
+      baseUrl: 'http://api',
+      fetcher: () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ message, requestId: 'req-1' }), {
+            headers: { 'Content-Type': 'application/json' },
+            status,
+          }),
+        ),
+    });
+  const messageOf = (client: ReturnType<typeof answer>) =>
+    client.request('/pos/online-payments', { body: {}, method: 'POST' }).then(
+      () => '',
+      (error: unknown) => (error instanceof ApiClientError ? error.message : String(error)),
+    );
+
+  assert.match(
+    await messageOf(answer(502, 'Pine Labs refused it: ERROR')),
+    /^Pine Labs refused it: ERROR/,
+  );
+  assert.match(
+    await messageOf(answer(500, 'Cannot read properties of undefined')),
+    /^Something went wrong/,
+  );
+});
+
 void test('other errors are not retried', async () => {
   const { calls, client } = backend(500, 200);
 

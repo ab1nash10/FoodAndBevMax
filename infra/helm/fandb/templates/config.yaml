@@ -26,7 +26,6 @@ data:
   NODE_ENV: {{ .Values.config.env.NODE_ENV | quote }}
   LOG_LEVEL: {{ .Values.config.env.LOG_LEVEL | quote }}
   CORS_ORIGINS: {{ required "config.env.corsOrigins is required - the browser origin, or every sign-in fails CORS" .Values.config.env.corsOrigins | quote }}
-  SMS_FEED_ID: {{ .Values.config.env.smsFeedId | default "" | quote }}
   SMS_SENDER_ID: {{ .Values.config.env.smsSenderId | default "" | quote }}
 ---
 apiVersion: v1

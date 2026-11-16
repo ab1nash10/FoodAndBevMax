@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { isImport, isJson } from './body-limits';
 
 // Payment providers are called over HTTPS. Trust the computer's own certificate store too, not only
 // Node's bundled list: on Max's network a proxy re-signs some sites (Pine Labs' Plutus, seen
@@ -44,20 +45,5 @@ async function bootstrap() {
 
   await (host ? app.listen(port, host) : app.listen(port));
 }
-
-type ParsedRequest = Readonly<{
-  headers: { 'content-type'?: string };
-  method?: string;
-  url?: string;
-}>;
-
-const isJson = (req: ParsedRequest) => /\bjson\b/i.test(req.headers['content-type'] ?? '');
-
-/** POST <prefix>/api/v1/{items,employees,restaurant-menus}/import, and the ERP's GRNs. */
-const isImport = (req: ParsedRequest) =>
-  req.method === 'POST' &&
-  /\/api\/v1\/(?:(?:items|employees|restaurant-menus)\/import|erp\/grns)\/?(?:\?|$)/.test(
-    req.url ?? '',
-  );
 
 void bootstrap();

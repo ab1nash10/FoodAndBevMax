@@ -1,6 +1,6 @@
-// The ERP GRN API end to end: the ERP sends a signed GRN, the store verifies it in the portal,
-// stock moves by exactly the accepted quantity, and the ERP reads back what was accepted and
-// rejected. Runs only with DATABASE_URL_TEST.
+// The ERP GRN API end to end: the ERP sends a signed GRN as flat rows (its own field names),
+// the store verifies it in the portal, stock moves by exactly the accepted quantity, and the
+// ERP reads back what was accepted and rejected. Runs only with DATABASE_URL_TEST.
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -33,8 +33,10 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
   const fx = {
     hospitalCode: '',
     hospitalId: '',
+    hospitalName: '',
     itemCode: '',
     itemId: '',
+    itemName: '',
     storeCode: '',
     storeId: '',
   };
@@ -66,45 +68,38 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     return { body: json, data: (json.data ?? {}) as Body, status: response.status };
   }
 
-  const send = (grn: Body, call: ErpCall = {}) =>
-    erp('POST', '/erp/grns', { ...call, body: JSON.stringify(grn) });
+  const send = (rows: Body[], call: ErpCall = {}) =>
+    erp('POST', '/erp/grns', { ...call, body: JSON.stringify(rows) });
 
+  /** One row per batch, in the ERP's own field names, as in its sample. */
   function grn(
     grnNumber: string,
     batches: { qty: number; batch: string; expiry?: string }[],
     extra: Body = {},
-  ): Body {
-    return {
-      flag: 0,
-      grnNumber,
-      hospitalCode: fx.hospitalCode,
-      issuedBy: 'M030634',
-      items: [
-        {
-          batches: batches.map((b, index) => ({
-            batchNumber: b.batch,
-            expiryDate: b.expiry ?? day(90),
-            qty: b.qty,
-            totalValue: Math.round(b.qty * 980) / 100,
-            transactionNumber: `${grnNumber}-${index + 1}`,
-          })),
-          discount: 0,
-          hsnCode: '998313',
-          itemCode: fx.itemCode,
-          itemName: 'Kinley Water - 1000 Ml',
-          mrp: 15,
-          taxRate: 'IGST@18%',
-          unitRate: 9.8,
-          uom: 'No.',
-        },
-      ],
-      purchaseOrder: '392851',
-      requisitionNumber: '918590',
-      storeCode: fx.storeCode,
-      transactionDate: '2026-10-26T15:50:00+05:30',
-      vendorCode: 'CAGR0008',
+  ): Body[] {
+    return batches.map((b, index) => ({
+      'Discount/Extra Charges': 0,
+      'HSN No': '998313',
+      MRP: 15,
+      'Tax Rate': 'IGST@18%',
+      'Total Value': Math.round(b.qty * 980) / 100,
+      UOM: 'No.',
+      'Unit Rate': 9.8,
+      batch: b.batch,
+      date: '2026-10-26T15:50:00+05:30',
+      expiry_date: b.expiry ?? day(90),
+      grn_No: grnNumber,
+      issued_by: 'M030634',
+      item_name: 'Kinley Water - 1000 Ml',
+      location: fx.hospitalCode,
+      part_item_code: fx.itemCode,
+      purchase_order: '392851',
+      requisition: '918590',
+      supplier: 'CAGR0008',
+      transaction_number: `${grnNumber}-${index + 1}`,
+      transaction_qty: b.qty,
       ...extra,
-    };
+    }));
   }
 
   const storeQty = async (batchNumber: string) => {
@@ -123,18 +118,34 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
 
   beforeAll(async () => {
     h = await startHarness();
+    // A location of its own: it comes with a Main Store, where the ERP's GRNs land.
+    fx.hospitalName = `Int ERP Site ${run}`;
+    const hospital = await h.ok('POST', '/hospitals', {
+      city: 'New Delhi',
+      invoicePrefix: `E${run.toUpperCase()}`,
+      locationCode: `e${run}`,
+      state: 'Delhi',
+      title: fx.hospitalName,
+    });
+    fx.hospitalId = hospital.id as string;
+    fx.hospitalCode = hospital.hospitalCode as string;
     const store = firstOf(
-      (await h.ok('GET', '/stores?limit=1&isActive=true&sortBy=createdAt&sortOrder=asc'))
-        .items as Body[],
+      ((await h.ok('GET', `/stores?hospitalId=${fx.hospitalId}&limit=100`)).items as Body[]).filter(
+        (s) => s.storeName === 'Main Store',
+      ),
     );
     fx.storeId = store.id as string;
     fx.storeCode = store.storeCode as string;
-    fx.hospitalId = store.hospitalId as string;
-    fx.hospitalCode = (await h.ok('GET', `/hospitals/${fx.hospitalId}`)).hospitalCode as string;
     const categoryId = (await h.ok('POST', '/item-categories', { categoryName: `ERP GRN ${run}` }))
       .id;
-    const item = await h.ok('POST', '/items', { itemName: `ERP GRN water ${run}`, type: 'VEG' });
+    const item = await h.ok('POST', '/items', {
+      hsnCode: '220110',
+      itemName: `ERP GRN water ${run}`,
+      type: 'VEG',
+    });
     fx.itemId = item.id as string;
+    // As the Item master keeps it (it title-cases names).
+    fx.itemName = item.itemName as string;
     fx.itemCode = item.itemCode as string;
     await h.ok('POST', '/store-items', { categoryId, itemId: fx.itemId, storeId: fx.storeId });
   }, 60_000);
@@ -193,7 +204,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     );
     expect([sent.status, sent.data]).toEqual([
       200,
-      { batches: 2, grnNumber, replaced: false, status: 'PENDING' },
+      { grn_No: grnNumber, replaced: false, rows: 2, status: 'PENDING' },
     ]);
     // Nothing reaches stock until the store verifies it.
     expect(await storeQty(b1)).toBe(0);
@@ -205,16 +216,21 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
         { batch: b2, qty: 45 },
       ]),
     );
-    expect(corrected.data).toEqual({ batches: 2, grnNumber, replaced: true, status: 'PENDING' });
+    expect(corrected.data).toEqual({
+      grn_No: grnNumber,
+      replaced: true,
+      rows: 2,
+      status: 'PENDING',
+    });
 
     const pending = await h.ok('GET', `/grn-entries?status=PENDING&search=${grnNumber}`);
-    expect((pending.items as Body[]).map((g) => [g.grnNumber, g.status])).toEqual([
+    expect((pending.items as Body[]).map((g) => [g.grn_No, g.status])).toEqual([
       [grnNumber, 'PENDING'],
     ]);
     const before = await erp('GET', `/erp/grns/${grnNumber}`);
     expect(before.data).toMatchObject({
       status: 'PENDING',
-      totals: { acceptedQty: null, rejectedQty: null, sentQty: 105 },
+      totals: { accepted_qty: null, rejected_qty: null, transaction_qty: 105 },
     });
 
     // Every batch must be answered for, and accepted + rejected must equal what was sent.
@@ -274,28 +290,42 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     const result = await erp('GET', `/erp/grns/${grnNumber}`);
     expect(result.status).toBe(200);
     expect(result.data).toMatchObject({
-      flag: 0,
-      grnNumber,
-      hospitalCode: fx.hospitalCode,
+      grn_No: grnNumber,
+      location: fx.hospitalCode,
       status: 'VERIFIED',
-      storeCode: fx.storeCode,
-      totals: { acceptedQty: 95, rejectedQty: 10, sentQty: 105 },
-      vendorCode: 'CAGR0008',
+      store_code: fx.storeCode,
+      store_name: 'Main Store',
+      totals: { accepted_qty: 95, rejected_qty: 10, transaction_qty: 105 },
     });
-    expect(result.data.verifiedAt).toEqual(expect.any(String));
-    expect(typeof (result.data.verifiedBy as Body).name).toBe('string');
-    const batches = (firstOf(result.data.items as Body[]).batches as Body[]).map((b) => [
-      b.transactionNumber,
-      b.batchNumber,
-      b.sentQty,
-      b.acceptedQty,
-      b.rejectedQty,
-      b.rejectionReason,
-    ]);
-    expect(batches).toEqual([
-      [t1, b1, 60, 60, 0, null],
-      [t2, b2, 45, 35, 10, 'Damaged packing'],
-    ]);
+    expect(result.data.verified_at).toEqual(expect.any(String));
+    expect(typeof (result.data.verified_by as Body).name).toBe('string');
+    // Every row comes back with every field the ERP sent, and the store's answer.
+    expect((result.data.rows as Body[])[1]).toEqual({
+      'Discount/Extra Charges': 0,
+      'HSN No': '998313',
+      MRP: 15,
+      'Tax Rate': 'IGST@18%',
+      'Total Value': 441,
+      UOM: 'No.',
+      'Unit Rate': 9.8,
+      accepted_qty: 35,
+      batch: b2,
+      date: '2026-10-26T10:20:00.000Z',
+      expiry_date: day(90),
+      flag: 0,
+      grn_No: grnNumber,
+      issued_by: 'M030634',
+      item_name: 'Kinley Water - 1000 Ml',
+      location: fx.hospitalCode,
+      part_item_code: fx.itemCode,
+      purchase_order: '392851',
+      rejected_qty: 10,
+      rejection_reason: 'Damaged packing',
+      requisition: '918590',
+      supplier: 'CAGR0008',
+      transaction_number: t2,
+      transaction_qty: 45,
+    });
 
     // The ERP picks up everything verified since a time.
     const since = new Date(Date.now() - 60_000).toISOString();
@@ -303,7 +333,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       'GET',
       `/erp/grns?status=VERIFIED&verifiedSince=${encodeURIComponent(since)}&limit=100`,
     );
-    expect((picked.data.items as Body[]).map((g) => g.grnNumber)).toContain(grnNumber);
+    expect((picked.data.items as Body[]).map((g) => g.grn_No)).toContain(grnNumber);
 
     // Once verified, the GRN can no longer be replaced or verified again.
     const late = await send(grn(grnNumber, [{ batch: b1, qty: 1 }]));
@@ -313,23 +343,75 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     ]);
   });
 
-  it('refuses unknown codes, listing each, and saves nothing', async () => {
+  it('takes the sample as the ERP writes it: text numbers, India time, location by name; fills the rest from AAHAR', async () => {
     const grnNumber = newGrnNumber();
-    const body = grn(grnNumber, [{ batch: `U-${run}`, qty: 5 }], { storeCode: 'NO-SUCH-STORE' });
-    (body.items as Body[]).push({
-      ...(body.items as Body[])[0],
-      batches: [
-        { batchNumber: 'X', expiryDate: day(30), qty: 1, transactionNumber: `${grnNumber}-9` },
-      ],
-      itemCode: 'NO-SUCH-ITEM',
+    const [row] = grn(grnNumber, [{ batch: '*', qty: 5 }]);
+    const sample: Body = {
+      ...row,
+      'Discount/Extra Charges': '0',
+      MRP: '15',
+      'Total Value': '9.257',
+      'Unit Rate': '9.80',
+      date: '2026-10-26 15:50:00',
+      expiry_date: '2027-10-26 15:50:00',
+      // The location's name, in any case, stands for it as well as its code.
+      location: fx.hospitalName.toUpperCase(),
+      transaction_qty: '5',
+    };
+    // Left out: the Item master supplies the name and HSN code.
+    delete sample.item_name;
+    delete sample['HSN No'];
+
+    const sent = await send([sample]);
+    expect([sent.status, sent.data.status]).toEqual([200, 'PENDING']);
+
+    const saved = await erp('GET', `/erp/grns/${grnNumber}`);
+    expect(saved.data).toMatchObject({ location: fx.hospitalCode, store_name: 'Main Store' });
+    expect(firstOf(saved.data.rows as Body[])).toMatchObject({
+      'Discount/Extra Charges': 0,
+      'HSN No': '220110',
+      MRP: 15,
+      'Total Value': 9.257,
+      'Unit Rate': 9.8,
+      batch: '*',
+      date: '2026-10-26T10:20:00.000Z',
+      expiry_date: '2027-10-26',
+      item_name: fx.itemName,
+      location: fx.hospitalCode,
+      transaction_qty: 5,
     });
-    const result = await send(body);
+  });
+
+  it('refuses unknown codes and mixed GRNs, listing each problem, and saves nothing', async () => {
+    const grnNumber = newGrnNumber();
+    const unknown = [
+      ...grn(grnNumber, [{ batch: `U-${run}`, qty: 5 }], { location: 'NO-SUCH-PLACE' }),
+      ...grn(grnNumber, [{ batch: 'X', qty: 1 }], {
+        part_item_code: 'NO-SUCH-ITEM',
+        transaction_number: `${grnNumber}-9`,
+      }),
+    ];
+    const result = await send(unknown);
     expect(result.status).toBe(422);
     expect(result.body.errors).toEqual([
-      `Store code NO-SUCH-STORE is not in hospital ${fx.hospitalCode}`,
+      'Every row of a GRN must have the same location',
+      'Location NO-SUCH-PLACE is not in AAHAR',
       'Item code NO-SUCH-ITEM is not in AAHAR',
     ]);
     expect((await erp('GET', `/erp/grns/${grnNumber}`)).status).toBe(404);
+
+    const mixed = [
+      ...grn(grnNumber, [{ batch: `M1-${run}`, qty: 1 }]),
+      ...grn(newGrnNumber(), [{ batch: `M2-${run}`, qty: 1 }]),
+    ];
+    const refused = await send(mixed);
+    expect([refused.status, refused.body.errors]).toEqual([
+      422,
+      ['Every row must have the same grn_No: send one GRN at a time'],
+    ]);
+
+    const missing = await send([{ ...grn(grnNumber, [{ batch: 'Y', qty: 1 }])[0], batch: '' }]);
+    expect(missing.status).toBe(400);
   });
 
   it('refuses a transaction number sent twice, or already used by another GRN', async () => {
@@ -338,8 +420,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       { batch: `D1-${run}`, qty: 1 },
       { batch: `D2-${run}`, qty: 1 },
     ]);
-    const batches = firstOf(twice.items as Body[]).batches as Body[];
-    batches[1]!.transactionNumber = batches[0]!.transactionNumber;
+    twice[1]!.transaction_number = twice[0]!.transaction_number;
     expect((await send(twice)).body.errors).toEqual([
       `Transaction number ${grnNumber}-1 appears more than once`,
     ]);
@@ -347,7 +428,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     const first = newGrnNumber();
     await send(grn(first, [{ batch: `D3-${run}`, qty: 1 }]));
     const other = grn(newGrnNumber(), [{ batch: `D4-${run}`, qty: 1 }]);
-    (firstOf(other.items as Body[]).batches as Body[])[0]!.transactionNumber = `${first}-1`;
+    other[0]!.transaction_number = `${first}-1`;
     const clash = await send(other);
     expect([clash.status, clash.body.errors]).toEqual([
       422,

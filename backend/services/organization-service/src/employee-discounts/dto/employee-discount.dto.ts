@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { EmploymentType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
-  ArrayUnique,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -18,6 +18,7 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { UniqueItems } from '../../common/unique-items';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { DisplayName } from '../../common/display-name.decorator';
 import { toOptionalBoolean } from '../../common/values';
@@ -72,7 +73,8 @@ export class CreateEmployeeDiscountDto {
     isArray: true,
   })
   @IsArray()
-  @ArrayUnique()
+  @ArrayMaxSize(7)
+  @UniqueItems()
   @IsEnum(RestaurantMenuDayOfWeek, { each: true })
   @IsOptional()
   daysOfWeek?: RestaurantMenuDayOfWeek[];

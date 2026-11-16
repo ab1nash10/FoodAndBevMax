@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayUnique,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsNotEmpty,
@@ -12,6 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { UniqueItems } from '../../common/unique-items';
 import { DisplayName } from '../../common/display-name.decorator';
 
 // BA spec: name and code are alphanumeric. Spaces and the separators already used by
@@ -77,7 +78,8 @@ export class CreatePosDeviceDto {
     example: ['0f7e08c8-66d9-4a50-994a-7e5c91565f9d'],
     type: [String],
   })
-  @ArrayUnique()
+  @ArrayMaxSize(1000)
+  @UniqueItems()
   @IsArray()
   @IsOptional()
   @IsUUID('4', { each: true })

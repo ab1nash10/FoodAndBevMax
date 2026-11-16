@@ -200,7 +200,6 @@ describe.skipIf(!databaseUrl)(
         MAIL_CLIENT_SECRET: ' ',
         NODE_ENV: 'test',
         REDIS_URL: '',
-        SMS_FEED_ID: ' ',
         SMS_PASSWORD: ' ',
         SMS_SENDER_ID: ' ',
         SMS_USERNAME: ' ',

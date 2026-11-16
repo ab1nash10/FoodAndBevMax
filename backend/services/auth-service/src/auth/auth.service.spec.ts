@@ -20,7 +20,6 @@ Object.assign(process.env, {
   MAIL_CLIENT_SECRET: '',
   MAIL_SENDER: '',
   MAIL_TENANT_ID: '',
-  SMS_FEED_ID: '',
   SMS_PASSWORD: '',
   SMS_SENDER_ID: '',
   SMS_USERNAME: '',

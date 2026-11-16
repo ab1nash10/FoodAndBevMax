@@ -147,10 +147,11 @@ export class OtpService {
       return target;
     }
 
-    // Checked before the code, so even the right one is refused until the day's window ends.
-    const dailyFailures = Number(await this.redis.get(this.getDailyFailuresKey(target)));
-
-    if (dailyFailures >= MAX_DAILY_FAILED_ATTEMPTS) {
+    // Every guess takes its place in both counts before the code is looked at: checking first
+    // and counting after let a burst of guesses all pass the check (security audit run 2).
+    // Past the day's limit even the right code is refused until the window ends.
+    const dailyKey = this.getDailyFailuresKey(target);
+    if ((await this.redis.increment(dailyKey, DAY_SECONDS)) > MAX_DAILY_FAILED_ATTEMPTS) {
       throw new HttpException(
         'Too many wrong codes for this account. Please try again later.',
         HttpStatus.TOO_MANY_REQUESTS,
@@ -158,14 +159,22 @@ export class OtpService {
     }
 
     const key = this.getOtpKey(target);
-    const storedOtp = await this.redis.get(key);
+    const attemptsKey = this.getAttemptsKey(target);
+    const ttlSeconds = this.config.get<number>('OTP_TTL_SECONDS') ?? 300;
+    const attempts = await this.redis.increment(attemptsKey, ttlSeconds);
+    const storedOtp = attempts > MAX_FAILED_ATTEMPTS ? null : await this.redis.get(key);
 
     if (!storedOtp) {
+      // No code to guess at: tapping verify after it expired must not use up the day.
+      if (attempts <= MAX_FAILED_ATTEMPTS) {
+        await this.redis.decrement(attemptsKey);
+        await this.redis.decrement(dailyKey);
+      }
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
     if (!otpMatches(storedOtp, input.otp)) {
-      await this.recordFailedAttempt(target);
+      if (attempts >= MAX_FAILED_ATTEMPTS) await this.burnCode(target, attempts);
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
@@ -180,25 +189,18 @@ export class OtpService {
     return target;
   }
 
-  // Counted atomically: guesses spread across instances still burn the code after five misses.
-  private async recordFailedAttempt(target: OtpTarget): Promise<void> {
-    const attemptsKey = this.getAttemptsKey(target);
-    const ttlSeconds = this.config.get<number>('OTP_TTL_SECONDS') ?? 300;
-    const attempts = await this.redis.increment(attemptsKey, ttlSeconds);
-    await this.redis.increment(this.getDailyFailuresKey(target), DAY_SECONDS);
-
-    if (attempts >= MAX_FAILED_ATTEMPTS) {
-      await this.redis.delete(this.getOtpKey(target));
-      await this.redis.delete(attemptsKey);
-      logger.warn(
-        {
-          attempts,
-          channel: target.channel,
-          target: target.channel === 'mobile' ? maskPhone(target.value) : target.value,
-        },
-        'otp_lockout',
-      );
-    }
+  // The fifth miss burns the code; a new one has to be sent.
+  private async burnCode(target: OtpTarget, attempts: number): Promise<void> {
+    await this.redis.delete(this.getOtpKey(target));
+    await this.redis.delete(this.getAttemptsKey(target));
+    logger.warn(
+      {
+        attempts,
+        channel: target.channel,
+        target: target.channel === 'mobile' ? maskPhone(target.value) : target.value,
+      },
+      'otp_lockout',
+    );
   }
 
   private getCooldownKey(target: OtpTarget): string {

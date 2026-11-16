@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MenuServeAt } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
-  ArrayUnique,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -17,6 +17,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { UniqueItems } from '../../common/unique-items';
 
 export const menuGstSlabs = [0, 5, 12, 18];
 
@@ -78,7 +79,8 @@ export class CreateRestaurantMenuDto {
     example: [RestaurantMenuDayOfWeek.MONDAY, RestaurantMenuDayOfWeek.TUESDAY],
     isArray: true,
   })
-  @ArrayUnique()
+  @ArrayMaxSize(7)
+  @UniqueItems()
   @IsArray()
   @IsEnum(RestaurantMenuDayOfWeek, { each: true })
   @IsOptional()

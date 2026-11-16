@@ -3,7 +3,6 @@ import { ShiftMode } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayUnique,
   IsArray,
   IsBoolean,
   IsEmail,
@@ -16,6 +15,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { UniqueItems } from '../../common/unique-items';
 import { CodeCase, DisplayName } from '../../common/display-name.decorator';
 import { GSTIN_PATTERN } from '../../legal-entities/legal-entity-guards';
 
@@ -67,7 +67,8 @@ export class CreateRestaurantDto {
 
   @ApiPropertyOptional({ description: 'Kitchens mapped to this restaurant.', type: [String] })
   @IsArray()
-  @ArrayUnique()
+  @ArrayMaxSize(1000)
+  @UniqueItems()
   @IsOptional()
   @IsUUID('4', { each: true })
   kitchenIds?: string[];

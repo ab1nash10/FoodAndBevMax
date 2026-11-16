@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseArrayPipe,
   Patch,
   Post,
   Query,
@@ -14,6 +15,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiHeader,
   ApiOkResponse,
   ApiOperation,
@@ -21,7 +23,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
-import { ErpGrnDto, ListGrnEntriesQueryDto, VerifyGrnEntryDto } from './dto/erp-grn.dto';
+import { ErpGrnRowDto, ListGrnEntriesQueryDto, VerifyGrnEntryDto } from './dto/erp-grn.dto';
 import { ErpGrnsService } from './erp-grns.service';
 import { ErpSignatureGuard } from './erp-signature.guard';
 
@@ -45,11 +47,18 @@ export class ErpGrnsController {
 
   @Post()
   @HttpCode(200)
-  @ApiOperation({ summary: 'Send a GRN (all its items and batches); saved as PENDING' })
-  @ApiOkResponse({ description: 'GRN saved, or replaced while still pending.' })
-  async receive(@Body() body: ErpGrnDto, @Req() request: RequestContextLike) {
+  @ApiOperation({
+    summary: 'Send a GRN: a JSON array of its rows, one per batch, all with the same grn_No',
+  })
+  @ApiBody({ type: [ErpGrnRowDto] })
+  @ApiOkResponse({ description: 'GRN saved as PENDING, or replaced while still pending.' })
+  async receive(
+    @Body(new ParseArrayPipe({ forbidNonWhitelisted: true, items: ErpGrnRowDto, whitelist: true }))
+    rows: ErpGrnRowDto[],
+    @Req() request: RequestContextLike,
+  ) {
     return {
-      data: await this.erpGrns.receive(body, getIpAddress(request)),
+      data: await this.erpGrns.receive(rows, getIpAddress(request)),
       message: 'Success',
       success: true,
     };

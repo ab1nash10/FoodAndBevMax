@@ -19,7 +19,6 @@ Object.assign(process.env, {
   MAIL_CLIENT_SECRET: '',
   MAIL_SENDER: '',
   MAIL_TENANT_ID: '',
-  SMS_FEED_ID: '',
   SMS_PASSWORD: '',
   SMS_SENDER_ID: '',
   SMS_USERNAME: '',
@@ -42,6 +41,11 @@ function fakeRedis() {
     return entries.get(key);
   };
   const redis = {
+    decrement: (key: string) => {
+      const entry = live(key);
+      if (entry) entry.value = String(Number(entry.value) - 1);
+      return Promise.resolve();
+    },
     delete: (key: string) => Promise.resolve(live(key) ? entries.delete(key) : false),
     get: (key: string) => Promise.resolve(live(key)?.value ?? null),
     increment: (key: string, ttlSeconds: number) => {
@@ -187,6 +191,45 @@ test('five wrong guesses burn the code, so even the right one is then refused', 
 
   await assert.rejects(service.verify({ mobile: '9876543210', otp: wrong }), invalid);
   await assert.rejects(service.verify({ mobile: '9876543210', otp: code }), invalid);
+});
+
+test('guesses sent all at once still stop at five per code', async () => {
+  const { service, smsSent } = otpService();
+  const mobile = '9876543210';
+  await service.send({ channel: 'mobile', value: mobile });
+  const code = smsSent[0]?.otp ?? '';
+  const wrong = code === '111111' ? '222222' : '111111';
+
+  // Ten at once, the right code last: only five may be compared, so it never gets a look.
+  const burst = [...Array<string>(9).fill(wrong), code];
+  const results = await Promise.allSettled(burst.map((otp) => service.verify({ mobile, otp })));
+  assert.deepEqual(
+    results.map((result) => result.status),
+    burst.map(() => 'rejected'),
+  );
+  // Burnt: the right code alone is refused afterwards too.
+  await assert.rejects(service.verify({ mobile, otp: code }), invalid);
+
+  // Within the five, the right code still signs in.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+  await service.send({ channel: 'mobile', value: mobile });
+  const next = smsSent[1]?.otp ?? '';
+  const miss = next === '111111' ? '222222' : '111111';
+  const settled = await Promise.allSettled(
+    [miss, miss, miss, miss, next].map((otp) => service.verify({ mobile, otp })),
+  );
+  assert.equal(settled.at(-1)?.status, 'fulfilled');
+});
+
+test('asking with no code waiting does not use up the day', async () => {
+  const { service, smsSent } = otpService();
+  const mobile = '9876543210';
+  for (let tap = 0; tap < 20; tap += 1) {
+    await assert.rejects(service.verify({ mobile, otp: '123456' }), invalid);
+  }
+  await service.send({ channel: 'mobile', value: mobile });
+  assert.ok(await service.verify({ mobile, otp: smsSent[0]?.otp ?? '' }));
 });
 
 test('a new code clears the miss count of the old one', async () => {

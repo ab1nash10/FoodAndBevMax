@@ -242,9 +242,10 @@ function friendlyErrorMessage(status: number, message?: string, requestId?: stri
 
   if (status >= 500) {
     return messageWithRequestId(
-      // 503 is a service saying on purpose what it cannot do now ("Could not send the OTP");
-      // any other 5xx is a crash, whose text is not for users.
-      status === 503 && canUseBackendMessage
+      // 503 is a service saying on purpose what it cannot do now ("Could not send the OTP"), and
+      // 502 a payment provider refusing ("Pine Labs refused it: …"); a proxy's own 502 has no
+      // message of ours. Any other 5xx is a crash, whose text is not for users.
+      (status === 502 || status === 503) && canUseBackendMessage
         ? backendMessage
         : 'Something went wrong. Please try again. If the issue continues, contact support.',
       requestId,

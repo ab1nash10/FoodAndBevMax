@@ -76,6 +76,7 @@ export const queryKeys = {
   auditLogs: key('audit-logs'),
   // ERP sends: the list (filters) and one send in full ('detail', id).
   erpPostings: key('erp-postings'),
+  grnEntries: key('grn-entries'),
   posEmployee: key('pos-employee'),
   posMenu: key('pos-menu'),
   posSummary: key('pos-summary'),

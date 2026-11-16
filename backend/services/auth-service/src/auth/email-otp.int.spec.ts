@@ -132,7 +132,6 @@ describe.skipIf(!databaseUrl)(
         MAIL_TENANT_ID: ' ',
         NODE_ENV: 'test',
         REDIS_URL: '',
-        SMS_FEED_ID: ' ',
         SMS_PASSWORD: ' ',
         SMS_SENDER_ID: ' ',
         SMS_USERNAME: ' ',

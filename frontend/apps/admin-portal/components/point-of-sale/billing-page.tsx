@@ -39,6 +39,7 @@ import { useToast } from '@/components/toast-provider';
 import { Input, Label, Panel, Skeleton } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { newClientId as newClientOrderId } from '@/lib/client-id';
 import { isNetworkError } from '@/lib/pos-offline-queue';
 import { previewBill } from '@/lib/pos-pricing';
 import { invalidatePosBillQueries } from '@/lib/query-invalidation';
@@ -87,10 +88,6 @@ const employmentTypeLabels: Record<EmploymentType, string> = {
   OUTSOURCED: 'Outsourced',
 };
 const mobilePattern = /^[6-9]\d{9}$/;
-
-function newClientOrderId(): string {
-  return crypto.randomUUID();
-}
 
 /** Why an item cannot be added right now, or null when it can. */
 function unavailableReason(item: PosMenuItem, inCart: number): string | null {
@@ -380,6 +377,12 @@ export function BillingPageClient() {
       employee?.isError &&
       'The Employee ID matches no employee here. Correct it or clear it.',
     isComplimentary && !complimentaryReason.trim() && 'Say why the meal is complimentary.',
+    // Not yet known whether a card machine or UPI gateway takes it: sent now, it would go as a
+    // typed card/UPI bill, which the server refuses where the counter collects online.
+    !isComplimentary &&
+      ((paymentMode === 'CARD' && cardMachineQuery.isPending) ||
+        (paymentMode === 'UPI' && providersQuery.isPending)) &&
+      'Checking how this counter takes the payment. Try again in a moment.',
   ].filter((problem): problem is string => Boolean(problem));
   const takesCash = paymentMode === 'CASH' && !isComplimentary;
 

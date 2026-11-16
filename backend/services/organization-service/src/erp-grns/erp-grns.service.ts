@@ -21,11 +21,12 @@ import { quantitiesMatch, toDateOnly, toNumber } from '../common/values';
 import { GrnsRepository } from '../grns/grns.repository';
 import { isExpiredForAcceptance, sum } from '../grns/grns.helpers';
 import { siteBusinessDate } from '../pos/pos-pricing';
-import type { ErpGrnDto, ListGrnEntriesQueryDto, VerifyGrnEntryDto } from './dto/erp-grn.dto';
+import type { ErpGrnRowDto, ListGrnEntriesQueryDto, VerifyGrnEntryDto } from './dto/erp-grn.dto';
 
 type Tx = Prisma.TransactionClient;
 
 const entryInclude = {
+  hospital: { select: { hospitalName: true } },
   store: { select: { storeName: true } },
   verifier: { select: { employeeCode: true, name: true } },
 } satisfies Prisma.GrnEntryInclude;
@@ -34,6 +35,22 @@ type Entry = Prisma.GrnEntryGetPayload<{ include: typeof entryInclude }>;
 
 /** Same codes whatever case the ERP sends them in; AAHAR keeps codes in capitals. */
 const code = (value: string) => value.trim().toUpperCase();
+
+/** Where a GRN from the ERP lands: the ERP names only the location. */
+const MAIN_STORE = 'Main Store';
+const MAX_ROWS = 2000;
+
+/** A text field the ERP sent, or undefined if it left it out or blank. */
+const filled = (value?: string) => value?.trim() || undefined;
+
+/** The ERP's time; without a zone ("2026-10-26 15:50:00") it is India time. */
+export function indiaTime(value: string): Date {
+  const text = value.trim().replace(' ', 'T');
+
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(text)) return new Date(text);
+
+  return new Date(`${text.length === 10 ? `${text}T00:00:00` : text}+05:30`);
+}
 
 @Injectable()
 export class ErpGrnsService {
@@ -45,47 +62,75 @@ export class ErpGrnsService {
 
   /**
    * Saves a GRN from the ERP as PENDING, one row per batch, all or nothing. Sent again while
-   * still pending, it replaces the earlier copy; once verified it is refused.
+   * still pending, it replaces the earlier copy; once verified it is refused. A field the ERP
+   * leaves out that AAHAR knows (the item's name and HSN code) is filled in from the Item master.
    */
-  async receive(dto: ErpGrnDto, ipAddress?: string) {
-    const grnNumber = dto.grnNumber.trim();
-    const batches = dto.items.flatMap((item) => item.batches.map((batch) => ({ batch, item })));
-    const problems = repeatedTransactionNumbers(
-      batches.map(({ batch }) => batch.transactionNumber),
+  async receive(rows: ErpGrnRowDto[], ipAddress?: string) {
+    if (rows.length === 0) {
+      throw new BadRequestException('Send the GRN as a JSON array with at least one row');
+    }
+
+    if (rows.length > MAX_ROWS) {
+      throw new BadRequestException(`A GRN can have at most ${MAX_ROWS} rows`);
+    }
+
+    const grnNumber = rows[0]!.grn_No.trim();
+
+    if (rows.some((row) => row.grn_No.trim() !== grnNumber)) {
+      throw unprocessable(grnNumber, [
+        'Every row must have the same grn_No: send one GRN at a time',
+      ]);
+    }
+
+    const location = rows[0]!.location.trim();
+    const problems: string[] = [];
+
+    if (rows.some((row) => row.location.trim().toLowerCase() !== location.toLowerCase())) {
+      problems.push('Every row of a GRN must have the same location');
+    }
+
+    problems.push(...repeatedTransactionNumbers(rows.map((row) => row.transaction_number)));
+    const { hospital, items, store } = await this.resolveCodes(
+      location,
+      rows.map((row) => row.part_item_code),
+      problems,
     );
-    const { hospital, itemIds, store } = await this.resolveCodes(dto, problems);
 
     if (problems.length > 0 || !hospital || !store) {
       throw unprocessable(grnNumber, problems);
     }
 
-    const data = batches.map(({ batch, item }) => ({
-      batchNumber: batch.batchNumber.trim(),
-      discount: item.discount,
-      expiryDate: toDateOnly(batch.expiryDate),
-      flag: dto.flag,
-      grnNumber,
-      hospitalCode: hospital.hospitalCode,
-      hospitalId: hospital.id,
-      hsnCode: item.hsnCode,
-      issuedBy: dto.issuedBy,
-      itemCode: code(item.itemCode),
-      itemId: itemIds.get(code(item.itemCode))!,
-      itemName: item.itemName,
-      mrp: item.mrp,
-      purchaseOrder: dto.purchaseOrder,
-      requisitionNumber: dto.requisitionNumber,
-      sentQty: batch.qty,
-      storeCode: store.storeCode,
-      storeId: store.id,
-      taxRate: item.taxRate,
-      totalValue: batch.totalValue,
-      transactionDate: new Date(dto.transactionDate),
-      transactionNumber: batch.transactionNumber.trim(),
-      unitRate: item.unitRate,
-      uom: item.uom,
-      vendorCode: dto.vendorCode,
-    }));
+    const data = rows.map((row) => {
+      const item = items.get(code(row.part_item_code))!;
+
+      return {
+        batchNumber: row.batch.trim(),
+        discount: row['Discount/Extra Charges'],
+        expiryDate: toDateOnly(row.expiry_date),
+        flag: row.flag ?? 0,
+        grnNumber,
+        hospitalCode: hospital.hospitalCode,
+        hospitalId: hospital.id,
+        hsnCode: filled(row['HSN No']) ?? item.hsnCode,
+        issuedBy: filled(row.issued_by),
+        itemCode: item.itemCode,
+        itemId: item.id,
+        itemName: filled(row.item_name) ?? item.itemName,
+        mrp: row.MRP,
+        purchaseOrder: filled(row.purchase_order),
+        requisitionNumber: filled(row.requisition),
+        sentQty: row.transaction_qty,
+        storeCode: store.storeCode,
+        storeId: store.id,
+        taxRate: filled(row['Tax Rate']),
+        totalValue: row['Total Value'],
+        transactionDate: indiaTime(row.date),
+        transactionNumber: row.transaction_number.trim(),
+        unitRate: row['Unit Rate'],
+        uom: filled(row.UOM),
+        vendorCode: filled(row.supplier),
+      };
+    });
 
     return this.prisma.$transaction(async (tx) => {
       await lockGrn(tx, grnNumber);
@@ -128,15 +173,15 @@ export class ErpGrnsService {
           entityName: 'grn_entries',
           hospitalId: hospital.id,
           ipAddress,
-          newValue: dto,
+          newValue: rows,
         },
         tx,
       );
 
       return {
-        batches: data.length,
-        grnNumber,
+        grn_No: grnNumber,
         replaced: existing.length > 0,
+        rows: data.length,
         status: GrnEntryStatus.PENDING,
       };
     });
@@ -352,61 +397,79 @@ export class ErpGrnsService {
     return rows;
   }
 
-  /** The hospital, store and items behind the ERP's codes; each one not found is a problem. */
-  private async resolveCodes(dto: ErpGrnDto, problems: string[]) {
-    const hospital = await this.prisma.hospital.findFirst({
+  /**
+   * The location (by code or name), its Main Store and the items behind the ERP's codes; each
+   * one not found is a problem.
+   */
+  private async resolveCodes(location: string, itemCodes: string[], problems: string[]) {
+    const named = { equals: location, mode: 'insensitive' as const };
+    const matches = await this.prisma.hospital.findMany({
       select: { hospitalCode: true, id: true },
+      take: 5,
       where: {
+        OR: [{ hospitalCode: named }, { hospitalName: named }, { displayName: named }],
         deletedAt: null,
-        hospitalCode: { equals: dto.hospitalCode.trim(), mode: 'insensitive' },
         isActive: true,
       },
     });
+    // A code is unique; a name may not be, and then only the code will do.
+    const hospital =
+      matches.find((match) => match.hospitalCode.toLowerCase() === location.toLowerCase()) ??
+      (matches.length === 1 ? matches[0] : undefined);
     const store = hospital
       ? await this.prisma.store.findFirst({
+          orderBy: { createdAt: 'asc' },
           select: { id: true, storeCode: true },
           where: {
             deletedAt: null,
             hospitalId: hospital.id,
             isActive: true,
-            storeCode: { equals: dto.storeCode.trim(), mode: 'insensitive' },
+            storeName: { equals: MAIN_STORE, mode: 'insensitive' },
           },
         })
       : null;
 
     if (!hospital) {
-      problems.push(`Hospital code ${dto.hospitalCode} is not in AAHAR`);
+      problems.push(
+        matches.length > 1
+          ? `Location ${location} matches more than one location: send its code`
+          : `Location ${location} is not in AAHAR`,
+      );
     } else if (!store) {
-      problems.push(`Store code ${dto.storeCode} is not in hospital ${hospital.hospitalCode}`);
+      problems.push(`Location ${hospital.hospitalCode} has no active ${MAIN_STORE}`);
     }
 
-    const codes = [...new Set(dto.items.map((item) => code(item.itemCode)))];
-    const items = await this.prisma.item.findMany({
-      select: { id: true, itemCode: true },
+    const codes = [...new Set(itemCodes.map(code))];
+    const found = await this.prisma.item.findMany({
+      select: { hsnCode: true, id: true, itemCode: true, itemName: true },
       where: { deletedAt: null, isActive: true, itemCode: { in: codes, mode: 'insensitive' } },
     });
-    const itemIds = new Map(items.map((item) => [code(item.itemCode), item.id]));
+    const items = new Map(found.map((item) => [code(item.itemCode), item]));
     const mapped = store
       ? new Set(
           (
-            await this.grns.findActiveStoreMappings(store.id, [...itemIds.values()], this.prisma)
+            await this.grns.findActiveStoreMappings(
+              store.id,
+              found.map((item) => item.id),
+              this.prisma,
+            )
           ).map((mapping) => mapping.itemId),
         )
       : undefined;
 
     for (const itemCode of codes) {
-      const itemId = itemIds.get(itemCode);
+      const item = items.get(itemCode);
 
-      if (!itemId) {
+      if (!item) {
         problems.push(`Item code ${itemCode} is not in AAHAR`);
-      } else if (mapped && !mapped.has(itemId)) {
+      } else if (mapped && !mapped.has(item.id)) {
         problems.push(
           `Item code ${itemCode} is not set up as a stock item of store ${store!.storeCode}`,
         );
       }
     }
 
-    return { hospital, itemIds, store };
+    return { hospital, items, store };
   }
 }
 
@@ -479,61 +542,60 @@ function answersFor(rows: Entry[], dto: VerifyGrnEntryDto) {
 
 const amount = (value: Prisma.Decimal | null) => (value === null ? null : toNumber(value));
 
-/** One GRN as the ERP and the portal see it: the GRN's details once, then items and batches. */
+/** One row as the ERP sent it, in its own field names, with the store's answer. */
+function toRow(row: Entry) {
+  return {
+    'Discount/Extra Charges': amount(row.discount),
+    'HSN No': row.hsnCode,
+    MRP: amount(row.mrp),
+    'Tax Rate': row.taxRate,
+    'Total Value': amount(row.totalValue),
+    UOM: row.uom,
+    'Unit Rate': amount(row.unitRate),
+    accepted_qty: amount(row.acceptedQty),
+    batch: row.batchNumber,
+    date: row.transactionDate,
+    expiry_date: row.expiryDate.toISOString().slice(0, 10),
+    flag: row.flag,
+    grn_No: row.grnNumber,
+    issued_by: row.issuedBy,
+    item_name: row.itemName,
+    location: row.hospitalCode,
+    part_item_code: row.itemCode,
+    purchase_order: row.purchaseOrder,
+    rejected_qty: amount(row.rejectedQty),
+    rejection_reason: row.rejectionReason,
+    requisition: row.requisitionNumber,
+    supplier: row.vendorCode,
+    transaction_number: row.transactionNumber,
+    transaction_qty: toNumber(row.sentQty),
+  };
+}
+
+/** One GRN as the ERP and the portal see it: where it landed, its status, then every row. */
 function toGrnResponse(rows: Entry[]) {
   const first = rows[0]!;
   const verified = first.status === GrnEntryStatus.VERIFIED;
   const total = (pick: (row: Entry) => Prisma.Decimal | null) =>
     sum(rows.map((row) => amount(pick(row)) ?? 0));
-  const itemCodes = [...new Set(rows.map((row) => row.itemCode))];
 
   return {
-    flag: first.flag,
-    grnNumber: first.grnNumber,
-    hospitalCode: first.hospitalCode,
-    hospitalId: first.hospitalId,
-    issuedBy: first.issuedBy,
-    items: itemCodes.map((itemCode) => {
-      const batches = rows.filter((row) => row.itemCode === itemCode);
-      const item = batches[0]!;
-
-      return {
-        batches: batches.map((row) => ({
-          acceptedQty: amount(row.acceptedQty),
-          batchNumber: row.batchNumber,
-          expiryDate: row.expiryDate.toISOString().slice(0, 10),
-          rejectedQty: amount(row.rejectedQty),
-          rejectionReason: row.rejectionReason,
-          sentQty: toNumber(row.sentQty),
-          totalValue: amount(row.totalValue),
-          transactionNumber: row.transactionNumber,
-        })),
-        discount: amount(item.discount),
-        hsnCode: item.hsnCode,
-        itemCode,
-        itemId: item.itemId,
-        itemName: item.itemName,
-        mrp: amount(item.mrp),
-        taxRate: item.taxRate,
-        unitRate: amount(item.unitRate),
-        uom: item.uom,
-      };
-    }),
-    purchaseOrder: first.purchaseOrder,
-    receivedAt: first.createdAt,
-    requisitionNumber: first.requisitionNumber,
+    grn_No: first.grnNumber,
+    hospital_id: first.hospitalId,
+    location: first.hospitalCode,
+    location_name: first.hospital.hospitalName,
+    received_at: first.createdAt,
+    rows: rows.map(toRow),
     status: first.status,
-    storeCode: first.storeCode,
-    storeId: first.storeId,
-    storeName: first.store.storeName,
+    store_code: first.storeCode,
+    store_id: first.storeId,
+    store_name: first.store.storeName,
     totals: {
-      acceptedQty: verified ? total((row) => row.acceptedQty) : null,
-      rejectedQty: verified ? total((row) => row.rejectedQty) : null,
-      sentQty: total((row) => row.sentQty),
+      accepted_qty: verified ? total((row) => row.acceptedQty) : null,
+      rejected_qty: verified ? total((row) => row.rejectedQty) : null,
+      transaction_qty: total((row) => row.sentQty),
     },
-    transactionDate: first.transactionDate,
-    vendorCode: first.vendorCode,
-    verifiedAt: first.verifiedAt,
-    verifiedBy: first.verifier,
+    verified_at: first.verifiedAt,
+    verified_by: first.verifier,
   };
 }

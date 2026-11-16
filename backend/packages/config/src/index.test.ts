@@ -75,3 +75,15 @@ void test('THROTTLE_ADDRESS_LIMIT is a whole number of sign-in requests a minute
     refused(/THROTTLE_ADDRESS_LIMIT/),
   );
 });
+
+// Under `pnpm dev` a service reads only the settings this schema keeps: one left out never
+// reaches it, as the ERP's GRN key and secret once did ("ERP access is not set up").
+void test('the ERP GRN API key and secret reach the service', () => {
+  const env = validateServiceEnv({
+    ...valid,
+    ERP_API_KEY: 'erp-key',
+    ERP_API_SECRET: 'erp-secret',
+  }) as Record<string, unknown>;
+  assert.equal(env.ERP_API_KEY, 'erp-key');
+  assert.equal(env.ERP_API_SECRET, 'erp-secret');
+});

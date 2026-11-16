@@ -22,6 +22,7 @@ import {
   savedOrder,
   type StepState,
 } from '@/lib/qr-order';
+import { newClientId } from '@/lib/client-id';
 import { cn } from '@/lib/utils';
 
 const rupees = new Intl.NumberFormat('en-IN', {
@@ -464,7 +465,7 @@ function CheckoutStep({
   const [staff, setStaff] = useState<{ code: string; percent: number; token: string } | null>(null);
   const [error, setError] = useState('');
   // One id per checkout: a double tap or a retry is the same order, not a second one.
-  const clientOrderId = useRef(crypto.randomUUID());
+  const clientOrderId = useRef(newClientId());
   const totals = cartTotals(cart, staff?.percent ?? 0);
   const itemsTotal = cart.reduce((sum, { item, quantity }) => sum + item.price * quantity, 0);
   const toRoom = channel === 'ROOM';

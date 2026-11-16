@@ -64,6 +64,9 @@ exports[`every prefix stays as it is 1`] = `
     "global-location-context",
     "active-locations",
   ],
+  "grnEntries": [
+    "grn-entries",
+  ],
   "grns": [
     "grns",
   ],
@@ -163,6 +166,9 @@ exports[`every prefix stays as it is 1`] = `
   ],
   "posCounters": [
     "pos-counters",
+  ],
+  "posDeviceUserOptions": [
+    "pos-device-user-options",
   ],
   "posDevices": [
     "pos-devices",
