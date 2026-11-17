@@ -114,6 +114,7 @@ export class OrderReportsService {
           { billNumber: { contains: search, mode: 'insensitive' } },
           { orderNumber: { contains: search, mode: 'insensitive' } },
           { customerMobile: { contains: search } },
+          { customerName: { contains: search, mode: 'insensitive' } },
           { employeeCode: { contains: search, mode: 'insensitive' } },
           { roomNumber: { contains: search, mode: 'insensitive' } },
           { paymentReference: { contains: search, mode: 'insensitive' } },

@@ -447,6 +447,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                           {[
                             bill.orderNumber,
                             bill.roomNumber ? `Room ${bill.roomNumber}` : null,
+                            bill.customerName,
                             bill.customerMobile,
                           ]
                             .filter(Boolean)

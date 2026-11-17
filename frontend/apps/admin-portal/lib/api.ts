@@ -137,6 +137,12 @@ export const grnEntriesApi = createGrnEntriesApi({
   refreshAccessToken: refreshStoredSession,
 });
 
+/**
+ * Live changes (lib/live-changes.ts). Same origin on every screen, guests' phones included: in
+ * development next.config.ts forwards it to the organization service.
+ */
+export const changesUrl = `${sameOriginApi}/changes`;
+
 /** No sign-in: only for public endpoints such as the TV order board. */
 export const publicOrganizationApi = createOrganizationApi({
   baseUrl: sameOriginApi,

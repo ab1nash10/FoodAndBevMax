@@ -454,8 +454,13 @@ function ErpGrnPanel({
                     </Badge>
                   ) : null}
                 </p>
-                <p className={cn(tableStyles.num, 'font-semibold')}>
-                  {show(row.transaction_qty)} {row.UOM ?? ''}
+                <p className="flex items-baseline gap-1.5">
+                  <span className="text-[12px] text-ds-muted">
+                    {row.flag === 1 ? 'Qty to return' : 'Qty sent'}
+                  </span>
+                  <span className={cn(tableStyles.num, 'font-semibold')}>
+                    {show(row.transaction_qty)} {row.UOM ?? ''}
+                  </span>
                 </p>
               </div>
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12.5px] sm:grid-cols-3">

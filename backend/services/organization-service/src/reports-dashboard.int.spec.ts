@@ -467,6 +467,8 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
               "bill": "string",
               "card": "number",
               "cash": "number",
+              "customerMobile": null,
+              "customerName": null,
               "discount": "number",
               "gst": "number",
               "online": "number",
@@ -512,6 +514,8 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
         'UPI',
         'ONLINE',
         'OTHER',
+        'Customer Name',
+        'Customer Mobile',
       ]);
       const money = ['amount', 'taxable', 'discount', 'gst', 'cash', 'card', 'upi', 'online'];
       expect(rowsOf(data).map((row) => pick(row, ['bill', ...money]))).toEqual(
@@ -551,11 +555,13 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
 
     it('sales-admin: adds who billed and whose staff discount it was', async () => {
       const data = await reportOk('sales-admin');
-      expect((data.columns as Body[]).slice(-4).map((column) => column.label)).toEqual([
+      expect((data.columns as Body[]).slice(-6).map((column) => column.label)).toEqual([
         'OTHER',
         'Operator Code',
         'Emp ID (Discount)',
         'Emp Name',
+        'Customer Name',
+        'Customer Mobile',
       ]);
       const rows = rowsOf(data);
       expect(rows.map((row) => [row.empId, row.empName])).toEqual([

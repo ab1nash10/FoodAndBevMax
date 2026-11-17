@@ -108,6 +108,17 @@ export class CreateQrOrderDto {
   @MaxLength(100)
   staffToken?: string;
 
+  @ApiPropertyOptional({ description: 'Who is paying (optional).', maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  customerName?: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @Matches(/^[6-9]\d{9}$/, { message: 'Enter a 10-digit mobile number.' })
+  customerMobile?: string;
+
   @ApiPropertyOptional({ description: 'The page the payment provider sends the guest back to.' })
   @IsOptional()
   @IsString()
@@ -144,6 +155,17 @@ export class CreateKioskPaidOrderDto {
   })
   @IsIn(['CARD', 'UPI'])
   method!: 'CARD' | 'UPI';
+
+  @ApiPropertyOptional({ description: 'Who is paying (optional).', maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  customerName?: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @Matches(/^[6-9]\d{9}$/, { message: 'Enter a 10-digit mobile number.' })
+  customerMobile?: string;
 
   @ApiPropertyOptional({ description: 'From a confirmed staff-discount OTP.' })
   @IsOptional()

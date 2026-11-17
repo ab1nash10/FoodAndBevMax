@@ -1,5 +1,13 @@
 import { writeFileSync } from 'node:fs';
-import type { FullConfig } from '@playwright/test';
+import type { FullConfig, Page } from '@playwright/test';
+
+/**
+ * For specs that wait for an idle network: a page's live-changes stream (GET /changes) stays
+ * open, so the network is never idle. Answered 204, the page stops asking for it.
+ */
+export async function withoutLiveChanges(page: Page): Promise<void> {
+  await page.route('**/api/v1/changes', (route) => route.fulfill({ status: 204 }));
+}
 
 /**
  * Signs in once with the development OTP (no SMS is sent: the auth service accepts 000000 only

@@ -102,8 +102,11 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
     restaurantQuery.data?.restaurantName ?? (restaurantQuery.isError ? 'Not found' : undefined),
   );
 
+  // A refresh (live changes: someone else saved) refills the form only while it is untouched,
+  // so it never wipes what is being typed or the images picked but not yet saved.
+  const isFormDirty = form.formState.isDirty || Boolean(thumbnailFile ?? coverFile);
   useEffect(() => {
-    if (!restaurantQuery.data) {
+    if (!restaurantQuery.data || isFormDirty) {
       return;
     }
 
@@ -112,7 +115,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
     setCoverPreviewUrl(restaurantQuery.data.coverImageUrl ?? undefined);
     setThumbnailFile(undefined);
     setCoverFile(undefined);
-  }, [form, restaurantQuery.data]);
+  }, [form, isFormDirty, restaurantQuery.data]);
 
   useEffect(() => {
     if (!isEditMode && scopedHospitalId && form.getValues('hospitalId') !== scopedHospitalId) {

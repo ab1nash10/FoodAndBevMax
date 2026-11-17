@@ -4,12 +4,12 @@ import { Button } from '@aahar/ui';
 import type { HospitalSummary } from '@aahar/api-client';
 import { Check, ChevronDown, MapPin } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { formatGlobalLocationLabel, useLocationContext } from '@/components/location-context';
+import {
+  formatGlobalLocationLabel,
+  getLocationTitle,
+  useLocationContext,
+} from '@/components/location-context';
 import { cn } from '@/lib/utils';
-
-function getLocationName(location: HospitalSummary): string {
-  return location.displayName || location.title || location.hospitalName || 'Location';
-}
 
 function getLocationMeta(location: HospitalSummary): string {
   return [location.city, location.state].filter(Boolean).join(', ') || 'Location';
@@ -170,7 +170,7 @@ export function HeaderLocationSelector({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-ds-text">
-                      {getLocationName(location)}
+                      {getLocationTitle(location)}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-ds-muted">
                       {getLocationMeta(location)}

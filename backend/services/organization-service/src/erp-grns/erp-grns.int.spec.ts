@@ -88,6 +88,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       batch: b.batch,
       date: '2026-10-26T15:50:00+05:30',
       expiry_date: b.expiry ?? day(90),
+      flag: 0,
       grn_No: grnNumber,
       issued_by: 'M030634',
       item_name: 'Kinley Water - 1000 Ml',
@@ -204,7 +205,13 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     );
     expect([sent.status, sent.data]).toEqual([
       200,
-      { grn_No: grnNumber, replaced: false, rows: 2, status: 'PENDING' },
+      {
+        grn_No: grnNumber,
+        replaced: false,
+        rows: 2,
+        status: 'PENDING',
+        transaction_numbers: [`${grnNumber}-1`, `${grnNumber}-2`],
+      },
     ]);
     // Nothing reaches stock until the store verifies it.
     expect(await storeQty(b1)).toBe(0);
@@ -221,6 +228,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       replaced: true,
       rows: 2,
       status: 'PENDING',
+      transaction_numbers: [`${grnNumber}-1`, `${grnNumber}-2`],
     });
 
     const pending = await h.ok('GET', `/grn-entries?status=PENDING&search=${grnNumber}`);
@@ -412,6 +420,63 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
 
     const missing = await send([{ ...grn(grnNumber, [{ batch: 'Y', qty: 1 }])[0], batch: '' }]);
     expect(missing.status).toBe(400);
+
+    // Every row says whether it is goods in (0) or a return (1): there is no default.
+    const noFlag = grn(grnNumber, [{ batch: 'Z', qty: 1 }]);
+    delete noFlag[0]!.flag;
+    const unflagged = await send(noFlag);
+    expect(unflagged.status).toBe(400);
+    expect(String(unflagged.body.message)).toContain('flag');
+    expect((await send(grn(grnNumber, [{ batch: 'Z', qty: 1 }], { flag: 2 }))).status).toBe(400);
+    expect((await erp('GET', `/erp/grns/${grnNumber}`)).status).toBe(404);
+  });
+
+  it('gives a row the ERP sends without a transaction number its own record id instead', async () => {
+    const grnNumber = newGrnNumber();
+    const rows = grn(grnNumber, [
+      { batch: `T1-${run}`, qty: 2 },
+      { batch: `T2-${run}`, qty: 3 },
+      { batch: `T3-${run}`, qty: 4 },
+    ]);
+    delete rows[0]!.transaction_number;
+    rows[1]!.transaction_number = '  ';
+    // A number the ERP does send is kept as it is.
+    rows[2]!.transaction_number = `${grnNumber}-own`;
+
+    const sent = await send(rows);
+    expect(sent.status).toBe(200);
+    const given = sent.data.transaction_numbers as string[];
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    expect(given).toHaveLength(3);
+    expect(given[0]).toMatch(uuid);
+    expect(given[1]).toMatch(uuid);
+    expect(given[0]).not.toBe(given[1]);
+    expect(given[2]).toBe(`${grnNumber}-own`);
+
+    // It is the row's own id, and the row reads back with it, in the order sent.
+    const ids = await h.rawQuery<{ id: string; transaction_number: string }>(
+      `SELECT grn_entry_id::text AS id, transaction_number FROM grn_entries WHERE grn_number = $1`,
+      grnNumber,
+    );
+    for (const row of ids.filter((r) => r.transaction_number !== `${grnNumber}-own`)) {
+      expect(row.transaction_number).toBe(row.id);
+    }
+    const saved = await erp('GET', `/erp/grns/${grnNumber}`);
+    expect((saved.data.rows as Body[]).map((r) => [r.batch, r.transaction_number]).sort()).toEqual(
+      [
+        [`T1-${run}`, given[0]],
+        [`T2-${run}`, given[1]],
+        [`T3-${run}`, given[2]],
+      ].sort(),
+    );
+
+    // The store answers each row by the number it was given.
+    const verified = await verify(grnNumber, [
+      { acceptedQty: 2, rejectedQty: 0, transactionNumber: given[0] },
+      { acceptedQty: 3, rejectedQty: 0, transactionNumber: given[1] },
+      { acceptedQty: 4, rejectedQty: 0, transactionNumber: given[2] },
+    ]);
+    expect(verified.status).toBe(200);
   });
 
   it('refuses a transaction number sent twice, or already used by another GRN', async () => {

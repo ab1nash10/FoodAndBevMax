@@ -11,7 +11,15 @@ import { newClientId as newClientOrderId } from '@/lib/client-id';
 import { reconcile, setQuantity, type KioskCartLine } from '@/lib/kiosk';
 import { useBoardTheme, useWakeLock } from '@/lib/order-board/live';
 import { queryKeys } from '@/lib/query-keys';
-import { FoodPic, formatRupees, KioskMenuScreen, type StaffDiscount } from './kiosk-menu';
+import {
+  FoodPic,
+  formatRupees,
+  KioskMenuScreen,
+  mobilePattern,
+  noPayer,
+  type Payer,
+  type StaffDiscount,
+} from './kiosk-menu';
 
 type Screen = 'done' | 'menu' | 'paying' | 'welcome';
 type PayMethod = 'CARD' | 'UPI';
@@ -368,6 +376,7 @@ export function KioskScreen({
   const [screen, setScreen] = useState<Screen>('welcome');
   const [pickedCart, setPickedCart] = useState<KioskCartLine[]>([]);
   const [staff, setStaff] = useState<StaffDiscount | null>(null);
+  const [payer, setPayer] = useState<Payer>(noPayer);
   const [payment, setPayment] = useState<{ method: PayMethod; order: QrOrderView } | null>(null);
   const [paidLines, setPaidLines] = useState<KioskCartLine[]>([]);
   const [notBilled, setNotBilled] = useState<QrOrderView | null>(null);
@@ -393,6 +402,8 @@ export function KioskScreen({
   const reset = useCallback(() => {
     setPickedCart([]);
     setStaff(null);
+    // The next guest never sees the last one's name or number.
+    setPayer(noPayer);
     setPayment(null);
     setPaidLines([]);
     setNotBilled(null);
@@ -414,6 +425,8 @@ export function KioskScreen({
       order: (
         await publicOrganizationApi.createKioskPaidOrder(restaurantId, token!, {
           clientOrderId,
+          customerMobile: payer.mobile || undefined,
+          customerName: payer.name.trim() || undefined,
           lines: cart.map(({ item, quantity }) => ({ menuId: item.id, quantity })),
           method,
           staffToken: staff?.token,
@@ -503,8 +516,19 @@ export function KioskScreen({
         error={error}
         isPlacing={place.isPending}
         menu={menu}
-        onPay={(method) => place.mutate(method)}
+        onPay={(method) => {
+          if (payer.mobile && !mobilePattern.test(payer.mobile)) {
+            setError('Enter a 10-digit mobile number, or leave it empty.');
+            return;
+          }
+          place.mutate(method);
+        }}
+        onPayer={(next) => {
+          setError('');
+          setPayer(next);
+        }}
         onQuantity={changeQuantity}
+        payer={payer}
         onStaff={setStaff}
         onStartOver={reset}
         restaurantId={restaurantId}

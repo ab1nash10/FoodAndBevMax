@@ -143,6 +143,9 @@ exports[`every prefix stays as it is 1`] = `
   "mappingHospitalOptions": [
     "mapping-hospital-options",
   ],
+  "myAccess": [
+    "my-access",
+  ],
   "orderAmendments": [
     "order-amendments",
   ],

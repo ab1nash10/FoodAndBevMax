@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -89,7 +90,11 @@ export class ErpGrnsService {
       problems.push('Every row of a GRN must have the same location');
     }
 
-    problems.push(...repeatedTransactionNumbers(rows.map((row) => row.transaction_number)));
+    problems.push(
+      ...repeatedTransactionNumbers(
+        rows.map((row) => filled(row.transaction_number)).filter((number) => number !== undefined),
+      ),
+    );
     const { hospital, items, store } = await this.resolveCodes(
       location,
       rows.map((row) => row.part_item_code),
@@ -102,12 +107,15 @@ export class ErpGrnsService {
 
     const data = rows.map((row) => {
       const item = items.get(code(row.part_item_code))!;
+      // A row the ERP sends without its own number takes the row's record id as its number.
+      const id = randomUUID();
 
       return {
+        id,
         batchNumber: row.batch.trim(),
         discount: row['Discount/Extra Charges'],
         expiryDate: toDateOnly(row.expiry_date),
-        flag: row.flag ?? 0,
+        flag: row.flag,
         grnNumber,
         hospitalCode: hospital.hospitalCode,
         hospitalId: hospital.id,
@@ -125,7 +133,7 @@ export class ErpGrnsService {
         taxRate: filled(row['Tax Rate']),
         totalValue: row['Total Value'],
         transactionDate: indiaTime(row.date),
-        transactionNumber: row.transaction_number.trim(),
+        transactionNumber: filled(row.transaction_number) ?? id,
         unitRate: row['Unit Rate'],
         uom: filled(row.UOM),
         vendorCode: filled(row.supplier),
@@ -183,6 +191,8 @@ export class ErpGrnsService {
         replaced: existing.length > 0,
         rows: data.length,
         status: GrnEntryStatus.PENDING,
+        /** Each row's transaction number, in the order sent: the ERP's own, or the one given. */
+        transaction_numbers: data.map((row) => row.transactionNumber),
       };
     });
   }

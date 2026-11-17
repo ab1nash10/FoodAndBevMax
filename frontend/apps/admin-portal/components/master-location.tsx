@@ -2,7 +2,7 @@
 
 import type { HospitalSummary, LocationOwned } from '@aahar/api-client';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
-import { useLocationContext } from '@/components/location-context';
+import { getLocationTitle, useLocationContext } from '@/components/location-context';
 import { Badge, Select } from '@/components/ui';
 
 /**
@@ -50,7 +50,7 @@ export const MasterLocationSelect = forwardRef<
       ) : null}
       {availableLocations.map((location) => (
         <option key={location.id} value={location.id}>
-          {location.displayName || location.hospitalName}
+          {getLocationTitle(location)}
         </option>
       ))}
     </Select>

@@ -43,11 +43,14 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
     hospitalQuery.data?.hospitalName ?? (hospitalQuery.isError ? 'Not found' : undefined),
   );
 
+  // A refresh (live changes: someone else saved) refills the form only while it is untouched,
+  // so it never wipes what is being typed. After a save here the form is clean again.
+  const isLocationFormDirty = locationMasterForm.formState.isDirty;
   useEffect(() => {
-    if (hospitalQuery.data) {
+    if (hospitalQuery.data && !isLocationFormDirty) {
       locationMasterForm.reset(toHospitalFormDefaults(hospitalQuery.data));
     }
-  }, [hospitalQuery.data, locationMasterForm]);
+  }, [hospitalQuery.data, isLocationFormDirty, locationMasterForm]);
 
   const updateLocationMasterMutation = useMutation({
     mutationFn: (body: HospitalInput) => organizationApi.updateHospital(hospitalId, body),
@@ -62,6 +65,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospital(hospitalId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitals() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.myAccess() });
       locationMasterForm.reset(toHospitalFormDefaults(response.data));
       showToast({
         recordId: response.data.id,

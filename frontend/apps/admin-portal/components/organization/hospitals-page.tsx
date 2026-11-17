@@ -148,6 +148,7 @@ export function HospitalsPageClient() {
     onSuccess(_, variables) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitals() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.myAccess() });
       showToast({
         recordId: variables.id,
         title: variables.isActive ? 'Location activated' : 'Location deactivated',
@@ -227,6 +228,7 @@ export function HospitalsPageClient() {
               onImported={() => {
                 void queryClient.invalidateQueries({ queryKey: queryKeys.hospitals() });
                 void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.myAccess() });
               }}
               startImport={
                 hasPermission('HOSPITAL_CREATE')

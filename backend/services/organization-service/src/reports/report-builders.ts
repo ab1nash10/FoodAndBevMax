@@ -24,6 +24,9 @@ export interface Bill {
   cancelledBy: string | null;
   complimentaryReason: string | null;
   counterCode: string;
+  /** Who paid, when the till or the guest gave it. */
+  customerMobile: string | null;
+  customerName: string | null;
   discount: number;
   employeeCode: string | null;
   employeeName: string | null;
@@ -139,6 +142,8 @@ export function salesReport(bills: Bill[], admin: boolean): ReportBody {
           text('empName', 'Emp Name'),
         ]
       : []),
+    text('customerName', 'Customer Name'),
+    text('customerMobile', 'Customer Mobile'),
   ];
   const rows = bills.filter(paid).map((bill) => {
     const via = (mode: Bill['paidVia']) => (bill.paidVia === mode ? bill.grandTotal : 0);
@@ -149,6 +154,8 @@ export function salesReport(bills: Bill[], admin: boolean): ReportBody {
       bill: bill.billNumber,
       card: via('CARD'),
       cash: via('CASH'),
+      customerMobile: bill.customerMobile,
+      customerName: bill.customerName,
       discount: bill.discount,
       gst: bill.gst,
       online: via('ONLINE'),

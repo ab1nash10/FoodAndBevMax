@@ -105,6 +105,8 @@ export const queryKeys = {
   dashboardSetup: key('dashboard', 'setup'),
   dashboardStats: key('dashboard', 'stats'),
   globalLocationContextActiveLocations: key('global-location-context', 'active-locations'),
+  // The header's locations and names (GET /users/me/access): a location or entity save refreshes it.
+  myAccess: key('my-access'),
 };
 
 // Fresh for 5 minutes: master data lists that every write to them invalidates (the entity's own

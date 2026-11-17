@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Loader2, Pencil, Plus, UserPlus, Utensils, X } from 'lucide-react';
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PosDevice, PosDeviceInput } from '@aahar/api-client';
@@ -157,11 +157,21 @@ function PosDeviceForm({
     );
   };
 
+  // Filled when it opens; after that only while untouched, so a refresh of the locations (live
+  // changes) never wipes what is being typed.
+  const isDirty = form.formState.isDirty;
+  const filled = useRef(false);
   useEffect(() => {
     if (!open) {
+      filled.current = false;
       return;
     }
 
+    if (filled.current && isDirty) {
+      return;
+    }
+
+    filled.current = true;
     if (editingDevice) {
       form.reset({
         code: editingDevice.code,
@@ -190,7 +200,7 @@ function PosDeviceForm({
       });
     }
     // hospitals: the location's entity is known once the locations have loaded.
-  }, [editingDevice, form, hospitals, open, scopedHospitalId]);
+  }, [editingDevice, form, hospitals, isDirty, open, scopedHospitalId]);
 
   const mutation = useMutation({
     mutationFn: (body: PosDeviceInput) =>

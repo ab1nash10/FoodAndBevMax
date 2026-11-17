@@ -37,7 +37,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   BadgePercent,
+  Copy,
   Download,
+  ExternalLink,
   Pencil,
   Plus,
   Printer,
@@ -707,6 +709,55 @@ export function RestaurantsPageClient() {
               <p className="order-1 text-sm text-ds-muted sm:order-2">Preparing restaurant QR…</p>
             )}
           </div>
+          {qrImage && kioskUrl ? (
+            // The same link the QR holds, to send by message or open on a screen without a camera.
+            <div className="mt-5 rounded-[20px] border border-[#e1e9f3] bg-white p-4">
+              <label
+                className="text-[13px] font-bold text-[#14233b]"
+                htmlFor="restaurant-menu-qr-link"
+              >
+                Ordering link
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-ds-border bg-ds-subtle px-3 font-mono text-xs text-ds-text"
+                  id="restaurant-menu-qr-link"
+                  onFocus={(event) => event.currentTarget.select()}
+                  readOnly
+                  value={kioskUrl}
+                />
+                <Button
+                  className="min-h-11 rounded-xl px-4"
+                  onClick={() =>
+                    void Promise.resolve()
+                      .then(() => navigator.clipboard.writeText(kioskUrl))
+                      .catch(() => {
+                        // No clipboard API on a plain http address: copy the selected text.
+                        (
+                          document.getElementById('restaurant-menu-qr-link') as HTMLInputElement
+                        ).select();
+                        document.execCommand('copy');
+                      })
+                      .then(() => showToast({ title: 'Ordering link copied', variant: 'success' }))
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  <Copy aria-hidden="true" className="h-4 w-4" />
+                  Copy link
+                </Button>
+                <Button asChild className="min-h-11 rounded-xl px-4" variant="outline">
+                  <a href={kioskUrl} rel="noreferrer" target="_blank">
+                    <ExternalLink aria-hidden="true" className="h-4 w-4" />
+                    Open
+                  </a>
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-ds-muted">
+                Anyone with this link can order from this restaurant, like scanning the QR.
+              </p>
+            </div>
+          ) : null}
           {qrImage ? (
             <div className="mt-5 flex flex-wrap justify-end gap-3">
               <Button className="min-h-11 rounded-xl px-5" onClick={printQr} type="button">

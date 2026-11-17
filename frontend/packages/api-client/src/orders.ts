@@ -187,6 +187,8 @@ export interface PosBillInput {
   complimentaryReason?: string;
   counterId: string;
   customerMobile?: string;
+  /** Who paid (optional); sent to Razorpay with an online payment, kept on the bill. */
+  customerName?: string;
   employeeCode?: string;
   instructions?: string;
   isComplimentary?: boolean;
@@ -220,7 +222,7 @@ export interface OnlinePayment {
 /** The bill an online payment is for: the server prices it. */
 export type OnlinePaymentInput = Pick<
   PosBillInput,
-  'channel' | 'counterId' | 'employeeCode' | 'lines'
+  'channel' | 'counterId' | 'customerMobile' | 'customerName' | 'employeeCode' | 'lines'
 > & { provider: OnlinePaymentProvider };
 
 export interface PosBillLine {
@@ -257,6 +259,7 @@ export interface PosBill {
   complimentaryReason: string | null;
   counter: { counterCode: string; counterName: string; id: string };
   customerMobile: string | null;
+  customerName: string | null;
   /** The staff discount rate given, and what it took off (0 when none). */
   discountPercent: number | null;
   discountTotal: number;
@@ -306,6 +309,7 @@ export interface PosBillSummary {
   complimentaryReason: string | null;
   counter: { counterCode: string; counterName: string; id: string };
   customerMobile: string | null;
+  customerName: string | null;
   discountPercent: number | null;
   discountTotal: number;
   employeeCode: string | null;
@@ -456,6 +460,9 @@ export interface KioskMenu {
 export interface KioskPaidOrderInput {
   /** The kiosk's own id for the order, made once: a retry returns the same order. */
   clientOrderId: string;
+  /** Who is paying (optional): a 10-digit mobile and a name, kept on the bill. */
+  customerMobile?: string;
+  customerName?: string;
   lines: Array<{ menuId: string; quantity: number }>;
   method: 'CARD' | 'UPI';
   /** From a confirmed staff-discount OTP (the same as QR ordering's). */
@@ -602,6 +609,9 @@ export interface QrOrderInput {
   channel?: QrChannel;
   /** The phone's own id for the order, made once: a retry returns the same order. */
   clientOrderId: string;
+  /** Who is paying (optional): a 10-digit mobile and a name, kept on the bill. */
+  customerMobile?: string;
+  customerName?: string;
   instructions?: string;
   lines: Array<{ menuId: string; quantity: number }>;
   /** The page the payment provider sends the guest back to. */

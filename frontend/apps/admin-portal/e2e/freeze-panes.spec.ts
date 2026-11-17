@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import signIn from './sign-in';
+import signIn, { withoutLiveChanges } from './sign-in';
 
 // The saved session may have been ended by another spec signing in (one browser at a time).
 test.beforeAll(() => signIn());
@@ -54,6 +54,9 @@ const screens = [
 ];
 
 test.use({ viewport: { height: 640, width: 1366 } });
+
+// Each of these waits for an idle network, which the open live-changes stream never allows.
+test.beforeEach(({ page }) => withoutLiveChanges(page));
 
 test('every list keeps its headings in view while its rows scroll', async ({ page }) => {
   test.setTimeout(10 * 60_000);

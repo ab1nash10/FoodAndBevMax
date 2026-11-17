@@ -1577,6 +1577,7 @@ describe.skipIf(!databaseUrl)(
               isActive: 'boolean',
               postalCode: null,
               state: null,
+              title: 'string',
             },
           ],
           permissions: [],

@@ -97,6 +97,7 @@ test('a GRN from the ERP shows every field and is verified by the store', async 
       batch: '*',
       date: '2026-10-26 15:50:00',
       expiry_date: '2030-10-26 15:50:00',
+      flag: 0,
       grn_No: grnNo,
       issued_by: 'M030634',
       // By name, as the ERP may send it; item name and HSN are left to the Item master.
@@ -119,6 +120,8 @@ test('a GRN from the ERP shows every field and is verified by the store', async 
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText(`GRN ${grnNo}`);
+  // The batch's quantity says what it is.
+  await expect(dialog.locator('li[data-transaction]')).toContainText(/Qty sent\s*5\s*No\./);
   for (const text of [
     hospital.hospitalCode,
     'Main Store',
@@ -173,6 +176,7 @@ test('a GRN sent while the page is open appears without a reload', async ({ page
       batch: '*',
       date: '2026-10-26 15:50:00',
       expiry_date: '2030-10-26',
+      flag: 0,
       grn_No: grnNo,
       location: hospital.hospitalCode,
       part_item_code: mapped!.item.itemCode,

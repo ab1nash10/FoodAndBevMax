@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import signIn from './sign-in';
+import signIn, { withoutLiveChanges } from './sign-in';
 
 // The saved session may have been ended by another spec signing in (one browser at a time).
 test.beforeAll(() => signIn());
@@ -35,6 +35,9 @@ function action(page: Page, name: RegExp) {
 // One test, one signed-in tab, like a person's: separate contexts would each hold a copy of the
 // refresh token, and the first refresh would sign every other copy out. Soft checks, so one run
 // lists every module that breaks the rule.
+// Each of these waits for an idle network, which the open live-changes stream never allows.
+test.beforeEach(({ page }) => withoutLiveChanges(page));
+
 test('records are created and edited in the side panel over their list', async ({ page }) => {
   test.setTimeout(10 * 60_000);
   // The dev server compiles a route on its first visit.

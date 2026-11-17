@@ -4,7 +4,7 @@ import { Button } from '@aahar/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { useLocationContext } from '@/components/location-context';
+import { getLocationTitle, useLocationContext } from '@/components/location-context';
 import { IfCanOpen } from '@/components/record-link';
 import { TableSkeletonRows } from '@/components/design-system';
 import { getApiErrorMessage } from '@/lib/api';
@@ -13,7 +13,7 @@ import { getApiErrorMessage } from '@/lib/api';
 export function useLocationName(): string | null {
   const { selectedLocation } = useLocationContext();
 
-  return selectedLocation ? selectedLocation.displayName || selectedLocation.hospitalName : null;
+  return selectedLocation ? getLocationTitle(selectedLocation) : null;
 }
 
 /**

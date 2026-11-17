@@ -816,6 +816,8 @@ model RestaurantOrder {
   billNumber          String?       @map("bill_number")
   channel             OrderChannel?
   businessDate        DateTime?     @map("business_date") @db.Date
+  /// Who paid, as the till or the guest typed it (optional); reports and searches show it.
+  customerName        String?       @map("customer_name")
   customerMobile      String?       @map("customer_mobile")
   employeeCode        String?       @map("employee_code")
   roomNumber          String?       @map("room_number")
@@ -942,6 +944,10 @@ model OnlinePayment {
   orderId          String?               @unique @map("order_id") @db.Uuid
   /// Pine Labs only: the card machine it was sent to, asked again for its status and cancel.
   paymentMachineId String?               @map("payment_machine_id") @db.Uuid
+  /// The payer as given when the payment was started; sent with the Razorpay link, and the
+  /// bill made with this payment keeps them.
+  customerName     String?               @map("customer_name")
+  customerMobile   String?               @map("customer_mobile")
   createdBy        String?               @map("created_by") @db.Uuid
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")

@@ -5,7 +5,7 @@ import { OnlinePaymentStatus, type OnlinePayment } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
-import { toNumber } from '../common/values';
+import { optionalText, toNumber } from '../common/values';
 import type { StartOnlinePaymentDto } from './dto/pos.dto';
 import {
   findCardMachine,
@@ -100,8 +100,13 @@ export class OnlinePaymentsService {
     }
 
     const id = randomUUID();
+    const customer = {
+      mobile: optionalText(dto.customerMobile) ?? null,
+      name: optionalText(dto.customerName) ?? null,
+    };
     const link = await provider.create({
       amount: grandTotal,
+      customer,
       description: `${counter.restaurant.restaurantName} · ${counter.counterName}`,
       reference: id,
       returnUrl,
@@ -113,6 +118,8 @@ export class OnlinePaymentsService {
           amount: grandTotal,
           counterId: counter.id,
           createdBy: context.actorId ?? null,
+          customerMobile: customer.mobile,
+          customerName: customer.name,
           hospitalId: counter.hospitalId,
           id,
           paymentMachineId: machine?.id ?? null,

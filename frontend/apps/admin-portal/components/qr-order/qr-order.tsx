@@ -462,6 +462,8 @@ function CheckoutStep({
   const [roomNumber, setRoomNumber] = useState('');
   const [bedNumber, setBedNumber] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerMobile, setCustomerMobile] = useState('');
   const [staff, setStaff] = useState<{ code: string; percent: number; token: string } | null>(null);
   const [error, setError] = useState('');
   // One id per checkout: a double tap or a retry is the same order, not a second one.
@@ -478,6 +480,8 @@ function CheckoutStep({
           bedNumber: (toRoom && bedNumber.trim()) || undefined,
           channel,
           clientOrderId: clientOrderId.current,
+          customerMobile: customerMobile || undefined,
+          customerName: customerName.trim() || undefined,
           instructions: instructions.trim() || undefined,
           lines: cart.map(({ item, quantity }) => ({ menuId: item.id, quantity })),
           returnUrl: returnUrlFor(window.location.href),
@@ -515,6 +519,10 @@ function CheckoutStep({
           event.preventDefault();
           if (toRoom && !roomNumber.trim()) {
             setError('Enter your room number.');
+            return;
+          }
+          if (customerMobile && !/^[6-9]\d{9}$/.test(customerMobile)) {
+            setError('Enter a 10-digit mobile number, or leave it empty.');
             return;
           }
           setError('');
@@ -555,6 +563,34 @@ function CheckoutStep({
             Pick up at {pickupAt}. Show your order number when it is ready.
           </p>
         )}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-name">
+            Your name (optional)
+            <input
+              autoComplete="name"
+              className={inputClass}
+              id="qr-name"
+              maxLength={100}
+              onChange={(event) => setCustomerName(event.target.value)}
+              value={customerName}
+            />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-mobile">
+            Mobile (optional)
+            <input
+              autoComplete="tel-national"
+              className={inputClass}
+              id="qr-mobile"
+              inputMode="numeric"
+              maxLength={10}
+              onChange={(event) => {
+                setCustomerMobile(event.target.value.replace(/\D/g, ''));
+                setError('');
+              }}
+              value={customerMobile}
+            />
+          </label>
+        </div>
         <label className="grid gap-1.5 text-xs font-semibold text-ds-text-2" htmlFor="qr-note">
           Note for the kitchen (optional)
           <input

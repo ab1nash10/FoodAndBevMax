@@ -27,7 +27,12 @@ export function invalidateKitchenQueries(queryClient: QueryClient): void {
 }
 
 export function invalidateLegalEntityQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [queryKeys.legalEntities(), queryKeys.legalEntityOptions()]);
+  // The header names locations by their entity's Location, so it refreshes too.
+  invalidate(queryClient, [
+    queryKeys.legalEntities(),
+    queryKeys.legalEntityOptions(),
+    queryKeys.myAccess(),
+  ]);
 }
 
 export function invalidateItemQueries(queryClient: QueryClient): void {

@@ -414,6 +414,7 @@ export function BillSummary({ bill }: Readonly<{ bill: PosBill }>) {
         ? `${bill.roomNumber}${bill.bedNumber ? ` / Bed ${bill.bedNumber}` : ''}`
         : null,
     ],
+    ['Customer name', bill.customerName],
     ['Customer mobile', bill.customerMobile],
     ['Employee ID', bill.employeeCode],
     [

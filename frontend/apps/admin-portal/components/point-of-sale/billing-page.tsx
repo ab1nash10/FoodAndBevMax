@@ -204,6 +204,7 @@ export function BillingPageClient() {
   const [bedNumber, setBedNumber] = useState('');
   const [instructions, setInstructions] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [employeeCode, setEmployeeCode] = useState('');
   const [isComplimentary, setIsComplimentary] = useState(false);
   const [complimentaryReason, setComplimentaryReason] = useState('');
@@ -392,6 +393,7 @@ export function BillingPageClient() {
     setBedNumber('');
     setInstructions('');
     setCustomerMobile('');
+    setCustomerName('');
     setEmployeeCode('');
     setIsComplimentary(false);
     setComplimentaryReason('');
@@ -512,6 +514,7 @@ export function BillingPageClient() {
         complimentaryReason: isComplimentary ? complimentaryReason.trim() : undefined,
         counterId: counter!.id,
         customerMobile: customerMobile || undefined,
+        customerName: customerName.trim() || undefined,
         employeeCode: employeeCode.trim() || undefined,
         instructions: instructions.trim() || undefined,
         isComplimentary,
@@ -536,6 +539,9 @@ export function BillingPageClient() {
         request: {
           channel: billChannel,
           counterId,
+          // Razorpay shows who is paying; the bill keeps them too.
+          customerMobile: order.payload.customerMobile,
+          customerName: order.payload.customerName,
           employeeCode: code,
           lines,
           provider: onlineVia,
@@ -1001,6 +1007,17 @@ export function BillingPageClient() {
           ) : null}
 
           <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label htmlFor="pos-customer-name">Customer name</Label>
+              <Input
+                autoComplete="off"
+                id="pos-customer-name"
+                maxLength={100}
+                onChange={(event) => setCustomerName(event.target.value)}
+                placeholder="Optional"
+                value={customerName}
+              />
+            </div>
             <div>
               <Label htmlFor="pos-mobile">Customer mobile</Label>
               <Input

@@ -30,6 +30,8 @@ const bill = (patch: Partial<Bill>): Bill => ({
   cancelledBy: null,
   complimentaryReason: null,
   counterCode: 'C1',
+  customerMobile: null,
+  customerName: null,
   discount: 0,
   employeeCode: null,
   employeeName: null,
@@ -86,4 +88,23 @@ test('day-wise summary and tax split', () => {
   assert.equal(dayItemSummaryReport(bills, false, ['14-Apr-2026']).rows[0]!['day_14-Apr-2026'], 4);
   const [tax] = taxReport(bills).rows;
   assert.deepEqual([tax!.cgst, tax!.sgst, tax!.cgstPercent], [2.5, 2.5, 2.5]);
+});
+
+test('sales: the payer’s name and mobile close each row, when the bill has them', () => {
+  for (const admin of [false, true]) {
+    const { columns, rows } = salesReport(
+      [
+        bill({ customerMobile: '9876543210', customerName: 'Asha Verma' }),
+        bill({ billNumber: 'MAX/2' }),
+      ],
+      admin,
+    );
+    assert.deepEqual(
+      columns.slice(-2).map((column) => column.label),
+      ['Customer Name', 'Customer Mobile'],
+    );
+    assert.equal(rows[0]!.customerName, 'Asha Verma');
+    assert.equal(rows[0]!.customerMobile, '9876543210');
+    assert.equal(rows[1]!.customerName, null);
+  }
 });

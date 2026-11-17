@@ -450,14 +450,63 @@ function StaffDiscountRow({
   );
 }
 
+/** Who is paying, as the guest typed it (both optional); kept on the bill. */
+export interface Payer {
+  mobile: string;
+  name: string;
+}
+
+export const noPayer: Payer = { mobile: '', name: '' };
+export const mobilePattern = /^[6-9]\d{9}$/;
+
+function PayerRow({
+  onChange,
+  payer,
+}: Readonly<{ onChange: (payer: Payer) => void; payer: Payer }>) {
+  const input =
+    'h-14 min-w-0 rounded-xl border-2 border-ds-border bg-ds-surface px-4 text-[22px] outline-hidden focus:border-ds-primary';
+
+  return (
+    <div className="grid grid-cols-2 gap-3 rounded-2xl bg-ds-subtle p-4">
+      <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-payer-name">
+        Your name (optional)
+        <input
+          autoComplete="off"
+          className={input}
+          id="kiosk-payer-name"
+          maxLength={100}
+          onChange={(event) => onChange({ ...payer, name: event.target.value })}
+          value={payer.name}
+        />
+      </label>
+      <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-payer-mobile">
+        Mobile (optional)
+        <input
+          autoComplete="off"
+          className={cn(input, 'tabular-nums tracking-wider')}
+          id="kiosk-payer-mobile"
+          inputMode="numeric"
+          maxLength={10}
+          onChange={(event) =>
+            onChange({ ...payer, mobile: event.target.value.replace(/\D/g, '') })
+          }
+          value={payer.mobile}
+        />
+      </label>
+    </div>
+  );
+}
+
 function CartSheet({
   cart,
   error,
   isPlacing,
   onClose,
   onPay,
+  onPayer,
   onQuantity,
   onStaff,
+  payer,
   payWith,
   restaurantId,
   staff,
@@ -469,8 +518,10 @@ function CartSheet({
   isPlacing: boolean;
   onClose: () => void;
   onPay: (method: 'CARD' | 'UPI') => void;
+  onPayer: (payer: Payer) => void;
   onQuantity: (item: KioskMenuItem, quantity: number) => void;
   onStaff: (staff: StaffDiscount | null) => void;
+  payer: Payer;
   payWith: Array<'CARD' | 'UPI'>;
   restaurantId: string;
   staff: StaffDiscount | null;
@@ -548,6 +599,7 @@ function CartSheet({
             token={token}
           />
         ) : null}
+        <PayerRow onChange={onPayer} payer={payer} />
         <div className="grid gap-2 rounded-2xl bg-ds-subtle px-6 py-5 text-[18px] tabular-nums">
           {totals.discountTotal > 0 ? (
             <p className="flex justify-between text-ds-status-ok-fg">
@@ -587,9 +639,11 @@ export function KioskMenuScreen({
   isPlacing,
   menu,
   onPay,
+  onPayer,
   onQuantity,
   onStaff,
   onStartOver,
+  payer,
   restaurantId,
   staff,
   token,
@@ -599,9 +653,11 @@ export function KioskMenuScreen({
   isPlacing: boolean;
   menu: KioskMenu;
   onPay: (method: 'CARD' | 'UPI') => void;
+  onPayer: (payer: Payer) => void;
   onQuantity: (item: KioskMenuItem, quantity: number) => void;
   onStaff: (staff: StaffDiscount | null) => void;
   onStartOver: () => void;
+  payer: Payer;
   restaurantId: string;
   staff: StaffDiscount | null;
   token: string;
@@ -866,8 +922,10 @@ export function KioskMenuScreen({
             isPlacing={isPlacing}
             onClose={() => setCartOpen(false)}
             onPay={onPay}
+            onPayer={onPayer}
             onQuantity={onQuantity}
             onStaff={onStaff}
+            payer={payer}
             payWith={menu.payWith}
             restaurantId={restaurantId}
             staff={staff}

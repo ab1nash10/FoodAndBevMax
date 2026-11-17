@@ -13,12 +13,12 @@ import {
 } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { userApi } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 
 const LOCATION_STORAGE_KEY = 'aahar.location-context';
 /** The last answer to /users/me/access, per user; sign-out clears it with the rest of aahar.*. */
 const ACCESS_STORAGE_KEY = 'aahar.my-access';
 const allLocationsValue = 'all';
-const myAccessQueryKey = ['my-access'] as const;
 
 type MyAccess = Awaited<ReturnType<typeof userApi.getMyAccess>>['data'];
 
@@ -93,8 +93,9 @@ function removeStoredLocationValue(): void {
   window.localStorage.removeItem(LOCATION_STORAGE_KEY);
 }
 
-function getLocationTitle(location: HospitalSummary): string {
-  return location.displayName || location.title || location.hospitalName || 'Location';
+/** As the Locations list names it, so a rename there shows here; the display name is a fallback. */
+export function getLocationTitle(location: HospitalSummary): string {
+  return location.title || location.hospitalName || location.displayName || 'Location';
 }
 
 function getLocationCode(location: HospitalSummary): string {
@@ -131,7 +132,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
     initialDataUpdatedAt: 0,
     queryFn: async () => (await userApi.getMyAccess()).data,
     // Per user, so the stored copy is read for the user now signed in.
-    queryKey: [...myAccessQueryKey, userId],
+    queryKey: queryKeys.myAccess(userId),
     staleTime: 60_000,
   });
 

@@ -7,6 +7,7 @@ import { ConfirmProvider } from '@/components/confirm-provider';
 import { LocationProvider } from '@/components/location-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ToastProvider } from '@/components/toast-provider';
+import { LiveChanges } from '@/lib/live-changes';
 import { createQueryClient } from '@/lib/query-client';
 
 export function Providers({ children }: Readonly<{ children: ReactNode }>) {
@@ -34,6 +35,7 @@ export function Providers({ children }: Readonly<{ children: ReactNode }>) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <LiveChanges />
       <ThemeProvider>
         <ToastProvider>
           <ConfirmProvider>

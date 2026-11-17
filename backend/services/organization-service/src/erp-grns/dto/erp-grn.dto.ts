@@ -37,12 +37,17 @@ const AsText = () =>
  * is every row with its grn_No; the GRN-wide fields repeat on each row.
  */
 export class ErpGrnRowDto {
-  @ApiProperty({ description: "The ERP's own id for this row; never reused.", example: '724630' })
+  @ApiPropertyOptional({
+    description:
+      "The ERP's own id for this row, never reused. Left out or blank, AAHAR uses the row's own " +
+      'record id (a UUID) and returns it in the response, in the order the rows were sent.',
+    example: '724630',
+  })
   @AsText()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(64)
-  transaction_number!: string;
+  transaction_number?: string;
 
   @ApiProperty({
     description: 'The AAHAR location: its code, or its name. The GRN goes to its Main Store.',
@@ -178,15 +183,14 @@ export class ErpGrnRowDto {
   @IsDateString()
   expiry_date!: string;
 
-  @ApiPropertyOptional({
-    description: '0 = goods in (the default), 1 = return to vendor.',
+  @ApiProperty({
+    description: '0 = goods in (adds to the store), 1 = return to vendor (takes out of it).',
     enum: [0, 1],
     example: 0,
   })
   @AsNumber()
-  @IsOptional()
   @IsIn([0, 1])
-  flag?: 0 | 1;
+  flag!: 0 | 1;
 }
 
 export class VerifyGrnEntryBatchDto {

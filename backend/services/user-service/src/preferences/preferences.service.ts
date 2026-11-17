@@ -44,7 +44,6 @@ export class PreferencesService {
     const [{ defaultLocationId }, locations] = await Promise.all([
       this.get(actor.id),
       this.prisma.hospital.findMany({
-        orderBy: [{ displayName: 'asc' }, { hospitalName: 'asc' }],
         select: {
           city: true,
           displayName: true,
@@ -52,6 +51,7 @@ export class PreferencesService {
           hospitalName: true,
           id: true,
           isActive: true,
+          legalEntity: { select: { locationName: true } },
           postalCode: true,
           state: true,
         },
@@ -66,10 +66,15 @@ export class PreferencesService {
     return {
       defaultLocationId,
       locationScope: actor.locationScope,
-      locations: locations.map((location) => ({
-        ...location,
-        displayName: location.displayName ?? location.hospitalName,
-      })),
+      // Titled as the Locations list titles them (the entity's Location, else the location's own
+      // name), so renaming one there renames it in the header too.
+      locations: locations
+        .map(({ legalEntity, ...location }) => ({
+          ...location,
+          displayName: location.displayName ?? location.hospitalName,
+          title: legalEntity?.locationName ?? location.hospitalName,
+        }))
+        .sort((a, b) => a.title.localeCompare(b.title)),
       // As resolved for this request (not the token's copy): the portal's own server routes,
       // such as the image upload, check them here.
       permissions: actor.permissions,

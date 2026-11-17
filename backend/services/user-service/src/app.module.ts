@@ -8,6 +8,7 @@ import {
   HealthCheckService,
   JwtAuthGuard,
   JwtStrategy,
+  PublishChangesInterceptor,
   RbacGuard,
   UserThrottlerGuard,
 } from '@aahar/auth';
@@ -89,6 +90,11 @@ import { UsersModule } from './users/users.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: ForgetAccessOnWriteInterceptor,
+    },
+    // Open screens hear of each save at once, through the organization service's GET /changes.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PublishChangesInterceptor,
     },
   ],
 })

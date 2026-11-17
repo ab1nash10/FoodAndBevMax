@@ -34,7 +34,7 @@ test('each write invalidates the same query keys', () => {
       ['item-options'],
     ],
     invalidateItemQueries: [['items'], ['item-options'], ['dashboard', 'setup']],
-    invalidateLegalEntityQueries: [['legal-entities'], ['legal-entity-options']],
+    invalidateLegalEntityQueries: [['legal-entities'], ['legal-entity-options'], ['my-access']],
     invalidateKitchenProductionQueries: [
       ['kitchen-productions'],
       ['kitchen-stock'],

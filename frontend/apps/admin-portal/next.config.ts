@@ -89,6 +89,12 @@ const nextConfig: NextConfig = {
         destination: `${organizationApiBase}/order-board/:path*`,
         source: `${BASE_PATH}/api/v1/order-board/:path*`,
       },
+      // Live changes (lib/live-changes.ts): every screen, guests' phones included, on one URL.
+      {
+        basePath: false,
+        destination: `${organizationApiBase}/changes`,
+        source: `${BASE_PATH}/api/v1/changes`,
+      },
       // The QR order page on a guest's phone: without it the page found no menu in development.
       {
         basePath: false,

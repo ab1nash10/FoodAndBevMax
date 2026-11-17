@@ -41,6 +41,7 @@ export function HospitalCreatePageClient() {
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitals() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.hospitalOptions() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.myAccess() });
       showToast({
         action: { href, label: `View ${response.data.hospitalName}` },
         description: 'Main Store, Main Kitchen and Counter Kitchen were created automatically.',

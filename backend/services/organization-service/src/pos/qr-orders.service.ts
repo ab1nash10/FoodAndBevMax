@@ -374,6 +374,8 @@ export class QrOrdersService {
       channel,
       clientOrderId,
       counter,
+      customerMobile: dto.customerMobile,
+      customerName: dto.customerName,
       instructions: optionalText(dto.instructions) ?? null,
       lines: dto.lines,
       provider,
@@ -455,6 +457,8 @@ export class QrOrdersService {
       channel: OrderChannel.COUNTER,
       clientOrderId,
       counter,
+      customerMobile: dto.customerMobile,
+      customerName: dto.customerName,
       instructions: null,
       lines: dto.lines,
       provider,
@@ -471,6 +475,8 @@ export class QrOrdersService {
     channel: OrderChannel;
     clientOrderId: string;
     counter: Awaited<ReturnType<PosService['findCounter']>>;
+    customerMobile?: string;
+    customerName?: string;
     instructions: string | null;
     lines: Array<{ menuId: string; quantity: number }>;
     provider: PaymentProviderName;
@@ -488,7 +494,15 @@ export class QrOrdersService {
     const id = randomUUID();
     const key = this.keyFor(id);
     const payment = await this.onlinePayments.start(
-      { channel, counterId: counter.id, employeeCode, lines, provider },
+      {
+        channel,
+        counterId: counter.id,
+        customerMobile: input.customerMobile,
+        customerName: input.customerName,
+        employeeCode,
+        lines,
+        provider,
+      },
       { actorId: undefined },
       returnAddress(input.returnUrl, id, key),
     );

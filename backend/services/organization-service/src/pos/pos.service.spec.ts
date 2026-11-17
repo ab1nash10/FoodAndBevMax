@@ -614,6 +614,42 @@ test('a bill paid online takes a paid, unused payment for exactly its total', as
   assert.equal(payments[3]!.orderId, made.id);
 });
 
+test('a bill keeps who paid: as typed at the till, else as given when the payment started', async () => {
+  const payment = (id: string) => ({
+    amount: decimal(120),
+    counterId: 'counter-1',
+    customerMobile: '9876543210',
+    customerName: 'Asha Verma',
+    id,
+    orderId: null,
+    paidReference: `pay_${id}`,
+    provider: 'RAZORPAY',
+    status: 'PAID',
+  });
+  const { orders, service } = serviceWith({ payments: [payment('qr'), payment('till')] });
+
+  // A QR order is billed without them: they come from its payment.
+  const fromPayment = await service.createOrder(
+    bill({ clientOrderId: 'qr', onlinePaymentId: 'qr' }),
+    cashier,
+  );
+  assert.equal(fromPayment.customerName, 'Asha Verma');
+  assert.equal(fromPayment.customerMobile, '9876543210');
+
+  // What the till typed wins.
+  await service.createOrder(
+    bill({
+      clientOrderId: 'till',
+      customerMobile: '9123456780',
+      customerName: ' Ravi ',
+      onlinePaymentId: 'till',
+    }),
+    cashier,
+  );
+  assert.equal(orders[1]!.customerName, 'Ravi');
+  assert.equal(orders[1]!.customerMobile, '9123456780');
+});
+
 test('a bill paid on the Pine Labs card machine is a card bill, with the card’s reference', async () => {
   const { service } = serviceWith({
     payments: [

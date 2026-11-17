@@ -63,8 +63,13 @@ function serviceForDefaults(allowedHospitalIds: string[] | null) {
     hospital: {
       count: vi.fn().mockResolvedValue(1),
       findMany: vi.fn().mockResolvedValue([
-        { displayName: null, hospitalName: 'Hospital A', id: 'hospital-a' },
-        { displayName: 'B', hospitalName: 'Hospital B', id: 'hospital-b' },
+        { displayName: null, hospitalName: 'Hospital A', id: 'hospital-a', legalEntity: null },
+        {
+          displayName: 'B',
+          hospitalName: 'Hospital B',
+          id: 'hospital-b',
+          legalEntity: { locationName: 'Apollo Wing' },
+        },
       ]),
     },
     user: {
@@ -96,10 +101,16 @@ test('the default location is the home location, not the old JSON value', async 
   assert.deepEqual(await service.access(user), {
     defaultLocationId: 'hospital-a',
     locationScope: 'MULTI',
-    // A location without a display name shows its name.
+    // Named as the Locations list names them: the entity's Location, else the location's own
+    // title; in that order. A location without a display name shows its name there.
     locations: [
-      { displayName: 'Hospital A', hospitalName: 'Hospital A', id: 'hospital-a' },
-      { displayName: 'B', hospitalName: 'Hospital B', id: 'hospital-b' },
+      { displayName: 'B', hospitalName: 'Hospital B', id: 'hospital-b', title: 'Apollo Wing' },
+      {
+        displayName: 'Hospital A',
+        hospitalName: 'Hospital A',
+        id: 'hospital-a',
+        title: 'Hospital A',
+      },
     ],
     // The caller's current permissions, for the portal's own server routes.
     permissions: ['RESTAURANT_UPDATE'],

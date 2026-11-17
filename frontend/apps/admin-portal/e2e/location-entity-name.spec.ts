@@ -66,3 +66,29 @@ test("the entity is picked first, and fills the new location's title and address
   await expect(page.locator('#location-title')).toHaveValue(entity!.locationName!);
   await expect(page.locator('#location-address')).toHaveValue(entity!.entityAddress);
 });
+
+// The header names a location as the Locations list does, so renaming it there renames it here.
+test('the header location menu uses the names on the Locations list', async ({ page, request }) => {
+  page.setDefaultTimeout(30_000);
+  const active = await list<Location>(request, '/hospitals?isActive=true&limit=100');
+
+  await page.goto('masters/locations');
+  await expect(page.locator('tr[data-record-id]').first()).toBeVisible();
+  const names: string[] = [];
+  for (const location of active) {
+    const title = page
+      .locator(`tr[data-record-id="${location.id}"] td`)
+      .first()
+      .locator('p')
+      .first();
+    if (await title.count()) names.push((await title.textContent())!.trim());
+  }
+  test.skip(names.length === 0, 'no active location on the first page of the list');
+
+  await page.getByRole('button', { name: /^Select Location\./ }).click();
+  for (const name of names) {
+    await expect(
+      page.getByRole('button').filter({ has: page.getByText(name, { exact: true }) }),
+    ).not.toHaveCount(0);
+  }
+});

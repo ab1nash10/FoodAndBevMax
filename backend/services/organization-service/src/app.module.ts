@@ -3,12 +3,14 @@ import {
   AccessResolver,
   addressThrottler,
   AuditLoggerService,
+  ChangeRelay,
   createThrottlerStorage,
   HealthCheckService,
   HospitalScopeGuard,
   HospitalScopeInterceptor,
   JwtAuthGuard,
   JwtStrategy,
+  PublishChangesInterceptor,
   RbacGuard,
   UserThrottlerGuard,
 } from '@aahar/auth';
@@ -24,6 +26,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PassportModule } from '@nestjs/passport';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { ChangesController } from './changes/changes.controller';
 import { CountersModule } from './counters/counters.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EmployeesModule } from './employees/employees.module';
@@ -59,7 +62,7 @@ import { TransferAcknowledgementsModule } from './transfer-acknowledgements/tran
 import { TransfersModule } from './transfers/transfers.module';
 
 @Module({
-  controllers: [HealthController],
+  controllers: [ChangesController, HealthController],
   imports: [
     LoggingModule,
     AuditLogsModule,
@@ -125,6 +128,7 @@ import { TransfersModule } from './transfers/transfers.module';
     AccessResolver,
     { provide: AUTH_PRISMA, useExisting: PrismaService },
     AuditLoggerService,
+    ChangeRelay,
     HealthCheckService,
     JwtStrategy,
     {
@@ -149,6 +153,11 @@ import { TransfersModule } from './transfers/transfers.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: HospitalScopeInterceptor,
+    },
+    // Every other open screen hears of each save at once (GET /changes).
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PublishChangesInterceptor,
     },
   ],
 })

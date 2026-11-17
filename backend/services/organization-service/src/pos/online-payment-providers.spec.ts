@@ -95,6 +95,23 @@ test('Razorpay is asked for a link in paise, with Basic auth from the key id and
   });
 });
 
+test('Razorpay gets the payer’s name and phone, and is told not to message them', async () => {
+  const razorpay = provider('RAZORPAY');
+  answer = () => Response.json({ id: 'plink_2', short_url: 'https://rzp.io/i/def' });
+
+  await razorpay.create({
+    amount: 50,
+    customer: { mobile: '9876543210', name: 'Asha Verma' },
+    description: 'Cafe · Till 1',
+    reference: 'pay-2',
+  });
+
+  const body = JSON.parse(calls[0]!.body) as Record<string, unknown>;
+  assert.deepEqual(body.customer, { contact: '+919876543210', name: 'Asha Verma' });
+  // The guest pays from the till's QR or their own phone: Razorpay sends them nothing.
+  assert.deepEqual(body.notify, { email: false, sms: false });
+});
+
 test('a Razorpay link reads as paid, closed or still open from its status', async () => {
   const razorpay = provider('RAZORPAY');
 

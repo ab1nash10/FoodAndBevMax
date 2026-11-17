@@ -109,6 +109,12 @@ export class CreatePosOrderDto {
   @Matches(/^[6-9]\d{9}$/, { message: 'customerMobile must be a 10-digit Indian mobile number' })
   customerMobile?: string;
 
+  @ApiPropertyOptional({ description: 'Who paid (optional).', maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  customerName?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -171,6 +177,8 @@ export class CreatePosOrderDto {
 export class StartOnlinePaymentDto extends PickType(CreatePosOrderDto, [
   'channel',
   'counterId',
+  'customerMobile',
+  'customerName',
   'employeeCode',
   'lines',
 ] as const) {

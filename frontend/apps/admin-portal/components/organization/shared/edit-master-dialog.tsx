@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckboxLine } from '@/components/organization/shared/form-controls';
 import { Field, Input } from '@/components/ui';
@@ -38,11 +38,16 @@ export function EditMasterDialog({
   const formId = useId();
   const form = useForm<EditMasterValues>({ defaultValues: { isActive: true, name: '' } });
 
+  // Filled when it opens; after that only while untouched, so neither a refresh (live changes)
+  // nor the parent re-rendering with a new record object wipes what is being typed.
+  const isDirty = form.formState.isDirty;
+  const filled = useRef(false);
   useEffect(() => {
-    if (record) {
+    if (record && (!filled.current || !isDirty)) {
       form.reset(record);
     }
-  }, [form, record]);
+    filled.current = Boolean(record);
+  }, [form, isDirty, record]);
 
   const handleSubmit = form.handleSubmit((values) =>
     onSave({ isActive: values.isActive, name: values.name.trim() }),

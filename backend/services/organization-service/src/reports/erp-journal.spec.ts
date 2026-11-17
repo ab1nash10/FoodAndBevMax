@@ -10,6 +10,8 @@ const bill = (patch: Partial<ErpBill>): ErpBill => ({
   cancelledAt: null,
   cancelledBy: null,
   complimentaryReason: null,
+  customerMobile: null,
+  customerName: null,
   counterCode: 'C1',
   discount: 0,
   discountPercent: null,

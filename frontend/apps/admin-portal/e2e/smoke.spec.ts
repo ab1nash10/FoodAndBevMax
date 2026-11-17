@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { getPermittedPages } from '../lib/navigation';
-import signIn from './sign-in';
+import signIn, { withoutLiveChanges } from './sign-in';
 
 // The saved session may have been ended by another spec signing in (one browser at a time).
 test.beforeAll(() => signIn());
@@ -40,6 +40,9 @@ async function problemsWhile(page: Page, open: () => Promise<void>): Promise<str
 }
 
 // One test, one signed-in tab (see record-panels.spec.ts: separate contexts sign each other out).
+// Each of these waits for an idle network, which the open live-changes stream never allows.
+test.beforeEach(({ page }) => withoutLiveChanges(page));
+
 test('every screen opens without errors', async ({ page }) => {
   test.setTimeout(30 * 60_000);
   // The dev server compiles a route on its first visit, slowly on a busy machine.

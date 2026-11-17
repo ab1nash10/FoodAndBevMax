@@ -7,6 +7,15 @@ export {
 } from './access-resolver';
 export type { ResolvedAccess } from './access-resolver';
 export { ForgetAccessOnWriteInterceptor } from './forget-access-on-write.interceptor';
+export {
+  CHANGE_RELAY_OPTIONS,
+  CHANGES_CHANNEL,
+  ChangeRelay,
+  EVERYTHING_CHANGED,
+  PublishChangesInterceptor,
+  changedArea,
+} from './change-feed';
+export type { ChangeRelayOptions } from './change-feed';
 export { AuditLoggerService } from './audit-logger.service';
 export type { AuditLogEvent } from './audit-logger.service';
 export {

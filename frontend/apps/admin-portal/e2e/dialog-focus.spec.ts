@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { newSession } from './sign-in';
+import { newSession, withoutLiveChanges } from './sign-in';
 
 /**
  * A dialog opened from the keyboard takes focus, keeps Tab inside it, and on Esc gives focus
@@ -20,6 +20,9 @@ const focusInDialog = (page: Page) =>
 // A session of its own, as in pos.spec.ts: sharing the saved one, the first test to refresh it
 // would sign the others out (each refresh token works once).
 test.use({ storageState: { cookies: [], origins: [] } });
+
+// Each of these waits for an idle network, which the open live-changes stream never allows.
+test.beforeEach(({ page }) => withoutLiveChanges(page));
 
 test('dialogs take focus, keep Tab inside and give it back on Esc', async ({ page }) => {
   test.setTimeout(5 * 60_000);

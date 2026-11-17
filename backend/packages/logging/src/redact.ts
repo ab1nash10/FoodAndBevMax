@@ -26,7 +26,14 @@ export const SECRET_KEYS = [
 ] as const;
 
 /** Keys holding a phone number: logged as the last four digits only. */
-export const PHONE_KEYS = ['mobile', 'mobileNumber', 'phone', 'phoneNumber'] as const;
+export const PHONE_KEYS = [
+  'contact',
+  'customerMobile',
+  'mobile',
+  'mobileNumber',
+  'phone',
+  'phoneNumber',
+] as const;
 
 export const REDACTED = '[REDACTED]';
 
