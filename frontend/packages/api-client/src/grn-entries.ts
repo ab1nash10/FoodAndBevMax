@@ -88,6 +88,32 @@ export interface GrnEntryQuery {
   status?: GrnEntryStatus;
 }
 
+/** A GRN the ERP sent that AAHAR refused: nothing was saved and no stock moved. */
+export interface GrnRefusal {
+  /** Every reason, in plain words. */
+  errors: string[];
+  grn_No: string;
+  /** Null when AAHAR does not know the location the ERP sent. */
+  hospital_id: string | null;
+  id: string;
+  /** The location as the ERP sent it. */
+  location: string;
+  location_name: string | null;
+  received_at: string;
+  /** The request's rows, in the ERP's own field names. */
+  rows: Array<
+    Record<string, unknown> & {
+      batch: string;
+      flag: 0 | 1;
+      part_item_code: string;
+      transaction_qty: number;
+    }
+  >;
+}
+
+/** Newest first; `search` matches the GRN number. */
+export type GrnRefusalQuery = Omit<GrnEntryQuery, 'status'>;
+
 export function createGrnEntriesApi(options: ApiClientOptions) {
   const client = createApiClient(options);
   const path = (grnNumber: string, action: string) =>
@@ -96,6 +122,10 @@ export function createGrnEntriesApi(options: ApiClientOptions) {
   return {
     listGrnEntries(query: GrnEntryQuery = {}) {
       return client.request<ApiResponse<ApiList<GrnEntry>>>('/grn-entries', { query });
+    },
+    /** GRNs AAHAR refused (Logs → ERP GRN errors), with every reason. */
+    listGrnRefusals(query: GrnRefusalQuery = {}) {
+      return client.request<ApiResponse<ApiList<GrnRefusal>>>('/grn-entries/refusals', { query });
     },
     /** Runs a waiting reverse now: it takes what the store holds of its batch. */
     runGrnEntry(grnNumber: string) {

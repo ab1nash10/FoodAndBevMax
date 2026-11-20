@@ -1,5 +1,5 @@
 import { GrnEntryStatus } from '@prisma/client';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
@@ -144,7 +144,10 @@ export class ErpGrnRowDto {
   @MaxLength(64)
   requisition?: string;
 
-  @ApiProperty({ example: '12344' })
+  @ApiProperty({
+    description: 'The ERP’s GRN number. Sent again, its rows are added to that GRN.',
+    example: '12344',
+  })
   @AsText()
   @IsString()
   @IsNotEmpty()
@@ -170,7 +173,9 @@ export class ErpGrnRowDto {
   expiry_date!: string;
 
   @ApiProperty({
-    description: '0 = goods in (adds to the store), 1 = return to vendor (takes out of it).',
+    description:
+      '0 = goods in (adds to the store), 1 = return to vendor (takes out of it; refused when the ' +
+      'Main Store holds less of the batch).',
     enum: [0, 1],
     example: 0,
   })
@@ -236,3 +241,10 @@ export class ListGrnEntriesQueryDto extends PaginationQueryDto {
   @IsOptional()
   receivedTo?: string;
 }
+
+/** A page of refused GRNs (ERP GRN errors), newest first. `search` matches the GRN number. */
+export class ListGrnRefusalsQueryDto extends OmitType(ListGrnEntriesQueryDto, [
+  'status',
+  'storeId',
+  'verifiedSince',
+] as const) {}

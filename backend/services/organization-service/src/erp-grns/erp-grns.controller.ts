@@ -28,6 +28,7 @@ import {
   CloseGrnEntryDto,
   ErpGrnRowDto,
   ListGrnEntriesQueryDto,
+  ListGrnRefusalsQueryDto,
   SetGrnEntryRerunDto,
 } from './dto/erp-grn.dto';
 import { ErpGrnsService } from './erp-grns.service';
@@ -62,9 +63,10 @@ export class ErpGrnsController {
   @ApiBody({ type: [ErpGrnRowDto] })
   @ApiOkResponse({
     description:
-      'Saved as PENDING (or replaced while still pending): { transaction_number, message: "We have ' +
-      'successfully received the request", success: true }. Refused: { transaction_number: null, ' +
-      'message: "Request failed", success: false, errors: [...] }.',
+      'Saved and its stock moved (the same grn_No again adds its rows to that GRN): ' +
+      '{ transaction_number, message: "We have successfully received the request", success: true }. ' +
+      'Refused, and listed on ERP GRN errors: { transaction_number: null, message: "Request ' +
+      'failed", success: false, errors: [...] }.',
   })
   async receive(
     @Body(new ParseArrayPipe({ forbidNonWhitelisted: true, items: ErpGrnRowDto, whitelist: true }))
@@ -109,6 +111,14 @@ export class GrnEntriesController {
   @ApiOperation({ summary: 'GRNs sent by the ERP' })
   async list(@Query() query: ListGrnEntriesQueryDto) {
     return { data: await this.erpGrns.list(query), message: 'Success', success: true };
+  }
+
+  // Before :grnNumber, which would otherwise take "refusals" as a GRN number.
+  @Get('refusals')
+  @Permissions('GRN_VIEW')
+  @ApiOperation({ summary: 'GRNs the ERP sent that AAHAR refused, with why (ERP GRN errors)' })
+  async listRefusals(@Query() query: ListGrnRefusalsQueryDto) {
+    return { data: await this.erpGrns.listRefusals(query), message: 'Success', success: true };
   }
 
   @Get(':grnNumber')

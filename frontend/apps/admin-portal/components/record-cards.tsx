@@ -133,9 +133,7 @@ export function RecordCard({
           {subtitle ? <p className="truncate font-mono text-xs text-ds-muted">{subtitle}</p> : null}
         </div>
         {children}
-        <div
-          className="mt-auto flex flex-wrap items-center gap-2"
-        >
+        <div className="mt-auto flex flex-wrap items-center gap-2">
           {footer}
           <span className="ml-auto flex min-w-0 items-center gap-2">
             {meta ? <span className="truncate text-xs text-ds-muted">{meta}</span> : null}

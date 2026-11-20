@@ -426,6 +426,7 @@ model Hospital {
   transfers                Transfer[]
   users                    User[]
   grnEntries               GrnEntry[]
+  erpGrnRefusals           ErpGrnRefusal[]
 
   @@index([deletedAt])
   @@index([isActive])
@@ -1642,6 +1643,26 @@ model GrnEntry {
   @@index([status, verifiedAt])
   @@index([storeId])
   @@map("grn_entries")
+}
+
+/// A GRN the ERP sent that AAHAR refused: nothing was saved and no stock moved. Listed on Logs
+/// → ERP GRN errors with every reason and the request as sent.
+model ErpGrnRefusal {
+  id         String   @id @default(uuid()) @map("erp_grn_refusal_id") @db.Uuid
+  grnNumber  String   @map("grn_number")
+  /// The location as the ERP sent it; hospital_id only when AAHAR knows that location.
+  location   String
+  hospitalId String?  @map("hospital_id") @db.Uuid
+  errors     String[]
+  /// The request's rows, in the ERP's own field names.
+  rows       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+
+  @@index([hospitalId, createdAt])
+  @@index([createdAt])
+  @@map("erp_grn_refusals")
 }
 
 /// X-Nonce of each signed ERP request in the last few minutes, so a captured request cannot be

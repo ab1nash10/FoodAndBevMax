@@ -867,9 +867,7 @@ export function TransfersPageClient() {
                         data-record-id={transfer.id}
                         key={transfer.id}
                       >
-                        <td
-                          className={cn(tableStyles.td, 'pr-0')}
-                        >
+                        <td className={cn(tableStyles.td, 'pr-0')}>
                           <input
                             aria-label={`Select ${transfer.transferNumber}`}
                             checked={isChecked}

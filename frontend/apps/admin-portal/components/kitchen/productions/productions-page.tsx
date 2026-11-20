@@ -100,7 +100,6 @@ const draftActions = [
   'KITCHEN_PRODUCTION_DELETE',
 ];
 
-
 function personInitials(name: string): string {
   return name
     .split(/\s+/)

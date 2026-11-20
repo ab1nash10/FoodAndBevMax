@@ -57,7 +57,8 @@ test('a GRN from the ERP goes into stock on arrival and shows every field', asyn
   const row = page.locator(`tr[data-record-id="${grnNo}"]`);
   await expect(row).toContainText('Success');
   await expect(row).toContainText('1 batch · GRN');
-  await row.click();
+  // The row itself opens nothing: its GRN number does.
+  await row.getByRole('button', { name: grnNo }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText(`GRN ${grnNo}`);
@@ -114,7 +115,8 @@ test('a GRN reverse takes the batch back out of the store', async ({ page, reque
   const row = page.locator(`tr[data-record-id="${grnNo}"]`);
   await expect(row).toContainText('GRN + reverse');
   await expect(row).toContainText('Success');
-  await row.click();
+  // The row itself opens nothing: its GRN number does.
+  await row.getByRole('button', { name: grnNo }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('li[data-row]', { hasText: 'Qty sent' })).toContainText(

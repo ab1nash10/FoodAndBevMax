@@ -425,11 +425,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                     .join(', ');
 
                   return (
-                    <tr
-                      className={tableStyles.row}
-                      data-record-id={bill.id}
-                      key={bill.id}
-                    >
+                    <tr className={tableStyles.row} data-record-id={bill.id} key={bill.id}>
                       <td className={tableStyles.td}>
                         <Link
                           className={cn(

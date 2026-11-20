@@ -169,14 +169,34 @@ describe('Operators', () => {
     ]);
   });
 
-  it('opens an operator to edit from its row', async () => {
+  it('opens an operator to edit from its Edit button only: clicking the row does nothing', async () => {
+    const { user } = renderScreen(<OperatorsPageClient />);
+    await screen.findByText('Anu Bala');
+
+    await user.click(within(row('Anu Bala')).getByText('anu@max.in'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.click(within(row('Anu Bala')).getByRole('button', { name: 'Edit Anu Bala' }));
+
+    const form = within(screen.getByRole('dialog', { name: 'Edit operator' }));
+    expect(form.getByRole('textbox', { name: /^Name/ })).toHaveValue('Anu Bala');
+  });
+
+  it('keeps a signed-in operator’s email and mobile locked, as on Admins', async () => {
+    const lockedUntil = new Date(Date.now() + 3_600_000).toISOString();
+    userApi.listUsers.mockReturnValue(page([{ ...anu, credentialsLockedUntil: lockedUntil }]));
     const { user } = renderScreen(<OperatorsPageClient />);
     await screen.findByText('Anu Bala');
 
     await user.click(within(row('Anu Bala')).getByRole('button', { name: 'Edit Anu Bala' }));
 
     const form = within(screen.getByRole('dialog', { name: 'Edit operator' }));
-    expect(form.getByRole('textbox', { name: /^Name/ })).toHaveValue('Anu Bala');
+    expect(form.getByRole('note')).toHaveTextContent('Anu Bala is signed in.');
+    expect(form.getByLabelText(/^Email/)).toBeDisabled();
+    expect(form.getByLabelText(/^Mobile/)).toBeDisabled();
+    expect(form.getByLabelText(/^Name/)).toBeEnabled();
+    // Picking from Employees is for new operators only, so it cannot refill a locked contact.
+    expect(form.queryByLabelText('Pick from Employees')).not.toBeInTheDocument();
   });
 
   it('offers no way to add or change an operator to someone who may only view them', async () => {

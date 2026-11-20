@@ -486,11 +486,7 @@ export function ItemsPageClient() {
                 </thead>
                 <tbody>
                   {items.map((item) => (
-                    <tr
-                      className={tableStyles.row}
-                      data-record-id={item.id}
-                      key={item.id}
-                    >
+                    <tr className={tableStyles.row} data-record-id={item.id} key={item.id}>
                       <td className={tableStyles.td}>
                         <span className="flex min-w-0 items-center gap-3">
                           {item.type ? <FoodTypeMarker type={item.type} /> : null}

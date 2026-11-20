@@ -98,11 +98,19 @@ test('Logs lists the ERP GRN log (the ERP GRNs page) for whoever may view GRNs',
   expect(logs?.items.map((item) => item.label)).toEqual([
     'ERP Posting',
     'ERP GRN log',
+    'ERP GRN errors',
     'Activity Logs',
   ]);
   // The same screen as Inventory's ERP GRNs, at an address of its own so its crumbs say Logs.
   expect(logs?.items[1]).toMatchObject({ href: '/logs/erp-grns', permissions: ['GRN_VIEW'] });
   expect(canOpenPath('/logs/erp-grns', holding('GRN_VIEW'))).toBe(true);
+  // GRNs AAHAR refused, for the same people.
+  expect(logs?.items[2]).toMatchObject({
+    href: '/logs/erp-grn-errors',
+    permissions: ['GRN_VIEW'],
+  });
+  expect(canOpenPath('/logs/erp-grn-errors', holding('GRN_VIEW'))).toBe(true);
+  expect(canOpenPath('/logs/erp-grn-errors', holding('TRANSFER_VIEW'))).toBe(false);
   expect(
     getStartPageOptions(() => true).filter((page) => page.href.endsWith('/erp-grns')),
   ).toHaveLength(2);

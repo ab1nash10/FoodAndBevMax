@@ -1,14 +1,7 @@
 'use client';
 
 import { usePathname, useSearchParams } from 'next/navigation';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-  type SetStateAction,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 
 /**
  * List state that lives in the URL (`?q=`, `?view=`, `?page=`…), so a refresh, a shared link
@@ -144,7 +137,6 @@ export function useOnScopeChange(
     settled.current = { value: scope };
   }, [isLoading, scope]);
 }
-
 
 /** `value`, once it has stopped changing for `delayMs` (for search boxes that query per key). */
 export function useDebouncedValue<T>(value: T, delayMs = 180): T {

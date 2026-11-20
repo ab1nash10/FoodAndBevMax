@@ -586,11 +586,7 @@ export function CountersTab() {
             <tbody>
               {items.length > 0 ? (
                 items.map((counter) => (
-                  <tr
-                    className={tableStyles.row}
-                    data-record-id={counter.id}
-                    key={counter.id}
-                  >
+                  <tr className={tableStyles.row} data-record-id={counter.id} key={counter.id}>
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
                         <RecordAvatar name={counter.counterName} />

@@ -31,6 +31,8 @@ export const HOSPITAL_SCOPED_MODELS = new Set([
   'CounterDayClose',
   'CounterShift',
   'EmployeeDiscount',
+  // A refusal for a location AAHAR does not know has no hospital: only ALL-scope users see it.
+  'ErpGrnRefusal',
   'Grn',
   'GrnEntry',
   'ItemPrice',

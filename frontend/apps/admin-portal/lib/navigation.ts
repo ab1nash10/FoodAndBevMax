@@ -8,6 +8,7 @@ import {
   ChefHat,
   ClipboardList,
   FileInput,
+  FileWarning,
   CookingPot,
   CreditCard,
   FileSpreadsheet,
@@ -416,6 +417,13 @@ export const navigationGroups: NavGroup[] = [
         href: '/logs/erp-grns',
         icon: FileInput,
         label: 'ERP GRN log',
+        permissions: ['GRN_VIEW'],
+      },
+      // GRNs the ERP sent that AAHAR refused, with why.
+      {
+        href: '/logs/erp-grn-errors',
+        icon: FileWarning,
+        label: 'ERP GRN errors',
         permissions: ['GRN_VIEW'],
       },
       {

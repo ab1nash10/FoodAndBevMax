@@ -29,4 +29,3 @@ test('an empty value removes the param, and push makes a history entry', () => {
   setUrlParams({ page: '', q: null }, 'push');
   assert.deepEqual(calls, [['push', '/fandb/masters/items#top']]);
 });
-

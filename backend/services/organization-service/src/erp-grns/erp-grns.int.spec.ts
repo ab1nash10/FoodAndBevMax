@@ -1,6 +1,7 @@
 // The ERP GRN API end to end: the ERP sends a signed GRN as flat rows (its own field names);
-// goods in go into the Main Store at once, a reverse takes what the store holds and waits for
-// the rest, and the ERP reads back what moved. Runs only with DATABASE_URL_TEST.
+// goods in go into the Main Store at once, a reverse takes the batch back out (refused, and
+// listed for the store team, when the store holds less), the same grn_No again adds to that GRN,
+// and the ERP reads back what moved. Runs only with DATABASE_URL_TEST.
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -16,7 +17,8 @@ import { formatErpTimestamp, sign, stringToSign } from './erp-signature.js';
 
 const apiKey = 'erp-test-key';
 const secret = 'erp-test-secret-0123456789abcdef';
-// Mail is "set up", and a stand-in for Microsoft Graph below catches what would be sent.
+// Mail is "set up", and a stand-in for Microsoft Graph below catches anything that would be
+// sent: the ERP GRN API sends nothing.
 Object.assign(process.env, {
   ERP_API_KEY: apiKey,
   ERP_API_SECRET: secret,
@@ -74,7 +76,6 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     item2Id: '',
     itemName: '',
     storeCode: '',
-    storeEmail: `store-${run}@example.test`,
     storeId: '',
   };
   let grnSeq = 0;
@@ -191,25 +192,6 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     );
   }
 
-  /** The restaurant sends it back and the store counts it in. */
-  async function returnFromRestaurant(batch: string, qty: number) {
-    await h.rawQuery(
-      `UPDATE stock_balances SET available_qty = available_qty - $3
-        WHERE location_id = $1::uuid AND batch_number = $2`,
-      restaurantId,
-      batch,
-      qty,
-    );
-    await h.rawQuery(
-      `UPDATE stock_balances SET available_qty = available_qty + $3
-        WHERE item_id = $1::uuid AND location_id = $2::uuid AND batch_number = $4`,
-      fx.itemId,
-      fx.storeId,
-      qty,
-      batch,
-    );
-  }
-
   const readBack = async (grnNumber: string) => (await erp('GET', `/erp/grns/${grnNumber}`)).data;
 
   /** The store's actions on a GRN with a reverse still waiting. */
@@ -219,6 +201,21 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     h.api('PATCH', `/grn-entries/${encodeURIComponent(grnNumber)}/rerun`, { active });
   const close = (grnNumber: string, reason?: string) =>
     h.api('PATCH', `/grn-entries/${encodeURIComponent(grnNumber)}/close`, { reason });
+
+  /**
+   * A reverse still waiting for its batch, as the earlier rule left them (a return must now be
+   * in the store whole, so the ERP cannot make one): sent while the store held the batch, then
+   * set back to nothing moved yet.
+   */
+  async function waitingReverse(grnNumber: string, batch: string, qty: number) {
+    await send(grn(newGrnNumber(), [{ batch, qty }]));
+    await send(grn(grnNumber, [{ batch, qty }], { flag: 1 }));
+    await h.rawQuery(
+      `UPDATE grn_entries SET accepted_qty = 0, rejected_qty = 0, status = 'PENDING', verified_at = NULL
+        WHERE grn_number = $1`,
+      grnNumber,
+    );
+  }
 
   beforeAll(async () => {
     h = await startHarness();
@@ -256,36 +253,6 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     fx.item2Id = item2.id as string;
     fx.item2Code = item2.itemCode as string;
     await h.ok('POST', '/store-items', { categoryId, itemId: fx.item2Id, storeId: fx.storeId });
-
-    // The location's store keeper (may post GRNs), who hears about a reverse that has to wait.
-    await h.rawQuery(
-      `INSERT INTO roles (id, name, location_scope, status, updated_at)
-       VALUES (gen_random_uuid(), $1, 'SINGLE', 'ACTIVE', now())`,
-      `Int Store ${run}`,
-    );
-    await h.rawQuery(
-      `INSERT INTO role_permissions (id, role_id, permission_id, updated_at)
-       SELECT gen_random_uuid(), r.id, p.id, now() FROM roles r, permissions p
-        WHERE r.name = $1 AND p.code = 'GRN_POST'`,
-      `Int Store ${run}`,
-    );
-    const keeper = randomUUID();
-    await h.rawQuery(
-      `INSERT INTO users (id, employee_code, name, email, mobile, status, hospital_id, updated_at)
-       VALUES ($1::uuid, $2, $3, $4, $5, 'ACTIVE', $6::uuid, now())`,
-      keeper,
-      `SK-${run}`,
-      `Store Keeper ${run}`,
-      fx.storeEmail,
-      `6${String(Date.now()).slice(-9)}`,
-      fx.hospitalId,
-    );
-    await h.rawQuery(
-      `INSERT INTO user_roles (id, user_id, role_id, updated_at)
-       SELECT gen_random_uuid(), $1::uuid, id, now() FROM roles WHERE name = $2`,
-      keeper,
-      `Int Store ${run}`,
-    );
   }, 60_000);
 
   afterAll(() => h?.app.close());
@@ -422,25 +389,60 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       [grnNumber, 'VERIFIED'],
     ]);
 
-    // Sent again (the ERP retrying after a timeout): refused with the number it already got,
-    // and the stock does not move twice.
-    const again = await send(grn(grnNumber, [{ batch: b1, qty: 60 }]));
-    expect([again.status, again.body]).toEqual([
-      409,
-      failed([`GRN ${grnNumber} was already received (transaction ${number})`]),
+    // The same grn_No again: its rows join that GRN and each moves stock by its flag. More of a
+    // batch it has (flag 0) adds, a new batch is added to it, a return (flag 1) takes back.
+    const b0 = `0-${run}`;
+    const more = await send([
+      ...grn(grnNumber, [{ batch: b1, qty: 5 }]),
+      ...grn(grnNumber, [{ batch: b0, qty: 7 }]),
     ]);
-    expect(await storeQty(b1)).toBe(60);
+    expect([more.status, more.body]).toEqual([200, received(expect.stringMatching(uuid))]);
+    const second = more.body.transaction_number as string;
+    const back = await send(grn(grnNumber, [{ batch: b2, qty: 15 }], { flag: 1 }));
+    expect(back.status).toBe(200);
+    const third = back.body.transaction_number as string;
+    expect(new Set([number, second, third]).size).toBe(3);
+    expect([await storeQty(b1), await storeQty(b2), await storeQty(b0)]).toEqual([65, 25, 7]);
+
+    // One GRN with every row. It keeps its first request's number and time; each row keeps the
+    // number of the request that sent it, and any of them finds the GRN.
+    const whole = await erp('GET', `/erp/grns/${third}`);
+    expect(whole.data).toMatchObject({
+      grn_No: grnNumber,
+      received_at: result.data.received_at,
+      status: 'VERIFIED',
+      totals: { accepted_qty: 127, pending_qty: 0, rejected_qty: 0, transaction_qty: 127 },
+      transaction_number: number,
+    });
+    expect(
+      (whole.data.rows as Body[]).map((row) => [
+        row.batch,
+        row.flag,
+        row.accepted_qty,
+        row.transaction_number,
+      ]),
+    ).toEqual([
+      [b0, 0, 7, second],
+      [b1, 0, 60, number],
+      [b1, 0, 5, second],
+      [b2, 0, 40, number],
+      [b2, 1, 15, third],
+    ]);
   });
 
-  it('the same GRN sent twice at once goes into stock once', async () => {
+  it('the same GRN sent twice at once goes into stock twice, one after the other', async () => {
     const grnNumber = newGrnNumber();
     const batch = `D-${run}`;
     const both = await Promise.all([
       send(grn(grnNumber, [{ batch, qty: 7 }])),
       send(grn(grnNumber, [{ batch, qty: 7 }])),
     ]);
-    expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
-    expect(await storeQty(batch)).toBe(7);
+    expect(both.map((r) => r.status)).toEqual([200, 200]);
+    expect(await storeQty(batch)).toBe(14);
+    expect((await readBack(grnNumber)).totals).toMatchObject({
+      accepted_qty: 14,
+      transaction_qty: 14,
+    });
   });
 
   it('takes the sample as the ERP writes it: text numbers, India time, location by name; fills the rest from AAHAR', async () => {
@@ -622,64 +624,63 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       failed([`Batch ${batch} of item ${fx.itemCode} has expired and cannot be received`]),
     ]);
     expect((await erp('GET', `/erp/grns/${late}`)).status).toBe(404);
-    // A return is not refused for its expiry; this one only because the location has none.
+    // A return is not refused for its expiry; this one only because the Main Store has none.
     expect(
       (await send(grn(newGrnNumber(), [{ batch, expiry: day(-1), qty: 1 }], { flag: 1 }))).body
         .errors,
-    ).toEqual([`Batch ${batch} of item ${fx.itemCode}: the location has only 0 to return, not 1`]);
+    ).toEqual([`Batch ${batch} of item ${fx.itemCode}: the Main Store has only 0, not 1`]);
   });
 
-  it('a reverse (flag 1) takes what the store holds and waits for the rest out in the restaurants', async () => {
+  it('a reverse (flag 1) for more than the Main Store holds is refused and listed for the store team', async () => {
     const batch = `R-${run}`;
     await send(grn(newGrnNumber(), [{ batch, qty: 10 }]));
     await issueToRestaurant(batch, 6);
     expect(await storeQty(batch)).toBe(4);
 
-    // More than the whole location holds of the batch (store 4 + restaurant 6): refused.
+    // 5 to return with 4 in the store: refused whole, though a restaurant holds the rest.
     const tooMuch = newGrnNumber();
-    const refused = await send(grn(tooMuch, [{ batch, qty: 11 }], { flag: 1 }));
-    expect([refused.status, refused.body]).toEqual([
-      422,
-      failed([`Batch ${batch} of item ${fx.itemCode}: the location has only 10 to return, not 11`]),
-    ]);
+    const sentRows = grn(tooMuch, [{ batch, qty: 5 }], { flag: 1 });
+    const refused = await send(sentRows);
+    const why = `Batch ${batch} of item ${fx.itemCode}: the Main Store has only 4, not 5`;
+    expect([refused.status, refused.body]).toEqual([422, failed([why])]);
+    expect(await storeQty(batch)).toBe(4);
     expect((await erp('GET', `/erp/grns/${tooMuch}`)).status).toBe(404);
-    // Two rows of one batch count together.
+    // The store team finds it on ERP GRN errors: why, where, and the request as sent.
+    const listed = await h.ok('GET', `/grn-entries/refusals?search=${tooMuch}`);
+    expect(listed.items).toEqual([
+      {
+        errors: [why],
+        grn_No: tooMuch,
+        hospital_id: fx.hospitalId,
+        id: expect.stringMatching(uuid) as unknown,
+        location: fx.hospitalCode,
+        location_name: fx.hospitalName,
+        received_at: expect.any(String) as unknown,
+        rows: sentRows,
+      },
+    ]);
+    // Two rows of one batch count together: 3 + 2 is more than 4.
     const split = await send(
       grn(
         newGrnNumber(),
         [
-          { batch, qty: 6 },
-          { batch, qty: 5 },
+          { batch, qty: 3 },
+          { batch, qty: 2 },
         ],
         { flag: 1 },
       ),
     );
-    expect(split.body.errors).toEqual([
-      `Batch ${batch} of item ${fx.itemCode}: the location has only 10 to return, not 11`,
-    ]);
+    expect(split.body.errors).toEqual([why]);
 
-    // All 10: the 4 in the store go at once, the 6 in the restaurant wait.
+    // What the store holds goes back at once, and nothing waits.
     const reverse = newGrnNumber();
-    const sent = await send(grn(reverse, [{ batch, qty: 10 }], { flag: 1 }));
+    const sent = await send(grn(reverse, [{ batch, qty: 4 }], { flag: 1 }));
     expect(sent.body).toEqual(received(expect.stringMatching(uuid)));
     expect(await storeQty(batch)).toBe(0);
-    const waiting = await readBack(reverse);
-    expect(waiting).toMatchObject({
-      rerun_active: true,
-      status: 'PENDING',
-      totals: { accepted_qty: 4, pending_qty: 6, rejected_qty: 0, transaction_qty: 10 },
-      verified_at: null,
+    expect(await readBack(reverse)).toMatchObject({
+      status: 'VERIFIED',
+      totals: { accepted_qty: 4, pending_qty: 0, rejected_qty: 0, transaction_qty: 4 },
     });
-    expect(firstOf(waiting.rows as Body[])).toMatchObject({ accepted_qty: 4, pending_qty: 6 });
-    // The location's store staff hear about it: which batch, how much, who holds it.
-    const told = mails.filter((mail) => mail.subject.includes(reverse));
-    expect(told.map(({ subject, to }) => ({ subject, to }))).toEqual([
-      {
-        subject: `GRN reverse ${reverse} at ${fx.hospitalName} is waiting for 6 to come back`,
-        to: [fx.storeEmail],
-      },
-    ]);
-    expect(told[0]!.html).toContain(batch);
     const [out] = await h.rawQuery<{ transaction_type: string; qty_out: string }>(
       `SELECT transaction_type, qty_out::text FROM stock_ledgers
         WHERE item_id = $1::uuid AND batch_number = $2 AND qty_out > 0`,
@@ -688,46 +689,27 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     );
     expect([out?.transaction_type, Number(out?.qty_out)]).toEqual(['GRN_RETURN_OUT', 4]);
 
-    // The 6 waiting are spoken for: another reverse finds nothing left.
-    const oneMore = await send(grn(newGrnNumber(), [{ batch, qty: 1 }], { flag: 1 }));
-    expect(oneMore.body.errors).toEqual([
-      `Batch ${batch} of item ${fx.itemCode}: the location has only 0 to return, not 1 (6 already waiting in other returns)`,
-    ]);
-
-    // Run now with nothing back yet: still waiting.
-    const early = await runNow(reverse);
-    expect([early.status, (early.body.data as Body).status]).toEqual([200, 'PENDING']);
-
-    // The restaurant sends the 6 back; run again, and the reverse is done.
-    await returnFromRestaurant(batch, 6);
-    const done = await runNow(reverse);
-    expect(done.status).toBe(200);
-    expect(await storeQty(batch)).toBe(0);
-    expect(await readBack(reverse)).toMatchObject({
-      status: 'VERIFIED',
-      totals: { accepted_qty: 10, pending_qty: 0, rejected_qty: 0, transaction_qty: 10 },
-      verified_at: expect.any(String) as unknown,
-    });
-    // Done: nothing to run any more.
-    expect((await runNow(reverse)).status).toBe(409);
-
     // A reverse is of the batch: another expiry date on it still finds the stock.
     await send(grn(newGrnNumber(), [{ batch, qty: 5 }]));
     const otherExpiry = newGrnNumber();
     await send(grn(otherExpiry, [{ batch, expiry: day(400), qty: 2 }], { flag: 1 }));
     expect(await storeQty(batch)).toBe(3);
     expect((await readBack(otherExpiry)).status).toBe('VERIFIED');
-    // Nothing waited, so nobody was emailed.
-    expect(mails.filter((mail) => mail.subject.includes(otherExpiry))).toEqual([]);
+    // Nobody is emailed about an ERP GRN.
+    expect(mails).toEqual([]);
   });
 
   it('a waiting reverse runs again by itself when the batch reaches the store; it can be paused and closed', async () => {
     const batch = `P-${run}`;
-    await send(grn(newGrnNumber(), [{ batch, qty: 5 }]));
-    await issueToRestaurant(batch, 5);
     const reverse = newGrnNumber();
-    await send(grn(reverse, [{ batch, qty: 5 }], { flag: 1 }));
+    await waitingReverse(reverse, batch, 5);
+    expect(await storeQty(batch)).toBe(0);
     expect((await readBack(reverse)).totals).toMatchObject({ accepted_qty: 0, pending_qty: 5 });
+    // What it waits for is spoken for: a new return of the batch finds nothing to take.
+    const oneMore = await send(grn(newGrnNumber(), [{ batch, qty: 1 }], { flag: 1 }));
+    expect(oneMore.body.errors).toEqual([
+      `Batch ${batch} of item ${fx.itemCode}: the Main Store has only 0, not 1 (5 already waiting in other returns)`,
+    ]);
 
     // Paused: new goods of the batch stay in the store.
     expect((await autoRerun(reverse, false)).status).toBe(200);
@@ -783,7 +765,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       })),
     );
     expect(over.body.errors).toEqual([
-      `Batch ${batch} of item ${fx.itemCode}: the location has only 8 to return, not 9`,
+      `Batch ${batch} of item ${fx.itemCode}: the Main Store has only 8, not 9`,
     ]);
   });
 });

@@ -104,7 +104,7 @@ export function ErpGrnsPageClient({ log = false }: Readonly<{ log?: boolean }> =
   return (
     <section className="space-y-4">
       <AppPageHeader
-        description="GRNs the ERP sent. Goods in go into the location's Main Store as they arrive; a reverse takes what the store holds and waits for the rest to come back from the restaurants."
+        description="GRNs the ERP sent. Goods in go into the location's Main Store as they arrive and a reverse takes the batch back out; a GRN AAHAR cannot take is on ERP GRN errors."
         eyebrow={log ? 'Logs' : 'Inventory'}
         title={log ? 'ERP GRN log' : 'ERP GRNs'}
       />

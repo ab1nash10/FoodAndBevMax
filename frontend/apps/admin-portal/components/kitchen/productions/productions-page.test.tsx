@@ -184,12 +184,16 @@ describe('the production board', () => {
     expect(screen.queryByRole('link', { name: /new production/i })).toBeNull();
   });
 
-  it('opens a production when its card is clicked', async () => {
+  it('opens a production from its number only: clicking the card does nothing', async () => {
     const { user } = renderScreen(<KitchenProductionsPageClient />);
 
     await user.click(await screen.findByText('Ravi Kumar'));
+    expect(router.push).not.toHaveBeenCalled();
 
-    expect(router.push).toHaveBeenCalledWith('/kitchen/productions?id=kp-1');
+    expect(screen.getByRole('link', { name: 'KP-001' })).toHaveAttribute(
+      'href',
+      '/kitchen/productions?id=kp-1',
+    );
   });
 
   it('opens the production named in the link in place of the board', async () => {
