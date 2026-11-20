@@ -2,6 +2,10 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "allowJs": true,
+    // An app emits no .d.ts: the base's declaration output (for the packages) made next build
+    // demand portable types on every export, and the test helpers' vi.fn() types are not.
+    "declaration": false,
+    "declarationMap": false,
     "jsx": "preserve",
     "noEmit": true,
     "paths": {
