@@ -40,11 +40,7 @@ import {
   SearchInput,
   StatusToggleCell,
 } from '@/components/organization/shared/list-controls';
-import {
-  activeFilterToBoolean,
-  listLimit,
-  nullableText,
-} from '@/components/organization/shared/utils';
+import { activeFilterToBoolean, nullableText } from '@/components/organization/shared/utils';
 import {
   freezeServicesMessage,
   getLocationCode,
@@ -62,6 +58,7 @@ import {
   locationMatching,
 } from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
+import { useListLimit } from '@/lib/list-limit';
 
 export function HospitalsPageClient() {
   const router = useRouter();
@@ -70,6 +67,7 @@ export function HospitalsPageClient() {
   const { showToast } = useToast();
   const confirm = useConfirm();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -96,7 +94,7 @@ export function HospitalsPageClient() {
       const response = await organizationApi.listHospitals({
         city: cityFilter || undefined,
         isActive: activeFilterToBoolean(activeFilter),
-        limit: listLimit,
+        limit,
         onlinePaymentOption: onlinePaymentFilter || undefined,
         page,
         search,
@@ -108,6 +106,7 @@ export function HospitalsPageClient() {
       return response.data;
     },
     queryKey: queryKeys.hospitals({
+      limit,
       activeFilter,
       cityFilter,
       onlinePaymentFilter,
@@ -159,7 +158,7 @@ export function HospitalsPageClient() {
 
   const items = locationsQuery.data?.items ?? [];
   const meta = locationsQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -402,12 +401,7 @@ export function HospitalsPageClient() {
                   const canOpen = canOpenPath(editHref, hasPermission);
 
                   return (
-                    <tr
-                      className={cn(tableStyles.row, !canOpen && 'cursor-default')}
-                      data-record-id={location.id}
-                      key={location.id}
-                      onClick={canOpen ? () => router.push(editHref) : undefined}
-                    >
+                    <tr className={tableStyles.row} data-record-id={location.id} key={location.id}>
                       <td className={tableStyles.td}>
                         <span className="flex min-w-0 items-center gap-3">
                           <RecordAvatar name={title} />
@@ -447,10 +441,12 @@ export function HospitalsPageClient() {
                       <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                         {location.onlinePaymentOption}
                       </td>
-                      {/* Its own click: switching the status does not open the location. */}
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <td className={tableStyles.td}>
                         <StatusToggleCell
-                          disabled={statusMutation.isPending && statusUpdatingId === location.id}
+                          disabled={
+                            !hasPermission('HOSPITAL_UPDATE') ||
+                            (statusMutation.isPending && statusUpdatingId === location.id)
+                          }
                           isActive={location.isActive}
                           onToggle={() => void toggleLocationStatus(location)}
                           showFrozenMessage={!location.isActive}
@@ -490,6 +486,7 @@ export function HospitalsPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

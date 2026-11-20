@@ -67,10 +67,10 @@ import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  listLimit,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 const categoryColumns: Array<CsvColumn<ItemCategory>> = [
   {
@@ -143,6 +143,7 @@ function useEntityList<TItem>(
 
 export function ItemCategoriesPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -170,7 +171,7 @@ export function ItemCategoriesPageClient() {
     'item-categories',
     {
       isActive: activeFilterToBoolean(activeFilter),
-      limit: listLimit,
+      limit,
       page,
       search,
       sortBy,
@@ -249,7 +250,7 @@ export function ItemCategoriesPageClient() {
 
   const items = categoriesQuery.data?.items ?? [];
   const meta = categoriesQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -470,7 +471,7 @@ export function ItemCategoriesPageClient() {
                   <RowSwitch
                     ariaLabel={`${category.categoryName} active`}
                     checked={category.isActive}
-                    disabled={toggleCategoryStatusMutation.isPending}
+                    disabled={toggleCategoryStatusMutation.isPending || !canEditCategories}
                     offLabel="Inactive"
                     onChange={() => void toggleCategoryStatus(category)}
                     onLabel="Active"
@@ -501,12 +502,7 @@ export function ItemCategoriesPageClient() {
               <tbody>
                 {items.length > 0 ? (
                   items.map((category) => (
-                    <tr
-                      className={cn(tableStyles.row, !canEditCategories && 'cursor-default')}
-                      data-record-id={category.id}
-                      key={category.id}
-                      onClick={canEditCategories ? () => startEditingCategory(category) : undefined}
-                    >
+                    <tr className={tableStyles.row} data-record-id={category.id} key={category.id}>
                       <td className={cn(tableStyles.td, tableStyles.title)}>
                         <span className="flex min-w-0 items-center gap-3">
                           <RecordAvatar name={category.categoryName} />
@@ -519,13 +515,12 @@ export function ItemCategoriesPageClient() {
                       <td className={tableStyles.td}>
                         <DateTimeCell value={category.updatedAt} />
                       </td>
-                      {/* Its own click: switching the status does not open the category. */}
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <td className={tableStyles.td}>
                         <span className="flex items-center gap-2">
                           <Toggle
                             ariaLabel={`${category.categoryName} active`}
                             checked={category.isActive}
-                            disabled={toggleCategoryStatusMutation.isPending}
+                            disabled={toggleCategoryStatusMutation.isPending || !canEditCategories}
                             onChange={() => void toggleCategoryStatus(category)}
                           />
                           <span
@@ -569,6 +564,7 @@ export function ItemCategoriesPageClient() {
           </div>
         )}
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

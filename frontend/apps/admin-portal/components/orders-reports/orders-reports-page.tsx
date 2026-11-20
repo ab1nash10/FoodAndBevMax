@@ -237,6 +237,8 @@ const columns: Column[] = [
       row.roomNumber ? `${row.roomNumber}${row.bedNumber ? ` / Bed ${row.bedNumber}` : ''}` : '',
     header: 'Room',
   },
+  // A dine-in table's QR order: served at this table.
+  { cell: (row) => row.tableName ?? '', header: 'Table' },
   { cell: (row) => <YesNo label="Paid online" yes={row.online} />, header: 'Online' },
   { cell: (row) => <Lines lines={historyOf(row)} />, header: 'History' },
   {

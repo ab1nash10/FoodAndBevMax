@@ -197,6 +197,8 @@ function OrderCard({
   order: RestaurantOrder;
 }>) {
   const confirm = useConfirm();
+  // Someone answers for every room delivery: Delivered waits for a steward.
+  const needsSteward = order.channel === 'ROOM' && next?.status === 'COLLECTED' && !order.stewardId;
 
   return (
     <li className="rounded-md border border-ds-border bg-ds-surface p-3 shadow-sm">
@@ -204,12 +206,18 @@ function OrderCard({
         <span className="text-2xl font-bold tabular-nums text-ds-text">{order.orderNumber}</span>
         <span className="flex items-center gap-2 text-xs text-ds-muted">
           <span className="rounded bg-ds-subtle px-1.5 py-0.5 font-medium">
-            {order.channel === 'ROOM' ? 'Room' : sourceLabels[order.source]}
+            {order.channel === 'ROOM'
+              ? 'Room'
+              : order.channel === 'TABLE'
+                ? 'Table'
+                : sourceLabels[order.source]}
           </span>
           {minutesSince(order.placedAt, now)}
         </span>
       </div>
-      {order.roomNumber ? (
+      {order.tableName ? (
+        <p className="mt-1 text-sm font-semibold text-ds-link">Table {order.tableName}</p>
+      ) : order.roomNumber ? (
         <p className="mt-1 text-sm font-semibold text-ds-link">
           Room {order.roomNumber}
           {order.bedNumber ? ` · Bed ${order.bedNumber}` : ''}
@@ -233,7 +241,8 @@ function OrderCard({
           {order.instructions}
         </p>
       ) : null}
-      {onSteward ? (
+      {/* Stewards take orders to rooms; a counter order is picked up and needs none. */}
+      {order.channel !== 'ROOM' ? null : onSteward ? (
         <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-ds-text-3">
           Steward
           <Select
@@ -260,13 +269,23 @@ function OrderCard({
         <div className="mt-3 flex flex-wrap gap-2">
           {next ? (
             <Button
-              disabled={isPending}
+              disabled={isPending || needsSteward}
               onClick={() => onMove(next.status)}
               size="sm"
+              title={needsSteward ? 'Choose a steward first' : undefined}
               type="button"
             >
-              {order.channel === 'ROOM' && next.status === 'COLLECTED' ? 'Delivered' : next.label}
+              {next.status === 'COLLECTED' && order.channel === 'ROOM'
+                ? 'Delivered'
+                : next.status === 'COLLECTED' && order.channel === 'TABLE'
+                  ? 'Served'
+                  : next.label}
             </Button>
+          ) : null}
+          {needsSteward ? (
+            <p className="basis-full text-xs text-ds-text-3">
+              Choose a steward first: they take it to the room.
+            </p>
           ) : null}
           {order.status === 'READY' ? (
             <Button

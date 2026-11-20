@@ -521,12 +521,14 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               ['isOpen24x7', 'Open 24x7'],
               ['isPosOrdersEnabled', 'POS Orders'],
               ['isInRoomDiningEnabled', 'In Room Dining'],
+              // Its dine-in tables' QRs take orders (Rooms & Tables → Tables).
+              ['isAtTableDiningEnabled', 'At Table Dining'],
               ['isTakeawayEnabled', 'Takeaway'],
               ['isOnlineOrdersEnabled', 'Online Orders'],
               ['isInventoryEnabled', 'Inventory'],
               ['isIhcOnly', 'IHC Only'],
-              // Veg only, delivery, home delivery, at-table and in-car dining are no longer
-              // offered; their saved values (like the Sodexo MID/TID) still round-trip unchanged.
+              // Veg only, delivery, home delivery and in-car dining are no longer offered; their
+              // saved values (like the Sodexo MID/TID) still round-trip unchanged.
             ].map(([name, label]) => (
               <CheckboxLine
                 input={

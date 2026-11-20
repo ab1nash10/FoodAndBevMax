@@ -2,20 +2,17 @@
 
 import { Button } from '@aahar/ui';
 import type { Employee, EmployeeInput } from '@aahar/api-client';
-import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, type ChangeEvent } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, FieldError, Input, RequiredMark } from '@/components/ui';
 import { CheckboxLine } from '@/components/master-data/shared/components';
 import { optionalText } from '@/components/master-data/shared/schemas';
+import { EmployeeSearch } from '@/components/master-data/employees/employee-search';
 import { MasterLocationSelect } from '@/components/master-location';
 import { useHospitalOptions } from '@/components/organization/shared/hooks';
 import { LegalEntitySelect } from '@/components/organization/shared/legal-entity-select';
 import { optionalEmail } from '@/components/organization/shared/schemas';
-import { organizationApi } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
-import { useDebouncedValue } from '@/lib/use-url-state';
 
 export const employeeSchema = z.object({
   /** YYYY-MM-DD from the date box; empty when not known. */
@@ -168,24 +165,6 @@ function ReportingManagerField({
 }: Readonly<{ employeeId?: string; form: UseFormReturn<EmployeeFormValues> }>) {
   const manager = form.watch('reportingManager');
   const hospitalId = form.watch('hospitalId');
-  const [search, setSearch] = useState('');
-  const term = useDebouncedValue(search.trim());
-  const matchesQuery = useQuery({
-    enabled: !manager && term.length > 0,
-    queryFn: async () => {
-      const response = await organizationApi.listEmployees({
-        // That location's employees and the shared ones.
-        hospitalId: hospitalId || undefined,
-        isActive: true,
-        limit: 8,
-        search: term,
-      });
-
-      return response.data.items.filter((match) => match.id !== employeeId);
-    },
-    queryKey: queryKeys.employees({ hospitalId, managerSearch: term }),
-  });
-  const matches = matchesQuery.data ?? [];
 
   if (manager) {
     return (
@@ -209,50 +188,19 @@ function ReportingManagerField({
   }
 
   return (
-    <Field label="Reporting Manager" name="employee-manager">
-      <div className="relative">
-        <Input
-          autoComplete="off"
-          id="employee-manager"
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name or code"
-          value={search}
-        />
-        {term ? (
-          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-white py-1 shadow-md">
-            {matchesQuery.isLoading ? (
-              <li className="px-3 py-2 text-sm text-ds-muted">Searching…</li>
-            ) : matches.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-ds-muted">No employee found.</li>
-            ) : (
-              matches.map((match) => (
-                <li key={match.id}>
-                  <button
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-ds-subtle"
-                    onClick={() => {
-                      form.setValue(
-                        'reportingManager',
-                        {
-                          employeeCode: match.employeeCode,
-                          employeeName: match.employeeName,
-                          id: match.id,
-                        },
-                        { shouldDirty: true },
-                      );
-                      setSearch('');
-                    }}
-                    type="button"
-                  >
-                    {match.employeeName}{' '}
-                    <span className="text-ds-muted">({match.employeeCode})</span>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        ) : null}
-      </div>
-    </Field>
+    <EmployeeSearch
+      excludeId={employeeId}
+      hospitalId={hospitalId}
+      id="employee-manager"
+      label="Reporting Manager"
+      onPick={(match) =>
+        form.setValue(
+          'reportingManager',
+          { employeeCode: match.employeeCode, employeeName: match.employeeName, id: match.id },
+          { shouldDirty: true },
+        )
+      }
+    />
   );
 }
 

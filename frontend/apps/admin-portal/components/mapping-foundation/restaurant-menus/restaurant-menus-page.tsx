@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Pencil, Plus } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type {
@@ -33,7 +33,12 @@ import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import { FilterSearch, Modal } from '@/components/ui-controls';
-import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
+import {
+  useOnScopeChange,
+  useUrlNumberParam,
+  useUrlParam,
+  useUrlSearchParam,
+} from '@/lib/use-url-state';
 import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -52,11 +57,11 @@ import type { ActiveFilter } from '@/components/mapping-foundation/shared/types'
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  listLimit,
   useItemOptions,
 } from '@/components/mapping-foundation/shared/utils';
 import { rupees, useItemCategoryOptions } from '@/components/master-data/items/shared';
 import { queryKeys } from '@/lib/query-keys';
+import { useListLimit } from '@/lib/list-limit';
 import { SetupNotice, useLocationName } from '@/components/location-empty-states';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -272,10 +277,11 @@ function daysText(menu: RestaurantMenu): string {
 
 export function RestaurantMenusPageClient() {
   const { hasPermission } = useAuth();
-  const { scopedHospitalId } = useLocationContext();
+  const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const locationName = useLocationName();
   const formId = useId();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [view, setView] = useListView('list');
@@ -301,11 +307,12 @@ export function RestaurantMenusPageClient() {
   const canCreate = hasPermission('RESTAURANT_MENU_CREATE');
   const canEdit = hasPermission('RESTAURANT_MENU_UPDATE');
 
-  // A different location in the top bar is a different set of restaurants.
-  useEffect(() => {
+  // A different location in the top bar is a different set of restaurants. Not on the first
+  // load, so the page in the link survives a refresh.
+  useOnScopeChange(scopedHospitalId, isLoadingLocations, () => {
     setRestaurantFilter('');
     setPage(1);
-  }, [scopedHospitalId, setPage]);
+  });
 
   const referenceMenusQuery = useQuery<RestaurantMenu[]>({
     enabled: Boolean(selectedRestaurantId) && formMenu !== null,
@@ -329,7 +336,7 @@ export function RestaurantMenusPageClient() {
         hospitalId: scopedHospitalId || undefined,
         isActive: activeFilterToBoolean(activeFilter),
         isAvailable: availabilityFilterToBoolean(availabilityFilter),
-        limit: listLimit,
+        limit,
         page,
         restaurantId: restaurantFilter,
         search,
@@ -340,6 +347,7 @@ export function RestaurantMenusPageClient() {
       return response.data;
     },
     queryKey: queryKeys.restaurantMenus({
+      limit,
       activeFilter,
       availabilityFilter,
       dayFilter,
@@ -426,7 +434,7 @@ export function RestaurantMenusPageClient() {
   const menus = menusQuery.data?.items ?? [];
   const referenceMenus =
     referenceMenusQuery.data?.filter((menu) => menu.id !== editingMenu?.id) ?? [];
-  const meta = menusQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = menusQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
 
   const handleSubmit = form.handleSubmit((values) => {
     const parsed = restaurantMenuSchema.safeParse(values);
@@ -814,12 +822,7 @@ export function RestaurantMenusPageClient() {
                     const prices = priceLines(menu);
 
                     return (
-                      <tr
-                        className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                        data-record-id={menu.id}
-                        key={menu.id}
-                        onClick={canEdit ? () => openForm(menu) : undefined}
-                      >
+                      <tr className={tableStyles.row} data-record-id={menu.id} key={menu.id}>
                         <td className={tableStyles.td}>
                           <span className="flex min-w-0 items-center gap-3">
                             <RecordAvatar foodType={menu.item.type} name={menu.item.itemName} />
@@ -889,7 +892,7 @@ export function RestaurantMenusPageClient() {
                           ))}
                         </td>
                         {/* The switches have their own clicks: they do not open the menu item. */}
-                        <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <td className={tableStyles.td}>
                           <RowSwitch
                             ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} available`}
                             checked={menu.isAvailable}
@@ -899,7 +902,7 @@ export function RestaurantMenusPageClient() {
                             onLabel="Available"
                           />
                         </td>
-                        <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                        <td className={tableStyles.td}>
                           <RowSwitch
                             ariaLabel={`${menu.item.itemName} in ${menu.restaurant.restaurantName} active`}
                             checked={menu.isActive}
@@ -940,6 +943,7 @@ export function RestaurantMenusPageClient() {
           </div>
         )}
         <ListPager
+          onLimitChange={setLimit}
           limit={meta.limit}
           noun="menu item"
           onPageChange={setPage}

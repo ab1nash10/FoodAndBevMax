@@ -25,7 +25,7 @@ import {
 } from '@/components/master-data/shared/components';
 import { PageHeader } from '@/components/organization/shared/list-controls';
 import type { ActiveFilter } from '@/components/master-data/shared/types';
-import { activeFilterToBoolean, listLimit } from '@/components/master-data/shared/utils';
+import { activeFilterToBoolean } from '@/components/master-data/shared/utils';
 import { CheckboxLine } from '@/components/organization/shared/form-controls';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Panel } from '@/components/ui';
@@ -41,6 +41,7 @@ import {
 import { queryKeys } from '@/lib/query-keys';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 /** GSTIN: state code, PAN, entity number, the letter Z, check character. The server checks too. */
 const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -62,6 +63,7 @@ export function LegalEntitiesPageClient() {
   const canCreate = isSuperAdmin && hasPermission('HOSPITAL_CREATE');
   const canEdit = isSuperAdmin && hasPermission('HOSPITAL_UPDATE');
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
     'active',
@@ -79,7 +81,7 @@ export function LegalEntitiesPageClient() {
 
   const query = {
     isActive: activeFilterToBoolean(activeFilter),
-    limit: listLimit,
+    limit,
     page,
     search,
     sortBy,
@@ -205,7 +207,7 @@ export function LegalEntitiesPageClient() {
   );
 
   const items = entitiesQuery.data?.items ?? [];
-  const meta = entitiesQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = entitiesQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const { errors } = form.formState;
 
   return (
@@ -410,12 +412,7 @@ export function LegalEntitiesPageClient() {
             <tbody>
               {items.length > 0 ? (
                 items.map((entity) => (
-                  <tr
-                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                    data-record-id={entity.id}
-                    key={entity.id}
-                    onClick={canEdit ? () => openDialog(entity) : undefined}
-                  >
+                  <tr className={tableStyles.row} data-record-id={entity.id} key={entity.id}>
                     <td className={cn(tableStyles.td, tableStyles.title)}>
                       {entity.locationName ?? '—'}
                     </td>
@@ -428,8 +425,7 @@ export function LegalEntitiesPageClient() {
                     >
                       {entity.gstNumber}
                     </td>
-                    {/* Its own click: switching the status does not open the entity. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <span className="flex items-center gap-2">
                         <Toggle
                           ariaLabel={`${entity.entityName} active`}
@@ -478,6 +474,7 @@ export function LegalEntitiesPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

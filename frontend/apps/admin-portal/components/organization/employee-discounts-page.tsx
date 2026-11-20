@@ -22,7 +22,7 @@ import {
   QueryState,
   SearchInput,
 } from '@/components/master-data/shared/components';
-import { formatDate, listLimit } from '@/components/master-data/shared/utils';
+import { formatDate } from '@/components/master-data/shared/utils';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Label, Panel, Select } from '@/components/ui';
 import { Modal, SegmentedControl } from '@/components/ui-controls';
@@ -30,6 +30,7 @@ import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 const days: Array<{ label: string; value: DayOfWeek }> = [
   { label: 'Mon', value: 'MONDAY' },
@@ -135,6 +136,7 @@ function toInput(values: FormValues): EmployeeDiscountInput {
  */
 export function EmployeeDiscountsPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [restaurantFilter, setRestaurantFilter] = useUrlParam('restaurant');
   const [view, setView] = useUrlParam<'archived' | 'live'>('view', 'live', ['archived', 'live']);
@@ -166,7 +168,7 @@ export function EmployeeDiscountsPageClient() {
   const listQuery = {
     archived: view === 'archived',
     hospitalId: scopedHospitalId,
-    limit: listLimit,
+    limit,
     page,
     restaurantId: restaurantFilter || undefined,
     search,
@@ -272,7 +274,7 @@ export function EmployeeDiscountsPageClient() {
 
   const problems = formProblems(values);
   const discounts = discountsQuery.data?.items ?? [];
-  const meta = discountsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = discountsQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const counts = countsQuery.data;
   const total = counts ? counts.live + counts.archived : undefined;
   const set = (patch: Partial<FormValues>) => setValues((current) => ({ ...current, ...patch }));
@@ -668,6 +670,7 @@ export function EmployeeDiscountsPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

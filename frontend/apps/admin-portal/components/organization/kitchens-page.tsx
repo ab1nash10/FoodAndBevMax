@@ -44,7 +44,7 @@ import {
   SearchInput,
   StatusToggleCell,
 } from '@/components/organization/shared/list-controls';
-import { activeFilterToBoolean, listLimit } from '@/components/organization/shared/utils';
+import { activeFilterToBoolean } from '@/components/organization/shared/utils';
 import {
   formatLocationOption,
   freezeServicesMessage,
@@ -61,6 +61,7 @@ import {
 } from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 export function KitchensPageClient() {
   const queryClient = useQueryClient();
@@ -71,6 +72,7 @@ export function KitchensPageClient() {
   const confirm = useConfirm();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -96,7 +98,7 @@ export function KitchensPageClient() {
       const response = await organizationApi.listKitchens({
         hospitalId: hospitalFilter || undefined,
         isActive: activeFilterToBoolean(activeFilter),
-        limit: listLimit,
+        limit,
         page,
         search,
         sortBy,
@@ -105,7 +107,15 @@ export function KitchensPageClient() {
 
       return response.data;
     },
-    queryKey: queryKeys.kitchens({ activeFilter, hospitalFilter, page, search, sortBy, sortOrder }),
+    queryKey: queryKeys.kitchens({
+      limit,
+      activeFilter,
+      hospitalFilter,
+      page,
+      search,
+      sortBy,
+      sortOrder,
+    }),
   });
 
   // Under the list's own key, so whatever refreshes the list refreshes these counts too.
@@ -169,7 +179,7 @@ export function KitchensPageClient() {
 
   const items = kitchensQuery.data?.items ?? [];
   const meta = kitchensQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -372,12 +382,7 @@ export function KitchensPageClient() {
             <tbody>
               {items.length > 0 ? (
                 items.map((kitchen) => (
-                  <tr
-                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                    data-record-id={kitchen.id}
-                    key={kitchen.id}
-                    onClick={canEdit ? () => setEditingKitchen(kitchen) : undefined}
-                  >
+                  <tr className={tableStyles.row} data-record-id={kitchen.id} key={kitchen.id}>
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
                         <RecordAvatar name={kitchen.kitchenName} />
@@ -394,10 +399,11 @@ export function KitchensPageClient() {
                     <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {getLocationDisplayName(kitchen.hospital)}
                     </td>
-                    {/* Its own click: switching the status does not open the kitchen. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <StatusToggleCell
-                        disabled={statusMutation.isPending && statusUpdatingId === kitchen.id}
+                        disabled={
+                          !canEdit || (statusMutation.isPending && statusUpdatingId === kitchen.id)
+                        }
                         isActive={kitchen.isActive}
                         onToggle={() => void toggleKitchenStatus(kitchen)}
                         showFrozenMessage={!kitchen.hospital.isActive}
@@ -435,6 +441,7 @@ export function KitchensPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

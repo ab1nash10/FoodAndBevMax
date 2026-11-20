@@ -2,7 +2,7 @@
 
 import { Button } from '@aahar/ui';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckboxLine } from '@/components/organization/shared/form-controls';
 import { Field, Input } from '@/components/ui';
@@ -18,6 +18,8 @@ export interface EditMasterValues {
  * changed here: moving one that already holds stock would leave its history at the old place.
  */
 export function EditMasterDialog({
+  asTyped = false,
+  children,
   isPending,
   location,
   nameLabel,
@@ -26,6 +28,10 @@ export function EditMasterDialog({
   record,
   title,
 }: Readonly<{
+  /** Keep the name exactly as typed, not in Title Case (room and bed names). */
+  asTyped?: boolean;
+  /** More fields, under the name (a new table's restaurant). */
+  children?: ReactNode;
   isPending: boolean;
   location: string;
   nameLabel: string;
@@ -85,6 +91,7 @@ export function EditMasterDialog({
           required
         >
           <Input
+            autoCapitalize={asTyped ? 'none' : undefined}
             id={`${formId}-name`}
             maxLength={150}
             {...form.register('name', {
@@ -92,6 +99,7 @@ export function EditMasterDialog({
             })}
           />
         </Field>
+        {children}
         <Field label="Location" name={`${formId}-location`}>
           <Input id={`${formId}-location`} readOnly value={location} />
         </Field>

@@ -50,12 +50,14 @@ import type { ActiveFilter } from '@/components/master-data/shared/types';
 import {
   activeFilterToBoolean,
   applyValidationErrors,
-  listLimit,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 import { useLocationContext } from '@/components/location-context';
 import { MasterLocationCell, useMasterEditing } from '@/components/master-location';
+import { useAuth } from '@/components/auth-provider';
+import { IfCanOpen } from '@/components/record-link';
 
 const requiredFields = employeeSchema.pick({ employeeName: true });
 
@@ -77,6 +79,7 @@ type EmployeeDialog = { mode: 'create' } | { employee: Employee; mode: 'edit' };
 
 export function EmployeesPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -94,6 +97,8 @@ export function EmployeesPageClient() {
 
   const { scopedHospitalId } = useLocationContext();
   const { canEdit, defaultHospitalId } = useMasterEditing();
+  // As the server checks: EMPLOYEE_UPDATE to edit or switch one.
+  const canUpdate = useAuth().hasPermission('EMPLOYEE_UPDATE');
   const form = useForm<EmployeeFormValues>({
     defaultValues: emptyEmployeeFormValues(defaultHospitalId),
   });
@@ -104,7 +109,7 @@ export function EmployeesPageClient() {
         eligibleForDiscount: discountFilterToBoolean(discountFilter),
         hospitalId: scopedHospitalId,
         isActive: activeFilterToBoolean(activeFilter),
-        limit: listLimit,
+        limit,
         page,
         search,
         sortBy,
@@ -114,6 +119,7 @@ export function EmployeesPageClient() {
       return response.data;
     },
     queryKey: queryKeys.employees({
+      limit,
       activeFilter,
       discountFilter,
       page,
@@ -205,7 +211,7 @@ export function EmployeesPageClient() {
 
   const employees = employeesQuery.data?.items ?? [];
   const meta = employeesQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -286,10 +292,12 @@ export function EmployeesPageClient() {
               onImported={() => invalidateEmployeeQueries(queryClient)}
             />
             <ImportButton definition={employeeImport} />
-            <Button onClick={openCreate} type="button">
-              <Plus className="h-4 w-4" />
-              New employee
-            </Button>
+            <IfCanOpen href="/masters/employees/new">
+              <Button onClick={openCreate} type="button">
+                <Plus className="h-4 w-4" />
+                New employee
+              </Button>
+            </IfCanOpen>
           </>
         }
         count={stats?.all}
@@ -414,15 +422,10 @@ export function EmployeesPageClient() {
             <tbody>
               {employees.length > 0 ? (
                 employees.map((employee) => {
-                  const editable = canEdit(employee);
+                  const editable = canUpdate && canEdit(employee);
 
                   return (
-                    <tr
-                      className={cn(tableStyles.row, !editable && 'cursor-default')}
-                      data-record-id={employee.id}
-                      key={employee.id}
-                      onClick={editable ? () => openEdit(employee) : undefined}
-                    >
+                    <tr className={tableStyles.row} data-record-id={employee.id} key={employee.id}>
                       <td className={tableStyles.td}>
                         <span className="flex min-w-0 items-center gap-3">
                           <RecordAvatar name={employee.employeeName} />
@@ -455,8 +458,7 @@ export function EmployeesPageClient() {
                           {employee.eligibleForDiscount ? 'Eligible' : 'Not eligible'}
                         </Badge>
                       </td>
-                      {/* Its own click: switching the status does not open the employee. */}
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <td className={tableStyles.td}>
                         <span className="flex items-center gap-2">
                           <Toggle
                             ariaLabel={`${employee.employeeName} active`}
@@ -507,6 +509,7 @@ export function EmployeesPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

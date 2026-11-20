@@ -54,11 +54,7 @@ import {
   QueryState,
   SearchInput,
 } from '@/components/organization/shared/list-controls';
-import {
-  activeFilterToBoolean,
-  formatDate,
-  listLimit,
-} from '@/components/organization/shared/utils';
+import { activeFilterToBoolean, formatDate } from '@/components/organization/shared/utils';
 import {
   formatRestaurantLocationDisplay,
   freezeServicesMessage,
@@ -72,6 +68,7 @@ import { StaffDiscountPanel } from '@/components/organization/staff-discount-pan
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 import { prefetchOnIntent, restaurantDetailQuery } from '@/lib/detail-queries';
+import { useListLimit } from '@/lib/list-limit';
 
 function RestaurantThumbnail({ restaurant }: Readonly<{ restaurant: Restaurant }>) {
   if (restaurant.thumbnailUrl) {
@@ -98,6 +95,7 @@ export function RestaurantsPageClient() {
   const confirm = useConfirm();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -119,7 +117,7 @@ export function RestaurantsPageClient() {
       const response = await organizationApi.listRestaurants({
         hospitalId: scopedHospitalId,
         isActive: activeFilterToBoolean(activeFilter),
-        limit: listLimit,
+        limit,
         page,
         search,
         sortBy,
@@ -129,6 +127,7 @@ export function RestaurantsPageClient() {
       return response.data;
     },
     queryKey: queryKeys.restaurants({
+      limit,
       activeFilter,
       page,
       scopedHospitalId,
@@ -343,7 +342,7 @@ export function RestaurantsPageClient() {
 
   const items = restaurantsQuery.data?.items ?? [];
   const meta = restaurantsQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -490,10 +489,9 @@ export function RestaurantsPageClient() {
 
                   return (
                     <tr
-                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
+                      className={tableStyles.row}
                       data-record-id={restaurant.id}
                       key={restaurant.id}
-                      onClick={canEdit ? () => router.push(editHref) : undefined}
                       onMouseEnter={canEdit ? prefetchDetail.onMouseEnter : undefined}
                     >
                       <td className={tableStyles.td}>
@@ -514,8 +512,7 @@ export function RestaurantsPageClient() {
                           </div>
                         </div>
                       </td>
-                      {/* Its own click: switching online ordering does not open the restaurant. */}
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <td className={tableStyles.td}>
                         {/* Both switches read the same way: the switch, then its state. */}
                         <div
                           className="flex items-center gap-2"
@@ -527,7 +524,7 @@ export function RestaurantsPageClient() {
                           <Toggle
                             ariaLabel={`${restaurant.restaurantName} online ordering`}
                             checked={isOnline}
-                            disabled={isOnlineUpdating || !isOpen}
+                            disabled={!canEdit || isOnlineUpdating || !isOpen}
                             onChange={() => void handleOnlineToggle(restaurant)}
                           />
                           <span
@@ -540,12 +537,12 @@ export function RestaurantsPageClient() {
                           </span>
                         </div>
                       </td>
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <td className={tableStyles.td}>
                         <div className="flex items-center gap-2">
                           <Toggle
                             ariaLabel={`${restaurant.restaurantName} restaurant availability`}
                             checked={restaurant.isActive}
-                            disabled={statusMutation.isPending}
+                            disabled={!canEdit || statusMutation.isPending}
                             onChange={() => void toggleRestaurantStatus(restaurant)}
                           />
                           <span
@@ -634,6 +631,7 @@ export function RestaurantsPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}
@@ -664,9 +662,9 @@ export function RestaurantsPageClient() {
                 {qrRestaurant?.restaurantName ?? 'Restaurant menu QR'}
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-ds-muted sm:text-base">
-                Anyone can scan this code to order on their own phone and pay by UPI. Patients and
-                attendants have it delivered to their room; staff and visitors pick it up at the
-                counter.
+                Anyone can scan this code to order on their own phone, pay by UPI and pick it up at
+                the counter. For delivery to a room, patients scan the QR on their bed (Rooms &amp;
+                Tables).
               </p>
             </div>
             <Button
@@ -683,8 +681,8 @@ export function RestaurantsPageClient() {
             <div className="order-2 sm:order-1">
               <p className="text-[18px] font-extrabold text-[#14233b]">Ready to scan</p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-ds-muted">
-                Point a phone camera at the code. Guests choose room delivery or pickup at the
-                counter, add dishes, confirm a staff discount if they have one, and pay by UPI.
+                Point a phone camera at the code. Guests add dishes, confirm a staff discount if
+                they have one, pay by UPI and collect the order at the counter.
               </p>
               <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#eef5ff] px-3 py-2 text-[12px] font-bold text-[#2563eb]">
                 <span className="h-2 w-2 rounded-full bg-[#34a879]" /> Live menu link
