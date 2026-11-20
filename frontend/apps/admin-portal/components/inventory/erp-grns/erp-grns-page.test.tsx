@@ -210,6 +210,12 @@ describe('ERP GRNs', () => {
     expect(panel.getByText('Waiting')).toBeInTheDocument();
     expect(within(panel.getByRole('listitem', { name: 'Batch B-1' })).getByText('6')).toBeVisible();
     expect(panel.getByText(/runs again by itself/i)).toBeInTheDocument();
+    // The three ways it gets settled, and the hold meanwhile.
+    const settle = panel.getByRole('list', { name: 'How it gets settled' });
+    expect(settle).toHaveTextContent(/returns it to the Main Store/);
+    expect(settle).toHaveTextContent(/goods in \(flag 0\) of the difference/);
+    expect(settle).toHaveTextContent(/close it with a reason/);
+    expect(panel.getByText(/cannot be sold at this location's counters/)).toBeInTheDocument();
 
     await user.click(panel.getByRole('button', { name: 'Run now' }));
     await waitFor(() => expect(api.runGrnEntry).toHaveBeenCalledWith('ERP-1'));
@@ -239,17 +245,33 @@ describe('ERP GRNs', () => {
     await waitFor(() => expect(api.setGrnEntryRerun).toHaveBeenLastCalledWith('ERP-1', true));
   });
 
-  it('closes a reverse that cannot finish, only with a reason', async () => {
+  it('closes a reverse that cannot finish, only with one of the reasons (Other needs a note)', async () => {
     const { panel, user } = await open('ERP-1');
 
     await user.click(panel.getByRole('button', { name: 'Close reverse' }));
     const confirmClose = panel.getByRole('button', { name: 'Close it' });
     expect(confirmClose).toBeDisabled();
 
-    await user.type(panel.getByRole('textbox', { name: 'Reason for closing' }), 'Sold at the café');
+    const reason = panel.getByRole('combobox', { name: 'Reason for closing' });
+    expect(
+      within(reason)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual([
+      'Pick a reason',
+      'Sold or used',
+      'Wasted or damaged',
+      'ERP entry was wrong',
+      'Stock count was wrong',
+      'Other',
+    ]);
+    await user.selectOptions(reason, 'OTHER');
+    expect(confirmClose).toBeDisabled();
+    await user.selectOptions(reason, 'SOLD');
+    await user.type(panel.getByRole('textbox', { name: 'Note' }), 'At the café');
     await user.click(confirmClose);
     await waitFor(() =>
-      expect(api.closeGrnEntry).toHaveBeenCalledWith('ERP-1', 'Sold at the café'),
+      expect(api.closeGrnEntry).toHaveBeenCalledWith('ERP-1', 'SOLD', 'At the café'),
     );
     expect(await screen.findByText('GRN ERP-1 closed')).toBeInTheDocument();
   });

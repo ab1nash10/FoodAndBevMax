@@ -30,11 +30,15 @@ import { toDateOnly, toNumber } from '../common/values';
 import { GrnsRepository } from '../grns/grns.repository';
 import { isExpiredForAcceptance, sum } from '../grns/grns.helpers';
 import { siteBusinessDate } from '../pos/pos-pricing';
-import type {
-  ErpGrnRowDto,
-  ListGrnEntriesQueryDto,
-  ListGrnRefusalsQueryDto,
+import {
+  CLOSE_REASONS,
+  type CloseReason,
+  type ErpGrnRowDto,
+  type ErpStockQueryDto,
+  type ListGrnEntriesQueryDto,
+  type ListGrnRefusalsQueryDto,
 } from './dto/erp-grn.dto';
+import { remainingOf, round } from './held-batches';
 
 type Tx = Prisma.TransactionClient;
 
@@ -55,24 +59,8 @@ const MAX_ROWS = 2000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Quantities are kept to 3 decimals; sums of them are rounded back. */
-const round = (value: number) => Math.round(value * 1000) / 1000;
-
 /** A text field the ERP sent, or undefined if it left it out or blank. */
 const filled = (value?: string) => value?.trim() || undefined;
-
-/** What a row still has to move: sent, less what moved and what was closed. */
-const remainingOf = (row: {
-  acceptedQty: Prisma.Decimal | null;
-  rejectedQty: Prisma.Decimal | null;
-  sentQty: Prisma.Decimal | null;
-}) =>
-  Math.max(
-    0,
-    round(
-      toNumber(row.sentQty ?? 0) - toNumber(row.acceptedQty ?? 0) - toNumber(row.rejectedQty ?? 0),
-    ),
-  );
 
 /** The ERP's time; without a zone ("2026-10-26 15:50:00") it is India time. */
 export function indiaTime(value: string): Date {
@@ -295,24 +283,8 @@ export class ErpGrnsService implements OnModuleInit {
 
     try {
       const admin = { equals: F_AND_B_ADMIN, mode: 'insensitive' as const };
-      const [held, people] = await Promise.all([
-        this.prisma.stockBalance.findMany({
-          select: {
-            availableQty: true,
-            batchNumber: true,
-            itemId: true,
-            locationId: true,
-            locationType: true,
-          },
-          where: {
-            availableQty: { gt: 0 },
-            deletedAt: null,
-            hospitalId,
-            itemType: ItemType.MRP,
-            locationType: { in: [InventoryLocationType.RESTAURANT, InventoryLocationType.COUNTER] },
-            OR: rows.map((row) => ({ batchNumber: row.batchNumber, itemId: row.itemId })),
-          },
-        }),
+      const [holders, people] = await Promise.all([
+        this.holdersOf(hospitalId, rows),
         this.prisma.user.findMany({
           select: { email: true },
           where: {
@@ -343,46 +315,14 @@ export class ErpGrnsService implements OnModuleInit {
           },
         }),
       ]);
-      const idsOf = (type: InventoryLocationType) => [
-        ...new Set(held.filter((b) => b.locationType === type).map((b) => b.locationId)),
-      ];
-      const [restaurants, counters] = await Promise.all([
-        this.prisma.restaurant.findMany({
-          select: { id: true, restaurantName: true },
-          where: { id: { in: idsOf(InventoryLocationType.RESTAURANT) } },
-        }),
-        this.prisma.counter.findMany({
-          select: { counterName: true, id: true },
-          where: { id: { in: idsOf(InventoryLocationType.COUNTER) } },
-        }),
-      ]);
-      const names = new Map([
-        ...restaurants.map((r) => [r.id, r.restaurantName] as const),
-        ...counters.map((c) => [c.id, c.counterName] as const),
-      ]);
       const { html, subject } = owedReturnEmail({
-        batches: rows.map((row) => {
-          const byPlace = new Map<string, number>();
-          for (const b of held) {
-            if (b.itemId === row.itemId && b.batchNumber === row.batchNumber) {
-              byPlace.set(
-                b.locationId,
-                round((byPlace.get(b.locationId) ?? 0) + toNumber(b.availableQty)),
-              );
-            }
-          }
-
-          return {
-            batch: row.batchNumber,
-            holders: [...byPlace].map(([id, qty]) => ({
-              name: names.get(id) ?? 'A restaurant no longer in AAHAR',
-              qty,
-            })),
-            itemCode: row.itemCode,
-            itemName: row.itemName,
-            owed: remainingOf(row),
-          };
-        }),
+        batches: rows.map((row) => ({
+          batch: row.batchNumber,
+          holders: holders(row),
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          owed: remainingOf(row),
+        })),
         grnNumber,
         locationName: hospital.hospitalName,
         transactionNumber,
@@ -396,6 +336,109 @@ export class ErpGrnsService implements OnModuleInit {
     } catch (error) {
       logger.error({ err: error, grnNumber }, 'erp_grn_owed_alert_failed');
     }
+  }
+
+  /** Which restaurants and counters of the location hold these batches, and how much each. */
+  private async holdersOf(
+    hospitalId: string,
+    batches: Array<{ batchNumber: string; itemId: string }>,
+  ) {
+    const held = await this.prisma.stockBalance.findMany({
+      select: {
+        availableQty: true,
+        batchNumber: true,
+        itemId: true,
+        locationId: true,
+        locationType: true,
+      },
+      where: {
+        availableQty: { gt: 0 },
+        deletedAt: null,
+        hospitalId,
+        itemType: ItemType.MRP,
+        locationType: { in: [InventoryLocationType.RESTAURANT, InventoryLocationType.COUNTER] },
+        OR: batches.map(({ batchNumber, itemId }) => ({ batchNumber, itemId })),
+      },
+    });
+    const idsOf = (type: InventoryLocationType) => [
+      ...new Set(held.filter((b) => b.locationType === type).map((b) => b.locationId)),
+    ];
+    const [restaurants, counters] = await Promise.all([
+      this.prisma.restaurant.findMany({
+        select: { id: true, restaurantName: true },
+        where: { id: { in: idsOf(InventoryLocationType.RESTAURANT) } },
+      }),
+      this.prisma.counter.findMany({
+        select: { counterName: true, id: true },
+        where: { id: { in: idsOf(InventoryLocationType.COUNTER) } },
+      }),
+    ]);
+    const names = new Map([
+      ...restaurants.map((r) => [r.id, r.restaurantName] as const),
+      ...counters.map((c) => [c.id, c.counterName] as const),
+    ]);
+
+    return ({ batchNumber, itemId }: { batchNumber: string; itemId: string }) => {
+      const byPlace = new Map<string, number>();
+      for (const b of held) {
+        if (b.itemId === itemId && b.batchNumber === batchNumber) {
+          byPlace.set(
+            b.locationId,
+            round((byPlace.get(b.locationId) ?? 0) + toNumber(b.availableQty)),
+          );
+        }
+      }
+
+      return [...byPlace].map(([id, qty]) => ({
+        name: names.get(id) ?? 'A restaurant no longer in AAHAR',
+        qty,
+      }));
+    };
+  }
+
+  /**
+   * For the ERP before a return: how much of a batch the location's Main Store holds (what a
+   * return can take now), and which restaurants and counters hold the rest.
+   */
+  async stock(query: ErpStockQueryDto) {
+    const problems: string[] = [];
+    const location = query.location.trim();
+    const { hospital, items, store } = await this.resolveCodes(
+      location,
+      [query.part_item_code],
+      problems,
+    );
+
+    if (problems.length > 0 || !hospital || !store) {
+      throw new UnprocessableEntityException({ errors: problems, message: 'Stock cannot be read' });
+    }
+
+    const item = items.get(code(query.part_item_code))!;
+    const batchNumber = query.batch.trim();
+    const [inStore, holders] = await Promise.all([
+      this.prisma.stockBalance.aggregate({
+        _sum: { availableQty: true },
+        where: {
+          batchNumber,
+          deletedAt: null,
+          itemId: item.id,
+          itemType: ItemType.MRP,
+          locationId: store.id,
+          locationType: InventoryLocationType.STORE,
+        },
+      }),
+      this.holdersOf(hospital.id, [{ batchNumber, itemId: item.id }]),
+    ]);
+
+    return {
+      batch: batchNumber,
+      held_elsewhere: holders({ batchNumber, itemId: item.id }),
+      item_name: item.itemName,
+      location: hospital.hospitalCode,
+      location_name: hospital.hospitalName,
+      main_store_qty: round(toNumber(inStore._sum.availableQty ?? 0)),
+      part_item_code: item.itemCode,
+    };
   }
 
   /**
@@ -619,13 +662,27 @@ export class ErpGrnsService implements OnModuleInit {
     });
   }
 
-  /** Closes a waiting reverse that can never finish (the stock was sold): the rest is written off. */
-  async close(grnNumber: string, reason: string | undefined, context: ActorContext) {
-    const why = reason?.trim();
+  /**
+   * Closes a waiting reverse that can never finish (the stock was sold, wasted, or never there):
+   * the rest is written off with one of the reasons, and a note (needed for Other).
+   */
+  async close(
+    grnNumber: string,
+    reason: CloseReason | undefined,
+    note: string | undefined,
+    context: ActorContext,
+  ) {
+    const said = note?.trim();
 
-    if (!why) {
+    if (!reason) {
       throw new BadRequestException('Give a reason for closing it');
     }
+
+    if (reason === 'OTHER' && !said) {
+      throw new BadRequestException('Say what happened in the note');
+    }
+
+    const why = said ? `${CLOSE_REASONS[reason]}: ${said}` : CLOSE_REASONS[reason];
 
     return this.whileWaiting(grnNumber, async (tx, rows) => {
       for (const row of rows) {
@@ -816,7 +873,7 @@ export class ErpGrnsService implements OnModuleInit {
   private async resolveCodes(location: string, itemCodes: string[], problems: string[]) {
     const named = { equals: location, mode: 'insensitive' as const };
     const matches = await this.prisma.hospital.findMany({
-      select: { hospitalCode: true, id: true },
+      select: { hospitalCode: true, hospitalName: true, id: true },
       take: 5,
       where: {
         OR: [{ hospitalCode: named }, { hospitalName: named }, { displayName: named }],
@@ -1032,7 +1089,13 @@ export function owedReturnEmail(input: {
 <table style="border-collapse:collapse;font-size:14px;margin:12px 0">
 <thead><tr><th style="${cell}">Item</th><th style="${cell}">Batch</th><th style="${cell}">Owed</th><th style="${cell}">Held at</th></tr></thead>
 <tbody>${rows}</tbody></table>
-<p style="font-size:14px">AAHAR takes what is owed by itself as soon as the batch reaches the Main Store again, for example when a restaurant sends it back. If it was sold or lost, close the GRN with a reason on Inventory → ERP GRNs.</p>
+<p style="font-size:14px;margin-bottom:4px">To settle it:</p>
+<ul style="font-size:14px;margin-top:0;padding-left:20px">
+<li>If a restaurant or counter has the batch, it returns it to the Main Store in AAHAR. AAHAR takes what is owed by itself.</li>
+<li>If the ERP returned more than the vendor got, ask the ERP team to send a goods in (flag 0) of the difference for the batch. AAHAR settles it by itself.</li>
+<li>If it was sold, used or wasted, close the GRN with a reason on Inventory → ERP GRNs.</li>
+</ul>
+<p style="font-size:14px">Until then the batch cannot be sold at the location's counters.</p>
 <p style="font-size:13px;color:#667085">Max Healthcare · AAHAR</p>
 </div>`,
     subject: `GRN reverse ${input.grnNumber} at ${input.locationName}: ${owed} still owed to the vendor`,

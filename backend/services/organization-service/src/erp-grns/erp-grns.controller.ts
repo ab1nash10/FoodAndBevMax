@@ -27,6 +27,7 @@ import { getActorId, getIpAddress, type RequestContextLike } from '../common/req
 import {
   CloseGrnEntryDto,
   ErpGrnRowDto,
+  ErpStockQueryDto,
   ListGrnEntriesQueryDto,
   ListGrnRefusalsQueryDto,
   SetGrnEntryRerunDto,
@@ -48,11 +49,11 @@ import { ErpSignatureGuard } from './erp-signature.guard';
 @UseGuards(ErpSignatureGuard)
 // Every failure the ERP gets, from any of its calls, in one shape: success false + errors.
 @UseFilters(ErpRequestFilter)
-@Controller('erp/grns')
+@Controller('erp')
 export class ErpGrnsController {
   constructor(private readonly erpGrns: ErpGrnsService) {}
 
-  @Post()
+  @Post('grns')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Send a GRN: a JSON array of its rows, one per batch, all with the same grn_No',
@@ -86,13 +87,23 @@ export class ErpGrnsController {
     };
   }
 
-  @Get()
+  @Get('grns')
   @ApiOperation({ summary: 'GRNs with what was accepted and rejected, e.g. verified since a time' })
   async list(@Query() query: ListGrnEntriesQueryDto) {
     return { data: await this.erpGrns.list(query), message: 'Success', success: true };
   }
 
-  @Get(':grnNumber')
+  @Get('stock')
+  @ApiOperation({
+    summary:
+      'Before a return: how much of a batch the Main Store holds (main_store_qty), and which ' +
+      'restaurants and counters hold the rest (held_elsewhere)',
+  })
+  async stock(@Query() query: ErpStockQueryDto) {
+    return { data: await this.erpGrns.stock(query), message: 'Success', success: true };
+  }
+
+  @Get('grns/:grnNumber')
   @ApiOperation({ summary: 'One GRN: sent, accepted and rejected quantity of every batch' })
   @ApiParam({
     description: 'The grn_No, or the transaction_number AAHAR returned',
@@ -178,7 +189,7 @@ export class GrnEntriesController {
     @Req() request: RequestContextLike,
   ) {
     return {
-      data: await this.erpGrns.close(grnNumber, body.reason, actor(user, request)),
+      data: await this.erpGrns.close(grnNumber, body.reason, body.note, actor(user, request)),
       message: 'Success',
       success: true,
     };

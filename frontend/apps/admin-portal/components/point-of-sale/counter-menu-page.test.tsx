@@ -114,6 +114,16 @@ describe('the counter menu', () => {
     expect(rowOf('Thali')).toHaveTextContent('Sold out');
   });
 
+  it('shows stock on hold for a return to the vendor beside what can be sold', async () => {
+    api.getPosMenu.mockImplementation(() =>
+      reply({ counter, items: [item({ held: 2, stock: 3 })] }),
+    );
+    renderScreen(<CounterMenuPageClient />);
+
+    expect(await screen.findByText('Veg Sandwich')).toBeInTheDocument();
+    expect(rowOf('Veg Sandwich')).toHaveTextContent('32 on hold for return');
+  });
+
   it('counts what is on sale, sold out and out of stock', async () => {
     renderScreen(<CounterMenuPageClient />);
     await screen.findByText('Veg Sandwich');

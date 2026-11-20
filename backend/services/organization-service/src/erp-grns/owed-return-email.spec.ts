@@ -37,6 +37,24 @@ test('the email names the GRN, each batch still owed and where it is held, per r
   }
 });
 
+test('the email says the three ways it gets settled, and that the batch is on hold meanwhile', () => {
+  const { html } = owedReturnEmail({
+    batches: [{ batch: 'B1', holders: [], itemCode: 'I1', itemName: null, owed: 1 }],
+    grnNumber: 'G1',
+    locationName: 'Site',
+    transactionNumber: 't',
+  });
+
+  for (const text of [
+    'returns it to the Main Store in AAHAR',
+    'goods in (flag 0) of the difference',
+    'close the GRN with a reason on Inventory → ERP GRNs',
+    "cannot be sold at the location's counters",
+  ]) {
+    expect(html).toContain(text);
+  }
+});
+
 test('names are escaped, and a batch held nowhere says so', () => {
   const { html } = owedReturnEmail({
     batches: [{ batch: '<b>', holders: [], itemCode: 'X&Y', itemName: null, owed: 1 }],

@@ -238,6 +238,21 @@ describe('the till menu', () => {
     expect(tile('Masala Chai')).toHaveTextContent('2 left');
   });
 
+  it('says when the stock left is on hold for a return to the vendor', async () => {
+    api.getPosMenu.mockImplementation(() =>
+      reply({
+        counter: counter(),
+        items: [sandwich, { ...chai, held: 3, stock: 0 }, omelette, thali],
+      }),
+    );
+    const { user } = renderScreen(<BillingPageClient />);
+    await openAllItems(user);
+
+    const tile = screen.getByText('Masala Chai').closest('li')!;
+    expect(tile).toHaveTextContent('On hold for return');
+    expect(within(tile).getByRole('button', { name: 'Add Masala Chai' })).toBeDisabled();
+  });
+
   it('stops at the stock the counter has', async () => {
     const { user } = renderScreen(<BillingPageClient />);
     await openAllItems(user);

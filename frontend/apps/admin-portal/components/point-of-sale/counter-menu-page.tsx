@@ -214,6 +214,11 @@ export function CounterMenuPageClient() {
           )}
         >
           {item.stock === null ? 'Not tracked' : item.stock}
+          {item.held ? (
+            <span className="block text-[11.5px] font-normal text-ds-status-pending-fg">
+              {item.held} on hold for return
+            </span>
+          ) : null}
         </td>
         <td className={tableStyles.td}>
           <span className="flex flex-wrap items-center gap-2">

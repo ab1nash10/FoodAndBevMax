@@ -1,6 +1,13 @@
 'use client';
 
-import type { GrnEntry, GrnEntryQuery, GrnEntryRow, GrnEntryStatus } from '@aahar/api-client';
+import {
+  GRN_CLOSE_REASONS,
+  type GrnCloseReason,
+  type GrnEntry,
+  type GrnEntryQuery,
+  type GrnEntryRow,
+  type GrnEntryStatus,
+} from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileInput, Loader2, Pause, Play, RotateCw, XCircle } from 'lucide-react';
@@ -334,16 +341,22 @@ function ErpGrnPanel({
   const first = grn.rows[0]!;
   const waiting = grn.status === 'PENDING';
   const [closing, setClosing] = useState(false);
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState<'' | GrnCloseReason>('');
+  const [note, setNote] = useState('');
+  // Other says nothing by itself: it needs the note.
+  const canClose = reason !== '' && (reason !== 'OTHER' || note.trim() !== '');
   const action = useMutation({
     mutationFn: async (
-      act: { kind: 'close'; reason: string } | { kind: 'rerun'; active: boolean } | { kind: 'run' },
+      act:
+        | { kind: 'close'; note?: string; reason: GrnCloseReason }
+        | { kind: 'rerun'; active: boolean }
+        | { kind: 'run' },
     ) =>
       (act.kind === 'run'
         ? await grnEntriesApi.runGrnEntry(grn.grn_No)
         : act.kind === 'rerun'
           ? await grnEntriesApi.setGrnEntryRerun(grn.grn_No, act.active)
-          : await grnEntriesApi.closeGrnEntry(grn.grn_No, act.reason)
+          : await grnEntriesApi.closeGrnEntry(grn.grn_No, act.reason, act.note)
       ).data,
     onError: (error) =>
       showToast({
@@ -455,11 +468,24 @@ function ErpGrnPanel({
       </dl>
 
       {waiting ? (
-        <p className="mt-4 rounded-xl bg-ds-status-pending-bg px-3 py-2 text-[13px] text-ds-status-pending-fg">
-          {grn.rerun_active
-            ? `${show(grn.totals.pending_qty)} still out in the restaurants. It runs again by itself whenever the batch reaches the Main Store.`
-            : `${show(grn.totals.pending_qty)} still out in the restaurants. Automatic rerun is paused: run it now, or resume it.`}
-        </p>
+        <div className="mt-4 rounded-xl bg-ds-status-pending-bg px-3 py-2 text-[13px] text-ds-status-pending-fg">
+          <p>
+            {grn.rerun_active
+              ? `${show(grn.totals.pending_qty)} still owed to the vendor. It runs again by itself whenever the batch reaches the Main Store.`
+              : `${show(grn.totals.pending_qty)} still owed to the vendor. Automatic rerun is paused: run it now, or resume it.`}
+          </p>
+          <ul aria-label="How it gets settled" className="mt-1 list-disc pl-5">
+            <li>A restaurant or counter that has the batch returns it to the Main Store.</li>
+            <li>
+              If the ERP returned more than the vendor got, the ERP sends a goods in (flag 0) of the
+              difference.
+            </li>
+            <li>If it was sold, used or wasted, close it with a reason.</li>
+          </ul>
+          <p className="mt-1">
+            Until then the batch cannot be sold at this location&apos;s counters.
+          </p>
+        </div>
       ) : null}
 
       <ul aria-label="Items" className="mt-4 space-y-4">
@@ -486,7 +512,9 @@ function ErpGrnPanel({
           className="mt-4 grid gap-2 rounded-2xl border border-ds-border p-3"
           onSubmit={(event) => {
             event.preventDefault();
-            if (reason.trim()) action.mutate({ kind: 'close', reason: reason.trim() });
+            if (canClose && reason) {
+              action.mutate({ kind: 'close', note: note.trim() || undefined, reason });
+            }
           }}
         >
           <label className="text-[12.5px] text-ds-text-2" htmlFor="close-reason">
@@ -496,17 +524,35 @@ function ErpGrnPanel({
             The {show(grn.totals.pending_qty)} still waiting are written off; the ERP sees the
             reason when it reads the GRN back.
           </p>
-          <Input
+          <Select
             id="close-reason"
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="For example: sold at the café before the return"
+            onChange={(event) => setReason(event.target.value as '' | GrnCloseReason)}
             value={reason}
+          >
+            <option value="">Pick a reason</option>
+            {Object.entries(GRN_CLOSE_REASONS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+          <label className="text-[12.5px] text-ds-text-2" htmlFor="close-note">
+            Note
+          </label>
+          <Input
+            id="close-note"
+            maxLength={500}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder={
+              reason === 'OTHER' ? 'Say what happened' : 'Optional, e.g. sold at the café'
+            }
+            value={note}
           />
           <div className="flex justify-end gap-2">
             <Button onClick={() => setClosing(false)} type="button" variant="outline">
               Keep it waiting
             </Button>
-            <Button disabled={!reason.trim() || action.isPending} type="submit">
+            <Button disabled={!canClose || action.isPending} type="submit">
               Close it
             </Button>
           </div>

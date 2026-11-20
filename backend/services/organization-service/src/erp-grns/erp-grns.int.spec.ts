@@ -190,8 +190,8 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     h.api('POST', `/grn-entries/${encodeURIComponent(grnNumber)}/run`);
   const autoRerun = (grnNumber: string, active: boolean) =>
     h.api('PATCH', `/grn-entries/${encodeURIComponent(grnNumber)}/rerun`, { active });
-  const close = (grnNumber: string, reason?: string) =>
-    h.api('PATCH', `/grn-entries/${encodeURIComponent(grnNumber)}/close`, { reason });
+  const close = (grnNumber: string, body: Body = {}) =>
+    h.api('PATCH', `/grn-entries/${encodeURIComponent(grnNumber)}/close`, body);
 
   /**
    * A reverse still waiting for its batch, as the earlier rule left them (a return must now be
@@ -748,18 +748,66 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     expect(await storeQty(batch)).toBe(0);
     expect((await readBack(reverse)).totals).toMatchObject({ accepted_qty: 3, pending_qty: 2 });
 
-    // The rest was sold at the café: the store closes it, with a reason.
+    // The rest was sold at the café: the store closes it, with one of the reasons and a note.
     const noReason = await close(reverse);
     expect([noReason.status, noReason.body.message]).toEqual([400, 'Give a reason for closing it']);
-    expect((await close(reverse, 'Sold at the café')).status).toBe(200);
+    expect((await close(reverse, { reason: 'Sold at the café' })).status).toBe(400);
+    const otherUnsaid = await close(reverse, { reason: 'OTHER' });
+    expect([otherUnsaid.status, otherUnsaid.body.message]).toEqual([
+      400,
+      'Say what happened in the note',
+    ]);
+    expect((await close(reverse, { note: ' At the café ', reason: 'SOLD' })).status).toBe(200);
     const closed = await readBack(reverse);
     expect(closed).toMatchObject({
       status: 'CLOSED',
       totals: { accepted_qty: 3, pending_qty: 0, rejected_qty: 2, transaction_qty: 5 },
     });
-    expect(firstOf(closed.rows as Body[]).rejection_reason).toBe('Sold at the café');
-    expect((await close(reverse, 'Again')).status).toBe(409);
+    expect(firstOf(closed.rows as Body[]).rejection_reason).toBe('Sold or used: At the café');
+    expect((await close(reverse, { reason: 'WASTED' })).status).toBe(409);
     expect((await runNow(reverse)).status).toBe(409);
+  });
+
+  it('before a return the ERP reads how much of the batch the Main Store holds, and where the rest is', async () => {
+    const batch = `K-${run}`;
+    await send(grn(newGrnNumber(), [{ batch, qty: 10 }]));
+    await issueToRestaurant(batch, 4);
+    const check = (query: string) => erp('GET', `/erp/stock?${query}`);
+    const at = `location=${fx.hospitalCode}&part_item_code=${fx.itemCode.toLowerCase()}`;
+
+    const held = await check(`${at}&batch=${batch}`);
+    expect([held.status, held.body]).toEqual([
+      200,
+      {
+        data: {
+          batch,
+          held_elsewhere: [{ name: 'A restaurant no longer in AAHAR', qty: 4 }],
+          item_name: fx.itemName,
+          location: fx.hospitalCode,
+          location_name: fx.hospitalName,
+          main_store_qty: 6,
+          part_item_code: fx.itemCode,
+        },
+        message: 'Success',
+        success: true,
+      },
+    ]);
+    // A batch the location never had: none anywhere.
+    expect((await check(`${at}&batch=NONE-${run}`)).data).toMatchObject({
+      held_elsewhere: [],
+      main_store_qty: 0,
+    });
+
+    // Codes AAHAR does not know are refused with why; it is a read, so not an ERP GRN error.
+    const unknown = await check(
+      `location=NOWHERE-${run}&part_item_code=${fx.itemCode}&batch=${batch}`,
+    );
+    expect([unknown.status, unknown.body]).toEqual([
+      422,
+      failed([`Location NOWHERE-${run} is not in AAHAR`]),
+    ]);
+    expect((await check(at)).status).toBe(400);
+    expect((await h.api('GET', `/erp/stock?${at}&batch=${batch}`)).status).toBe(401);
   });
 
   it('one request may carry items coming in and a return; the stock comes in before it goes out', async () => {

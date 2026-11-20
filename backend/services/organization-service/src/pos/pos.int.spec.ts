@@ -873,6 +873,45 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     ]);
   });
 
+  it('a batch the location still owes the vendor (an ERP return waiting) is on hold at its counters', async () => {
+    // C1 holds the sandwich from the last test: LATE 5, SOON 3 (EXP is out of date). A return of
+    // LATE the Main Store could not cover leaves 2 of it owed.
+    const grnNumber = `HOLD-${run}`;
+    await h.rawQuery(
+      `INSERT INTO grn_entries (grn_entry_id, transaction_number, grn_number, flag, hospital_id,
+         store_id, item_id, hospital_code, store_code, item_code, batch_number, expiry_date, sent_qty,
+         accepted_qty, rejected_qty, transaction_date, status, updated_at)
+       VALUES (gen_random_uuid(), gen_random_uuid()::text, $1, 1, $2::uuid, $3::uuid, $4::uuid,
+         'INT', 'INT', 'INT', $5, $6::date, 2, 0, 0, now(), 'PENDING', now())`,
+      grnNumber,
+      fx.hospitalId,
+      fx.storeId,
+      sandwich.itemId,
+      `LATE-${run}`,
+      day(30),
+    );
+    const onMenu = async () =>
+      items(await h.ok('GET', `/pos/menu?counterId=${fx.counterId}&channel=COUNTER`)).find(
+        (entry) => entry.id === sandwich.menuId,
+      )!;
+    expect(await onMenu()).toMatchObject({ held: 5, stock: 3 });
+
+    // (Which batch a bill then takes is the unit test's; a bill here would change later counts.)
+    const tooMany = await bill('held-4', { lines: [{ menuId: sandwich.menuId, quantity: 4 }] });
+    expect([tooMany.status, tooMany.body.message]).toEqual([
+      400,
+      `Only 3 of ${sandwich.name} can be sold at this counter: 5 more are on hold for a return to the vendor. Take the rest off the bill.`,
+    ]);
+
+    // Settled or closed, the hold lifts.
+    await h.rawQuery(
+      `UPDATE grn_entries SET status = 'CLOSED', rejected_qty = 2 WHERE grn_number = $1`,
+      grnNumber,
+    );
+    const free = await onMenu();
+    expect([free.stock, free.held]).toEqual([8, undefined]);
+  });
+
   it('staff discount: the rule for the employee type, off discountable items before GST', async () => {
     const rates = await h.api('GET', `/pos/staff-discounts/${fx.restaurantId}`);
     expect(rates.data).toEqual({

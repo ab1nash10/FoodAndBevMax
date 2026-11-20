@@ -94,7 +94,9 @@ function unavailableReason(item: PosMenuItem, inCart: number): string | null {
   if (item.price === null) return 'No price';
   if (!item.isAvailable) return 'Sold out';
   if (!item.isOnSale) return 'Not now';
-  if (item.stock !== null && item.stock - inCart <= 0) return 'Out of stock';
+  if (item.stock !== null && item.stock - inCart <= 0) {
+    return item.held ? 'On hold for return' : 'Out of stock';
+  }
   return null;
 }
 
@@ -123,7 +125,9 @@ function QuantityDialog({
         ? `At most ${MAX_QUANTITY} at a time.`
         : reason === 'Out of stock'
           ? `Only ${item.stock} left.`
-          : reason;
+          : reason === 'On hold for return'
+            ? `Only ${item.stock} left; ${item.held} more on hold for a return to the vendor.`
+            : reason;
 
   return (
     <Modal

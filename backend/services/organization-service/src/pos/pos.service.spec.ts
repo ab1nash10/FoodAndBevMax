@@ -113,6 +113,8 @@ function serviceWith(
     /** Pine Labs machines on the counter's POS device. */
     machines?: Array<Record<string, unknown>>;
     noShift?: boolean;
+    /** Batches the location still owes the vendor (ERP returns waiting): on hold. */
+    owedBatches?: string[];
     payments?: Array<Record<string, unknown>>;
     shiftEnded?: boolean;
     shiftEndedWhileBilling?: boolean;
@@ -173,6 +175,16 @@ function serviceWith(
         );
         return found ? { ...found, employeeName: 'Neha' } : null;
       },
+    },
+    grnEntry: {
+      findMany: () =>
+        (options.owedBatches ?? []).map((batchNumber) => ({
+          acceptedQty: decimal(0),
+          batchNumber,
+          itemId: 'item-samosa',
+          rejectedQty: decimal(0),
+          sentQty: decimal(2),
+        })),
     },
     employeeDiscount: {
       findMany: () => [
@@ -574,6 +586,32 @@ test('counter stock is taken earliest expiry first, skipping expired batches', a
       { balanceAfter: 0, batchNumber: 'today', qtyOut: 1, transactionType: 'SALE_OUT' },
       { balanceAfter: 3, batchNumber: 'later', qtyOut: 2, transactionType: 'SALE_OUT' },
     ],
+  );
+});
+
+test('a batch owed back to the vendor is on hold: the bill takes the other batches', async () => {
+  const balances = [balance('owed', 4, '2026-10-23'), balance('later', 5, '2026-10-25')];
+  const { ledger, service } = serviceWith({ balances, owedBatches: ['owed'] });
+
+  await assert.rejects(
+    service.createOrder(bill({ lines: [{ menuId: 'samosa', quantity: 6 }] }), cashier),
+    (error: unknown) =>
+      error instanceof BadRequestException &&
+      error.message ===
+        'Only 5 of Samosa can be sold at this counter: 4 more are on hold for a return to the vendor. Take the rest off the bill.',
+  );
+
+  await service.createOrder(
+    bill({ clientOrderId: 'till-2', lines: [{ menuId: 'samosa', quantity: 2 }] }),
+    cashier,
+  );
+  assert.deepEqual(
+    balances.map((entry) => Number(entry.availableQty)),
+    [4, 3],
+  );
+  assert.deepEqual(
+    ledger.map(({ batchNumber, qtyOut }) => ({ batchNumber, qtyOut })),
+    [{ batchNumber: 'later', qtyOut: 2 }],
   );
 });
 

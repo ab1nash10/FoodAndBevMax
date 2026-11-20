@@ -171,6 +171,11 @@ export interface PosMenuItem {
   price: number | null;
   /** Unexpired stock at the counter; null when the counter keeps no stock of it. */
   stock: number | null;
+  /**
+   * More at the counter, of a batch the location still owes the vendor (an ERP return waiting):
+   * on hold, not for sale and not in `stock`. Absent when none.
+   */
+  held?: number;
 }
 
 export interface PosMenu {

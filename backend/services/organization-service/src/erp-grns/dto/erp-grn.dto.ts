@@ -174,8 +174,8 @@ export class ErpGrnRowDto {
 
   @ApiProperty({
     description:
-      '0 = goods in (adds to the store), 1 = return to vendor (takes out of it; refused when the ' +
-      'Main Store holds less of the batch).',
+      '0 = goods in (adds to the store), 1 = return to vendor (takes what the Main Store holds of ' +
+      'the batch; the rest is owed until the batch comes back).',
     enum: [0, 1],
     example: 0,
   })
@@ -191,13 +191,53 @@ export class SetGrnEntryRerunDto {
   active!: boolean;
 }
 
+/** Why a waiting reverse is closed: what became of the stock still owed to the vendor. */
+export const CLOSE_REASONS = {
+  COUNT_MISMATCH: 'Stock count was wrong',
+  ERP_ERROR: 'ERP entry was wrong',
+  OTHER: 'Other',
+  SOLD: 'Sold or used',
+  WASTED: 'Wasted or damaged',
+} as const;
+
+export type CloseReason = keyof typeof CLOSE_REASONS;
+
 /** Closes a waiting reverse; the service asks for the reason in plain words if it is missing. */
 export class CloseGrnEntryDto {
-  @ApiPropertyOptional({ example: 'Sold at the café before the return came' })
+  @ApiPropertyOptional({ enum: Object.keys(CLOSE_REASONS), example: 'SOLD' })
+  @IsOptional()
+  @IsIn(Object.keys(CLOSE_REASONS))
+  reason?: CloseReason;
+
+  @ApiPropertyOptional({
+    description: 'More about it; needed for OTHER.',
+    example: 'Sold at the café before the return came',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  reason?: string;
+  note?: string;
+}
+
+/** The ERP asks how much of a batch a location's Main Store holds, before it sends a return. */
+export class ErpStockQueryDto {
+  @ApiProperty({ description: 'The AAHAR location code (or name).', example: '21' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  location!: string;
+
+  @ApiProperty({ example: 'ITM0004' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  part_item_code!: string;
+
+  @ApiProperty({ example: 'B-201' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  batch!: string;
 }
 
 /** A page of GRNs (not rows). `search` matches the GRN number. */

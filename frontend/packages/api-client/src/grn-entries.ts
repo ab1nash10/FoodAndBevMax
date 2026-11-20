@@ -114,6 +114,17 @@ export interface GrnRefusal {
 /** Newest first; `search` matches the GRN number. */
 export type GrnRefusalQuery = Omit<GrnEntryQuery, 'status'>;
 
+/** Why a waiting reverse is closed: what became of the stock still owed to the vendor. */
+export const GRN_CLOSE_REASONS = {
+  SOLD: 'Sold or used',
+  WASTED: 'Wasted or damaged',
+  ERP_ERROR: 'ERP entry was wrong',
+  COUNT_MISMATCH: 'Stock count was wrong',
+  OTHER: 'Other',
+} as const;
+
+export type GrnCloseReason = keyof typeof GRN_CLOSE_REASONS;
+
 export function createGrnEntriesApi(options: ApiClientOptions) {
   const client = createApiClient(options);
   const path = (grnNumber: string, action: string) =>
@@ -139,9 +150,9 @@ export function createGrnEntriesApi(options: ApiClientOptions) {
       });
     },
     /** Closes a waiting reverse that cannot finish; the rest is written off with the reason. */
-    closeGrnEntry(grnNumber: string, reason: string) {
+    closeGrnEntry(grnNumber: string, reason: GrnCloseReason, note?: string) {
       return client.request<ApiResponse<GrnEntry>>(path(grnNumber, 'close'), {
-        body: { reason },
+        body: { note, reason },
         method: 'PATCH',
       });
     },

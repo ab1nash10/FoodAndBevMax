@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { bestDiscountRule } from '../employee-discounts/employee-discount-rules';
+import { batchKey, heldForReturn } from '../erp-grns/held-batches';
 import { getOrderBy, getPageMeta, getPagination, toStatusCounts } from '../common/pagination';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
@@ -664,15 +665,19 @@ export class PosService {
         serveAt: { in: servedOn(query.channel) },
       },
     });
-    const stock = await this.counterStock(
+    const itemIds = menus.map((menu) => menu.itemId);
+    const { held, stock } = await this.counterStock(
       counter.id,
-      menus.map((menu) => menu.itemId),
+      itemIds,
       this.prisma,
+      await heldForReturn(this.prisma, counter.hospitalId, itemIds),
     );
 
     return {
       counter,
       items: menus.map((menu) => ({
+        // Stock on hold for a return to the vendor: at the counter, not for sale.
+        ...(held.get(menu.itemId) ? { held: held.get(menu.itemId) } : {}),
         availableFrom: menu.availableFrom,
         availableTo: menu.availableTo,
         category: menu.category,
@@ -695,11 +700,19 @@ export class PosService {
     };
   }
 
-  /** Sellable (unexpired) stock per item at a counter; items it keeps no stock of are absent. */
-  private async counterStock(counterId: string, itemIds: string[], client: Client) {
+  /**
+   * Sellable (unexpired) stock per item at a counter; items it keeps no stock of are absent.
+   * Batches `onHold` are left out of it and counted in `held` instead.
+   */
+  private async counterStock(
+    counterId: string,
+    itemIds: string[],
+    client: Client,
+    onHold = new Set<string>(),
+  ) {
     const today = toDateOnly(siteBusinessDate(new Date()));
     const rows = await client.stockBalance.findMany({
-      select: { availableQty: true, expiryDate: true, itemId: true },
+      select: { availableQty: true, batchNumber: true, expiryDate: true, itemId: true },
       where: {
         deletedAt: null,
         itemId: { in: itemIds },
@@ -708,16 +721,16 @@ export class PosService {
       },
     });
     const stock = new Map<string, number>();
+    const held = new Map<string, number>();
 
     for (const row of rows) {
-      const sellable = !row.expiryDate || row.expiryDate >= today;
-      stock.set(
-        row.itemId,
-        (stock.get(row.itemId) ?? 0) + (sellable ? toNumber(row.availableQty) : 0),
-      );
+      const qty = !row.expiryDate || row.expiryDate >= today ? toNumber(row.availableQty) : 0;
+      const onHoldHere = onHold.has(batchKey(row.itemId, row.batchNumber));
+      stock.set(row.itemId, (stock.get(row.itemId) ?? 0) + (onHoldHere ? 0 : qty));
+      if (onHoldHere && qty > 0) held.set(row.itemId, (held.get(row.itemId) ?? 0) + qty);
     }
 
-    return stock;
+    return { held, stock };
   }
 
   async setAvailability(menuId: string, isAvailable: boolean, context: ActorContext) {
@@ -1095,8 +1108,20 @@ export class PosService {
       });
     }
 
+    const onHold = await heldForReturn(tx, counter.hospitalId, [...quantityByItem.keys()]);
+
     for (const [itemId, entry] of quantityByItem) {
-      await this.takeCounterStock(tx, counter, itemId, entry, order.id, businessDate, now, context);
+      await this.takeCounterStock(
+        tx,
+        counter,
+        itemId,
+        entry,
+        order.id,
+        businessDate,
+        now,
+        context,
+        onHold,
+      );
     }
 
     // The payment goes on this bill only, and only once: a second bill with it rolls back here.
@@ -1129,7 +1154,8 @@ export class PosService {
 
   /**
    * Takes `quantity` of an item from the counter's stock, earliest expiry first, skipping expired
-   * batches. A counter that keeps no stock of the item (no balance rows at all) sells it freely.
+   * batches and batches on hold for a return to the vendor. A counter that keeps no stock of the
+   * item (no balance rows at all) sells it freely.
    */
   private async takeCounterStock(
     tx: Prisma.TransactionClient,
@@ -1140,6 +1166,7 @@ export class PosService {
     businessDate: Date,
     now: Date,
     context: ActorContext,
+    onHold: Set<string>,
   ) {
     const balances = await tx.stockBalance.findMany({
       orderBy: [
@@ -1159,16 +1186,25 @@ export class PosService {
       return;
     }
 
-    const sellable = balances.filter(
+    const unexpired = balances.filter(
       (balance) =>
         (!balance.expiryDate || balance.expiryDate >= businessDate) &&
         toNumber(balance.availableQty) > 0,
     );
-    const onHand = sellable.reduce((sum, balance) => sum + toNumber(balance.availableQty), 0);
+    const isHeld = (balance: { batchNumber: string | null }) =>
+      onHold.has(batchKey(itemId, balance.batchNumber));
+    const qtyOf = (list: typeof balances) =>
+      list.reduce((sum, balance) => sum + toNumber(balance.availableQty), 0);
+    const sellable = unexpired.filter((balance) => !isHeld(balance));
+    const onHand = qtyOf(sellable);
 
     if (onHand < entry.quantity) {
+      const held = qtyOf(unexpired.filter(isHeld));
+
       throw new BadRequestException(
-        `Only ${onHand} of ${entry.name} left at this counter; receive more stock or take it off the bill.`,
+        held > 0
+          ? `Only ${onHand} of ${entry.name} can be sold at this counter: ${held} more ${held === 1 ? 'is' : 'are'} on hold for a return to the vendor. Take the rest off the bill.`
+          : `Only ${onHand} of ${entry.name} left at this counter; receive more stock or take it off the bill.`,
       );
     }
 
@@ -1544,7 +1580,11 @@ export class PosService {
       },
     });
     const items = new Map([...menus, ...stocked].map(({ item }) => [item.id, item] as const));
-    const available = await this.counterStock(counter.id, [...items.keys()], this.prisma);
+    const { stock: available } = await this.counterStock(
+      counter.id,
+      [...items.keys()],
+      this.prisma,
+    );
     const moved = (itemId: string, type: StockTransactionType, field: 'qtyIn' | 'qtyOut') =>
       toNumber(
         movements.find((row) => row.itemId === itemId && row.transactionType === type)?._sum[
