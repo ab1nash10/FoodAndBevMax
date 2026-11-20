@@ -44,6 +44,15 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+// The guest's QR order page alone opens Razorpay's checkout: its script, the payment window it
+// frames, and the calls that script makes. Every other page keeps the policy above.
+const razorpay = 'https://checkout.razorpay.com https://api.razorpay.com';
+const orderPagePolicy = contentSecurityPolicy
+  .replace(/script-src [^;]+/, (rule) => `${rule} https://checkout.razorpay.com`)
+  .replace(/connect-src [^;]+/, (rule) => `${rule} ${razorpay} https://lumberjack.razorpay.com`)
+  .replace(/img-src [^;]+/, (rule) => `${rule} https://cdn.razorpay.com`)
+  .concat(`; frame-src ${razorpay}`);
+
 const nextConfig: NextConfig = {
   // The prefix is baked into the bundle here, so it must be the same value the client
   // helper uses - both read it from lib/base-path.
@@ -66,6 +75,11 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
         source: '/:path*',
+      },
+      // Last match wins in Next.js: this replaces the policy above on the QR order page only.
+      {
+        headers: [{ key: 'Content-Security-Policy', value: orderPagePolicy }],
+        source: '/order/:path*',
       },
     ]);
   },

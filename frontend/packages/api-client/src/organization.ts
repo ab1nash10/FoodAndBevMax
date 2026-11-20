@@ -211,6 +211,72 @@ export interface KitchenListQuery extends ListQuery {
   locationId?: string;
 }
 
+/**
+ * A room or bed at a location, or (with a restaurant) a restaurant's dine-in table. Its QR opens
+ * ordering with it filled in.
+ */
+export interface Room {
+  createdAt: string;
+  hospital: HospitalSummary;
+  hospitalId: string;
+  id: string;
+  isActive: boolean;
+  /** A table's restaurant; null for a room or bed. */
+  restaurant: {
+    /** At Table Dining: until it is on, the table's QR takes no orders. */
+    atTableDining: boolean;
+    id: string;
+    restaurantCode: string;
+    restaurantName: string;
+  } | null;
+  restaurantId: string | null;
+  /** Given by the server: R-000001, … for rooms, T-000001, … for tables. */
+  roomCode: string;
+  roomName: string;
+  updatedAt: string;
+}
+
+export interface RoomInput {
+  hospitalId: string;
+  isActive?: boolean;
+  /** Makes it a table of this restaurant (at the same location). */
+  restaurantId?: string;
+  roomName: string;
+}
+
+export interface RoomListQuery extends ListQuery {
+  hospitalId?: string;
+  /** ROOM: rooms and beds only; TABLE: tables only. */
+  kind?: 'ROOM' | 'TABLE';
+  restaurantId?: string;
+}
+
+/** A table's QR, on the guest's phone: its restaurant's ordering link and the table. */
+export interface QrTable {
+  restaurantId: string;
+  restaurantName: string;
+  tableName: string;
+  token: string;
+}
+
+/** A room's QR, on the guest's phone: where it is and the restaurants that deliver to it. */
+export interface QrRoom {
+  locationAddress: string | null;
+  locationName: string;
+  restaurants: Array<{
+    id: string;
+    /** Taking orders now: its QR counter has a shift open. */
+    open: boolean;
+    /** "HH:mm" as set on the restaurant, or null. */
+    opensAt: string | null;
+    /** Its quickest and slowest room dish, in minutes; null when none has a time. */
+    readyMinutes: { max: number; min: number } | null;
+    restaurantName: string;
+    token: string;
+  }>;
+  roomName: string;
+}
+
 export type ShiftMode = 'CASHIER' | 'FIXED';
 
 /** A fixed shift, e.g. Morning 07:00–15:00; one ending before it starts runs past midnight. */

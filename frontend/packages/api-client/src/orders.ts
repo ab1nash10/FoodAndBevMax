@@ -11,7 +11,7 @@ export interface RestaurantOrder {
   /** Set on bills raised in AAHAR's POS; null on orders other systems send. */
   bedNumber: string | null;
   billNumber: string | null;
-  channel: PosChannel | null;
+  channel: OrderChannel | null;
   id: string;
   instructions: string | null;
   items: Array<{ name: string; note?: string; quantity: number }>;
@@ -19,6 +19,8 @@ export interface RestaurantOrder {
   placedAt: string;
   readyAt: string | null;
   roomNumber: string | null;
+  /** The dine-in table of a TABLE order. */
+  tableName: string | null;
   source: OrderSource;
   status: OrderStatus;
   /** The steward (Delivery Operator) taking it to the guest; kitchen screen only. */
@@ -59,6 +61,9 @@ export interface BoardFeed {
 
 /** COUNTER = walk-in at the counter; ROOM = a patient room (room price where one is set). */
 export type PosChannel = 'COUNTER' | 'ROOM';
+
+/** What a bill or order can be: the till's channels, or TABLE (a dine-in table's QR order). */
+export type OrderChannel = PosChannel | 'TABLE';
 
 export type PaymentMode = 'CARD' | 'CASH' | 'OTHER' | 'UPI';
 
@@ -255,7 +260,7 @@ export interface PosBill {
   /** The cashier's employee code: the bill's UID / operator id. */
   cashierCode: string | null;
   cashierName: string | null;
-  channel: PosChannel;
+  channel: OrderChannel;
   complimentaryReason: string | null;
   counter: { counterCode: string; counterName: string; id: string };
   customerMobile: string | null;
@@ -296,6 +301,8 @@ export interface PosBill {
     upiId: string | null;
   };
   roomNumber: string | null;
+  /** The dine-in table of a TABLE order. */
+  tableName: string | null;
   roundOff: number;
   status: OrderStatus;
   subtotal: number;
@@ -305,7 +312,7 @@ export interface PosBillSummary {
   billNumber: string;
   businessDate: string;
   cancelReason: string | null;
-  channel: PosChannel;
+  channel: OrderChannel;
   complimentaryReason: string | null;
   counter: { counterCode: string; counterName: string; id: string };
   customerMobile: string | null;
@@ -328,6 +335,8 @@ export interface PosBillSummary {
   placedAt: string;
   restaurant: { id: string; restaurantName: string };
   roomNumber: string | null;
+  /** The dine-in table of a TABLE order. */
+  tableName: string | null;
   status: OrderStatus;
   subtotal: number;
 }
@@ -335,7 +344,7 @@ export interface PosBillSummary {
 export interface PosBillListQuery extends ListQuery {
   /** Adds meta.statusCounts: the count per status, and meta.complimentaryCount, in the same request. */
   statusCounts?: boolean;
-  channel?: PosChannel;
+  channel?: OrderChannel;
   counterId?: string;
   /** Business dates, YYYY-MM-DD. */
   from?: string;
@@ -460,13 +469,10 @@ export interface KioskMenu {
 export interface KioskPaidOrderInput {
   /** The kiosk's own id for the order, made once: a retry returns the same order. */
   clientOrderId: string;
-  /** Who is paying (optional): a 10-digit mobile and a name, kept on the bill. */
-  customerMobile?: string;
-  customerName?: string;
+  /** The guest signed in for this order (name and mobile, by OTP): both go on the bill, and an employee's mobile gets their discount. */
+  guestToken: string;
   lines: Array<{ menuId: string; quantity: number }>;
   method: 'CARD' | 'UPI';
-  /** From a confirmed staff-discount OTP (the same as QR ordering's). */
-  staffToken?: string;
 }
 
 export interface KioskMenuItem {
@@ -493,7 +499,7 @@ export interface OrderReportRow {
   cancelReason: string | null;
   cancelled: boolean;
   cancelledAt: string | null;
-  channel: PosChannel;
+  channel: OrderChannel;
   complimentaryReason: string | null;
   counter: { counterCode: string; counterName: string; posDeviceId: string | null } | null;
   delivered: boolean;
@@ -534,6 +540,8 @@ export interface OrderReportRow {
   restaurant: { id: string; restaurantName: string };
   restaurantId: string;
   roomNumber: string | null;
+  /** The dine-in table of a TABLE order. */
+  tableName: string | null;
   roundOff: number | null;
   status: OrderStatus;
   stewardAssigned: boolean;
@@ -584,11 +592,15 @@ export interface OrderAmendmentInput {
 
 /** A dish on the QR (room service) menu, at the room price. */
 export interface QrMenuItem extends Omit<KioskMenuItem, 'isFeatured'> {
+  /** False while it is off for now or sold out: listed, not orderable. */
+  available: boolean;
   /** Left at the QR counter; null when it keeps no stock of it. */
   stock: number | null;
 }
 
 export interface QrMenu {
+  /** The restaurant's address, else its location's. */
+  address: string | null;
   items: QrMenuItem[];
   locationName: string;
   /** False while the restaurant's QR counter has no shift open: no orders are taken. */
@@ -596,58 +608,92 @@ export interface QrMenu {
   /** The counter pickup orders are collected from (the QR counter), while it is open. */
   pickupCounter: string | null;
   restaurantName: string;
+  /** In Room Dining: it delivers to rooms. Without it, pickup at the counter only. */
+  roomDelivery: boolean;
   /** Whether staff get a discount here (Employee ID + OTP). */
   staffDiscount: boolean;
 }
 
-/** ROOM: delivered to a patient's room. COUNTER: staff and visitors pick it up at the counter. */
-export type QrChannel = 'COUNTER' | 'ROOM';
+/**
+ * ROOM: delivered to a patient's room. COUNTER: staff and visitors pick it up at the counter.
+ * TABLE: served at a dine-in table, from the counter menu.
+ */
+export type QrChannel = 'COUNTER' | 'ROOM' | 'TABLE';
 
 export interface QrOrderInput {
-  bedNumber?: string;
   /** ROOM when left out. */
   channel?: QrChannel;
   /** The phone's own id for the order, made once: a retry returns the same order. */
   clientOrderId: string;
-  /** Who is paying (optional): a 10-digit mobile and a name, kept on the bill. */
-  customerMobile?: string;
-  customerName?: string;
+  /** The guest's sign-in: their name and mobile go on the bill; an employee's gets their discount. */
+  guestToken: string;
   instructions?: string;
   lines: Array<{ menuId: string; quantity: number }>;
   /** The page the payment provider sends the guest back to. */
   returnUrl?: string;
-  /** Needed for ROOM. */
-  roomNumber?: string;
-  /** From a confirmed staff-discount OTP. */
-  staffToken?: string;
+  /** Needed for ROOM: the id on the bed's QR. The restaurant's QR is pickup only. */
+  roomId?: string;
+  /** Needed for TABLE: the id on the table's QR. */
+  tableId?: string;
+}
+
+/** A QR guest signed in on their phone: name and mobile, confirmed by OTP. */
+export interface QrGuest {
+  /** When the sign-in lapses (30 days). */
+  expiresAt: string;
+  guestToken: string;
+  mobile: string;
+  name: string;
 }
 
 export type QrOrderStatus = 'AWAITING_PAYMENT' | 'BILLED' | 'CLOSED' | 'PAID_NOT_BILLED';
 
+/** Razorpay's checkout for a QR order, opened on the guest's page (amount in paise). */
+export interface QrCheckout {
+  amount: number;
+  currency: string;
+  keyId: string;
+  name: string;
+  orderId: string;
+  prefill: { contact?: string; name?: string };
+}
+
 /** A guest's QR order as their phone sees it. */
 export interface QrOrderView {
   billNumber: string | null;
-  channel: PosChannel;
+  channel: OrderChannel;
+  /** Razorpay's checkout on this page, while it waits for payment; else the payment page. */
+  checkout: QrCheckout | null;
+  deliveredAt: string | null;
   grandTotal: number;
   id: string;
   /** Reads this order again (GET /qr/orders/:id?key=). */
   key: string;
   /** Where the kitchen has it, once billed. */
   kitchenStatus: OrderStatus | null;
+  /** The dishes as billed; empty until it is paid. */
+  lines: Array<{ amount: number; itemName: string; quantity: number }>;
   message: string | null;
   orderNumber: string | null;
   /** The UPI page, while it waits for payment. */
   paymentUrl: string | null;
+  /** When it was paid and billed. */
+  paidAt: string | null;
   provider: OnlinePaymentProvider;
+  readyAt: string | null;
+  /** When it should be ready: the slowest dish's time after it was paid. */
+  readyBy: string | null;
   restaurantName: string;
   roomNumber: string | null;
+  /** The dine-in table of a TABLE order. */
+  tableName: string | null;
   status: QrOrderStatus;
 }
 
 /** A QR order the guest paid for that could not be billed: refund it at the counter. */
 export interface PaidNotBilled {
   amount: number;
-  channel: PosChannel;
+  channel: OrderChannel;
   createdAt: string;
   id: string;
   paidAt: string | null;

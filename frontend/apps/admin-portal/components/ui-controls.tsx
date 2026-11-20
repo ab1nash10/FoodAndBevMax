@@ -94,11 +94,12 @@ export function Toggle({ ariaLabel, checked, disabled = false, id, label, onChan
     return control;
   }
 
+  // A <label> around the switch names it by the text and lets the text flip it.
   return (
-    <span className="flex min-h-control items-center gap-3 rounded-control border border-ds-border bg-ds-surface px-3.5 text-sm font-medium text-ds-text-2">
+    <label className="flex min-h-control items-center gap-3 rounded-control border border-ds-border bg-ds-surface px-3.5 text-sm font-medium text-ds-text-2">
       {control}
       <span>{label}</span>
-    </span>
+    </label>
   );
 }
 

@@ -23,6 +23,10 @@ export type StockTransactionType =
   | 'DISCARD_OUT'
   /** Ready-made leftovers sent from one restaurant to another. */
   | 'RESTAURANT_TRANSFER_OUT'
+  /** MRP stock a restaurant sent back to the store. */
+  | 'RESTAURANT_RETURN_OUT'
+  /** A restaurant's return, counted into the store. */
+  | 'STORE_RETURN_IN'
   | 'GRN_IN'
   /** Sent back to the vendor: an ERP return GRN, once verified. */
   | 'GRN_RETURN_OUT'
@@ -369,6 +373,9 @@ export interface Transfer {
   hospitalId: string;
   id: string;
   lines: TransferLine[];
+  /** The operator named to acknowledge it: only they (or a Super Admin) can. Null: anyone may. */
+  receiverId: string | null;
+  receiverName: string | null;
   remarks: string | null;
   sourceId: string;
   sourceType: InventoryLocationType;
@@ -376,6 +383,13 @@ export interface Transfer {
   transferDate: string;
   transferNumber: string;
   updatedAt: string;
+}
+
+/** An operator of a location who can be named to receive a transfer (GET /transfers/receivers). */
+export interface TransferReceiver {
+  employeeCode: string;
+  id: string;
+  name: string;
 }
 
 export interface TransferLineInput {
@@ -392,6 +406,8 @@ export interface TransferInput {
   destinationType: InventoryLocationType;
   hospitalId: string;
   items: TransferLineInput[];
+  /** The operator who must acknowledge it (from listTransferReceivers). */
+  receiverId?: string;
   remarks?: string;
   sourceId: string;
   sourceType: InventoryLocationType;

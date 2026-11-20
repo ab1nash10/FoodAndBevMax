@@ -49,11 +49,7 @@ config:
     JWT_ACCESS_SECRET: ''
     JWT_REFRESH_SECRET: ''
     # Airtel IQ login: SMS_USERNAME is the customer ID. Left empty, mobile OTP sign-in is
-    # refused; email + password sign-in is unaffected.
-    # The Super Admin's first password (aahar@admin.local), applied by the seed only while the
-    # account has none, so a later change survives upgrades. At least 8 characters with a
-    # letter and a digit. Left empty, the account signs in by OTP until one is set.
-    ADMIN_PASSWORD: ''
+    # refused; email OTP sign-in is unaffected.
     SMS_USERNAME: ''
     SMS_PASSWORD: ''
     # Optional shared store for OTPs, refresh tokens and rate limits. Set it to run more than

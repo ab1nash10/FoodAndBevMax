@@ -26,11 +26,11 @@ helm upgrade --install fandb infra/helm/fandb -n dev --create-namespace \
 The chart brings up all three services and the portal, and runs the migration and the seed
 as pre-upgrade hooks in that order. Each backend service is a separate process on its own
 port, so all three must be deployed: `auth-service` is what serves sign-in, and without it
-`POST /fandb/api/v1/auth/login-with-password` returns 404 while the other APIs work.
+`POST /fandb/api/v1/auth/send-otp` returns 404 while the other APIs work.
 
-The seed creates the Super Admin `aahar@admin.local` (mobile `9999999999`) and, while it has
-no password, gives it the default from `prisma/seed.ts`. Later deploys leave it alone, so
-change it after the first sign-in; `pnpm admin:password` resets it by hand.
+The seed creates the Super Admin `aahar@admin.local` (mobile `9999999999`). There are no
+passwords: everyone signs in with a code to their email or mobile, so give that account a real
+one before relying on it.
 
 ### Verify the deploy
 
@@ -92,8 +92,6 @@ kubectl -n aahar wait --for=condition=complete job/aahar-migrate --timeout=300s
 
 # 4. Seed, ONCE per environment. Migrations create the schema but no data: without this
 #    there are no permissions, no roles and no users, so nobody can sign in at all.
-#    If ADMIN_EMAIL and ADMIN_PASSWORD are in the Secret, this also gives the Super Admin
-#    its password, and step 7 is then unnecessary.
 kubectl -n aahar apply -f infra/k8s/21-seed-job.yaml
 kubectl -n aahar wait --for=condition=complete job/aahar-seed --timeout=300s
 
@@ -104,17 +102,11 @@ kubectl apply -f frontend/deployment.yml
 # 6. Ingress
 kubectl apply -f infra/k8s/40-ingress.yaml
 
-# 7. Optional: replace the Super Admin's password (the seed gives it the default from
-#    prisma/seed.ts on first run).
-kubectl -n aahar run admin-password --rm -it --restart=Never \
-  --image=013929206983.dkr.ecr.ap-south-1.amazonaws.com/max-ai-repo:migrate-<tag> \
-  --env="DATABASE_URL=..." --env="ADMIN_EMAIL=aahar@admin.local" \
-  --env="ADMIN_PASSWORD=..." -- pnpm admin:password
 ```
 
 Verified against empty databases: after step 3 the schema exists with zero rows; step 4
-creates 95 permissions, 6 roles and the `aahar@admin.local` Super Admin, which can sign in
-immediately with the ADMIN_PASSWORD from the Secret.
+creates 95 permissions, 6 roles and the `aahar@admin.local` Super Admin, who signs in with a
+code to its email or mobile.
 
 The seeded administrator is `aahar@admin.local`, mobile `9999999999`.
 

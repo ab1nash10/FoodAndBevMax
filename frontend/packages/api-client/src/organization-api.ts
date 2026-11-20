@@ -57,6 +57,7 @@ import type {
   RestaurantOrder,
   PaidNotBilled,
   QrChannel,
+  QrGuest,
   QrMenu,
   QrOrderInput,
   QrOrderView,
@@ -97,6 +98,7 @@ import type {
   TransferAcknowledgementListQuery,
   TransferInput,
   TransferListQuery,
+  TransferReceiver,
 } from './inventory';
 import type {
   KitchenProduction,
@@ -118,6 +120,11 @@ import type {
   LegalEntityListQuery,
   HospitalListQuery,
   Kitchen,
+  QrRoom,
+  QrTable,
+  Room,
+  RoomInput,
+  RoomListQuery,
   KitchenInput,
   KitchenListQuery,
   Location,
@@ -291,9 +298,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
     deleteHospital(id: string) {
       return client.request<ApiResponse<{ id: string }>>(`/hospitals/${id}`, { method: 'DELETE' });
     },
-    deleteItem(id: string) {
-      return client.request<ApiResponse<{ id: string }>>(`/items/${id}`, { method: 'DELETE' });
-    },
     deleteLegalEntity(id: string) {
       return client.request<ApiResponse<{ id: string }>>(`/legal-entities/${id}`, {
         method: 'DELETE',
@@ -376,19 +380,27 @@ export function createOrganizationApi(options: ApiClientOptions) {
         query: { channel, token },
       });
     },
-    /** Public: sends an OTP to the employee's registered mobile; where it went, masked. */
-    sendQrStaffOtp(restaurantId: string, token: string, employeeCode: string) {
-      return client.request<ApiResponse<{ sentTo: string }>>(`/qr/${restaurantId}/staff-otp`, {
-        body: { employeeCode },
+    /** Public: a guest signs in; an OTP goes to the mobile they give. */
+    sendQrGuestOtp(restaurantId: string, token: string, body: { mobile: string; name: string }) {
+      return client.request<ApiResponse<{ sentTo: string }>>(`/qr/${restaurantId}/guest-otp`, {
+        body,
         method: 'POST',
         query: { token },
       });
     },
-    /** Public: confirms the OTP; the discount and a token for checkout. */
-    verifyQrStaffOtp(restaurantId: string, token: string, employeeCode: string, otp: string) {
-      return client.request<ApiResponse<{ discountPercent: number; staffToken: string }>>(
-        `/qr/${restaurantId}/staff-verify`,
-        { body: { employeeCode, otp }, method: 'POST', query: { token } },
+    /** Public: confirms the guest's OTP; the phone's sign-in, good for 30 days. */
+    verifyQrGuestOtp(restaurantId: string, token: string, body: { mobile: string; otp: string }) {
+      return client.request<ApiResponse<QrGuest>>(`/qr/${restaurantId}/guest-verify`, {
+        body,
+        method: 'POST',
+        query: { token },
+      });
+    },
+    /** Public: a signed-in guest's staff discount here; 0 unless theirs is an employee's mobile. */
+    getQrGuestDiscount(restaurantId: string, token: string, guestToken: string) {
+      return client.request<ApiResponse<{ discountPercent: number }>>(
+        `/qr/${restaurantId}/guest-discount`,
+        { body: { guestToken }, method: 'POST', query: { token } },
       );
     },
     /** Public: places a room-service order, priced on the server, with a UPI page to pay. */
@@ -684,6 +696,18 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'PATCH',
       });
     },
+    /** A steward's own room orders today: ready ones to take, and what is coming. */
+    listMyDeliveries() {
+      return client.request<ApiResponse<Array<RestaurantOrder & { restaurantName: string }>>>(
+        '/restaurant-orders/deliveries',
+      );
+    },
+    /** The steward hands over a ready room order given to them. */
+    markOrderDelivered(id: string) {
+      return client.request<ApiResponse<RestaurantOrder>>(`/restaurant-orders/${id}/delivered`, {
+        method: 'POST',
+      });
+    },
     setRestaurantOrderStatus(id: string, status: OrderStatus) {
       return client.request<ApiResponse<RestaurantOrder>>(`/restaurant-orders/${id}/status`, {
         body: { status },
@@ -790,6 +814,23 @@ export function createOrganizationApi(options: ApiClientOptions) {
     listKitchenItems(query?: KitchenItemListQuery) {
       return client.request<ApiResponse<ApiList<KitchenItem>>>('/kitchen-items', { query });
     },
+    listRooms(query?: RoomListQuery) {
+      return client.request<ApiResponse<ApiList<Room>>>('/rooms', { query });
+    },
+    createRoom(body: RoomInput) {
+      return client.request<ApiResponse<Room>>('/rooms', { body, method: 'POST' });
+    },
+    updateRoom(id: string, body: Partial<Omit<RoomInput, 'hospitalId'>>) {
+      return client.request<ApiResponse<Room>>(`/rooms/${id}`, { body, method: 'PUT' });
+    },
+    /** Public: a room's QR, the room and the restaurants that deliver to it. */
+    getQrRoom(roomId: string) {
+      return client.request<ApiResponse<QrRoom>>(`/qr/rooms/${roomId}`);
+    },
+    /** Public: a table's QR, its restaurant's ordering link and the table. */
+    getQrTable(tableId: string) {
+      return client.request<ApiResponse<QrTable>>(`/qr/tables/${tableId}`);
+    },
     listKitchens(query?: KitchenListQuery) {
       return client.request<ApiResponse<ApiList<Kitchen>>>('/kitchens', { query });
     },
@@ -868,6 +909,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     listTransfers(query?: TransferListQuery) {
       return client.request<ApiResponse<ApiList<Transfer>>>('/transfers', { query });
+    },
+    /** The location's operators who can be named to acknowledge a transfer. */
+    listTransferReceivers(hospitalId: string) {
+      return client.request<ApiResponse<TransferReceiver[]>>('/transfers/receivers', {
+        query: { hospitalId },
+      });
     },
     listTransferAcknowledgements(query?: TransferAcknowledgementListQuery) {
       return client.request<ApiResponse<ApiList<TransferAcknowledgement>>>(

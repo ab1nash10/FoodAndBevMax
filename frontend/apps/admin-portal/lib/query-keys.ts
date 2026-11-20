@@ -46,6 +46,7 @@ export const queryKeys = {
   restaurantBoardLink: key('restaurant-board-link'),
   restaurantOrders: key('restaurant-orders'),
   restaurants: key('restaurants'),
+  rooms: key('rooms'),
   staffDiscounts: key('staff-discounts'),
   storeOptions: key('store-options'),
   stores: key('stores'),

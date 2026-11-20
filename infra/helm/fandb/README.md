@@ -147,9 +147,8 @@ uses upserts, `skipDuplicates` on the join tables and an existence check before 
 sample location. Verified against an empty database - a second pass left the counts
 unchanged at 95 permissions, 6 roles, 211 role-permissions, 1 user.
 
-The seed gives the Super Admin (`aahar@admin.local`) its first password from
-`config.secrets.ADMIN_PASSWORD` (the Jenkins credential `aahar-admin`), only if the account has
-no password yet, so one changed later survives upgrades. It is never stored in the repository.
-`pnpm admin:password` resets it by hand.
+There are no passwords: everyone, the seeded Super Admin (`aahar@admin.local`, mobile
+`9999999999`) included, signs in with a code sent to their email or mobile. Give that account a
+real email or mobile (or sign in as another Super Admin) before relying on it.
 
 `dbJobs.enabled=false` turns both off, for a database managed elsewhere.

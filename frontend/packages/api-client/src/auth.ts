@@ -14,18 +14,6 @@ export interface VerifyOtpRequest extends SendOtpRequest {
   otp: string;
 }
 
-export interface EmailPasswordLoginRequest {
-  email: string;
-  password: string;
-}
-
-/** A forgotten password, replaced with a code sent to the email (send-otp). */
-export interface ResetPasswordRequest {
-  email: string;
-  newPassword: string;
-  otp: string;
-}
-
 export interface RefreshTokenRequest {
   refreshToken: string;
 }
@@ -44,20 +32,8 @@ export function createAuthApi(options: ApiClientOptions) {
         method: 'POST',
       });
     },
-    loginWithPassword(body: EmailPasswordLoginRequest) {
-      return client.request<ApiResponse<AuthTokens>>('/auth/login-with-password', {
-        body,
-        method: 'POST',
-      });
-    },
     refresh(body: RefreshTokenRequest) {
       return client.request<ApiResponse<AuthTokens>>('/auth/refresh', {
-        body,
-        method: 'POST',
-      });
-    },
-    resetPassword(body: ResetPasswordRequest) {
-      return client.request<ApiResponse<{ reset: true }>>('/auth/reset-password', {
         body,
         method: 'POST',
       });

@@ -1,6 +1,7 @@
 import {
   ArrowRightLeft,
   BadgePercent,
+  BedDouble,
   BookOpenText,
   Boxes,
   Building2,
@@ -25,6 +26,8 @@ import {
   Package,
   PackageCheck,
   PackageOpen,
+  PackageMinus,
+  PackagePlus,
   Receipt,
   ScrollText,
   Send,
@@ -33,6 +36,7 @@ import {
   Sun,
   Tablet,
   Tags,
+  UserCog,
   Utensils,
   UsersRound,
   Wallet,
@@ -142,6 +146,12 @@ export const navigationGroups: NavGroup[] = [
         label: 'Restaurants',
         permissions: ['RESTAURANT_VIEW'],
         record: 'q',
+      },
+      {
+        href: '/masters/rooms',
+        icon: BedDouble,
+        label: 'Rooms & Tables',
+        permissions: ['ROOM_VIEW'],
       },
       {
         href: '/masters/employees',
@@ -321,6 +331,20 @@ export const navigationGroups: NavGroup[] = [
         label: 'Restaurant Stock',
         permissions: ['RESTAURANT_STOCK_VIEW'],
       },
+      {
+        // A restaurant sends MRP stock back; the transfer API lets either permission send it.
+        href: '/inventory/returns/new',
+        icon: PackageMinus,
+        label: 'Return to Store',
+        permissions: ['RESTAURANT_TRANSFER_SEND', 'TRANSFER_CREATE'],
+      },
+      {
+        // The store counts a return in, which the API allows to those who post GRNs.
+        href: '/inventory/returns',
+        icon: PackagePlus,
+        label: 'Count Returns',
+        permissions: ['GRN_POST'],
+      },
     ],
     label: 'Inventory',
     section: 'Operations',
@@ -347,6 +371,13 @@ export const navigationGroups: NavGroup[] = [
         icon: ChefHat,
         label: 'Kitchen Stock',
         permissions: ['KITCHEN_STOCK_VIEW'],
+      },
+      {
+        // A steward's room orders, marked delivered at the bed.
+        href: '/deliveries',
+        icon: BedDouble,
+        label: 'My Deliveries',
+        permissions: ['ORDER_DELIVER'],
       },
     ],
     label: 'Kitchen Operations',
@@ -380,6 +411,13 @@ export const navigationGroups: NavGroup[] = [
     icon: ScrollText,
     items: [
       { href: '/logs/erp', icon: Send, label: 'ERP Posting', permissions: ['REPORT_ERP'] },
+      // The Inventory page under its log name; the sidebar highlights the Inventory entry.
+      {
+        href: '/logs/erp-grns',
+        icon: FileInput,
+        label: 'ERP GRN log',
+        permissions: ['GRN_VIEW'],
+      },
       {
         href: '/logs/activity',
         icon: History,
@@ -393,7 +431,9 @@ export const navigationGroups: NavGroup[] = [
   {
     icon: ShieldCheck,
     items: [
-      { href: '/users', icon: UsersRound, label: 'Users / Roles', permissions: ['USER_VIEW'] },
+      // Operator roles (a fixed list, user-service common/operator-roles.ts) on Operators.
+      { href: '/users', icon: UserCog, label: 'Admins', permissions: ['USER_VIEW'] },
+      { href: '/operators', icon: UsersRound, label: 'Operators', permissions: ['USER_VIEW'] },
       {
         activeAs: '/users',
         hidden: true,
@@ -428,8 +468,14 @@ export const subRoutes: SubRoute[] = [
     parent: '/inventory/transfers',
     pattern: '/inventory/transfers/[id]/acknowledge',
     // The page reads the transfer like the list does; acknowledging needs TRANSFER_ACKNOWLEDGE
-    // (or RESTAURANT_TRANSFER_RECEIVE for another restaurant's leftovers).
-    permissions: ['TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW', 'RESTAURANT_TRANSFER_RECEIVE'],
+    // (or RESTAURANT_TRANSFER_RECEIVE for another restaurant's leftovers, GRN_POST for the store
+    // counting a restaurant's return in).
+    permissions: [
+      'TRANSFER_VIEW',
+      'KITCHEN_TRANSFER_VIEW',
+      'RESTAURANT_TRANSFER_RECEIVE',
+      'GRN_POST',
+    ],
   },
   {
     label: 'Receive a delivery',
@@ -465,7 +511,7 @@ export const subRoutes: SubRoute[] = [
     label: 'Edit location',
     parent: '/masters/locations',
     pattern: '/masters/locations/[id]/edit',
-    permissions: ['HOSPITAL_VIEW'],
+    permissions: ['HOSPITAL_UPDATE'],
   },
   {
     label: 'New store',
@@ -579,16 +625,26 @@ const dashboardDataPermissions = [
 
 /**
  * Where the portal opens for this user: their saved start page if they may still open it,
- * else the screen their permissions point to - Billing for counter staff and Store Today for
- * store staff when the dashboard would be empty for them, otherwise the dashboard.
+ * else the screen their permissions point to - Billing for counter staff, My Deliveries for
+ * stewards and Store Today for
+ * store staff when the dashboard would be empty for them, otherwise the dashboard. The installed
+ * POS app (app/pos-app.webmanifest) always opens Billing for anyone who may bill.
  */
-export function homeHref(hasPermission: HasPermission, startPage?: string | null): string {
+export function homeHref(
+  hasPermission: HasPermission,
+  startPage?: string | null,
+  posApp = false,
+): string {
+  if (posApp && canOpenPath('/pos/billing', hasPermission)) {
+    return '/pos/billing';
+  }
+
   if (startPage && getStartPageOptions(hasPermission).some((page) => page.href === startPage)) {
     return startPage;
   }
 
   if (!hasPermission(dashboardDataPermissions)) {
-    const workScreen = ['/pos/billing', '/inventory/today'].find((href) =>
+    const workScreen = ['/pos/billing', '/inventory/today', '/deliveries'].find((href) =>
       canOpenPath(href, hasPermission),
     );
 

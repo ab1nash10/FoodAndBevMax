@@ -17,17 +17,24 @@ const technicalFields = new Set([
   'username',
 ]);
 
+// A field inside a list ("users.0.hostName") is judged by its own name ("hostName").
+const fieldOf = (key: string | undefined) => key?.split('.').pop() ?? '';
+
 /**
  * The naming convention for a name a person types (a field called "name" or "…Name", by its
  * form name or else its id): Title Case, acronyms kept (lib/names.ts).
  */
 export function isNameField(key: string | undefined): boolean {
-  return Boolean(key) && !technicalFields.has(key!) && (key === 'name' || /[a-z]Name$/.test(key!));
+  const field = fieldOf(key);
+  return (
+    Boolean(field) && !technicalFields.has(field) && (field === 'name' || /[a-z]Name$/.test(field))
+  );
 }
 
 /** A code a person types (a field called "…Code"): upper case. */
 export function isCodeField(key: string | undefined): boolean {
-  return Boolean(key) && !technicalFields.has(key!) && /[a-z]Code$/.test(key!);
+  const field = fieldOf(key);
+  return Boolean(field) && !technicalFields.has(field) && /[a-z]Code$/.test(field);
 }
 
 /** Rewrites what is in the box, keeping the cursor where it was (a rewrite moves it to the end). */
@@ -50,7 +57,9 @@ function rewrite(input: HTMLInputElement, value: string): boolean {
 export const Input = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<'input'>>(
   ({ className, onBlur, onChange, type = 'text', ...props }, ref) => {
     const key = props.name ?? props.id;
-    const isName = type === 'text' && Boolean(onChange) && isNameField(key);
+    // autoCapitalize="none": a name kept exactly as typed (a bed such as "2220 B").
+    const isName =
+      type === 'text' && Boolean(onChange) && isNameField(key) && props.autoCapitalize !== 'none';
     const isCode = type === 'text' && Boolean(onChange) && isCodeField(key);
 
     return (

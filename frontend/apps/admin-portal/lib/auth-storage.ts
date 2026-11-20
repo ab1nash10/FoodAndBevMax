@@ -5,6 +5,10 @@ export const AUTH_STORAGE_EVENT = 'aahar:auth-storage-changed';
 const AAHAR_STORAGE_PREFIXES = ['aahar.', 'aahar-', 'aahar:'];
 /** The browser's till key belongs to the computer, not the user: a sign-out keeps it. */
 export const TILL_KEY_STORAGE_KEY = 'aahar.pos.tillKey';
+/** The till launcher's computer name and window (lib/pos-launch): the computer's, too. */
+export const POS_COMPUTER_NAME_KEY = 'aahar.pos.computerName';
+export const POS_WINDOW_KEY = 'aahar.pos.window';
+const KEPT_ON_SIGN_OUT = [TILL_KEY_STORAGE_KEY, POS_COMPUTER_NAME_KEY, POS_WINDOW_KEY];
 
 export interface StoredAuth extends AuthTokens {
   savedAt: string;
@@ -78,7 +82,7 @@ export function clearAaharClientStorage(): void {
 
       if (
         key &&
-        key !== TILL_KEY_STORAGE_KEY &&
+        !KEPT_ON_SIGN_OUT.includes(key) &&
         AAHAR_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
       ) {
         keysToRemove.push(key);

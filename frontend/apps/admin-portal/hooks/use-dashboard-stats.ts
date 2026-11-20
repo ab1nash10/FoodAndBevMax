@@ -4,6 +4,8 @@ import type { DashboardSetup, HospitalSummary, StockBalance } from '@aahar/api-c
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
+// The stock screens' "expiring soon", so the dashboard counts the same batches they flag.
+import { EXPIRING_DAYS } from '@/components/inventory/stock-levels/levels';
 import { useLocationContext } from '@/components/location-context';
 import { organizationApi } from '@/lib/api';
 import {
@@ -23,7 +25,6 @@ import { queryKeys } from '@/lib/query-keys';
 
 /** Period stats change slowly; the work queue keeps the app's default 30s. */
 const STATS_STALE_MS = 60_000;
-const EXPIRY_WINDOW_DAYS = 7;
 
 function daysUntil(dateIso: string): number {
   const today = new Date();
@@ -159,7 +160,7 @@ export function useDashboardStats(period: Period) {
         })
       ).data.items.filter(
         (balance): balance is StockBalance & { expiryDate: string } =>
-          balance.expiryDate !== null && daysUntil(balance.expiryDate) <= EXPIRY_WINDOW_DAYS,
+          balance.expiryDate !== null && daysUntil(balance.expiryDate) <= EXPIRING_DAYS,
       ),
     queryKey: queryKeys.dashboardExpiring(scope),
   });

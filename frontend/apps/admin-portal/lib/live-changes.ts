@@ -62,6 +62,7 @@ const busyAreas: Record<string, QueryKey[]> = {
   'order-reports': [...billKeys, queryKeys.orderAmendments()],
   pos: billKeys,
   qr: billKeys,
+  rooms: [queryKeys.rooms()],
   'stock-discards': stockKeys,
   'transfer-acknowledgements': transferKeys,
   transfers: transferKeys,

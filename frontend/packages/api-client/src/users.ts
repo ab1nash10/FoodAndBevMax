@@ -14,6 +14,8 @@ export type LocationScope = 'ALL' | 'MULTI' | 'SINGLE';
 export interface AccessRole {
   description: string | null;
   id: string;
+  /** One of the fixed operator roles: its users are on Operators, everyone else on Admins. */
+  isOperator: boolean;
   /** ALL = every location, MULTI = the assigned locations, SINGLE = exactly one. */
   locationScope: LocationScope;
   name: string;
@@ -23,7 +25,7 @@ export interface AccessRole {
 export interface AccessUser {
   avatarUrl: string | null;
   createdAt: string;
-  /** While set (ISO time), an admin cannot change this user's email, mobile or password. */
+  /** While set (ISO time), an admin cannot change this user's email or mobile. */
   credentialsLockedUntil: string | null;
   /** Where the user starts after sign-in: one of their locations (any location for ALL scope). */
   defaultLocationId: string | null;
@@ -32,6 +34,8 @@ export interface AccessUser {
   employeeCode: string;
   hospitals: Array<{ id: string; name: string }>;
   id: string;
+  /** ISO time of their last sign-in; null if they never signed in. */
+  lastLoginAt: string | null;
   locationScope: LocationScope | null;
   mobile: string;
   name: string;
@@ -42,19 +46,15 @@ export interface AccessUser {
 
 export interface AccessUserInput {
   avatarUrl?: string;
-  /** Required when changing your own password, email or mobile. */
-  currentPassword?: string;
   /** Null on an update clears it. */
   designation?: string | null;
-  /** A password signs in with the email, so every user has one. */
+  /** Sign-in codes go here (or to the mobile). */
   email: string;
   employeeCode: string;
   /** Locations this user may operate in; count must match the role's locationScope. */
   hospitalIds?: string[];
   mobile: string;
   name: string;
-  /** Required on create; omit on update to keep the existing password. */
-  password?: string;
   roleId: string;
   status?: UserStatus;
 }
@@ -68,36 +68,29 @@ export interface UserPreferences {
   /** A portal path such as /inventory/grns, or null for the dashboard. */
   startPage: string | null;
   theme: ThemePreference | null;
-  /** False until the user has a password: Preferences then sets one with no current password. */
-  hasPassword: boolean;
 }
 
 /**
  * Partial update: omitted fields are kept, null resets a field to its default. The default
  * location can be changed to another of the user's locations but never cleared.
  */
-export type UserPreferencesInput = Partial<
-  Omit<UserPreferences, 'defaultLocationId' | 'hasPassword'>
-> & {
+export type UserPreferencesInput = Partial<Omit<UserPreferences, 'defaultLocationId'>> & {
   defaultLocationId?: string;
 };
 
 /** The signed-in user's location reach, default location and the active locations they may pick. */
 export interface MyAccess {
   defaultLocationId: string | null;
+  employeeCode: string;
   locationScope: LocationScope;
   locations: HospitalSummary[];
   /** The signed-in user's permissions, as the server resolves them now. */
   permissions: string[];
 }
 
-export interface ChangePasswordInput {
-  /** Left out to set a first password. */
-  currentPassword?: string;
-  newPassword: string;
-}
-
 export interface AccessUserListQuery extends ListQuery {
+  /** OPERATORS: holding an operator role (AccessRole.isOperator); ADMINS: everyone else. */
+  group?: 'ADMINS' | 'OPERATORS';
   /** Only users working at this location (default or assigned). */
   hospitalId?: string;
   roleId?: string;
@@ -140,12 +133,6 @@ export function createUserApi(options: ApiClientOptions) {
       return client.request<ApiResponse<UserPreferences>>('/users/me/preferences', {
         body,
         method: 'PATCH',
-      });
-    },
-    changeMyPassword(body: ChangePasswordInput) {
-      return client.request<ApiResponse<{ changed: true }>>('/users/me/password', {
-        body,
-        method: 'POST',
       });
     },
     assignUserLocations(body: { hospitalIds: string[]; userIds: string[] }) {

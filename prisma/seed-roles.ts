@@ -11,9 +11,9 @@ import { createPrismaAdapter } from '../backend/packages/auth/src/prisma-adapter
  *   MULTI  - the locations explicitly assigned (Admin)
  *   SINGLE - exactly the one location assigned to the user (everyone else)
  *
- * Permission codes are limited to those that guard an endpoint that exists today. POS Cashier
- * and Delivery Operator are deliberately thin until the ordering, billing, KOT and delivery
- * modules ship their own permissions.
+ * Permission codes are limited to those that guard an endpoint that exists today.
+ * Restaurant/POS Operator and Delivery Operator are deliberately thin until the ordering, billing,
+ * KOT and delivery modules ship their own permissions.
  */
 export const OPERATIONAL_ROLES: Array<{
   description: string;
@@ -24,7 +24,7 @@ export const OPERATIONAL_ROLES: Array<{
   {
     description: 'Billing, POS orders and payments at any counter of their location',
     locationScope: LocationScope.SINGLE,
-    name: 'POS Cashier',
+    name: 'Restaurant/POS Operator',
     // Bills, receives stock at the counter and switches menu items on or off there, and passes
     // ready-made leftovers to another restaurant (or takes them in); cancelling a bill (a refund
     // and a stock reversal) stays with Admins.
@@ -103,7 +103,8 @@ export const OPERATIONAL_ROLES: Array<{
     description: 'Order assignment and delivery at an assigned location',
     locationScope: LocationScope.SINGLE,
     name: 'Delivery Operator',
-    permissionCodes: ['ITEM_VIEW', 'RESTAURANT_MENU_VIEW', 'RESTAURANT_VIEW'],
+    // My Deliveries: the room orders given to them, marked delivered at the bed.
+    permissionCodes: ['ITEM_VIEW', 'ORDER_DELIVER', 'RESTAURANT_MENU_VIEW', 'RESTAURANT_VIEW'],
   },
 ];
 

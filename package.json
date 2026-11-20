@@ -9,7 +9,6 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "admin:password": "pnpm --filter @aahar/auth admin:password",
     "build": "turbo build",
     "clean": "turbo clean",
     "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",

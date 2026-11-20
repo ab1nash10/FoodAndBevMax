@@ -88,10 +88,12 @@ enum ServiceType {
   TAKE_AWAY
 }
 
-/// Where the guest is served: at the counter, or in their room (in-room dining).
+/// Where the guest is served: at the counter, in their room (in-room dining), or at a dine-in
+/// table, ordered from the table's QR (at-table dining).
 enum OrderChannel {
   COUNTER
   ROOM
+  TABLE
 }
 
 /// How a counter bill was paid. Card and UPI are taken on the counter's own machine and
@@ -203,8 +205,11 @@ enum StockTransactionType {
   DISCARD_OUT
   /// Ready-made leftovers sent from one restaurant to another.
   RESTAURANT_TRANSFER_OUT
-  /// Stock sent back from a store to the vendor: an ERP return GRN (flag 1), once verified.
+  /// Stock sent back from a store to the vendor: an ERP GRN reverse (flag 1).
   GRN_RETURN_OUT
+  /// A restaurant sending a batch back to the store; the store counts it in as STORE_RETURN_IN.
+  RESTAURANT_RETURN_OUT
+  STORE_RETURN_IN
 }
 
 enum StockReferenceType {
@@ -235,6 +240,8 @@ model User {
   /// The user's last signed-in request (written at most once a minute), cleared on sign-out.
   /// While it is under 8 hours old an admin cannot change their password, email or mobile.
   lastActiveAt   DateTime?  @map("last_active_at")
+  /// When the user last signed in (stamped by auth-service); shown on Admins and Operators.
+  lastLoginAt    DateTime?  @map("last_login_at")
   status         UserStatus @default(ACTIVE)
   hospitalId     String?    @map("hospital_id") @db.Uuid
   createdAt      DateTime   @default(now()) @map("created_at")
@@ -396,6 +403,7 @@ model Hospital {
   grns                     Grn[]
   kitchenProductions       KitchenProduction[]
   kitchens                 Kitchen[]
+  rooms                    Room[]
   locations                Location[]
   assignedUsers            UserHospital[]
   itemPrices               ItemPrice[]
@@ -539,6 +547,30 @@ model Kitchen {
   @@map("kitchens")
 }
 
+/// A room or bed at a location, or (with a restaurant) a dine-in table of that restaurant. Its QR
+/// opens ordering with it already filled in.
+model Room {
+  id           String    @id @default(uuid()) @db.Uuid
+  hospitalId   String    @map("hospital_id") @db.Uuid
+  /// Set for a table: the restaurant it stands in. Null for a room or bed.
+  restaurantId String?   @map("restaurant_id") @db.Uuid
+  roomCode     String    @unique @map("room_code")
+  roomName     String    @map("room_name")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  createdBy    String?   @map("created_by") @db.Uuid
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  updatedBy    String?   @map("updated_by") @db.Uuid
+  deletedAt    DateTime? @map("deleted_at")
+
+  hospital   Hospital    @relation(fields: [hospitalId], references: [id])
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+
+  @@index([hospitalId])
+  @@index([restaurantId])
+  @@map("rooms")
+}
+
 model Restaurant {
   id                       String    @id @default(uuid()) @db.Uuid
   hospitalId               String    @map("hospital_id") @db.Uuid
@@ -616,6 +648,7 @@ model Restaurant {
   orders             RestaurantOrder[]
   kioskOrders        KioskOrder[]
   qrOrders           QrOrder[]
+  tables             Room[]
   staffDiscounts     RestaurantStaffDiscount[]
   employeeDiscounts  EmployeeDiscount[]
   hospital           Hospital                  @relation(fields: [hospitalId], references: [id])
@@ -822,6 +855,8 @@ model RestaurantOrder {
   employeeCode        String?       @map("employee_code")
   roomNumber          String?       @map("room_number")
   bedNumber           String?       @map("bed_number")
+  /// The dine-in table a TABLE order is served at, by name.
+  tableName           String?       @map("table_name")
   instructions        String?
   isComplimentary     Boolean       @default(false) @map("is_complimentary")
   complimentaryReason String?       @map("complimentary_reason")
@@ -1042,6 +1077,8 @@ model QrOrder {
   channel         OrderChannel
   roomNumber      String?          @map("room_number")
   bedNumber       String?          @map("bed_number")
+  /// The table a TABLE order goes to, from the table's own QR.
+  tableName       String?          @map("table_name")
   instructions    String?
   /// [{ menuId, quantity }] as ordered; priced by the server.
   lines           Json
@@ -1536,9 +1573,13 @@ model GrnLine {
   @@map("grn_lines")
 }
 
+/// An ERP GRN's progress, the same on every row of it. Goods in move on arrival, so PENDING is a
+/// reverse (flag 1) still waiting for stock to come back to the store; VERIFIED is everything
+/// moved; CLOSED is a waiting reverse a store admin closed (its rest written off, with a reason).
 enum GrnEntryStatus {
   PENDING
   VERIFIED
+  CLOSED
 }
 
 /// One batch of a GRN sent by the ERP (POST /erp/grns), as sent: the ERP's GRN is one document,
@@ -1546,8 +1587,9 @@ enum GrnEntryStatus {
 /// portal, and the ERP reads the result back. Nothing reaches stock while it is PENDING.
 model GrnEntry {
   id                String         @id @default(uuid()) @map("grn_entry_id") @db.Uuid
-  /// The ERP's id for this batch row: a resend can never add the same batch twice.
-  transactionNumber String         @unique @map("transaction_number")
+  /// AAHAR's number for the request that sent this row (one per POST /erp/grns, given in its
+  /// response): every row of one request has the same one.
+  transactionNumber String         @map("transaction_number")
   /// The ERP's GRN number, the same on every batch of one GRN.
   grnNumber         String         @map("grn_number")
   /// 0 = goods in (adds the accepted quantity to the store), 1 = return to vendor (takes it out).
@@ -1563,7 +1605,8 @@ model GrnEntry {
   hsnCode           String?        @map("hsn_code")
   batchNumber       String         @map("batch_number")
   expiryDate        DateTime       @map("expiry_date") @db.Date
-  /// What the ERP sent. Once verified, accepted + rejected equals it (a CHECK in the migration).
+  /// What the ERP sent. accepted is what moved (into the store, or out for a reverse) and
+  /// rejected what was closed without moving; once not PENDING they add up to it (a CHECK).
   sentQty           Decimal        @map("sent_qty") @db.Decimal(12, 3)
   acceptedQty       Decimal?       @map("accepted_qty") @db.Decimal(12, 3)
   rejectedQty       Decimal?       @map("rejected_qty") @db.Decimal(12, 3)
@@ -1579,6 +1622,10 @@ model GrnEntry {
   requisitionNumber String?        @map("requisition_number")
   vendorCode        String?        @map("vendor_code")
   status            GrnEntryStatus @default(PENDING)
+  /// Whether a waiting reverse runs again by itself when its batch reaches the store; the store
+  /// can pause it. Same on every row of the GRN.
+  rerunActive       Boolean        @default(true) @map("rerun_active")
+  /// When it was finished (or closed); by whom, if a user did it rather than the ERP's call.
   verifiedAt        DateTime?      @map("verified_at")
   verifiedBy        String?        @map("verified_by") @db.Uuid
   createdAt         DateTime       @default(now()) @map("created_at")
@@ -1590,6 +1637,7 @@ model GrnEntry {
   verifier User?    @relation(fields: [verifiedBy], references: [id])
 
   @@index([grnNumber])
+  @@index([transactionNumber])
   @@index([hospitalId, status])
   @@index([status, verifiedAt])
   @@index([storeId])
@@ -1733,6 +1781,9 @@ model Transfer {
   businessDate    DateTime              @map("business_date") @db.Date
   status          TransferStatus        @default(DRAFT)
   remarks         String?
+  /// The operator the store chose at Distribute: only they (or a Super Admin) acknowledge it.
+  /// Null: anyone at the destination who may receive transfers.
+  receiverId      String?               @map("receiver_id") @db.Uuid
   createdAt       DateTime              @default(now()) @map("created_at")
   createdBy       String?               @map("created_by") @db.Uuid
   updatedAt       DateTime              @updatedAt @map("updated_at")

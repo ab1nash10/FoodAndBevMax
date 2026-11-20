@@ -94,16 +94,8 @@ spec:
         - name: seed
           image: {{ $image | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          # The seed also gives the Super Admin its first password from ADMIN_PASSWORD, but only
-          # while the account has none - see prisma/seed.ts.
           command: ['pnpm', 'db:seed']
           env:
-            - name: ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.config.secretName }}
-                  key: ADMIN_PASSWORD
-                  optional: true
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

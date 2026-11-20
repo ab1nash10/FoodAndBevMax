@@ -224,6 +224,9 @@ exports[`every prefix stays as it is 1`] = `
   "restaurants": [
     "restaurants",
   ],
+  "rooms": [
+    "rooms",
+  ],
   "staffDiscounts": [
     "staff-discounts",
   ],

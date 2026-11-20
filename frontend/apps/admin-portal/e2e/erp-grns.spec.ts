@@ -1,89 +1,22 @@
-import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { env, mainStoreItem, sendAsErp } from './erp';
 import signIn from './sign-in';
 
 // The saved session may have been ended by another spec signing in (one browser at a time).
 test.beforeAll(() => signIn());
 
-const organizationApi = process.env.E2E_ORGANIZATION_URL ?? 'http://localhost:4003/api/v1';
-
-/** A setting from the repo's .env (the ERP key and secret the local API checks). */
-function env(name: string): string {
-  const line = readFileSync('../../../.env', 'utf8')
-    .split(/\r?\n/)
-    .find((text) => text.startsWith(`${name}=`));
-  return (line?.slice(name.length + 1) ?? '').replace(/^["']|["']$/g, '');
-}
-
-async function list<T>(request: APIRequestContext, path: string): Promise<T[]> {
-  const session = JSON.parse(readFileSync('e2e/.auth.json', 'utf8')) as {
-    origins: { localStorage: { value: string }[] }[];
-  };
-  const { accessToken } = JSON.parse(session.origins[0]?.localStorage[0]?.value ?? '{}') as {
-    accessToken: string;
-  };
-  const response = await request.get(`${organizationApi}${path}`, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
-  return ((await response.json()) as { data: { items: T[] } }).data.items;
-}
-
-/** India time as the ERP signs it: dd/MM/yyyy/HH/mm. */
-function erpTimestamp(): string {
-  const ist = new Date(Date.now() + 330 * 60_000);
-  const two = (value: number) => String(value).padStart(2, '0');
-  return `${two(ist.getUTCDate())}/${two(ist.getUTCMonth() + 1)}/${ist.getUTCFullYear()}/${two(ist.getUTCHours())}/${two(ist.getUTCMinutes())}`;
-}
-
-/** Sends rows to POST /erp/grns signed as the ERP does. */
-async function sendAsErp(request: APIRequestContext, rows: object[]) {
-  const url = new URL(`${organizationApi}/erp/grns`);
-  const body = JSON.stringify(rows);
-  const timestamp = erpTimestamp();
-  const nonce = randomUUID();
-  const text = [
-    'POST',
-    url.pathname,
-    timestamp,
-    nonce,
-    createHash('sha256').update(body).digest('hex'),
-  ].join('\n');
-
-  return request.post(url.toString(), {
-    data: body,
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': env('ERP_API_KEY'),
-      'x-nonce': nonce,
-      'x-signature': createHmac('sha256', env('ERP_API_SECRET')).update(text).digest('hex'),
-      'x-timestamp': timestamp,
-    },
-  });
-}
-
-type Store = { hospitalId: string; id: string; isActive: boolean; storeName: string };
-type StoreItem = { isActive: boolean; item: { itemCode: string }; storeId: string };
-type Hospital = { hospitalCode: string; hospitalName: string; id: string };
-
-// The ERP sends a GRN in its own field names; the store opens it on the ERP GRNs page, sees
-// every field, rejects the batch with a reason (so no stock moves) and verifies it.
-test('a GRN from the ERP shows every field and is verified by the store', async ({
+// The ERP sends a GRN in its own field names; it goes into the Main Store on arrival, and the
+// ERP GRNs page shows every field and what was added, with nothing left for the store to do.
+test('a GRN from the ERP goes into stock on arrival and shows every field', async ({
   page,
   request,
 }) => {
   page.setDefaultTimeout(30_000);
   test.skip(!env('ERP_API_KEY') || !env('ERP_API_SECRET'), 'no ERP key in .env');
 
-  const stores = await list<Store>(request, '/stores?isActive=true&limit=100');
-  const storeItems = await list<StoreItem>(request, '/store-items?isActive=true&limit=100');
-  const hospitals = await list<Hospital>(request, '/hospitals?isActive=true&limit=100');
-  const mapped = storeItems.find((row) =>
-    stores.some((store) => store.id === row.storeId && store.storeName === 'Main Store'),
-  );
-  test.skip(!mapped, 'no item set up in a Main Store');
-  const store = stores.find((row) => row.id === mapped!.storeId)!;
-  const hospital = hospitals.find((row) => row.id === store.hospitalId)!;
+  const found = await mainStoreItem(request);
+  test.skip(!found, 'no item set up in a Main Store');
+  const { hospital, mapped } = found!;
   const grnNo = `E2E-${Date.now().toString(36)}`;
 
   const sent = await sendAsErp(request, [
@@ -94,7 +27,7 @@ test('a GRN from the ERP shows every field and is verified by the store', async 
       'Total Value': '9.257',
       UOM: 'No.',
       'Unit Rate': '9.80',
-      batch: '*',
+      batch: grnNo,
       date: '2026-10-26 15:50:00',
       expiry_date: '2030-10-26 15:50:00',
       flag: 0,
@@ -102,27 +35,40 @@ test('a GRN from the ERP shows every field and is verified by the store', async 
       issued_by: 'M030634',
       // By name, as the ERP may send it; item name and HSN are left to the Item master.
       location: hospital.hospitalName,
-      part_item_code: mapped!.item.itemCode,
+      part_item_code: mapped.item.itemCode,
       purchase_order: '392851',
       requisition: '918590',
       supplier: 'CAGR0008',
-      transaction_number: `${grnNo}-1`,
       transaction_qty: '5',
     },
   ]);
   expect(sent.status(), await sent.text()).toBe(200);
+  // AAHAR answers with its own number for the request.
+  const receipt = (await sent.json()) as Record<string, unknown>;
+  expect(receipt).toEqual({
+    message: 'We have successfully received the request',
+    success: true,
+    transaction_number: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
+  });
+  const transactionNumber = receipt.transaction_number as string;
 
   await page.addInitScript(() => window.localStorage.setItem('aahar.location-context', 'all'));
   await page.goto(`inventory/erp-grns?q=${grnNo}`);
   const row = page.locator(`tr[data-record-id="${grnNo}"]`);
-  await expect(row).toContainText('To verify');
+  await expect(row).toContainText('Success');
+  await expect(row).toContainText('1 batch · GRN');
   await row.click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText(`GRN ${grnNo}`);
-  // The batch's quantity says what it is.
-  await expect(dialog.locator('li[data-transaction]')).toContainText(/Qty sent\s*5\s*No\./);
+  // Batches sit under their item; each says what was sent and what went into the store.
+  const item = dialog.locator(`li[data-item="${mapped.item.itemCode}"]`);
+  await expect(item.getByRole('heading')).toContainText(mapped.item.itemCode);
+  const batch = item.locator('li[data-row]');
+  await expect(batch).toContainText(/Qty sent\s*5\s*No\./);
+  await expect(batch).toContainText(/Added to the store\s*5/);
   for (const text of [
+    transactionNumber,
     hospital.hospitalCode,
     'Main Store',
     'CAGR0008',
@@ -135,19 +81,48 @@ test('a GRN from the ERP shows every field and is verified by the store', async 
   ]) {
     await expect(dialog).toContainText(text);
   }
+  // Nothing for the store to do on goods in.
+  await expect(dialog.getByRole('button', { name: 'Run now' })).toHaveCount(0);
+});
 
-  // Reject the whole batch: a reason is needed before Verify is allowed.
-  await dialog.getByLabel(`Accepted for ${grnNo}-1`).fill('0');
-  await expect(dialog.getByRole('button', { name: 'Verify GRN' })).toBeDisabled();
-  await dialog.getByLabel(`Reason for ${grnNo}-1`).fill('E2E check, not received');
-  await dialog.getByRole('button', { name: 'Verify GRN' }).click();
-  await page
-    .getByRole('dialog', { name: `Verify GRN ${grnNo}?` })
-    .getByRole('button', { name: 'Verify' })
-    .click();
+// A reverse (flag 1) takes the batch back out of the store: here the same GRN brings it in
+// and sends it back, so the store holds it whatever else is in stock.
+test('a GRN reverse takes the batch back out of the store', async ({ page, request }) => {
+  page.setDefaultTimeout(30_000);
+  test.skip(!env('ERP_API_KEY') || !env('ERP_API_SECRET'), 'no ERP key in .env');
 
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(row).toContainText('Verified');
+  const found = await mainStoreItem(request);
+  test.skip(!found, 'no item set up in a Main Store');
+  const { hospital, mapped } = found!;
+  const grnNo = `E2E-RET-${Date.now().toString(36)}`;
+
+  const line = (flag: number) => ({
+    batch: grnNo,
+    date: '2026-10-26 15:50:00',
+    expiry_date: '2030-10-26',
+    flag,
+    grn_No: grnNo,
+    location: hospital.hospitalCode,
+    part_item_code: mapped.item.itemCode,
+    transaction_qty: '2',
+  });
+  const sent = await sendAsErp(request, [line(0), line(1)]);
+  expect(sent.status(), await sent.text()).toBe(200);
+
+  await page.addInitScript(() => window.localStorage.setItem('aahar.location-context', 'all'));
+  await page.goto(`inventory/erp-grns?q=${grnNo}`);
+  const row = page.locator(`tr[data-record-id="${grnNo}"]`);
+  await expect(row).toContainText('GRN + reverse');
+  await expect(row).toContainText('Success');
+  await row.click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('li[data-row]', { hasText: 'Qty sent' })).toContainText(
+    /Added to the store\s*2/,
+  );
+  await expect(dialog.locator('li[data-row]', { hasText: 'Qty to return' })).toContainText(
+    /Returned\s*2/,
+  );
 });
 
 // The list keeps itself up to date: a GRN the ERP sends while the page is open shows up on its
@@ -156,15 +131,9 @@ test('a GRN sent while the page is open appears without a reload', async ({ page
   page.setDefaultTimeout(30_000);
   test.skip(!env('ERP_API_KEY') || !env('ERP_API_SECRET'), 'no ERP key in .env');
 
-  const stores = await list<Store>(request, '/stores?isActive=true&limit=100');
-  const storeItems = await list<StoreItem>(request, '/store-items?isActive=true&limit=100');
-  const hospitals = await list<Hospital>(request, '/hospitals?isActive=true&limit=100');
-  const mapped = storeItems.find((row) =>
-    stores.some((store) => store.id === row.storeId && store.storeName === 'Main Store'),
-  );
-  test.skip(!mapped, 'no item set up in a Main Store');
-  const store = stores.find((row) => row.id === mapped!.storeId)!;
-  const hospital = hospitals.find((row) => row.id === store.hospitalId)!;
+  const found = await mainStoreItem(request);
+  test.skip(!found, 'no item set up in a Main Store');
+  const { hospital, mapped } = found!;
 
   await page.addInitScript(() => window.localStorage.setItem('aahar.location-context', 'all'));
   await page.goto('inventory/erp-grns');
@@ -179,8 +148,7 @@ test('a GRN sent while the page is open appears without a reload', async ({ page
       flag: 0,
       grn_No: grnNo,
       location: hospital.hospitalCode,
-      part_item_code: mapped!.item.itemCode,
-      transaction_number: `${grnNo}-1`,
+      part_item_code: mapped.item.itemCode,
       transaction_qty: '1',
     },
   ]);
