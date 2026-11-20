@@ -1,7 +1,7 @@
 -- 2,000 throwaway users for the load test, all at Max-Smart (the location of this dev PC's till), signing in with the dev OTP
 -- (mobile 7000000001..7000002000, code LOADTEST-0001..). Local database only; remove them with
 -- cleanup-users.sql. Re-running adds only the missing ones.
--- Each block of 1,000: 1-500 POS Cashier, 501-750 Inventory Manager, 751-900 Kitchen Operator,
+-- Each block of 1,000: 1-500 Restaurant/POS Operator, 501-750 Inventory Manager, 751-900 Kitchen Operator,
 -- 901-1000 Admin.
 BEGIN;
 
@@ -23,7 +23,7 @@ INSERT INTO user_roles (id, user_id, role_id, updated_at)
 SELECT gen_random_uuid(), u.id, r.id, now()
 FROM users u
 JOIN roles r ON r.deleted_at IS NULL AND r.name = CASE
-  WHEN (substr(u.employee_code, 10)::int - 1) % 1000 < 500 THEN 'POS Cashier'
+  WHEN (substr(u.employee_code, 10)::int - 1) % 1000 < 500 THEN 'Restaurant/POS Operator'
   WHEN (substr(u.employee_code, 10)::int - 1) % 1000 < 750 THEN 'Inventory Manager'
   WHEN (substr(u.employee_code, 10)::int - 1) % 1000 < 900 THEN 'Kitchen Operator'
   ELSE 'Admin'

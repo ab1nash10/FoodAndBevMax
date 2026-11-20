@@ -31,7 +31,7 @@ const email = (n) => `loadtest-${String(n).padStart(4, '0')}@aahar.test`;
 // The same split as seed-users.sql: half cashiers, then inventory, kitchen and admins.
 const roleOf = (n) =>
   n <= 500
-    ? 'POS Cashier'
+    ? 'Restaurant/POS Operator'
     : n <= 750
       ? 'Inventory Manager'
       : n <= 900
@@ -114,7 +114,12 @@ async function setup() {
 
   const roles = (await api('GET', '/roles?limit=100', token)).data;
   const roleIds = Object.fromEntries((roles.items ?? roles).map((role) => [role.name, role.id]));
-  for (const name of ['POS Cashier', 'Inventory Manager', 'Kitchen Operator', 'Admin']) {
+  for (const name of [
+    'Restaurant/POS Operator',
+    'Inventory Manager',
+    'Kitchen Operator',
+    'Admin',
+  ]) {
     if (!roleIds[name]) throw new Error(`no role named ${name}`);
   }
 

@@ -39,7 +39,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL_TEST"],
+      "env": ["DATABASE_URL_TEST", "REDIS_URL"],
       "outputs": ["coverage/**"]
     },
     "typecheck": {

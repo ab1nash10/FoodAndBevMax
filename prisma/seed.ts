@@ -1,14 +1,8 @@
 import { LocationScope, PrismaClient, UserStatus } from '@prisma/client';
-import { hashPassword } from '../backend/packages/auth/src/passwords';
 import { createPrismaAdapter } from '../backend/packages/auth/src/prisma-adapter';
 import { seedOperationalRoles } from './seed-roles';
 
 const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
-
-// The Super Admin's first password comes from the environment (the Jenkins credential
-// aahar-admin, via the chart's Secret), never from source: this repository is public. It is
-// applied only while the account has no password, so one changed later survives every deploy.
-const INITIAL_SUPER_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim();
 
 const defaultPermissions = [
   ['USER_CREATE', 'USER', 'CREATE', 'Create users'],
@@ -36,6 +30,9 @@ const defaultPermissions = [
   ['KITCHEN_VIEW', 'KITCHEN', 'VIEW', 'View kitchens'],
   ['KITCHEN_UPDATE', 'KITCHEN', 'UPDATE', 'Update kitchens'],
   ['KITCHEN_DELETE', 'KITCHEN', 'DELETE', 'Disable kitchens'],
+  ['ROOM_CREATE', 'ROOM', 'CREATE', 'Create rooms and tables'],
+  ['ROOM_VIEW', 'ROOM', 'VIEW', 'View rooms and tables'],
+  ['ROOM_UPDATE', 'ROOM', 'UPDATE', 'Update rooms and tables'],
   ['RESTAURANT_CREATE', 'RESTAURANT', 'CREATE', 'Create restaurants'],
   ['RESTAURANT_VIEW', 'RESTAURANT', 'VIEW', 'View restaurants'],
   ['RESTAURANT_UPDATE', 'RESTAURANT', 'UPDATE', 'Update restaurants'],
@@ -161,7 +158,13 @@ const defaultPermissions = [
   ['ORDER_VIEW', 'ORDER', 'VIEW', 'View guest orders on the kitchen screen'],
   ['ORDER_UPDATE', 'ORDER', 'UPDATE', 'Move guest orders to preparing, ready and collected'],
   ['ORDER_STEWARD_ASSIGN', 'ORDER', 'STEWARD', 'Assign a steward (delivery person) to an order'],
-  ['ORDER_REPORT_VIEW', 'ORDER_REPORT', 'VIEW', 'View Orders & Reports: every bill with its steps and amendments'],
+  ['ORDER_DELIVER', 'ORDER', 'DELIVER', 'See the room orders given to you and mark them delivered'],
+  [
+    'ORDER_REPORT_VIEW',
+    'ORDER_REPORT',
+    'VIEW',
+    'View Orders & Reports: every bill with its steps and amendments',
+  ],
   ['ORDER_AMEND', 'ORDER_REPORT', 'AMEND', "Change a bill's payment mode within 48 hours"],
   // AAHAR's own POS, at a counter.
   ['POS_ORDER_CREATE', 'POS_ORDER', 'CREATE', 'Bill orders at a counter'],
@@ -449,20 +452,6 @@ async function main() {
         employeeCode: 'SA001',
       },
     });
-
-    if (!superAdminUser.passwordHash) {
-      if (INITIAL_SUPER_ADMIN_PASSWORD) {
-        await tx.user.update({
-          data: { passwordHash: await hashPassword(INITIAL_SUPER_ADMIN_PASSWORD) },
-          where: { id: superAdminUser.id },
-        });
-      } else {
-        // Not fatal: OTP sign-in still works, and `pnpm admin:password` can set it later.
-        console.warn(
-          'ADMIN_PASSWORD is not set, so the Super Admin (aahar@admin.local) has no password yet.',
-        );
-      }
-    }
 
     await tx.userRole.upsert({
       create: {
