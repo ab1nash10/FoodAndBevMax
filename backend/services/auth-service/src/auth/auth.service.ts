@@ -1,33 +1,22 @@
-import { randomUUID } from 'node:crypto';
 import {
   HttpException,
-  HttpStatus,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { hashPassword, isSessionCurrent, verifyPassword } from '@aahar/auth';
+import { isSessionCurrent } from '@aahar/auth';
 import { getRequestContext, logger, maskPhone, NO_ENTITY_ID } from '@aahar/logging';
 import { UserStatus } from '@prisma/client';
 import { AuthAuditLogService } from '../common/audit/auth-audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { RedisService } from '../common/redis/redis.service';
 import type { AuthContext, AuthTokens } from './auth.types';
 import { LogoutDto } from './dto/logout.dto';
-import { EmailPasswordLoginDto } from './dto/email-password-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { OtpService } from './services/otp.service';
 import { RefreshTokenReusedError, TokenService } from './services/token.service';
 
-// Ten wrong passwords for one email within 15 minutes lock its password sign-in for 15 minutes;
-// thirty from one address within 10 minutes (one guess at many accounts) lock that address for
-// 10. Code (OTP) sign-in stays open throughout.
-const PASSWORD_FAILURES_PER_ACCOUNT = { max: 10, seconds: 15 * 60 };
-const passwordFailuresKey = (email: string) => `auth:password-failures:${email}`;
-const PASSWORD_FAILURES_PER_ADDRESS = { max: 30, seconds: 10 * 60 };
 // However often it is refreshed, a session ends 30 days after its sign-in.
 const MAX_SESSION_AGE_SECONDS = 30 * 24 * 60 * 60;
 
@@ -82,13 +71,10 @@ function failureReason(error: unknown): string {
 
 @Injectable()
 export class AuthService {
-  private readonly dummyPasswordHash = hashPassword(randomUUID());
-
   constructor(
     private readonly auditLog: AuthAuditLogService,
     private readonly otp: OtpService,
     private readonly prisma: PrismaService,
-    private readonly redis: RedisService,
     private readonly tokens: TokenService,
   ) {}
 
@@ -158,131 +144,6 @@ export class AuthService {
     });
 
     return tokens;
-  }
-
-  /**
-   * Email and password sign-in, verified against the password stored on the user record.
-   *
-   * The seed gives the Super Admin its first password from ADMIN_PASSWORD (prisma/seed.ts),
-   * hashed into the user record like any other; `pnpm admin:password` replaces it.
-   */
-  async loginWithPassword(dto: EmailPasswordLoginDto, context: AuthContext): Promise<AuthTokens> {
-    const target = { channel: 'email', value: dto.email.toLowerCase() } as const;
-    // Counted per email typed, registered or not, so a lock tells a caller nothing about who exists.
-    const failureCounters = [
-      { key: passwordFailuresKey(target.value), ...PASSWORD_FAILURES_PER_ACCOUNT },
-      ...(context.ipAddress
-        ? [
-            {
-              key: `auth:password-failures-ip:${context.ipAddress}`,
-              ...PASSWORD_FAILURES_PER_ADDRESS,
-            },
-          ]
-        : []),
-    ];
-    // Every attempt takes its place in the counts before it is checked (one atomic INCR each),
-    // so a burst sent at once cannot all read "not locked" and get a full check: the attempts
-    // past a limit are refused. An attempt that turns out not to be a wrong password gives its
-    // place back below.
-    const counts = await Promise.all(
-      failureCounters.map(({ key, seconds }) => this.redis.increment(key, seconds)),
-    );
-    const giveBack = (counters: typeof failureCounters) =>
-      Promise.all(counters.map(({ key }) => this.redis.decrement(key)));
-
-    if (failureCounters.some(({ max }, index) => counts[index]! > max)) {
-      this.recordFailure('LOGIN_FAILED', target, 'locked');
-      throw new HttpException(
-        'Too many failed sign-in attempts. Please try again later, or sign in with a code.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    let user: Awaited<ReturnType<AuthService['findLoginUserOrNull']>>;
-    let passwordMatches: boolean;
-
-    try {
-      // Passwords are an email-only credential; a mobile number always signs in through OTP.
-      user = await this.findLoginUserOrNull(target);
-
-      // Always pay for one scrypt, so an unknown email is not answered measurably faster than a
-      // wrong password; otherwise response time alone enumerates registered addresses.
-      passwordMatches = await verifyPassword(
-        dto.password,
-        user?.passwordHash ?? (await this.dummyPasswordHash),
-      );
-    } catch (error) {
-      // An outage is not a wrong password: staff retrying it must not lock their address.
-      await giveBack(failureCounters);
-      throw error;
-    }
-
-    if (!user?.passwordHash || !passwordMatches) {
-      // The failure that reaches a limit restarts its window, so the lock runs its full length
-      // from there.
-      await Promise.all(
-        failureCounters.map(async ({ key, max, seconds }, index) => {
-          if (counts[index] === max) await this.redis.setWithExpiry(key, String(max), seconds);
-        }),
-      );
-      this.recordFailure('LOGIN_FAILED', target, 'invalid_credentials', user?.id);
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    // The account's own count clears; the address only gets this attempt's place back, since one
-    // right password must not wipe an address's spraying.
-    await this.redis.delete(failureCounters[0]!.key);
-    await giveBack(failureCounters.slice(1));
-
-    const tokens = await this.startSession(user);
-
-    await this.auditLog.record({
-      action: 'LOGIN_SUCCESS',
-      entityId: user.id,
-      ipAddress: context.ipAddress,
-      newValue: { channel: 'email-password' },
-      userId: user.id,
-    });
-
-    return tokens;
-  }
-
-  /**
-   * A forgotten password: the code sent to the account's email (send-otp) proves who it is, and
-   * the new password replaces the old one. Every session ends, as with any password change, and
-   * the wrong-password lock on that email lifts so the new password works at once. Email only:
-   * the password belongs to the email, and a mobile number never signs in with one.
-   */
-  async resetPassword(dto: ResetPasswordDto, context: AuthContext): Promise<{ reset: true }> {
-    const target = { channel: 'email', value: dto.email.trim().toLowerCase() } as const;
-    let user: Awaited<ReturnType<AuthService['findLoginUser']>>;
-
-    try {
-      await this.otp.verify({ email: target.value, otp: dto.otp });
-      user = await this.findLoginUser(target);
-    } catch (error) {
-      this.recordFailure('OTP_FAILED', target, failureReason(error));
-      throw error;
-    }
-
-    // Hashed first, so the scrypt work holds no database connection.
-    const passwordHash = await hashPassword(dto.newPassword);
-
-    await this.prisma.$executeRaw`
-      UPDATE users SET password_hash = ${passwordHash}, session_version = session_version + 1,
-        last_active_at = NULL, updated_at = now(), updated_by = ${user.id}::uuid
-      WHERE id = ${user.id}::uuid`;
-    await this.redis.delete(passwordFailuresKey(target.value));
-    await this.auditLog.record({
-      action: 'PASSWORD_CHANGED',
-      entityId: user.id,
-      entityName: 'users',
-      ipAddress: context.ipAddress,
-      newValue: { via: 'email-code' },
-      userId: user.id,
-    });
-
-    return { reset: true };
   }
 
   async refresh(dto: RefreshTokenDto, context: AuthContext): Promise<AuthTokens> {
@@ -380,7 +241,7 @@ export class AuthService {
 
   /**
    * A refused OTP or sign-in: a warning line (what CloudWatch counts per IP) and an audit row.
-   * Never the code or password; a phone shows its last four digits only.
+   * Never the code; a phone shows its last four digits only.
    */
   private recordFailure(
     action: 'LOGIN_FAILED' | 'OTP_FAILED',
@@ -412,7 +273,7 @@ export class AuthService {
    */
   private async startSession(user: Awaited<ReturnType<AuthService['findUserById']>>) {
     const [session] = await this.prisma.$queryRaw<Array<{ sessionVersion: number }>>`
-      UPDATE users SET session_version = session_version + 1
+      UPDATE users SET session_version = session_version + 1, last_login_at = now()
       WHERE id = ${user.id}::uuid
       RETURNING session_version AS "sessionVersion"`;
 
@@ -451,7 +312,7 @@ export class AuthService {
 
   /**
    * Null only when no such user exists: a database outage must surface as one (503), not tell
-   * a registered user to go to IT or that their password is wrong.
+   * a registered user to go to IT.
    */
   private findLoginUserOrNull(target: { channel: 'email' | 'mobile'; value: string }) {
     return this.findLoginUser(target).catch((error: unknown) => {

@@ -9,7 +9,6 @@ export type AuthAuditAction =
   | 'LOGOUT'
   | 'OTP_FAILED'
   | 'OTP_SENT'
-  | 'PASSWORD_CHANGED'
   | 'SESSION_REFRESHED'
   | 'SESSION_REVOKED';
 

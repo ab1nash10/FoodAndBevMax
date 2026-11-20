@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   Req,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -23,8 +24,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
-import { ErpGrnRowDto, ListGrnEntriesQueryDto, VerifyGrnEntryDto } from './dto/erp-grn.dto';
+import {
+  CloseGrnEntryDto,
+  ErpGrnRowDto,
+  ListGrnEntriesQueryDto,
+  SetGrnEntryRerunDto,
+} from './dto/erp-grn.dto';
 import { ErpGrnsService } from './erp-grns.service';
+import { ErpRequestFilter } from './erp-request.filter';
 import { ErpSignatureGuard } from './erp-signature.guard';
 
 /** For the ERP only: no user sign-in, every request signed instead (see ErpSignatureGuard). */
@@ -41,6 +48,8 @@ import { ErpSignatureGuard } from './erp-signature.guard';
 @ApiTags('erp-grns')
 @Public()
 @UseGuards(ErpSignatureGuard)
+// Every failure the ERP gets, from any of its calls, in one shape: success false + errors.
+@UseFilters(ErpRequestFilter)
 @Controller('erp/grns')
 export class ErpGrnsController {
   constructor(private readonly erpGrns: ErpGrnsService) {}
@@ -51,16 +60,23 @@ export class ErpGrnsController {
     summary: 'Send a GRN: a JSON array of its rows, one per batch, all with the same grn_No',
   })
   @ApiBody({ type: [ErpGrnRowDto] })
-  @ApiOkResponse({ description: 'GRN saved as PENDING, or replaced while still pending.' })
+  @ApiOkResponse({
+    description:
+      'Saved as PENDING (or replaced while still pending): { transaction_number, message: "We have ' +
+      'successfully received the request", success: true }. Refused: { transaction_number: null, ' +
+      'message: "Request failed", success: false, errors: [...] }.',
+  })
   async receive(
     @Body(new ParseArrayPipe({ forbidNonWhitelisted: true, items: ErpGrnRowDto, whitelist: true }))
     rows: ErpGrnRowDto[],
     @Req() request: RequestContextLike,
   ) {
+    const { transactionNumber } = await this.erpGrns.receive(rows, getIpAddress(request));
+
     return {
-      data: await this.erpGrns.receive(rows, getIpAddress(request)),
-      message: 'Success',
+      message: 'We have successfully received the request',
       success: true,
+      transaction_number: transactionNumber,
     };
   }
 
@@ -72,13 +88,16 @@ export class ErpGrnsController {
 
   @Get(':grnNumber')
   @ApiOperation({ summary: 'One GRN: sent, accepted and rejected quantity of every batch' })
-  @ApiParam({ name: 'grnNumber' })
+  @ApiParam({
+    description: 'The grn_No, or the transaction_number AAHAR returned',
+    name: 'grnNumber',
+  })
   async get(@Param('grnNumber') grnNumber: string) {
     return { data: await this.erpGrns.get(grnNumber), message: 'Success', success: true };
   }
 }
 
-/** For the portal: the store team checks each ERP GRN and accepts or rejects every batch. */
+/** For the portal: the store team sees each ERP GRN and handles reverses still waiting. */
 @ApiBearerAuth('access-token')
 @ApiTags('grn-entries')
 @Controller('grn-entries')
@@ -100,23 +119,59 @@ export class GrnEntriesController {
     return { data: await this.erpGrns.get(grnNumber), message: 'Success', success: true };
   }
 
-  @Patch(':grnNumber/verify')
+  @Post(':grnNumber/run')
+  @HttpCode(200)
   @Permissions('GRN_POST')
-  @ApiOperation({ summary: 'Accept or reject every batch; accepted quantity moves store stock' })
+  @ApiOperation({ summary: 'Run a waiting reverse now: take what the store holds of its batch' })
   @ApiParam({ name: 'grnNumber' })
-  async verify(
+  async run(
     @Param('grnNumber') grnNumber: string,
-    @Body() body: VerifyGrnEntryDto,
     @CurrentUser() user: JwtRequestUser | undefined,
     @Req() request: RequestContextLike,
   ) {
     return {
-      data: await this.erpGrns.verify(grnNumber, body, {
-        actorId: getActorId(user),
-        ipAddress: getIpAddress(request),
-      }),
+      data: await this.erpGrns.run(grnNumber, actor(user, request)),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Patch(':grnNumber/rerun')
+  @Permissions('GRN_POST')
+  @ApiOperation({ summary: 'Pause or resume a waiting reverse running again by itself' })
+  @ApiParam({ name: 'grnNumber' })
+  async setRerun(
+    @Param('grnNumber') grnNumber: string,
+    @Body() body: SetGrnEntryRerunDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.erpGrns.setRerun(grnNumber, body.active, actor(user, request)),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Patch(':grnNumber/close')
+  @Permissions('GRN_POST')
+  @ApiOperation({ summary: 'Close a waiting reverse that cannot finish, with a reason' })
+  @ApiParam({ name: 'grnNumber' })
+  async close(
+    @Param('grnNumber') grnNumber: string,
+    @Body() body: CloseGrnEntryDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.erpGrns.close(grnNumber, body.reason, actor(user, request)),
       message: 'Success',
       success: true,
     };
   }
 }
+
+const actor = (user: JwtRequestUser | undefined, request: RequestContextLike) => ({
+  actorId: getActorId(user),
+  ipAddress: getIpAddress(request),
+});

@@ -8,3 +8,6 @@ backend/services/**/src/generated
 
 # Helm templates are Go templates, not YAML: Prettier cannot parse `{{- range ... }}`.
 infra/helm/**/templates/**
+
+# Agent skills are vendored as installed (skills-lock.json), not project code.
+.agents

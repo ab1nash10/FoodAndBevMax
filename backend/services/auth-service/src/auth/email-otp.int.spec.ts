@@ -1,6 +1,6 @@
 // Characterisation of email OTP sign-in over HTTP, plus refresh and logout: the happy path and the
 // claims it issues, wrong, reused and expired codes, the attempt limit, the per-email throttles,
-// unknown and inactive accounts, and delivery failures. auth.int.spec.ts covers password and SMS.
+// unknown and inactive accounts, and delivery failures. auth.int.spec.ts covers SMS. There is no password sign-in.
 //
 // The Microsoft Graph mail sender is replaced by a spy that records the code, and the SMS sender
 // by one that records anything, so no email or text can ever be sent.
@@ -10,7 +10,6 @@
 process.env.TZ = 'UTC';
 
 import type { AddressInfo } from 'node:net';
-import { hashPassword } from '@aahar/auth';
 import { type INestApplication, ServiceUnavailableException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, type MockInstance, vi } from 'vitest';
 import type { PrismaService } from '../common/prisma/prisma.service';
@@ -24,7 +23,6 @@ const run = Date.now().toString(36);
 // Ten digits starting 56: no Indian mobile starts with 5, and the stamp keeps runs apart.
 const mobileStamp = String(Date.now()).slice(-6);
 let sequence = 10;
-const password = `Characterisation-${run}`;
 
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.length ? [shape(value[0])] : [];
@@ -99,7 +97,6 @@ describe.skipIf(!databaseUrl)(
           employeeCode: `CHR-OTP-${run}-${n}`.toUpperCase(),
           mobile: `56${mobileStamp}${n}`,
           name: `Characterisation ${label} ${n}`,
-          passwordHash: await hashPassword(password),
           roles: { create: [{ roleId }] },
           status,
         },
@@ -107,6 +104,21 @@ describe.skipIf(!databaseUrl)(
     }
 
     /** Sends a code to the email and returns what the mail spy captured. */
+    /**
+     * Another sign-in by emailed code, `afterSeconds` on: past the 30-second resend wait. Codes and
+     * waits live in this process (no REDIS_URL), timed by Date.now.
+     */
+    async function signInAgain(email: string, afterSeconds: number) {
+      const realNow = Date.now.bind(Date);
+      const ahead = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + afterSeconds * 1000);
+      try {
+        const { otp } = await sendCode(email);
+        return (await post('/auth/verify-otp', { email, otp })).data;
+      } finally {
+        ahead.mockRestore();
+      }
+    }
+
     async function sendCode(email: string) {
       const before = mailed.length;
       const sent = await post('/auth/send-otp', { email });
@@ -427,7 +439,7 @@ describe.skipIf(!databaseUrl)(
       const { otp } = await sendCode(email);
       const first = (await post('/auth/verify-otp', { email, otp })).data;
       // Signing in on another browser ends the first session (one browser at a time).
-      const second = (await post('/auth/login-with-password', { email, password })).data;
+      const second = await signInAgain(email, 31);
       expect(refused(await post('/auth/refresh', { refreshToken: first.refreshToken }))).toEqual([
         401,
         'Your account was updated. Please sign in again.',
@@ -480,7 +492,7 @@ describe.skipIf(!databaseUrl)(
       ).toEqual([401, 'Invalid refresh token']);
 
       // A disabled user cannot renew a session.
-      const third = (await post('/auth/login-with-password', { email, password })).data;
+      const third = await signInAgain(email, 62);
       expect(claimsOf(third.accessToken).sv).toBe(4);
       await prisma.user.update({ data: { status: 'DISABLED' }, where: { id: user.id } });
       expect(refused(await post('/auth/refresh', { refreshToken: third.refreshToken }))).toEqual([
@@ -503,55 +515,6 @@ describe.skipIf(!databaseUrl)(
           'LOGOUT',
           'LOGIN_SUCCESS',
         ]);
-      });
-    });
-
-    it('resets a forgotten password with an emailed code; the old one and every session stop', async () => {
-      const user = await portalUser('reset');
-      const email = user.email ?? '';
-      const signedIn = (await post('/auth/login-with-password', { email, password })).data;
-
-      const { otp } = await sendCode(email);
-      // The new password follows the same rule as everywhere else.
-      expect(
-        (await post('/auth/reset-password', { email, newPassword: 'short', otp })).status,
-      ).toBe(400);
-      expect(
-        refused(
-          await post('/auth/reset-password', {
-            email,
-            newPassword: 'Reset-new-1',
-            otp: wrongCode(otp),
-          }),
-        ),
-      ).toEqual([401, INVALID_OTP]);
-
-      const reset = await post('/auth/reset-password', {
-        email: email.toUpperCase(),
-        newPassword: 'Reset-new-1',
-        otp,
-      });
-      expect(reset.status).toBe(201);
-      expect(reset.body).toMatchObject({ data: { reset: true }, success: true });
-
-      expect((await post('/auth/login-with-password', { email, password })).status).toBe(401);
-      expect(
-        (await post('/auth/login-with-password', { email, password: 'Reset-new-1' })).status,
-      ).toBe(201);
-      // The session from before the reset is over.
-      expect((await post('/auth/refresh', { refreshToken: signedIn.refreshToken })).status).toBe(
-        401,
-      );
-      // The code is spent.
-      expect(
-        refused(await post('/auth/reset-password', { email, newPassword: 'Reset-new-2', otp })),
-      ).toEqual([401, INVALID_OTP]);
-      await vi.waitFor(async () => {
-        expect(
-          await prisma.auditLog.count({
-            where: { action: 'PASSWORD_CHANGED', entityId: user.id, entityName: 'users' },
-          }),
-        ).toBe(1);
       });
     });
   },

@@ -52,6 +52,7 @@ import { PosModule } from './pos/pos.module';
 import { RestaurantMenusModule } from './restaurant-menus/restaurant-menus.module';
 import { RestaurantOrdersModule } from './restaurant-orders/restaurant-orders.module';
 import { RestaurantsModule } from './restaurants/restaurants.module';
+import { RoomsModule } from './rooms/rooms.module';
 import { StockModule } from './stock/stock.module';
 import { StoreItemsModule } from './store-items/store-items.module';
 import { StoresModule } from './stores/stores.module';
@@ -115,6 +116,7 @@ import { TransfersModule } from './transfers/transfers.module';
     RestaurantMenusModule,
     RestaurantOrdersModule,
     RestaurantsModule,
+    RoomsModule,
     StockModule,
     StoreItemsModule,
     StoresModule,

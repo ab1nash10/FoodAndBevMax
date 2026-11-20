@@ -1,7 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { HttpException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { hashPassword, verifyPassword } from '@aahar/auth';
 import { logger } from '@aahar/logging';
 import { afterEach, test, vi } from 'vitest';
 import type { AuthAuditLogService } from '../common/audit/auth-audit-log.service';
@@ -41,7 +40,6 @@ const asha = {
   id: 'user-1',
   mobile: '9876543210',
   name: 'Asha',
-  passwordHash: null,
   permissionOverrides: [
     { granted: true, permission: permission('REPORT_VIEW') },
     { granted: false, permission: permission('KOT_CANCEL') },
@@ -62,13 +60,12 @@ const asha = {
   sessionVersion: 3,
   status: 'ACTIVE',
 };
-// Signs in with a password (set in the password tests).
+// A second registered user, signing in by email.
 const meera = {
   ...asha,
   email: 'meera@max.in',
   id: 'user-3',
   mobile: '9000000003',
-  passwordHash: null as string | null,
 };
 // Created in the portal but disabled since: may not sign in.
 const ravi = {
@@ -176,7 +173,6 @@ function authService(env: Record<string, unknown> = { NODE_ENV: 'test' }) {
     { record } as unknown as AuthAuditLogService,
     otp,
     prisma as unknown as PrismaService,
-    redis as unknown as RedisService,
     tokens as unknown as TokenService,
   );
 
@@ -230,19 +226,6 @@ test('a database outage is not reported as "not registered", and sends nothing',
     (error: unknown) => error === unreachable,
   );
   assert.equal(sms.sendOtp.mock.calls.length, 0);
-});
-
-test('a database outage during password sign-in is not called a wrong password', async () => {
-  const { findFirst, service } = authService();
-  const unreachable = Object.assign(new Error("Can't reach database server at localhost:5433"), {
-    code: 'P1001',
-  });
-  findFirst.mockRejectedValueOnce(unreachable);
-
-  await assert.rejects(
-    service.loginWithPassword({ email: 'asha@max.in', password: 'whatever' }, { ipAddress: '' }),
-    (error: unknown) => error === unreachable,
-  );
 });
 
 test('a refused number does not use up the resend cooldown', async () => {
@@ -453,210 +436,4 @@ test('a session signed in over 30 days ago cannot be refreshed; the sign-in time
   setRefresh({ ...token, iat: now - 2 * day, jti: 'jti-3' });
   await service.refresh({ refreshToken: 'r' }, {});
   assert.equal(tokens.issueTokens.mock.calls[1]?.[1], now - 2 * day);
-});
-
-const lockedOut = (error: unknown) =>
-  error instanceof HttpException &&
-  error.getStatus() === 429 &&
-  /Too many failed sign-in attempts/.test(error.message);
-const wrongPassword = (error: unknown) =>
-  error instanceof UnauthorizedException && error.message === 'Invalid email or password';
-
-test(
-  'ten wrong passwords lock that email for 15 minutes; the right one clears the count',
-  { timeout: 30_000 },
-  async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    meera.passwordHash = await hashPassword('Meera-right-1');
-    const { service } = authService();
-    const login = (password: string, email = 'Meera@max.in') =>
-      service.loginWithPassword({ email, password }, { ipAddress: '10.0.0.1' });
-
-    for (let attempt = 0; attempt < 9; attempt += 1) {
-      await assert.rejects(login('wrong'), wrongPassword);
-    }
-    assert.ok(await login('Meera-right-1'), 'nine misses do not lock, and success clears them');
-
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      await assert.rejects(login('wrong'), wrongPassword);
-    }
-    await assert.rejects(login('Meera-right-1'), lockedOut);
-    // Another account is not held up.
-    await assert.rejects(login('wrong', 'asha@max.in'), wrongPassword);
-
-    vi.advanceTimersByTime(14 * 60 * 1000);
-    await assert.rejects(login('Meera-right-1'), lockedOut);
-    vi.advanceTimersByTime(60 * 1000 + 1);
-    assert.ok(await login('Meera-right-1'));
-  },
-);
-
-test(
-  'thirty wrong passwords from one address lock password sign-in from it for 10 minutes',
-  { timeout: 30_000 },
-  async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    meera.passwordHash = await hashPassword('Meera-right-1');
-    const { service } = authService();
-
-    // Spraying: one guess at each of thirty accounts.
-    for (let account = 0; account < 30; account += 1) {
-      await assert.rejects(
-        service.loginWithPassword(
-          { email: `user${account}@max.in`, password: 'Summer2026' },
-          { ipAddress: '10.0.0.9' },
-        ),
-        wrongPassword,
-      );
-    }
-    const meeraFrom = (ipAddress: string) =>
-      service.loginWithPassword(
-        { email: 'meera@max.in', password: 'Meera-right-1' },
-        { ipAddress },
-      );
-    await assert.rejects(meeraFrom('10.0.0.9'), lockedOut);
-    assert.ok(await meeraFrom('10.0.0.10'), 'another address is not held up');
-
-    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
-    assert.ok(await meeraFrom('10.0.0.9'));
-  },
-);
-
-test(
-  'wrong passwords sent all at once still stop at the lock: each attempt is counted before its check',
-  { timeout: 60_000 },
-  async () => {
-    meera.passwordHash = await hashPassword('Meera-right-1');
-    const { service } = authService();
-    const outcomes = async (attempts: Promise<unknown>[]) => {
-      const results = await Promise.allSettled(attempts);
-      return {
-        checked: results.filter((r) => r.status === 'rejected' && wrongPassword(r.reason)).length,
-        locked: results.filter((r) => r.status === 'rejected' && lockedOut(r.reason)).length,
-      };
-    };
-
-    // Spraying in one burst: one guess at each of sixty accounts from one address.
-    const spray = Array.from({ length: 60 }, (_, account) =>
-      service.loginWithPassword(
-        { email: `user${account}@max.in`, password: 'Summer2026' },
-        { ipAddress: '10.0.0.9' },
-      ),
-    );
-    assert.deepEqual(await outcomes(spray), { checked: 30, locked: 30 });
-
-    // Twenty guesses at one account in one burst, from different addresses.
-    const burst = Array.from({ length: 20 }, (_, i) =>
-      service.loginWithPassword(
-        { email: 'meera@max.in', password: `guess-${i}` },
-        { ipAddress: `10.0.1.${i}` },
-      ),
-    );
-    assert.deepEqual(await outcomes(burst), { checked: 10, locked: 10 });
-  },
-);
-
-test(
-  'right passwords from one hospital address never add up to its lock',
-  { timeout: 60_000 },
-  async () => {
-    meera.passwordHash = await hashPassword('Meera-right-1');
-    const { service } = authService();
-
-    // A shift's worth of correct sign-ins behind one public address.
-    for (let i = 0; i < 31; i += 1) {
-      assert.ok(
-        await service.loginWithPassword(
-          { email: 'meera@max.in', password: 'Meera-right-1' },
-          { ipAddress: '10.0.0.5' },
-        ),
-      );
-    }
-  },
-);
-
-/** The new password hash the reset wrote, read from its UPDATE. */
-const resetHash = (executeRaw: ReturnType<typeof authService>['executeRaw']) => {
-  const call = executeRaw.mock.calls.find(([sql]) =>
-    (sql as readonly string[]).join('?').includes('password_hash'),
-  );
-  return call ? { hash: call[1] as string, userId: call.at(-1) } : undefined;
-};
-
-test(
-  'a forgotten password is reset with a code sent to the email: sessions end, the lock lifts',
-  { timeout: 30_000 },
-  async () => {
-    meera.passwordHash = await hashPassword('Meera-old-1');
-    const { executeRaw, mail, record, service } = authService();
-    const login = (password: string) =>
-      service.loginWithPassword({ email: 'meera@max.in', password }, { ipAddress: '10.0.0.1' });
-
-    // Ten wrong guesses lock password sign-in, the usual state of someone who forgot it.
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      await assert.rejects(login('guess'), wrongPassword);
-    }
-    await assert.rejects(login('Meera-old-1'), lockedOut);
-
-    await service.sendOtp({ email: 'meera@max.in' });
-    const code = mail.sendOtp.mock.calls[0]?.[1] as string;
-
-    assert.deepEqual(
-      await service.resetPassword(
-        { email: 'Meera@Max.in', newPassword: 'Meera-new-2', otp: code },
-        { ipAddress: '10.0.0.1' },
-      ),
-      { reset: true },
-    );
-
-    const written = resetHash(executeRaw);
-    assert.ok(written, 'the password was written');
-    assert.equal(written.userId, 'user-3');
-    assert.ok(await verifyPassword('Meera-new-2', written.hash));
-    // The same UPDATE moves the session version on, so every device signs in again.
-    assert.match(
-      (
-        executeRaw.mock.calls.find(([sql]) =>
-          (sql as readonly string[]).join('?').includes('password_hash'),
-        )?.[0] as readonly string[]
-      ).join('?'),
-      /session_version = session_version \+ 1/,
-    );
-    assert.ok(
-      record.mock.calls.some(
-        ([entry]) => entry.action === 'PASSWORD_CHANGED' && entry.userId === 'user-3',
-      ),
-    );
-
-    meera.passwordHash = written.hash;
-    assert.ok(await login('Meera-new-2'), 'the new password signs in at once: the lock is gone');
-
-    // A code works once.
-    await assert.rejects(
-      service.resetPassword(
-        { email: 'meera@max.in', newPassword: 'Meera-new-3', otp: code },
-        { ipAddress: '10.0.0.1' },
-      ),
-      UnauthorizedException,
-    );
-  },
-);
-
-test('a wrong code or an unregistered email changes no password', async () => {
-  meera.passwordHash = await hashPassword('Meera-old-1');
-  const { executeRaw, service } = authService();
-
-  await service.sendOtp({ email: 'meera@max.in' });
-  await assert.rejects(
-    service.resetPassword({ email: 'meera@max.in', newPassword: 'Meera-new-2', otp: '000001' }, {}),
-    UnauthorizedException,
-  );
-  await assert.rejects(
-    service.resetPassword(
-      { email: 'nobody@max.in', newPassword: 'Meera-new-2', otp: '123456' },
-      {},
-    ),
-    UnauthorizedException,
-  );
-  assert.equal(resetHash(executeRaw), undefined);
 });

@@ -6,6 +6,7 @@ import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { CreateGrnDto } from './dto/create-grn.dto';
 import type { GrnsRepository } from './grns.repository';
 import { GrnsService } from './grns.service';
+import type { StoreArrivals } from '../common/store-arrivals';
 
 type StoredBatch = {
   acceptedQty: number;
@@ -118,6 +119,7 @@ function setup(grns: StoredGrn[] = []) {
   const service = new GrnsService(
     { record: () => Promise.resolve() } as unknown as AuditLogService,
     repository as unknown as GrnsRepository,
+    { arrived: () => Promise.resolve(), listen: () => undefined } as unknown as StoreArrivals,
   );
 
   return { balances, grns, ledger, service };

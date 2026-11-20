@@ -216,8 +216,6 @@ if (process.env.DB_SETUP_ON_START !== 'false') {
     '--schema',
     'prisma/schema.prisma',
   ]);
-  // The seed gives the Super Admin its first password from ADMIN_PASSWORD, only while the
-  // account has none; without it the account exists and `set-admin-password` sets one.
   runSetupStep('seed', ['node_modules/tsx/dist/cli.mjs', 'prisma/seed.ts']);
 }
 

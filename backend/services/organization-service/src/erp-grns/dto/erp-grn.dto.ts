@@ -1,10 +1,8 @@
 import { GrnEntryStatus } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -16,7 +14,6 @@ import {
   IsUUID,
   MaxLength,
   Min,
-  ValidateNested,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
@@ -34,21 +31,10 @@ const AsText = () =>
 
 /**
  * One row the ERP sends: one batch of one item of a GRN, in the ERP's own field names. A GRN
- * is every row with its grn_No; the GRN-wide fields repeat on each row.
+ * is every row with its grn_No; the GRN-wide fields repeat on each row. There is no transaction
+ * number: AAHAR gives each request its own and returns it in the response.
  */
 export class ErpGrnRowDto {
-  @ApiPropertyOptional({
-    description:
-      "The ERP's own id for this row, never reused. Left out or blank, AAHAR uses the row's own " +
-      'record id (a UUID) and returns it in the response, in the order the rows were sent.',
-    example: '724630',
-  })
-  @AsText()
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  transaction_number?: string;
-
   @ApiProperty({
     description: 'The AAHAR location: its code, or its name. The GRN goes to its Main Store.',
     example: 'BLK',
@@ -193,39 +179,20 @@ export class ErpGrnRowDto {
   flag!: 0 | 1;
 }
 
-export class VerifyGrnEntryBatchDto {
-  @ApiProperty({ example: '724630' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  transactionNumber!: string;
+/** Pauses (false) or resumes (true) a waiting reverse's automatic rerun. */
+export class SetGrnEntryRerunDto {
+  @ApiProperty({ example: false })
+  @IsBoolean()
+  active!: boolean;
+}
 
-  @ApiProperty({ example: 30 })
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
-  acceptedQty!: number;
-
-  @ApiProperty({ example: 10 })
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
-  rejectedQty!: number;
-
-  @ApiPropertyOptional({ example: 'Damaged packing' })
+/** Closes a waiting reverse; the service asks for the reason in plain words if it is missing. */
+export class CloseGrnEntryDto {
+  @ApiPropertyOptional({ example: 'Sold at the café before the return came' })
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  rejectionReason?: string;
-}
-
-/** The store's answer for every batch of a GRN. */
-export class VerifyGrnEntryDto {
-  @ApiProperty({ type: [VerifyGrnEntryBatchDto] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(2000)
-  @ValidateNested({ each: true })
-  @Type(() => VerifyGrnEntryBatchDto)
-  batches!: VerifyGrnEntryBatchDto[];
+  reason?: string;
 }
 
 /** A page of GRNs (not rows). `search` matches the GRN number. */
@@ -252,4 +219,20 @@ export class ListGrnEntriesQueryDto extends PaginationQueryDto {
   @IsDateString()
   @IsOptional()
   verifiedSince?: string;
+
+  @ApiPropertyOptional({
+    description: 'Received on or after this day (India).',
+    example: '2026-11-01',
+  })
+  @IsDateString()
+  @IsOptional()
+  receivedFrom?: string;
+
+  @ApiPropertyOptional({
+    description: 'Received on or before this day (India).',
+    example: '2026-11-30',
+  })
+  @IsDateString()
+  @IsOptional()
+  receivedTo?: string;
 }

@@ -1,6 +1,7 @@
 # Quality gates on every pull request: the same install, generate, lint, typecheck, test and build
-# Jenkins runs, plus a throwaway Postgres so the integration suites (skipped without
-# DATABASE_URL_TEST) characterise every module's API over HTTP against a seeded database.
+# Jenkins runs, plus a throwaway Postgres and Redis so the integration suites (skipped without
+# DATABASE_URL_TEST) characterise every module's API over HTTP against a seeded database, and
+# the Redis store tests (skipped without REDIS_URL) run against a real Redis.
 name: CI
 
 on:
@@ -32,10 +33,21 @@ jobs:
           --health-retries 12
         ports:
           - 5432:5432
+      # The shared store (OTPs, sign-in codes, rate limits): its tests skip without REDIS_URL.
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 6379:6379
     env:
       # A disposable database that exists only for this job; nothing here is a real credential.
       DATABASE_URL: postgresql://aahar_ci:aahar_ci@localhost:5432/aahar_ci
       DATABASE_URL_TEST: postgresql://aahar_ci:aahar_ci@localhost:5432/aahar_ci
+      REDIS_URL: redis://localhost:6379
       TURBO_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v5

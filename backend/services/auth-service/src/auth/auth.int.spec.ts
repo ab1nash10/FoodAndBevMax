@@ -1,10 +1,10 @@
-// Characterisation of sign-in over HTTP: email + password and mobile OTP, each with its failures.
+// Characterisation of sign-in over HTTP by mobile OTP, with its failures (email codes:
+// email-otp.int.spec.ts). There is no password sign-in.
 // The SMS gateway is replaced by a spy that records the code, so no message can ever be sent.
 //
 // Runs only with DATABASE_URL_TEST: a migrated database it may write to. It adds one uniquely
 // named user per run and touches nothing else.
 import type { AddressInfo } from 'node:net';
-import { hashPassword } from '@aahar/auth';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SmsService } from './services/sms.service';
@@ -16,7 +16,6 @@ const run = Date.now().toString(36);
 // Starts with 5, which no Indian mobile number does.
 const mobile = `5${String(Date.now()).slice(-9)}`;
 const email = `login-${run}@characterisation.test`;
-const password = `Characterisation-${run}`;
 
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.length ? [shape(value[0])] : [];
@@ -36,6 +35,7 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
   let app: INestApplication | undefined;
   let baseUrl = '';
   let userId = '';
+  let lastLoginOf: () => Promise<Date | null> = () => Promise.resolve(null);
   const sent: { mobile: string; otp: string }[] = [];
 
   async function post(path: string, body: unknown) {
@@ -94,47 +94,21 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
         employeeCode: `CHR-${run}`,
         mobile,
         name: 'Characterisation Login',
-        passwordHash: await hashPassword(password),
       },
     });
     userId = user.id;
+    lastLoginOf = async () =>
+      (
+        await nest.get(PrismaService).user.findUniqueOrThrow({
+          select: { lastLoginAt: true },
+          where: { id: userId },
+        })
+      ).lastLoginAt;
   }, 60_000);
 
   afterAll(async () => {
     await app?.close();
     vi.restoreAllMocks();
-  });
-
-  it('email + password: issues tokens for the right password only', async () => {
-    const signedIn = await post('/auth/login-with-password', { email, password });
-    expect(signedIn.status).toBe(201);
-    expect(shape(signedIn.body)).toMatchSnapshot('tokens');
-    expect(claimsOf(signedIn.data.accessToken)).toMatchObject({
-      email,
-      mobile,
-      sub: userId,
-      sv: 1,
-    });
-
-    // Case-insensitive on the email, case-sensitive on the password.
-    const upper = await post('/auth/login-with-password', { email: email.toUpperCase(), password });
-    expect(upper.status).toBe(201);
-    // One browser at a time: signing in again ends the first session.
-    expect(claimsOf(upper.data.accessToken)).toMatchObject({ sv: 2 });
-    const ended = await post('/auth/refresh', { refreshToken: signedIn.data.refreshToken });
-    expect([ended.status, ended.body.message]).toEqual([
-      401,
-      'Your account was updated. Please sign in again.',
-    ]);
-    for (const attempt of [
-      { email, password: password.toLowerCase() },
-      { email: `nobody-${run}@characterisation.test`, password },
-    ]) {
-      const refused = await post('/auth/login-with-password', attempt);
-      expect([refused.status, refused.body.message]).toEqual([401, 'Invalid email or password']);
-    }
-    const refused = await post('/auth/login-with-password', { email, password: 'wrong' });
-    expect(shape(refused.body)).toMatchSnapshot('error body');
   });
 
   it('mobile OTP: sends one code, rejects a wrong one, signs in once with the right one', async () => {
@@ -168,10 +142,13 @@ describe.skipIf(!databaseUrl)('sign-in (integration)', { timeout: 30_000 }, () =
     const wrong = await post('/auth/verify-otp', { mobile, otp: wrongCode });
     expect([wrong.status, wrong.body.message]).toEqual([401, 'Invalid or expired OTP']);
 
+    expect(await lastLoginOf()).toBeNull();
     const verified = await post('/auth/verify-otp', { mobile, otp: code });
     expect(verified.status).toBe(201);
+    // The Admins and Operators screens show when each user last signed in.
+    expect(Math.abs(Date.now() - ((await lastLoginOf())?.getTime() ?? 0))).toBeLessThan(60_000);
     expect(shape(verified.body)).toMatchSnapshot('tokens');
-    expect(claimsOf(verified.data.accessToken)).toMatchObject({ mobile, sub: userId, sv: 3 });
+    expect(claimsOf(verified.data.accessToken)).toMatchObject({ mobile, sub: userId, sv: 1 });
 
     const reused = await post('/auth/verify-otp', { mobile, otp: code });
     expect([reused.status, reused.body.message]).toEqual([401, 'Invalid or expired OTP']);

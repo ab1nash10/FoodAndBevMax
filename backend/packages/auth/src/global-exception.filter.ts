@@ -174,12 +174,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       );
     }
 
-    response.status(statusCode).json({
-      errors,
-      message,
-      requestId,
-      success: false,
-      timestamp: new Date().toISOString(),
-    });
+    response.status(statusCode).json(this.body({ errors, message, requestId }));
+  }
+
+  /** What the client gets; a route with its own failure shape overrides this (and only this). */
+  protected body(failure: {
+    errors: unknown[];
+    message: string;
+    requestId: string | undefined;
+  }): Record<string, unknown> {
+    return { ...failure, success: false, timestamp: new Date().toISOString() };
   }
 }

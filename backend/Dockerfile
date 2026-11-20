@@ -87,9 +87,9 @@ COPY --from=pruner /app/tsconfig.base.json ./tsconfig.base.json
 # then dies at startup with MODULE_NOT_FOUND.
 RUN pnpm -r build
 
-# ---- migration / admin tooling image ---------------------------------------------------
+# ---- migration tooling image ---------------------------------------------------------
 # Carries the Prisma CLI, the schema, the migrations and the seed scripts. Used by the
-# migration Job and by `pnpm admin:password`.
+# migration and seed Jobs.
 FROM base AS migrate
 ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules

@@ -45,7 +45,7 @@ phases:
           docker push "${REGISTRY}/max-ai-repo:${SERVICE}-${IMAGE_TAG}"
         done
 
-      # Migration/admin tooling image, used by the Job below and by `pnpm admin:password`.
+      # Migration tooling image, used by the Job below.
       - |
         docker build -f backend/Dockerfile \
           --target migrate \

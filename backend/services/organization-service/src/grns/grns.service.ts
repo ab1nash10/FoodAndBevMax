@@ -31,6 +31,7 @@ import {
   toNumber,
 } from '../common/values';
 import { isExpiredForAcceptance, sum, toGrnResponse, type PreparedGrnLine } from './grns.helpers';
+import { StoreArrivals } from '../common/store-arrivals';
 
 type GrnClient = Prisma.TransactionClient;
 
@@ -39,6 +40,7 @@ export class GrnsService {
   constructor(
     private readonly auditLog: AuditLogService,
     private readonly grns: GrnsRepository,
+    private readonly arrivals: StoreArrivals,
   ) {}
 
   async list(query: ListGrnsQueryDto) {
@@ -310,7 +312,7 @@ export class GrnsService {
   }
 
   async postToStock(id: string, context: ActorContext) {
-    return this.grns.transaction(async (tx) => {
+    const result = await this.grns.transaction(async (tx) => {
       await lockRow(tx, 'grns', id);
       const existing = await this.findActiveGrn(id, tx);
 
@@ -415,6 +417,19 @@ export class GrnsService {
 
       return toGrnResponse(posted);
     });
+
+    // A batch an ERP reverse is waiting for may have just come in.
+    await this.arrivals.arrived(
+      result.lines.flatMap((line) =>
+        line.batches.map((batch) => ({
+          batchNumber: batch.batchNumber,
+          itemId: line.itemId,
+          storeId: result.storeId,
+        })),
+      ),
+    );
+
+    return result;
   }
 
   private async assertActiveHospital(hospitalId: string, client: GrnClient): Promise<void> {

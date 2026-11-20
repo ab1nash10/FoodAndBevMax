@@ -82,6 +82,11 @@ pipeline {
 
   stages {
     stage('Quality gates') {
+      environment {
+        // This build's own throwaway Postgres and Redis: the tests write to them.
+        CI_PG    = "aahar-ci-pg-${env.BUILD_NUMBER}"
+        CI_REDIS = "aahar-ci-redis-${env.BUILD_NUMBER}"
+      }
       steps {
         sh '''
           corepack enable
@@ -89,8 +94,28 @@ pipeline {
           pnpm db:generate
           pnpm typecheck
           pnpm lint
+
+          # Without DATABASE_URL_TEST every integration suite is skipped, and without REDIS_URL
+          # the Redis store tests are: give them a migrated, seeded database and a Redis.
+          docker run -d --rm --name "$CI_PG" -p 127.0.0.1::5432 \
+            -e POSTGRES_USER=aahar_ci -e POSTGRES_PASSWORD=aahar_ci -e POSTGRES_DB=aahar_ci \
+            postgres:16-alpine
+          docker run -d --rm --name "$CI_REDIS" -p 127.0.0.1::6379 redis:7-alpine
+          for attempt in $(seq 1 30); do
+            docker exec "$CI_PG" pg_isready -U aahar_ci -d aahar_ci >/dev/null 2>&1 && break
+            sleep 2
+          done
+          export DATABASE_URL_TEST="postgresql://aahar_ci:aahar_ci@$(docker port "$CI_PG" 5432/tcp | head -1)/aahar_ci"
+          export REDIS_URL="redis://$(docker port "$CI_REDIS" 6379/tcp | head -1)"
+          DATABASE_URL="$DATABASE_URL_TEST" pnpm db:deploy
+          DATABASE_URL="$DATABASE_URL_TEST" pnpm db:seed
           pnpm test
         '''
+      }
+      post {
+        always {
+          sh 'docker rm -f "$CI_PG" "$CI_REDIS" >/dev/null 2>&1 || true'
+        }
       }
     }
 
@@ -184,8 +209,6 @@ pipeline {
           string(credentialsId: "aahar-database-url${credSuffix()}", variable: 'DATABASE_URL'),
           string(credentialsId: "aahar-jwt-access-secret${credSuffix()}", variable: 'JWT_ACCESS_SECRET'),
           string(credentialsId: "aahar-jwt-refresh-secret${credSuffix()}", variable: 'JWT_REFRESH_SECRET'),
-          usernamePassword(credentialsId: "aahar-admin${credSuffix()}",
-                           usernameVariable: 'ADMIN_EMAIL', passwordVariable: 'ADMIN_PASSWORD'),
           // Bulk SMS gateway login for mobile OTPs. Both must exist in Jenkins before this runs.
           string(credentialsId: "aahar-sms-username${credSuffix()}", variable: 'SMS_USERNAME'),
           string(credentialsId: "aahar-sms-password${credSuffix()}", variable: 'SMS_PASSWORD'),
@@ -221,7 +244,6 @@ config:
     DATABASE_URL: $(yq "$DATABASE_URL")
     JWT_ACCESS_SECRET: $(yq "$JWT_ACCESS_SECRET")
     JWT_REFRESH_SECRET: $(yq "$JWT_REFRESH_SECRET")
-    ADMIN_PASSWORD: $(yq "$ADMIN_PASSWORD")
     SMS_USERNAME: $(yq "$SMS_USERNAME")
     SMS_PASSWORD: $(yq "$SMS_PASSWORD")
     REDIS_URL: $(yq "${REDIS_URL:-}")

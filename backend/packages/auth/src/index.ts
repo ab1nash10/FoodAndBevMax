@@ -41,11 +41,11 @@ export type { ServiceHealthDetails } from './health-check.service';
 export { JwtAuthGuard } from './jwt-auth.guard';
 export { JwtStrategy } from './jwt.strategy';
 export { SmsService } from './sms.service';
+export { RedisService } from './redis-store';
 export { ADDRESS_THROTTLER, UserThrottlerGuard, addressThrottler } from './user-throttler.guard';
 export { RbacGuard } from './rbac.guard';
 export { requestLoggingMiddleware } from './request-logging.middleware';
 export { countPrismaQueries, prismaQueryLogOptions } from './query-log';
-export { hashPassword, verifyPassword } from './passwords';
 export {
   createPrismaAdapter,
   PRISMA_TRANSACTION_OPTIONS,
