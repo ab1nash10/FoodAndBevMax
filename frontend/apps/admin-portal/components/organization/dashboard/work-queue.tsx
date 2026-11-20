@@ -8,7 +8,7 @@ import { useLocationNames } from '@/components/inventory/use-locations';
 import { RecordLink } from '@/components/record-link';
 import { WorkQueueCard } from '@/components/dashboard/work-queue-card';
 import type { DashboardStats } from '@/hooks/use-dashboard-stats';
-import { recordHref } from '@/lib/navigation';
+import { erpGrnHref, recordHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { AttentionCard } from '@/components/organization/dashboard/kpi-row';
 import { Button } from '@aahar/ui';
@@ -102,14 +102,14 @@ const productionVerbs: Record<KitchenProduction['status'], string> = {
 const kindAbbr: Record<TaskKind, string> = { grn: 'GRN', production: 'PRD', transfer: 'TRF' };
 
 const taskListHref: Record<TaskKind, string> = {
-  grn: '/inventory/grns',
+  grn: '/inventory/erp-grns',
   production: '/kitchen/productions',
   transfer: '/inventory/transfers',
 };
 
 // The list filtered to the same queue the tasks count.
 const taskQueueHref: Record<TaskKind, string> = {
-  grn: '/inventory/grns?view=DRAFT',
+  grn: '/inventory/erp-grns?view=PENDING',
   production: '/kitchen/productions?view=DRAFT',
   transfer: pendingHref,
 };
@@ -163,17 +163,16 @@ export function WorkQueue({
       reference: transfer.transferNumber,
       status: transfer.status,
     })),
+    // An ERP GRN waiting on the store: a return still short of stock.
     ...(queue.grns.data?.items ?? []).map((grn): Task => ({
-      action: 'Verify',
-      createdAt: grn.createdAt,
-      description: [grn.vendorName, plural(grn.lines.length, 'line'), grn.store.storeName]
-        .filter(Boolean)
-        .join(' · '),
-      href: recordHref(taskListHref.grn, { id: grn.id }),
-      id: grn.id,
+      action: 'Review',
+      createdAt: grn.received_at,
+      description: `${grn.store_name} · ${grn.totals.pending_qty} waiting · ${grn.location_name}`,
+      href: erpGrnHref(grn.grn_No),
+      id: grn.grn_No,
       kind: 'grn',
-      recordHref: recordHref(taskListHref.grn, { id: grn.id }),
-      reference: grn.grnNumber,
+      recordHref: erpGrnHref(grn.grn_No),
+      reference: grn.grn_No,
       status: grn.status,
     })),
     ...(queue.productions.data?.items ?? []).map((production): Task => ({
@@ -212,14 +211,12 @@ export function WorkQueue({
           verb: transferVerbs[transfer.status],
         })),
         ...activityQuery.data.grns.map((grn): Activity => ({
-          at: grn.updatedAt,
-          detail: [grn.vendorName, plural(grn.lines.length, 'line'), grn.store.storeName]
-            .filter(Boolean)
-            .join(' · '),
-          href: recordHref(taskListHref.grn, { id: grn.id }),
-          id: grn.id,
+          at: grn.verified_at ?? grn.received_at,
+          detail: `${grn.store_name} · ${grn.location_name}`,
+          href: erpGrnHref(grn.grn_No),
+          id: grn.grn_No,
           kind: 'grn',
-          reference: grn.grnNumber,
+          reference: grn.grn_No,
           verb: grnVerbs[grn.status],
         })),
         ...activityQuery.data.productions.map((production): Activity => ({
@@ -259,7 +256,7 @@ export function WorkQueue({
       <span className="flex flex-col gap-0.5">
         <span className="text-[13.5px] font-extrabold text-ds-text">You’re all caught up</span>
         <span className="text-[12.5px] text-ds-muted">
-          Transfers to acknowledge, GRNs to verify and draft productions will show up here.
+          Transfers to acknowledge, ERP GRNs waiting and draft productions will show up here.
         </span>
       </span>
     </div>

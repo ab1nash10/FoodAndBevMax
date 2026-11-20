@@ -92,8 +92,10 @@ describe('Preferences', () => {
     const { user } = renderDialog();
     const startPage = await screen.findByRole('combobox', { name: 'Start page' });
 
-    await user.selectOptions(startPage, '/inventory/grns');
-    expect(userApi.updateMyPreferences).toHaveBeenLastCalledWith({ startPage: '/inventory/grns' });
+    await user.selectOptions(startPage, '/inventory/erp-grns');
+    expect(userApi.updateMyPreferences).toHaveBeenLastCalledWith({
+      startPage: '/inventory/erp-grns',
+    });
 
     await user.selectOptions(startPage, '/dashboard');
     expect(userApi.updateMyPreferences).toHaveBeenLastCalledWith({ startPage: null });

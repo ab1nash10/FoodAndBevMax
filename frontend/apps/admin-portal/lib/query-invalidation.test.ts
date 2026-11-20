@@ -20,13 +20,6 @@ test('each write invalidates the same query keys', () => {
     Object.fromEntries(Object.entries(invalidation).map(([name, fn]) => [name, keysFor(fn)])),
   ).toEqual({
     invalidateEmployeeQueries: [['employees'], ['dashboard', 'setup']],
-    invalidateGrnQueries: [
-      ['grns'],
-      ['stock-balances'],
-      ['stock-ledgers'],
-      ['transfer-store-stock'],
-      ['dashboard'],
-    ],
     invalidateItemCategoryQueries: [
       ['item-categories'],
       ['item-category-options'],

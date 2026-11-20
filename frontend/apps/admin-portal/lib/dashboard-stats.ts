@@ -1,8 +1,8 @@
 import type {
   DashboardGrn,
   DashboardProduction,
+  DashboardSetup,
   DashboardTransfer,
-  Grn,
   Transfer,
 } from '@aahar/api-client';
 
@@ -496,14 +496,15 @@ export interface VendorRow {
   rejected: number;
 }
 
-/** Posted GRNs in the period, by vendor: accepted vs rejected quantity. */
+/** ERP GRNs finished in the period, by supplier code: accepted vs rejected quantity. */
 export function vendorRows(grns: DashboardGrn[], window: PeriodWindow, limit = 4): VendorRow[] {
   const vendors = new Map<string, Omit<VendorRow, 'acceptedPercent' | 'flagged'>>();
 
   for (const grn of grns) {
     const time = Date.parse(grn.receivedDate);
 
-    if (grn.status !== 'POSTED_TO_STOCK' || time < window.start || time > window.end) {
+    // A waiting (PENDING) GRN has not finished moving stock yet.
+    if (grn.status === 'PENDING' || time < window.start || time > window.end) {
       continue;
     }
 
@@ -767,7 +768,8 @@ export function insights(input: {
   if (worstVendor) {
     candidates.push({
       cta: 'Review GRNs',
-      href: `/inventory/grns?view=POSTED_TO_STOCK&q=${encodeURIComponent(worstVendor.name)}`,
+      // The ERP GRNs page cannot search by supplier, so it opens the list.
+      href: '/inventory/erp-grns',
       title: `${worstVendor.name}: ${Math.round(100 - worstVendor.acceptedPercent)}% of quantity rejected ${worstVendor.grns === 1 ? 'in its only GRN this period' : `across ${worstVendor.grns} GRNs`}`,
       tone: 'bad',
     });
@@ -863,7 +865,7 @@ const added = (count: number) => `${count} added`;
  */
 export function setupSteps(
   counts: SetupCounts,
-  firsts: { grn?: Grn | null; transfer?: Transfer | null },
+  firsts: { grn?: DashboardSetup['firstGrn']; transfer?: Transfer | null },
   canOpen: (href: string) => boolean,
 ): SetupStep[] {
   const steps: Array<Omit<SetupStep, 'doing'> | null> = [];
@@ -945,13 +947,11 @@ export function setupSteps(
 
   if (firsts.grn !== undefined) {
     steps.push({
-      cta: { href: '/inventory/grns/new', label: 'Receive a delivery' },
-      detail: firsts.grn
-        ? `${firsts.grn.grnNumber} · ${firsts.grn.store.storeName}`
-        : 'Receive goods into a store',
+      cta: { href: '/inventory/erp-grns', label: 'ERP GRNs' },
+      detail: firsts.grn ? firsts.grn.grnNumber : 'Goods come into a store as the ERP sends GRNs',
       done: Boolean(firsts.grn),
       key: 'grn',
-      title: 'First GRN posted',
+      title: 'First GRN from the ERP',
     });
   }
 

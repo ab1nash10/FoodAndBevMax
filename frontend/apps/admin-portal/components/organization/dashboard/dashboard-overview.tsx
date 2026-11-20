@@ -67,10 +67,10 @@ const dashboardTiles: QuickTile[] = [
     tone: 'blue',
   },
   {
-    detail: 'Check and add to stock',
-    href: '/inventory/grns?view=DRAFT',
+    detail: 'Returns waiting on the store',
+    href: '/inventory/erp-grns?view=PENDING',
     icon: ClipboardCheck,
-    title: 'Deliveries to verify',
+    title: 'ERP GRNs waiting',
     tone: 'violet',
   },
   {
@@ -98,7 +98,7 @@ export function DashboardOverview() {
   // The sidebar badges' counts (one shared request): what each tile has waiting right now.
   const navCounts = useNavCounts(hasPermission);
   const tileCounts: Record<string, Pick<QuickTile, 'count' | 'countLabel'>> = {
-    '/inventory/grns?view=DRAFT': { count: navCounts.grns, countLabel: 'to verify' },
+    '/inventory/erp-grns?view=PENDING': { count: navCounts.grns, countLabel: 'waiting' },
     '/kitchen/productions': { count: navCounts.productions, countLabel: 'to post' },
     [pendingHref]: { count: navCounts.transfers, countLabel: 'waiting' },
   };

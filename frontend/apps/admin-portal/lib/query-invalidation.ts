@@ -58,16 +58,6 @@ export function invalidateStockDiscardQueries(queryClient: QueryClient): void {
   ]);
 }
 
-export function invalidateGrnQueries(queryClient: QueryClient): void {
-  invalidate(queryClient, [
-    queryKeys.grns(),
-    queryKeys.stockBalances(),
-    queryKeys.stockLedgers(),
-    queryKeys.transferStoreStock(),
-    queryKeys.dashboard(),
-  ]);
-}
-
 export function invalidateTransferQueries(queryClient: QueryClient): void {
   invalidate(queryClient, [
     queryKeys.transfers(),

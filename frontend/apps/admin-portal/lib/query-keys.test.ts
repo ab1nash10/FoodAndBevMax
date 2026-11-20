@@ -5,10 +5,10 @@ test('builders give the same arrays the literal keys were', () => {
   expect(queryKeys.hospitalOptions()).toEqual(['hospital-options']);
   expect(queryKeys.transfers('detail', 'id-1')).toEqual(['transfers', 'detail', 'id-1']);
   expect(queryKeys.itemOptions('MRP', 'rice')).toEqual(['item-options', 'MRP', 'rice']);
-  expect(queryKeys.dashboardStats('grns', 7, 'all')).toEqual([
+  expect(queryKeys.dashboardStats('records', 7, 'all')).toEqual([
     'dashboard',
     'stats',
-    'grns',
+    'records',
     7,
     'all',
   ]);

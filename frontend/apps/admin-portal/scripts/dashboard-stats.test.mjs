@@ -272,8 +272,8 @@ assert.equal(wastage.kitchens, 1);
 assert.equal(wastage.posted, 2, 'drafts and the previous period are not counted');
 assert.deepEqual(wastage.postedSeries, [0, 0, 0, 0, 1, 0, 1]);
 
-// ---- Vendors: posted GRNs in the period, flagged above 5% rejected.
-const grn = (vendorName, accepted, rejected, daysAgo = 1, status = 'POSTED_TO_STOCK') => ({
+// ---- Vendors: finished ERP GRNs in the period, flagged above 5% rejected.
+const grn = (vendorName, accepted, rejected, daysAgo = 1, status = 'VERIFIED') => ({
   lines: [{ acceptedQty: accepted, rejectedQty: rejected }],
   receivedDate: at(daysAgo),
   status,
@@ -286,14 +286,15 @@ const vendors = vendorRows(
     grn('Metro Wholesale', 99, 1),
     grn(' metro wholesale', 50, 0),
     grn('Old Vendor', 10, 10, 20),
-    grn('Draft Vendor', 10, 10, 1, 'DRAFT'),
+    grn('Waiting Vendor', 10, 10, 1, 'PENDING'),
+    grn('Metro Wholesale', 10, 0, 1, 'CLOSED'),
     grn(null, 5, 0),
   ],
   week,
 );
 assert.deepEqual(
   vendors.map((v) => `${v.name}:${v.grns}:${v.flagged}`),
-  ['Shree Dairy:2:false', 'Metro Wholesale:2:false', 'No vendor:1:false'],
+  ['Metro Wholesale:3:false', 'Shree Dairy:2:false', 'No vendor:1:false'],
 );
 assert.equal(Math.round(vendorRows([grn('Bad Farms', 90, 10)], week)[0].acceptedPercent), 90);
 assert.equal(vendorRows([grn('Bad Farms', 90, 10)], week)[0].flagged, true);
@@ -360,6 +361,7 @@ assert.deepEqual(
   'unseen counts are left out; the first unfinished step is the next one',
 );
 assert.equal(fresh.find((s) => s.key === 'mappings').cta.href, '/masters/item-mapping?tab=kitchen');
+assert.equal(fresh.find((s) => s.key === 'grn').cta.href, '/inventory/erp-grns');
 assert.equal(
   fresh.find((s) => s.key === 'hospitals').cta,
   undefined,

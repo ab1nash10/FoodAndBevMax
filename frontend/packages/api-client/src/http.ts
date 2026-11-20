@@ -11,7 +11,7 @@ export interface ApiResponse<TData = unknown> {
 export interface ApiListMeta {
   limit: number;
   page: number;
-  /** With `statusCounts: true` (transfers, GRNs, productions): the count per status, other filters applied. */
+  /** With `statusCounts: true` (transfers, productions): the count per status, other filters applied. */
   statusCounts?: Partial<Record<string, number>>;
   /** Stock ledgers with `referenceTypeCounts: true`: the count per reference type. */
   referenceTypeCounts?: Partial<Record<string, number>>;

@@ -7,7 +7,6 @@ import { liveQueueKeys, masterDataKeys, queryKeys } from '@/lib/query-keys';
 export const listKeys = [
   queryKeys.accessUsers(),
   queryKeys.employees(),
-  queryKeys.grns(),
   queryKeys.hospitals(),
   queryKeys.items(),
   queryKeys.kitchenProductions(),
@@ -29,9 +28,6 @@ export const listKeys = [
 // Under those prefixes but about one record (or one store, item or kitchen): another id must
 // never show the previous one's data.
 export const recordKeys = [
-  queryKeys.grns('detail'),
-  queryKeys.grns('vendor-history'),
-  queryKeys.grns('vendors'),
   queryKeys.items('detail'),
   queryKeys.kitchenProductions('detail'),
   queryKeys.kitchenProductionsToday(),

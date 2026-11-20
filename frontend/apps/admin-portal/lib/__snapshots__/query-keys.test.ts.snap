@@ -67,9 +67,6 @@ exports[`every prefix stays as it is 1`] = `
   "grnEntries": [
     "grn-entries",
   ],
-  "grns": [
-    "grns",
-  ],
   "hospital": [
     "hospital",
   ],

@@ -7,8 +7,7 @@ const key =
     [...prefix, ...args] as const;
 
 export const queryKeys = {
-  // Inventory: GRNs, stock and transfers
-  grns: key('grns'),
+  // Inventory: stock and transfers
   inventoryStoreItems: key('inventory-store-items'),
   restaurantStock: key('restaurant-stock'),
   stockBalances: key('stock-balances'),

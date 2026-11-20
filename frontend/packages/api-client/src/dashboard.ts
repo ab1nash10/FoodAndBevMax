@@ -1,4 +1,5 @@
-import type { Grn, GrnLine, Transfer, TransferLine } from './inventory';
+import type { GrnEntryStatus } from './grn-entries';
+import type { Transfer, TransferLine } from './inventory';
 import type { KitchenProduction, KitchenProductionLine } from './kitchen';
 
 // GET /dashboard/records keeps only the fields the dashboard's numbers read; a full record from
@@ -26,9 +27,14 @@ export type DashboardProduction = Pick<
   >;
 };
 
-export type DashboardGrn = Pick<Grn, 'receivedDate' | 'status' | 'vendorName'> & {
-  lines: Array<Pick<GrnLine, 'acceptedQty' | 'rejectedQty'>>;
-};
+/** A GRN the ERP sent, slimmed to what the vendor numbers read. */
+export interface DashboardGrn {
+  lines: Array<{ acceptedQty: number; rejectedQty: number }>;
+  receivedDate: string;
+  status: GrnEntryStatus;
+  /** The ERP's supplier code (it sends no vendor name); null when it sent none. */
+  vendorName: string | null;
+}
 
 export interface DashboardRecordList<T> {
   items: T[];
@@ -44,7 +50,7 @@ export interface DashboardRecords {
 }
 
 export interface DashboardRecordsQuery {
-  /** Transfers, posted productions and posted GRNs dated from here on. */
+  /** Transfers, posted productions and ERP GRNs dated from here on. */
   fromDate: string;
   hospitalId?: string;
 }
@@ -62,12 +68,14 @@ export interface DashboardSetup {
     storeItems?: number;
     stores?: number;
   };
-  firstGrn?: Grn | null;
+  /** The first GRN the ERP sent. */
+  firstGrn?: { grnNumber: string; receivedDate: string } | null;
   firstTransfer?: Transfer | null;
 }
 
 /** The nav badges' counts (GET /dashboard/nav-counts); a count is missing when the user may not view its list. */
 export interface DashboardNavCounts {
+  /** ERP GRNs still PENDING (a return waiting on the store). */
   grns?: number;
   productions?: number;
   transfers?: number;

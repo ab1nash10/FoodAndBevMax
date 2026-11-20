@@ -6,12 +6,11 @@ import signIn from './sign-in';
 test.beforeAll(() => signIn());
 
 /**
- * The History button on a GRN, a transfer and a kitchen production opens the side panel with
+ * The History button on a transfer and a kitchen production opens the side panel with
  * that record's changes. Read-only: it picks records that already have history (any record if
  * none has), opens them and the panel, and changes nothing.
  */
 const documents = [
-  { entityName: 'grns', list: 'grns', page: 'inventory/grns' },
   { entityName: 'transfers', list: 'transfers', page: 'inventory/transfers' },
   { entityName: 'kitchen_productions', list: 'kitchen-productions', page: 'kitchen/productions' },
 ];
@@ -60,7 +59,7 @@ async function problemsWhile(page: Page, act: () => Promise<void>): Promise<stri
 }
 
 // One test, one signed-in tab (see record-panels.spec.ts: separate contexts sign each other out).
-test('the History panel opens on a GRN, a transfer and a kitchen production', async ({ page }) => {
+test('the History panel opens on a transfer and a kitchen production', async ({ page }) => {
   test.setTimeout(5 * 60_000);
   // The dev server compiles a route on its first visit.
   page.setDefaultTimeout(90_000);

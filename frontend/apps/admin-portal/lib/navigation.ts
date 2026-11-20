@@ -6,7 +6,6 @@ import {
   Boxes,
   Building2,
   ChefHat,
-  ClipboardList,
   FileInput,
   FileWarning,
   CookingPot,
@@ -283,13 +282,6 @@ export const navigationGroups: NavGroup[] = [
       },
       {
         badge: 'grns',
-        href: '/inventory/grns',
-        icon: ClipboardList,
-        label: 'Deliveries (GRN)',
-        permissions: ['GRN_VIEW'],
-        record: 'id',
-      },
-      {
         href: '/inventory/erp-grns',
         icon: FileInput,
         label: 'ERP GRNs',
@@ -486,12 +478,6 @@ export const subRoutes: SubRoute[] = [
     ],
   },
   {
-    label: 'Receive a delivery',
-    parent: '/inventory/grns',
-    pattern: '/inventory/grns/new',
-    permissions: ['GRN_CREATE'],
-  },
-  {
     label: 'New production',
     parent: '/kitchen/productions',
     pattern: '/kitchen/productions/new',
@@ -622,7 +608,7 @@ export function getStartPageOptions(
   }));
 }
 
-// The dashboard is built from transfers, GRNs and productions (hooks/use-dashboard-stats.ts);
+// The dashboard is built from transfers, ERP GRNs and productions (hooks/use-dashboard-stats.ts);
 // a role that sees none of them gets a near-empty dashboard.
 const dashboardDataPermissions = [
   'TRANSFER_VIEW',
@@ -691,6 +677,11 @@ export function recordHref(pageHref: string, record: { id?: string; name?: strin
   }
 
   return pageHref;
+}
+
+/** One GRN the ERP sent, open on the ERP GRNs page. */
+export function erpGrnHref(grnNumber: string): string {
+  return `/inventory/erp-grns?grn=${encodeURIComponent(grnNumber)}`;
 }
 
 const locationPages: Record<string, string> = {

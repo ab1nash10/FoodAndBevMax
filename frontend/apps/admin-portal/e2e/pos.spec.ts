@@ -15,8 +15,6 @@ const screens: Array<[string, string]> = [
   ['pos/menu', 'Counter Menu'],
   ['pos/stock', 'Counter Stock'],
   ['pos/receive', 'Receive Inventory'],
-  // The store and kitchen task screens.
-  ['inventory/grns/new', 'Receive a delivery'],
 ];
 
 // The POS opens only for a user an admin listed on a POS device with this computer's name, once

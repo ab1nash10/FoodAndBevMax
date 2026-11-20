@@ -1,6 +1,6 @@
 'use client';
 
-import type { Grn } from '@aahar/api-client';
+import type { GrnEntryStatus } from '@aahar/api-client';
 
 export const tones = {
   bad: 'bg-ds-status-bad-bg text-ds-status-bad-fg',
@@ -44,14 +44,11 @@ export function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
-export const grnVerbs: Record<Grn['status'], string> = {
-  ACCEPTED: 'accepted',
-  CANCELLED: 'cancelled',
-  DRAFT: 'drafted',
-  PARTIALLY_ACCEPTED: 'partially accepted',
-  POSTED_TO_STOCK: 'added to stock',
-  REJECTED: 'rejected',
-  UNDER_VERIFICATION: 'received',
+/** What became of a GRN the ERP sent. */
+export const grnVerbs: Record<GrnEntryStatus, string> = {
+  CLOSED: 'closed',
+  PENDING: 'waiting on the store',
+  VERIFIED: 'completed',
 };
 
 export const pendingHref = '/inventory/transfers?view=PENDING_ACKNOWLEDGEMENT';

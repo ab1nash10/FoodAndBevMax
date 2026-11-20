@@ -1,5 +1,4 @@
 import type {
-  GrnStatus,
   KitchenProductionStatus,
   StockBalanceStatus,
   TransferAcknowledgementStatus,
@@ -10,11 +9,7 @@ import type {
 export type StatusTone = 'bad' | 'info' | 'neutral' | 'ok' | 'pending';
 
 export type KnownStatus =
-  | GrnStatus
-  | KitchenProductionStatus
-  | StockBalanceStatus
-  | TransferAcknowledgementStatus
-  | TransferStatus;
+  KitchenProductionStatus | StockBalanceStatus | TransferAcknowledgementStatus | TransferStatus;
 
 export interface StatusPresentation {
   label: string;
@@ -25,7 +20,7 @@ export interface StatusPresentation {
 
 // A Record over the union: the compiler rejects a status value that has no entry.
 const presentations: Record<KnownStatus, StatusPresentation> = {
-  // Shared by transfers, GRNs and kitchen production.
+  // Shared by transfers and kitchen production.
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
   DRAFT: { label: 'Draft', tone: 'neutral' },
   // Transfers
@@ -39,12 +34,6 @@ const presentations: Record<KnownStatus, StatusPresentation> = {
   ACCEPTED_FULL: { label: 'Accepted in full', tone: 'ok' },
   ACCEPTED_PARTIAL: { label: 'Accepted partially', tone: 'pending' },
   REJECTED_FULL: { label: 'Rejected in full', tone: 'bad' },
-  // GRNs
-  ACCEPTED: { label: 'Accepted', tone: 'ok' },
-  PARTIALLY_ACCEPTED: { label: 'Partially accepted', tone: 'pending' },
-  POSTED_TO_STOCK: { label: 'Added to stock', tone: 'ok' },
-  REJECTED: { label: 'Rejected', tone: 'bad' },
-  UNDER_VERIFICATION: { label: 'Under verification', tone: 'info' },
   // Kitchen production
   POSTED: { label: 'Posted', tone: 'ok' },
   // Stock balances

@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRightLeft,
   CalendarClock,
-  PackagePlus,
+  FileInput,
   Store as StoreIcon,
   TrendingDown,
   type LucideIcon,
@@ -27,7 +27,8 @@ import {
 } from '@/components/inventory/stock-levels/levels';
 import { MovementBars } from '@/components/inventory/stock-levels/movement-bars';
 import { Chip, CoverBar, toneChip } from '@/components/inventory/stock-levels/parts';
-import { organizationApi } from '@/lib/api';
+import { grnEntriesApi, organizationApi } from '@/lib/api';
+import { erpGrnHref } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 
@@ -131,12 +132,18 @@ export function TodayPageClient() {
       ).data,
     queryKey: queryKeys.restaurantStock('today-out', scope),
   });
+  // The GRNs the ERP sent today.
   const grnsQuery = useQuery({
     enabled: canSeeGrns,
     queryFn: async () =>
-      (await organizationApi.listGrns({ fromDate: today, hospitalId: scopedHospitalId, limit: 10 }))
-        .data.items,
-    queryKey: queryKeys.grns('today', scope, today),
+      (
+        await grnEntriesApi.listGrnEntries({
+          hospitalId: scopedHospitalId,
+          limit: 10,
+          receivedFrom: today,
+        })
+      ).data.items,
+    queryKey: queryKeys.grnEntries('today', scope, today),
   });
   const transfersQuery = useQuery({
     enabled: canSeeTransfers,
@@ -163,12 +170,12 @@ export function TodayPageClient() {
   const emptyShelves = restaurantsQuery.data?.items ?? [];
   const events = [
     ...(grnsQuery.data ?? []).map((grn) => ({
-      at: grn.receivedDate,
-      href: `/inventory/grns?id=${grn.id}`,
-      key: grn.id,
-      number: grn.grnNumber,
+      at: grn.received_at,
+      href: erpGrnHref(grn.grn_No),
+      key: grn.grn_No,
+      number: grn.grn_No,
       status: grn.status,
-      text: `from ${grn.vendorName ?? grn.store.storeName}`,
+      text: `from the ERP · ${grn.store_name}`,
     })),
     ...(transfersQuery.data ?? []).map((transfer) => ({
       at: transfer.transferDate,
@@ -203,11 +210,11 @@ export function TodayPageClient() {
                 </Link>
               </Button>
             </IfCanOpen>
-            <IfCanOpen href="/inventory/grns/new">
+            <IfCanOpen href="/inventory/erp-grns">
               <Button asChild>
-                <Link href="/inventory/grns/new">
-                  <PackagePlus aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                  Receive delivery
+                <Link href="/inventory/erp-grns">
+                  <FileInput aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                  ERP GRNs
                 </Link>
               </Button>
             </IfCanOpen>
@@ -240,9 +247,9 @@ export function TodayPageClient() {
               >
                 All stock levels
               </Link>
-              <IfCanOpen href="/inventory/grns/new">
+              <IfCanOpen href="/inventory/erp-grns">
                 <Button asChild className="ml-auto" size="sm">
-                  <Link href="/inventory/grns/new">Receive stock</Link>
+                  <Link href="/inventory/erp-grns">ERP GRNs</Link>
                 </Button>
               </IfCanOpen>
             </>

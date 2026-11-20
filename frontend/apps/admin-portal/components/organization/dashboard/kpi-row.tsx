@@ -126,8 +126,8 @@ function usePendingSeries(stats: DashboardStats) {
 const dayMonthFormatter = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' });
 
 /**
- * A new workspace's key numbers: each footer names the last record. GRNs to verify has no
- * trend line, since the records carry no time a GRN was posted.
+ * A new workspace's key numbers: each footer names the last record. ERP GRNs waiting has no
+ * trend line, since the records carry no time a GRN stopped waiting.
  */
 export function NewKpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   const { can, period } = stats;
@@ -147,7 +147,7 @@ export function NewKpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   }
 
   const pendingTotal = stats.pending.stats?.total ?? 0;
-  const grnsToVerify = stats.queue.grns.data?.meta.total ?? 0;
+  const grnsWaiting = stats.queue.grns.data?.meta.total ?? 0;
 
   // What waits on the user leads (with a status dot); the period's activity follows.
   return (
@@ -185,19 +185,17 @@ export function NewKpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
           <KpiCard
             foot={
               lastGrn
-                ? lastGrn.status === 'POSTED_TO_STOCK'
-                  ? `${lastGrn.grnNumber} posted to ${lastGrn.store.storeName}`
-                  : `${lastGrn.grnNumber} ${grnVerbs[lastGrn.status]} · ${lastGrn.store.storeName}`
-                : 'No GRNs yet'
+                ? `${lastGrn.grn_No} ${grnVerbs[lastGrn.status]} · ${lastGrn.store_name}`
+                : 'No GRNs from the ERP yet'
             }
-            href="/inventory/grns?view=DRAFT"
+            href="/inventory/erp-grns?view=PENDING"
             icon={PackageCheck}
-            label="GRNs to verify"
+            label="ERP GRNs waiting"
             error={stats.queue.grns.isError}
             loading={stats.queue.grns.isLoading || loadingRecent}
             scope="Right now"
-            status={grnsToVerify ? 'waiting' : 'clear'}
-            value={String(grnsToVerify)}
+            status={grnsWaiting ? 'waiting' : 'clear'}
+            value={String(grnsWaiting)}
           />
         ) : null}
         {can.transfers ? (

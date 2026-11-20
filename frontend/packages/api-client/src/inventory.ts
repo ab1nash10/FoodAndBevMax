@@ -1,15 +1,6 @@
 import type { ItemSummary, ItemType } from './catalog';
 import type { ListQuery } from './http';
-import type { HospitalSummary, Store } from './organization';
-
-export type GrnStatus =
-  | 'ACCEPTED'
-  | 'CANCELLED'
-  | 'DRAFT'
-  | 'PARTIALLY_ACCEPTED'
-  | 'POSTED_TO_STOCK'
-  | 'REJECTED'
-  | 'UNDER_VERIFICATION';
+import type { HospitalSummary } from './organization';
 
 export type InventoryLocationType = 'COUNTER' | 'KITCHEN' | 'RESTAURANT' | 'STORE';
 
@@ -45,100 +36,6 @@ export type StockBalanceStatus =
 export type TransferStatus = 'ACKNOWLEDGED' | 'CANCELLED' | 'DRAFT' | 'PENDING_ACKNOWLEDGEMENT';
 
 export type TransferAcknowledgementStatus = 'ACCEPTED_FULL' | 'ACCEPTED_PARTIAL' | 'REJECTED_FULL';
-
-export interface GrnBatch {
-  acceptedQty: number;
-  batchNumber: string;
-  createdAt: string;
-  expiryDate: string;
-  grnLineId: string;
-  id: string;
-  itemId: string;
-  manufacturingDate: string | null;
-  receivedQty: number;
-  rejectedQty: number;
-  rejectionReason: string | null;
-  updatedAt: string;
-}
-
-export interface GrnLine {
-  acceptedQty: number;
-  batches: GrnBatch[];
-  createdAt: string;
-  grnId: string;
-  id: string;
-  item: ItemSummary;
-  itemId: string;
-  orderedQty: number | null;
-  receivedQty: number;
-  rejectedQty: number;
-  rejectionReason: string | null;
-  remarks: string | null;
-  updatedAt: string;
-}
-
-export interface Grn {
-  createdAt: string;
-  deletedAt: string | null;
-  grnNumber: string;
-  hospital: HospitalSummary;
-  hospitalId: string;
-  id: string;
-  invoiceNumber: string | null;
-  lines: GrnLine[];
-  poNumber: string | null;
-  receivedBy: string;
-  receivedDate: string;
-  remarks: string | null;
-  status: GrnStatus;
-  store: Pick<Store, 'hospitalId' | 'id' | 'isActive' | 'storeCode' | 'storeName'>;
-  storeId: string;
-  updatedAt: string;
-  vendorName: string | null;
-}
-
-export interface GrnBatchInput {
-  acceptedQty: number;
-  batchNumber: string;
-  expiryDate: string;
-  manufacturingDate?: string;
-  receivedQty: number;
-  rejectedQty: number;
-  rejectionReason?: string;
-}
-
-export interface GrnLineInput {
-  acceptedQty: number;
-  batches: GrnBatchInput[];
-  itemId: string;
-  orderedQty?: number;
-  receivedQty: number;
-  rejectedQty: number;
-  rejectionReason?: string;
-  remarks?: string;
-}
-
-export interface GrnInput {
-  hospitalId: string;
-  invoiceNumber?: string;
-  items: GrnLineInput[];
-  poNumber?: string;
-  receivedBy: string;
-  receivedDate: string;
-  remarks?: string;
-  storeId: string;
-  vendorName: string;
-}
-
-export interface GrnListQuery extends ListQuery {
-  /** Adds meta.statusCounts: every status tab's count in the same request. */
-  statusCounts?: boolean;
-  fromDate?: string;
-  hospitalId?: string;
-  status?: GrnStatus;
-  storeId?: string;
-  toDate?: string;
-}
 
 export interface StockLocationSummary {
   code: string | null;

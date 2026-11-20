@@ -26,10 +26,8 @@ test('lists keep their rows while the next page loads; records never show anothe
   const placeholderOf = (queryKey: readonly unknown[]) =>
     createQueryClient().defaultQueryOptions({ queryKey }).placeholderData;
 
-  expect(placeholderOf(queryKeys.grns(1, '', '', '', '', 'desc'))).toBe(keepPreviousData);
   expect(placeholderOf(queryKeys.transfers(2, 'all'))).toBe(keepPreviousData);
   expect(placeholderOf(queryKeys.employees({ page: 1 }))).toBe(keepPreviousData);
-  expect(placeholderOf(queryKeys.grns('detail', 'grn-1'))).toBeUndefined();
   expect(placeholderOf(queryKeys.transfers('detail', 'transfer-1'))).toBeUndefined();
   expect(placeholderOf(queryKeys.items('detail', 'item-1'))).toBeUndefined();
   expect(placeholderOf(queryKeys.kitchenProductions('detail', 'p-1'))).toBeUndefined();

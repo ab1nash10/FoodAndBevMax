@@ -149,7 +149,8 @@ export function TrendsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
                       <span className="flex justify-between gap-2 text-[12.5px]">
                         <RecordLink
                           className="min-w-0 truncate font-bold text-ds-text"
-                          href={`/inventory/grns?view=POSTED_TO_STOCK&q=${encodeURIComponent(vendor.name)}`}
+                          // The ERP GRNs page cannot search by supplier, so it opens the list.
+                          href="/inventory/erp-grns"
                         >
                           {vendor.name}
                         </RecordLink>
@@ -187,8 +188,8 @@ export function TrendsRow({ stats }: Readonly<{ stats: DashboardStats }>) {
               </ul>
             ) : (
               <EmptyState
-                description="Vendors appear here once GRNs are posted to stock."
-                title="No GRNs posted"
+                description="Vendors appear here once the ERP sends GRNs."
+                title="No GRNs from the ERP"
               />
             )}
           </DashboardCard>

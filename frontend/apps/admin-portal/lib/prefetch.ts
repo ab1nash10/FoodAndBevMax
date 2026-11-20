@@ -19,23 +19,6 @@ const listLimit = 10;
 type FirstView = (scopedHospitalId: string | undefined) => FetchQueryOptions;
 
 const firstViews: Record<string, FirstView> = {
-  '/inventory/grns': (scopedHospitalId) => {
-    const hospitalId = scopedHospitalId ?? '';
-
-    return {
-      queryFn: async () =>
-        (
-          await organizationApi.listGrns({
-            hospitalId,
-            limit: listLimit,
-            page: 1,
-            sortBy: 'createdAt',
-            sortOrder: 'desc',
-          })
-        ).data,
-      queryKey: queryKeys.grns(1, '', hospitalId, '', '', 'desc'),
-    };
-  },
   '/inventory/store-stock': (scopedHospitalId) => {
     const hospitalId = scopedHospitalId ?? '';
 

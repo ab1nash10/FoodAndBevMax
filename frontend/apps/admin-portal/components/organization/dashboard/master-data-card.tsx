@@ -8,11 +8,11 @@ import { useLocationContext } from '@/components/location-context';
 import { Skeleton } from '@/components/ui';
 import type { DashboardStats } from '@/hooks/use-dashboard-stats';
 import { cn } from '@/lib/utils';
-import { ArrowRightLeft, CookingPot, Plus, type LucideIcon } from 'lucide-react';
+import { ArrowRightLeft, CookingPot, FileInput, Plus, type LucideIcon } from 'lucide-react';
 import { tones } from '@/components/organization/dashboard/format';
 
 const quickCreateIcons: Record<string, LucideIcon> = {
-  '/inventory/grns/new': Plus,
+  '/inventory/erp-grns': FileInput,
   '/inventory/transfers/new': ArrowRightLeft,
   '/kitchen/productions/new': CookingPot,
 };

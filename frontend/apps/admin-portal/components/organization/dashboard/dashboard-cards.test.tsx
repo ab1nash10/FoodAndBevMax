@@ -131,12 +131,13 @@ describe('the Master data card', () => {
 
 describe('the Quick create card', () => {
   it('offers only the create pages the user may open', () => {
-    signedIn(['GRN_CREATE']);
+    signedIn(['GRN_VIEW']);
     renderScreen(<QuickCreateCard />);
 
-    expect(screen.getByRole('link', { name: /Receive a delivery \(GRN\)/ })).toHaveAttribute(
+    // Goods come in from the ERP, so N G opens its GRNs rather than a delivery form.
+    expect(screen.getByRole('link', { name: /ERP GRNs/ })).toHaveAttribute(
       'href',
-      '/inventory/grns/new',
+      '/inventory/erp-grns',
     );
     expect(screen.queryByRole('link', { name: /New transfer/ })).not.toBeInTheDocument();
   });

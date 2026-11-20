@@ -65,7 +65,7 @@ export type ThemePreference = 'dark' | 'light' | 'system';
 export interface UserPreferences {
   /** The user's default location (their home location); null only if none is set yet. */
   defaultLocationId: string | null;
-  /** A portal path such as /inventory/grns, or null for the dashboard. */
+  /** A portal path such as /inventory/transfers, or null for the dashboard. */
   startPage: string | null;
   theme: ThemePreference | null;
 }

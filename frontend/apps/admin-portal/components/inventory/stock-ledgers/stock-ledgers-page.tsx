@@ -21,7 +21,7 @@ import { DateTimeCell, StatStrip, tableStyles } from '@/components/design-system
 import { useLocationContext } from '@/components/location-context';
 import { Input, Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
-import { locationHref, recordHref } from '@/lib/navigation';
+import { erpGrnHref, locationHref, recordHref } from '@/lib/navigation';
 import { organizationApi } from '@/lib/api';
 import { useOnScopeChange, useUrlNumberParam, useUrlSearchParam } from '@/lib/use-url-state';
 import {
@@ -122,9 +122,10 @@ const referenceLabels: Partial<Record<StockReferenceType, string>> = {
 };
 
 // The page that opens a row's document (an acknowledgement comes as its transfer, a sale as
-// its bill).
-const referencePages: Record<NonNullable<StockLedger['referenceDocument']>['type'], string> = {
-  GRN: '/inventory/grns',
+// its bill). A delivery GRN has no screen any more: its number shows without a link.
+const referencePages: Partial<
+  Record<NonNullable<StockLedger['referenceDocument']>['type'], string>
+> = {
   KITCHEN_PRODUCTION: '/kitchen/productions',
   ORDER: '/pos/history',
   TRANSFER: '/inventory/transfers',
@@ -138,10 +139,36 @@ function referenceLabel(type: StockReferenceType): string {
   return referenceLabels[type] ?? formatEnum(type);
 }
 
-function referenceHref(ledger: StockLedger): string | null {
+/** The row's document number and where it opens (null: nowhere), or null with none. */
+function referenceOf(ledger: StockLedger): { href: string | null; number: string } | null {
   const document = ledger.referenceDocument;
 
-  return document ? recordHref(referencePages[document.type], { id: document.id }) : null;
+  if (document) {
+    const page = referencePages[document.type];
+
+    return { href: page ? recordHref(page, { id: document.id }) : null, number: document.number };
+  }
+
+  // An ERP GRN's rows name it only in their remarks ("ERP GRN <number>").
+  const erpGrn =
+    ledger.referenceType === 'GRN_ENTRY' ? /^ERP GRN (.+)$/.exec(ledger.remarks ?? '')?.[1] : null;
+
+  return erpGrn ? { href: erpGrnHref(erpGrn), number: erpGrn } : null;
+}
+
+/** The document's number (GRN000002) linked to it; its kind when the record is gone. */
+function ReferenceCell({ ledger }: Readonly<{ ledger: StockLedger }>) {
+  const reference = referenceOf(ledger);
+
+  return reference ? (
+    <RecordLink className="font-mono text-[12.5px] text-ds-link" href={reference.href}>
+      {reference.number}
+    </RecordLink>
+  ) : ledger.referenceType ? (
+    referenceLabel(ledger.referenceType)
+  ) : (
+    '—'
+  );
 }
 
 export function StockLedgersPageClient() {
@@ -545,19 +572,7 @@ export function StockLedgersPageClient() {
                       </span>
                     </td>
                     <td className={cn(tableStyles.td, 'truncate text-ds-text-2')}>
-                      {/* The document's number (GRN000002); its kind when the record is gone. */}
-                      {ledger.referenceDocument ? (
-                        <RecordLink
-                          className="font-mono text-[12.5px] text-ds-link"
-                          href={referenceHref(ledger)}
-                        >
-                          {ledger.referenceDocument.number}
-                        </RecordLink>
-                      ) : ledger.referenceType ? (
-                        referenceLabel(ledger.referenceType)
-                      ) : (
-                        '—'
-                      )}
+                      <ReferenceCell ledger={ledger} />
                     </td>
                     <td
                       className={cn(

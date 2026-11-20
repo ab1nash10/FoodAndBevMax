@@ -7,7 +7,7 @@ import { useAuth } from '@/components/auth-provider';
 // The stock screens' "expiring soon", so the dashboard counts the same batches they flag.
 import { EXPIRING_DAYS } from '@/components/inventory/stock-levels/levels';
 import { useLocationContext } from '@/components/location-context';
-import { organizationApi } from '@/lib/api';
+import { grnEntriesApi, organizationApi } from '@/lib/api';
 import {
   dashboardMode,
   insights,
@@ -39,7 +39,7 @@ const iso = (time: number) => new Date(time).toISOString();
 
 /**
  * Everything the dashboard shows for a period, scoped to the top-bar location. Each source is
- * one query (keys under ['dashboard'], so the app's invalidation after a GRN, transfer or
+ * one query (keys under ['dashboard'], so the app's invalidation after an ERP GRN, transfer or
  * production refreshes it), fired in parallel and only when the user may view it; the numbers
  * are derived with useMemo from the fetched records.
  */
@@ -70,7 +70,7 @@ export function useDashboardStats(period: Period) {
   };
 
   // ---- Period records: this period and the one before (for deltas). One request returns the
-  // transfers, posted productions and posted GRNs the user may view, with only the fields the
+  // transfers, posted productions and ERP GRNs the user may view, with only the fields the
   // numbers below read.
   const recordsQuery = useQuery({
     enabled: ready && (can.transfers || can.productions || can.grns),
@@ -101,20 +101,12 @@ export function useDashboardStats(period: Period) {
       ).data,
     queryKey: queryKeys.dashboardQueue('transfers', scope),
   });
-  const grnsToVerifyQuery = useQuery({
+  // ERP GRNs waiting on the store: a return still short of stock (Run now or Close).
+  const grnsWaitingQuery = useQuery({
     enabled: ready && can.grns,
     queryFn: async () =>
-      (
-        await organizationApi.listGrns({
-          hospitalId,
-          limit: 20,
-          sortBy: 'createdAt',
-          sortOrder: 'asc',
-          // GRNs stay DRAFT until verified and posted; the API never sets UNDER_VERIFICATION.
-          status: 'DRAFT',
-        })
-      ).data,
-    queryKey: queryKeys.dashboardQueue('grns-to-verify', scope),
+      (await grnEntriesApi.listGrnEntries({ hospitalId, limit: 20, status: 'PENDING' })).data,
+    queryKey: queryKeys.dashboardQueue('grns-waiting', scope),
   });
   const draftProductionsQuery = useQuery({
     enabled: ready && can.productions,
@@ -137,7 +129,9 @@ export function useDashboardStats(period: Period) {
       const recent = { hospitalId, limit: 6, sortBy: 'updatedAt', sortOrder: 'desc' } as const;
       const [transfers, grns, productions] = await Promise.all([
         can.transfers ? organizationApi.listTransfers(recent).then((r) => r.data.items) : [],
-        can.grns ? organizationApi.listGrns(recent).then((r) => r.data.items) : [],
+        can.grns
+          ? grnEntriesApi.listGrnEntries({ hospitalId, limit: 6 }).then((r) => r.data.items)
+          : [],
         can.productions
           ? organizationApi.listKitchenProductions(recent).then((r) => r.data.items)
           : [],
@@ -166,7 +160,7 @@ export function useDashboardStats(period: Period) {
   });
 
   // ---- Master data totals and the setup checklist: one request with every count the user may
-  // see (each counted by its list endpoint) and the first posted GRN and acknowledged transfer.
+  // see (each counted by its list endpoint) and the first ERP GRN and acknowledged transfer.
   const setupQuery = useQuery({
     enabled: ready && Object.values(can).some(Boolean),
     queryFn: async () => (await organizationApi.getDashboardSetup({ hospitalId })).data,
@@ -301,7 +295,7 @@ export function useDashboardStats(period: Period) {
     period,
     productions: { ...loading(recordsQuery), truncated: records?.productions?.truncated ?? false },
     queue: {
-      grns: loading(grnsToVerifyQuery),
+      grns: loading(grnsWaitingQuery),
       productions: loading(draftProductionsQuery),
       transfers: loading(pendingTransfersQuery),
     },

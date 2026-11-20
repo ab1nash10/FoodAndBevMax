@@ -3,6 +3,7 @@ import { readdirSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import {
   canOpenPath,
+  erpGrnHref,
   findPage,
   findSubRoute,
   getStartPageOptions,
@@ -33,7 +34,7 @@ test('a saved start page wins only while the user may still open it', () => {
 
   expect(homeHref(cashier, '/pos/history')).toBe('/pos/history');
   expect(homeHref(cashier, '/dashboard')).toBe('/dashboard');
-  expect(homeHref(cashier, '/inventory/grns')).toBe('/pos/billing');
+  expect(homeHref(cashier, '/inventory/erp-grns')).toBe('/pos/billing');
   expect(homeHref(cashier, null)).toBe('/pos/billing');
 });
 
@@ -63,6 +64,16 @@ test('Time Slots is no longer a screen: no tab, no new-slot page, nothing to ope
   expect(findPage('/masters/time-slots')).toBeUndefined();
   expect(findSubRoute('/masters/time-slots/new')).toBeUndefined();
   expect(canOpenPath('/masters/time-slots', everything)).toBe(false);
+});
+
+test('Deliveries (GRN) is no longer a screen: ERP GRNs carry its badge and open one GRN', () => {
+  const everything = () => true;
+
+  expect(findPage('/inventory/grns')).toBeUndefined();
+  expect(findSubRoute('/inventory/grns/new')).toBeUndefined();
+  expect(canOpenPath('/inventory/grns', everything)).toBe(false);
+  expect(findPage('/inventory/erp-grns')?.badge).toBe('grns');
+  expect(erpGrnHref('GRN/26 01')).toBe('/inventory/erp-grns?grn=GRN%2F26%2001');
 });
 
 test('an edit form opens only for someone who may save it', () => {

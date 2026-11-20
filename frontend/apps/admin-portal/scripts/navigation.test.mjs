@@ -76,11 +76,11 @@ assert.equal(
 );
 assert.equal(
   show(
-    getBreadcrumbTrail('/inventory/grns', params(`id=${id}&view=DRAFT`), all, {
-      [id]: 'GRN000123',
+    getBreadcrumbTrail('/kitchen/productions', params(`id=${id}&view=DRAFT`), all, {
+      [id]: 'PRD000123',
     }),
   ),
-  '[Inventory] › Deliveries (GRN)(/inventory/grns) › GRN000123',
+  '[Kitchen Operations] › Kitchen Production(/kitchen/productions) › PRD000123',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/items', params(`id=${id}`), all, { [id]: 'Masala chai' })),
@@ -126,8 +126,8 @@ assert.equal(
 );
 // A trailing slash is the same page.
 assert.equal(
-  show(getBreadcrumbTrail('/inventory/grns/', null, all)),
-  '[Inventory] › Deliveries (GRN)',
+  show(getBreadcrumbTrail('/kitchen/productions/', null, all)),
+  '[Kitchen Operations] › Kitchen Production',
 );
 
 // Without permission a page crumb is plain text, and so is a named record on it.
@@ -137,10 +137,10 @@ assert.equal(
   ),
   '[Inventory] › Transfers › TRF0043 › Acknowledge',
 );
-const onlyGrns = (permission) => [permission].flat().includes('GRN_VIEW');
+const onlyProductions = (permission) => [permission].flat().includes('KITCHEN_PRODUCTION_VIEW');
 assert.equal(
-  show(getBreadcrumbTrail('/inventory/grns/new', null, onlyGrns)),
-  '[Inventory] › Deliveries (GRN)(/inventory/grns) › Receive a delivery',
+  show(getBreadcrumbTrail('/kitchen/productions/new', null, onlyProductions)),
+  '[Kitchen Operations] › Kitchen Production(/kitchen/productions) › New production',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/stores/abc/def', null, none)),
@@ -198,7 +198,7 @@ assert.equal(getActiveNavHref('/roles'), '/users');
 assert.equal(getActiveNavHref('/nope'), null);
 
 // Record and location links.
-assert.equal(recordHref('/inventory/grns', { id }), `/inventory/grns?id=${id}`);
+assert.equal(recordHref('/kitchen/productions', { id }), `/kitchen/productions?id=${id}`);
 assert.equal(recordHref('/masters/stores', { id, name: 'Main Store' }), '/masters/stores');
 assert.equal(recordHref('/masters/stores', {}), '/masters/stores');
 assert.equal(locationHref('STORE', 'STR0001'), '/masters/stores');
@@ -206,8 +206,8 @@ assert.equal(locationHref('RESTAURANT', 'RST0001'), '/masters/restaurants');
 assert.equal(locationHref('COUNTER', 'C1'), null);
 
 // Permission checks by path, with query strings and sub-routes.
-assert.equal(canOpenPath('/inventory/grns?view=DRAFT', onlyGrns), true);
-assert.equal(canOpenPath('/inventory/grns/new', onlyGrns), false);
+assert.equal(canOpenPath('/kitchen/productions?view=DRAFT', onlyProductions), true);
+assert.equal(canOpenPath('/kitchen/productions/new', onlyProductions), false);
 assert.equal(canOpenPath(`/masters/restaurants/${id}/edit`, none), false);
 // The shell sends users to /forbidden on these answers, so they must match the API: the
 // acknowledge page reads a transfer like the list (TRANSFER_VIEW or KITCHEN_TRANSFER_VIEW).

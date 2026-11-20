@@ -6,12 +6,7 @@ import { test } from 'vitest';
 
 test('every schema status has a chip label and tone', () => {
   const schema = readFileSync(join(__dirname, '../../../../prisma/schema.prisma'), 'utf8');
-  const enums = [
-    'GrnStatus',
-    'KitchenProductionStatus',
-    'TransferAcknowledgementStatus',
-    'TransferStatus',
-  ];
+  const enums = ['KitchenProductionStatus', 'TransferAcknowledgementStatus', 'TransferStatus'];
 
   for (const name of enums) {
     const block = new RegExp(`enum ${name} \\{([^}]*)\\}`).exec(schema)?.[1];

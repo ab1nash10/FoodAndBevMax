@@ -35,7 +35,7 @@ const stockKeys = [
   queryKeys.posMenu(),
   queryKeys.dashboard(),
 ];
-const grnKeys = [queryKeys.grns(), queryKeys.grnEntries(), ...stockKeys];
+const grnKeys = [queryKeys.grnEntries(), ...stockKeys];
 const transferKeys = [queryKeys.transfers(), queryKeys.transferAcknowledgements(), ...stockKeys];
 
 /**
@@ -49,7 +49,6 @@ const busyAreas: Record<string, QueryKey[]> = {
   erp: grnKeys,
   'erp-postings': [queryKeys.erpPostings()],
   'grn-entries': grnKeys,
-  grns: grnKeys,
   'kitchen-productions': [
     queryKeys.kitchenProductions(),
     queryKeys.kitchenProductionItems(),

@@ -77,9 +77,6 @@ import {
   type ImportResult,
 } from './http';
 import type {
-  Grn,
-  GrnInput,
-  GrnListQuery,
   LocationStockLevels,
   LocationStockLevelsQuery,
   StockBalance,
@@ -171,12 +168,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     createEmployee(body: EmployeeInput) {
       return client.request<ApiResponse<Employee>>('/employees', {
-        body,
-        method: 'POST',
-      });
-    },
-    createGrn(body: GrnInput) {
-      return client.request<ApiResponse<Grn>>('/grns', {
         body,
         method: 'POST',
       });
@@ -291,9 +282,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<ApiResponse<{ id: string }>>(`/employees/${id}`, {
         method: 'DELETE',
       });
-    },
-    deleteGrn(id: string) {
-      return client.request<ApiResponse<{ id: string }>>(`/grns/${id}`, { method: 'DELETE' });
     },
     deleteHospital(id: string) {
       return client.request<ApiResponse<{ id: string }>>(`/hospitals/${id}`, { method: 'DELETE' });
@@ -726,9 +714,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
     getEmployee(id: string) {
       return client.request<ApiResponse<Employee>>(`/employees/${id}`);
     },
-    getGrn(id: string) {
-      return client.request<ApiResponse<Grn>>(`/grns/${id}`);
-    },
     getHospital(id: string) {
       return client.request<ApiResponse<Hospital>>(`/hospitals/${id}`);
     },
@@ -792,9 +777,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     listEmployees(query?: EmployeeListQuery) {
       return client.request<ApiResponse<ApiList<Employee>>>('/employees', { query });
-    },
-    listGrns(query?: GrnListQuery) {
-      return client.request<ApiResponse<ApiList<Grn>>>('/grns', { query });
     },
     listHospitals(query?: HospitalListQuery) {
       return client.request<ApiResponse<ApiList<Hospital>>>('/hospitals', { query });
@@ -946,12 +928,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'PUT',
       });
     },
-    updateGrn(id: string, body: Partial<GrnInput>) {
-      return client.request<ApiResponse<Grn>>(`/grns/${id}`, {
-        body,
-        method: 'PUT',
-      });
-    },
     updateHospital(id: string, body: Partial<HospitalInput>) {
       return client.request<ApiResponse<Hospital>>(`/hospitals/${id}`, {
         body,
@@ -1049,11 +1025,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'PUT',
       });
     },
-    cancelGrn(id: string) {
-      return client.request<ApiResponse<Grn>>(`/grns/${id}/cancel`, {
-        method: 'PATCH',
-      });
-    },
     cancelKitchenProduction(id: string) {
       return client.request<ApiResponse<KitchenProduction>>(`/kitchen-productions/${id}/cancel`, {
         method: 'PATCH',
@@ -1066,11 +1037,6 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     dispatchTransfer(id: string) {
       return client.request<ApiResponse<Transfer>>(`/transfers/${id}/dispatch`, {
-        method: 'PATCH',
-      });
-    },
-    postGrnToStock(id: string) {
-      return client.request<ApiResponse<Grn>>(`/grns/${id}/post-to-stock`, {
         method: 'PATCH',
       });
     },

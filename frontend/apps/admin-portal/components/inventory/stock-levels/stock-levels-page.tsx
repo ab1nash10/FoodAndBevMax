@@ -3,7 +3,7 @@
 import { Button } from '@aahar/ui';
 import type { StoreStockLevel } from '@aahar/api-client';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRightLeft, PackagePlus } from 'lucide-react';
+import { ArrowRightLeft, FileInput } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { AppPageHeader, EmptyState, RecordAvatar } from '@/components/design-system';
@@ -18,7 +18,6 @@ import {
   formatQuantity,
   plural,
 } from '@/components/inventory/shared/utils';
-import { receivePrefillHref } from '@/components/inventory/grns/receive-prefill';
 import { organizationApi } from '@/lib/api';
 import { recordHref } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';
@@ -36,15 +35,6 @@ const filters: Array<{ label: string; value: LevelFilter }> = [
 ];
 
 const rowKey = (item: StoreStockLevel) => `${item.storeId}:${item.itemId}`;
-
-/** Receive a delivery into these items' store (all in one), each added for counting. */
-function receiveHref(items: StoreStockLevel[]): string {
-  return receivePrefillHref({
-    hospitalId: items[0]?.hospitalId ?? '',
-    itemIds: items.map((item) => item.itemId),
-    storeId: items[0]?.storeId ?? '',
-  });
-}
 
 export function StockLevelsPageClient() {
   const { scopedHospitalId } = useLocationContext();
@@ -83,19 +73,8 @@ export function StockLevelsPageClient() {
     matchesFilter(item, filter, daysFromToday(item.nextExpiryDate)),
   );
   const selected = shown.find((item) => rowKey(item) === selectedKey) ?? shown[0] ?? undefined;
-  // Running-low and out items per store, for one "receive them all" link each: a store tops up
-  // from a delivery, not by sending its stock away.
-  const lowByStore = [
-    ...inStore
-      .filter((item) => item.level !== 'OK')
-      .reduce(
-        (groups, item) => groups.set(item.storeId, [...(groups.get(item.storeId) ?? []), item]),
-        new Map<string, StoreStockLevel[]>(),
-      )
-      .values(),
-  ];
-  const lowCount = lowByStore.reduce((total, group) => total + group.length, 0);
-  const hasLowRow = shown.some((item) => item.level !== 'OK');
+  // Running-low and out items: a store tops up from the ERP's GRNs, not by sending stock away.
+  const lowCount = inStore.filter((item) => item.level !== 'OK').length;
 
   return (
     <section className="space-y-5">
@@ -125,11 +104,11 @@ export function StockLevelsPageClient() {
                 </Link>
               </Button>
             </IfCanOpen>
-            <IfCanOpen href="/inventory/grns/new">
+            <IfCanOpen href="/inventory/erp-grns">
               <Button asChild>
-                <Link href="/inventory/grns/new">
-                  <PackagePlus aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                  Receive delivery
+                <Link href="/inventory/erp-grns">
+                  <FileInput aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                  ERP GRNs
                 </Link>
               </Button>
             </IfCanOpen>
@@ -166,35 +145,27 @@ export function StockLevelsPageClient() {
           </div>
 
           {lowCount > 0 ? (
-            <IfCanOpen href="/inventory/grns/new">
+            <IfCanOpen href="/inventory/erp-grns">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ds-divider bg-ds-status-pending-bg/40 px-5 py-2.5">
                 <span className="mr-auto text-[13px] text-ds-status-pending-fg">
                   <span className="font-semibold">
                     {plural(lowCount, 'item')} running low or out.
                   </span>{' '}
-                  A delivery starts with each added, ready to count.
+                  Stock comes in as the ERP sends GRNs.
                 </span>
-                {lowByStore.map((group) => (
-                  <Button asChild key={group[0]!.storeId} size="sm" variant="outline">
-                    <Link href={receiveHref(group)}>
-                      <PackagePlus aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                      {lowByStore.length > 1
-                        ? `Receive a delivery · ${group[0]!.storeName}`
-                        : 'Receive a delivery'}
-                    </Link>
-                  </Button>
-                ))}
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/inventory/erp-grns">
+                    <FileInput aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                    ERP GRNs
+                  </Link>
+                </Button>
               </div>
             </IfCanOpen>
           ) : null}
 
           <div
             aria-hidden="true"
-            className={cn(
-              'hidden grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_96px_120px_112px] gap-5 border-b border-ds-border bg-ds-surface py-3 pl-5 text-[12.5px] font-medium text-ds-muted md:grid',
-              // Rows running low or out carry a receive link in a column of their own.
-              hasLowRow ? 'pr-17' : 'pr-5',
-            )}
+            className="hidden grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_96px_120px_112px] gap-5 border-b border-ds-border bg-ds-surface px-5 py-3 text-[12.5px] font-medium text-ds-muted md:grid"
           >
             <span>Item</span>
             <span>Cover</span>
@@ -221,7 +192,7 @@ export function StockLevelsPageClient() {
               <EmptyState
                 description={
                   inStore.length === 0
-                    ? 'Store stock arrives with a GRN. Receive a delivery to start.'
+                    ? 'Store stock arrives with the GRNs the ERP sends.'
                     : 'Nothing matches this search or filter.'
                 }
                 title={inStore.length === 0 ? 'No store stock yet' : 'No items here'}
@@ -281,26 +252,6 @@ export function StockLevelsPageClient() {
                         </Chip>
                       </span>
                     </button>
-                    {hasLowRow ? (
-                      <span className="grid w-12 shrink-0 place-items-center">
-                        {item.level === 'OK' ? null : (
-                          <IfCanOpen href="/inventory/grns/new">
-                            <Link
-                              aria-label={`Receive a delivery of ${item.itemName}`}
-                              className="grid h-8 w-8 place-items-center rounded-lg text-ds-link transition hover:bg-ds-primary-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-                              href={receiveHref([item])}
-                              title="Receive a delivery"
-                            >
-                              <PackagePlus
-                                aria-hidden="true"
-                                className="h-4 w-4"
-                                strokeWidth={1.8}
-                              />
-                            </Link>
-                          </IfCanOpen>
-                        )}
-                      </span>
-                    ) : null}
                   </li>
                 );
               })}
@@ -447,9 +398,9 @@ function LevelDetail({ item }: Readonly<{ item: StoreStockLevel }>) {
             <Link href="/inventory/transfers/new">Send to restaurant</Link>
           </Button>
         </IfCanOpen>
-        <IfCanOpen href="/inventory/grns/new">
+        <IfCanOpen href="/inventory/erp-grns">
           <Button asChild className="flex-1">
-            <Link href={receiveHref([item])}>Receive more</Link>
+            <Link href="/inventory/erp-grns">ERP GRNs</Link>
           </Button>
         </IfCanOpen>
       </footer>

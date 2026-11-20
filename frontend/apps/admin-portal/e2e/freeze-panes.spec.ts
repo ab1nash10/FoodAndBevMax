@@ -11,7 +11,7 @@ test.beforeAll(() => signIn());
  */
 const screens = [
   'dashboard',
-  'inventory/grns',
+  'inventory/erp-grns',
   'inventory/restaurant-stock',
   'inventory/stock-ledgers',
   'inventory/stock-levels',

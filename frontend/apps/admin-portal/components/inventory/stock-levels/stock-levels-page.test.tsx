@@ -163,26 +163,23 @@ describe('stock levels', () => {
     expect(detail.getByText('Out of stock')).toBeInTheDocument();
   });
 
-  it('links the low and out items to a delivery, for someone who may receive one', async () => {
-    signedIn(['STOCK_VIEW', 'GRN_CREATE']);
+  it('points low and out stock to the ERP GRNs, for someone who may view them', async () => {
+    signedIn(['STOCK_VIEW', 'GRN_VIEW']);
     renderScreen(<StockLevelsPageClient />);
 
     expect(await screen.findByText('2 items running low or out.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Receive a delivery of Oil' })).toHaveAttribute(
-      'href',
-      `/inventory/grns/new?hospital=${ppg.id}&items=item-oil&store=store-1`,
-    );
-    expect(screen.getByRole('link', { name: 'Receive a delivery' })).toHaveAttribute(
-      'href',
-      `/inventory/grns/new?hospital=${ppg.id}&items=item-oil%2Citem-salt&store=store-1`,
-    );
+    // Stock comes in from the ERP: no delivery is received here, item by item or otherwise.
+    const links = screen.getAllByRole('link', { name: 'ERP GRNs' });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) expect(link).toHaveAttribute('href', '/inventory/erp-grns');
+    expect(screen.queryByRole('link', { name: /receive/i })).toBeNull();
   });
 
   it('offers no delivery or transfer to someone who may only view stock', async () => {
     renderScreen(<StockLevelsPageClient />);
     await screen.findByRole('list', { name: 'Store items' });
 
-    expect(screen.queryByRole('link', { name: /receive/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /ERP GRNs/ })).toBeNull();
     expect(screen.queryByRole('link', { name: /send to restaurant/i })).toBeNull();
   });
 

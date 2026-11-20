@@ -1,8 +1,8 @@
 import { screen, within } from '@testing-library/react';
-import type { Grn, StockBalance, StoreStockLevel, Transfer } from '@aahar/api-client';
+import type { GrnEntry, StockBalance, StoreStockLevel, Transfer } from '@aahar/api-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { at } from '@/test/next-navigation';
-import { organizationApi } from '@/lib/api';
+import { grnEntriesApi, organizationApi } from '@/lib/api';
 import { mockedApi } from '@/components/inventory/test-support';
 import { signedIn } from '@/test/auth';
 import { page, renderScreen, reply } from '@/test/harness';
@@ -14,8 +14,8 @@ vi.mock('@/components/auth-provider', () => import('@/test/auth'));
 vi.mock('@/components/location-context', () => import('@/components/inventory/test-location'));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<object>()),
+  grnEntriesApi: { listGrnEntries: vi.fn() },
   organizationApi: {
-    listGrns: vi.fn(),
     listRestaurantStock: vi.fn(),
     listStoreStockLevels: vi.fn(),
     listStoreStockMovements: vi.fn(),
@@ -24,6 +24,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 
 const api = mockedApi(organizationApi);
+const erp = mockedApi(grnEntriesApi);
 
 function inDays(days: number) {
   const date = new Date();
@@ -90,16 +91,14 @@ beforeEach(() => {
       } as StockBalance,
     ]),
   );
-  api.listGrns.mockReturnValue(
+  erp.listGrnEntries.mockReturnValue(
     page([
       {
-        grnNumber: 'GRN-007',
-        id: 'grn-7',
-        receivedDate: `${inDays(0)}T04:30:00.000Z`,
-        status: 'DRAFT',
-        store: { storeName: 'Main Store' },
-        vendorName: 'Fresh Farms',
-      } as Grn,
+        grn_No: 'GRN-007',
+        received_at: `${inDays(0)}T04:30:00.000Z`,
+        status: 'VERIFIED',
+        store_name: 'Main Store',
+      } as GrnEntry,
     ]),
   );
   api.listTransfers.mockReturnValue(
@@ -162,19 +161,30 @@ describe('the store’s day', () => {
     await screen.findByRole('region', { name: 'Running low' });
     expect(screen.queryByRole('region', { name: 'Restaurants need stock' })).toBeNull();
     expect(api.listRestaurantStock).not.toHaveBeenCalled();
-    expect(api.listGrns).not.toHaveBeenCalled();
+    expect(erp.listGrnEntries).not.toHaveBeenCalled();
     expect(api.listTransfers).not.toHaveBeenCalled();
-    expect(screen.queryByRole('link', { name: /receive/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'ERP GRNs' })).toBeNull();
     expect(await screen.findByText('No GRN or transfer yet today.')).toBeInTheDocument();
   });
 
-  it('lists today’s GRNs and transfers, newest first, and the fortnight’s movement', async () => {
+  it('lists today’s ERP GRNs and transfers, newest first, and the fortnight’s movement', async () => {
     renderScreen(<TodayPageClient />);
 
     const today = within(screen.getByRole('region', { name: 'Today' }));
     const links = await today.findAllByRole('link', { name: /GRN-007|TR-003/ });
     expect(links.map((link) => link.textContent)).toEqual(['TR-003', 'GRN-007']);
-    expect(today.getByText(/from Fresh Farms/)).toBeInTheDocument();
+    expect(links[1]).toHaveAttribute('href', '/inventory/erp-grns?grn=GRN-007');
+    expect(today.getByText(/from the ERP · Main Store/)).toBeInTheDocument();
+    expect(erp.listGrnEntries).toHaveBeenCalledWith({
+      hospitalId: ppg.id,
+      limit: 10,
+      receivedFrom: inDays(0),
+    });
+    // Stock comes in from the ERP: the store opens its GRNs rather than receiving a delivery.
+    expect(screen.getAllByRole('link', { name: 'ERP GRNs' })[0]).toHaveAttribute(
+      'href',
+      '/inventory/erp-grns',
+    );
     expect(today.getByText(/· 2 lines/)).toBeInTheDocument();
 
     const moves = within(screen.getByRole('region', { name: 'Stock in and out' }));
