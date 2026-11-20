@@ -81,6 +81,14 @@ export class CreateTransferDto {
   @MaxLength(500)
   remarks?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'The operator who must acknowledge it (from GET /transfers/receivers). Left out, anyone at the destination who may receive transfers can.',
+  })
+  @IsOptional()
+  @IsUUID()
+  receiverId?: string;
+
   @ApiProperty({ isArray: true, type: CreateTransferLineDto })
   @ArrayMaxSize(200)
   @ArrayMinSize(1)

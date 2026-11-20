@@ -6,10 +6,11 @@ import {
   randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
-import { SmsService } from '@aahar/auth';
+import { RedisService, SmsService } from '@aahar/auth';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -29,27 +30,40 @@ import {
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { optionalText, toNumber } from '../common/values';
-import type { CreateKioskPaidOrderDto, CreateQrOrderDto, QrChannel } from './dto/qr.dto';
+import type {
+  CreateKioskPaidOrderDto,
+  CreateQrOrderDto,
+  QrChannel,
+  QrGuestOtpDto,
+  QrGuestVerifyDto,
+} from './dto/qr.dto';
 import { providersAt } from './online-payment-providers';
 
 type PaymentProviderName = 'PAYU' | 'PINELABS' | 'RAZORPAY';
 import { OnlinePaymentsService } from './online-payments.service';
-import { siteBusinessDate } from './pos-pricing';
-import { PosService } from './pos.service';
+import { sellableMenu, siteBusinessDate } from './pos-pricing';
+import { PosService, servedOn } from './pos.service';
 
 /** The registered SMS says the code is "valid for 5 minutes". */
 const OTP_TTL_MS = 5 * 60_000;
 const RESEND_AFTER_MS = 60_000;
 const MAX_SENDS_PER_DAY = 5;
 const MAX_WRONG_TRIES = 5;
-/** How long a confirmed staff discount stays good at checkout. */
-const STAFF_TOKEN_MS = 30 * 60_000;
+const DAY_SECONDS = 24 * 60 * 60;
+/** A guest stays signed in on their phone this long. */
+const GUEST_SESSION_MS = 30 * 24 * 60 * 60_000;
+const signInFirst = 'Confirm your mobile number with an OTP to order.';
 
 const notTaking = 'Ordering is closed right now. Please try again later.';
 const kioskNotTaking = 'This kiosk is not taking orders right now. Please order at the counter.';
-const noStaff = 'No employee with this ID gets a staff discount here.';
+const notAtTable = (restaurantName: string) =>
+  `${restaurantName} does not take orders at the table. Please order at the counter.`;
 const notBilled =
   'Your payment was received, but the order could not be placed. Please show this screen at the counter for a refund.';
+
+/** "MAX-PATPARGANJ, New Delhi, Delhi": what the location's own fields give, in order. */
+const addressOf = (place: { address: string | null; city: string | null; state: string | null }) =>
+  [place.address, place.city, place.state].filter(Boolean).join(', ') || null;
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -88,6 +102,8 @@ export class QrOrdersService {
     private readonly pos: PosService,
     private readonly prisma: PrismaService,
     private readonly sms: SmsService,
+    /** Guests' sign-in codes, kept only until they expire (Redis; in memory without it). */
+    private readonly store: RedisService,
     private readonly auditLog?: AuditLogService,
   ) {
     this.secret = config.getOrThrow<string>('JWT_ACCESS_SECRET');
@@ -108,9 +124,12 @@ export class QrOrdersService {
               take: 1,
               where: { deletedAt: null, isActive: true },
             },
-            hospital: { select: { hospitalName: true } },
+            address: true,
+            atTableDining: true,
+            hospital: { select: { address: true, city: true, hospitalName: true, state: true } },
             hospitalId: true,
             id: true,
+            inRoomDiningEnabled: true,
             location: { select: { locationName: true } },
             kioskCounterId: true,
             restaurantName: true,
@@ -149,27 +168,182 @@ export class QrOrdersService {
     });
   }
 
-  /** What can be ordered now: for a room at the room price, or for pickup at the counter's. */
+  /**
+   * A room's QR: its name and the restaurants that deliver to it, each with its ordering link
+   * secret: only those with In Room Dining switched on (and a counter to bill at).
+   * The QR holds only the room's id, so a restaurant's new link secret never reprints it.
+   */
+  async room(roomId: string) {
+    const room = await this.prisma.room.findFirst({
+      select: {
+        hospital: { select: { address: true, city: true, hospitalName: true, state: true } },
+        hospitalId: true,
+        roomName: true,
+      },
+      where: {
+        deletedAt: null,
+        hospital: { deletedAt: null, isActive: true },
+        id: roomId,
+        isActive: true,
+        // A room or bed: a table's QR is GET /qr/tables/:id.
+        restaurantId: null,
+      },
+    });
+
+    if (!room) throw new NotFoundException('This QR code is no longer valid.');
+
+    const restaurants = await this.prisma.restaurant.findMany({
+      orderBy: { restaurantName: 'asc' },
+      select: {
+        boardToken: true,
+        // Its QR counter (the first active one) takes orders while a shift is open there.
+        counters: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            shifts: { select: { id: true }, take: 1, where: { status: CounterShiftStatus.OPEN } },
+          },
+          take: 1,
+          where: { deletedAt: null, isActive: true },
+        },
+        id: true,
+        openingTime: true,
+        restaurantName: true,
+      },
+      where: {
+        counters: { some: { deletedAt: null, isActive: true } },
+        deletedAt: null,
+        hospitalId: room.hospitalId,
+        inRoomDiningEnabled: true,
+        isActive: true,
+      },
+    });
+    // How long its room dishes take, quickest to slowest: "ready in 25–40 min".
+    const prep = await this.prisma.restaurantMenu.groupBy({
+      _max: { preparationTimeMinutes: true },
+      _min: { preparationTimeMinutes: true },
+      by: ['restaurantId'],
+      where: {
+        ...sellableMenu,
+        deletedAt: null,
+        isActive: true,
+        preparationTimeMinutes: { gt: 0 },
+        restaurantId: { in: restaurants.map((restaurant) => restaurant.id) },
+        serveAt: { in: servedOn(OrderChannel.ROOM) },
+      },
+    });
+
+    return {
+      locationAddress: addressOf(room.hospital),
+      locationName: room.hospital.hospitalName,
+      restaurants: await Promise.all(
+        restaurants.map(async (restaurant) => {
+          const times = prep.find((row) => row.restaurantId === restaurant.id);
+
+          return {
+            id: restaurant.id,
+            /** Taking orders now: its QR counter has a shift open. */
+            open: Boolean(restaurant.counters[0]?.shifts.length),
+            /** "HH:mm", as set on the restaurant; null when not set. */
+            opensAt: restaurant.openingTime,
+            readyMinutes:
+              times?._min.preparationTimeMinutes && times._max.preparationTimeMinutes
+                ? {
+                    max: times._max.preparationTimeMinutes,
+                    min: times._min.preparationTimeMinutes,
+                  }
+                : null,
+            restaurantName: restaurant.restaurantName,
+            token: restaurant.boardToken ?? (await this.newBoardToken(restaurant.id)),
+          };
+        }),
+      ),
+      roomName: room.roomName,
+    };
+  }
+
+  /**
+   * A table's QR: its restaurant's ordering link, with the table filled in, while the restaurant
+   * takes orders at the table (At Table Dining). Like a bed's, the QR holds only the table's id.
+   */
+  async table(tableId: string) {
+    const table = await this.prisma.room.findFirst({
+      select: {
+        restaurant: {
+          select: { atTableDining: true, boardToken: true, id: true, restaurantName: true },
+        },
+        roomName: true,
+      },
+      where: {
+        deletedAt: null,
+        hospital: { deletedAt: null, isActive: true },
+        id: tableId,
+        isActive: true,
+        restaurant: { deletedAt: null, isActive: true },
+        restaurantId: { not: null },
+      },
+    });
+
+    if (!table?.restaurant) throw new NotFoundException('This QR code is no longer valid.');
+
+    const { restaurant } = table;
+
+    if (!restaurant.atTableDining) {
+      throw new BadRequestException(notAtTable(restaurant.restaurantName));
+    }
+
+    return {
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.restaurantName,
+      tableName: table.roomName,
+      token: restaurant.boardToken ?? (await this.newBoardToken(restaurant.id)),
+    };
+  }
+
+  /** A restaurant whose ordering link was never opened gets its secret now, as the portal would. */
+  private async newBoardToken(restaurantId: string) {
+    const boardToken = randomBytes(24).toString('base64url');
+
+    await this.prisma.restaurant.updateMany({
+      data: { boardToken },
+      where: { boardToken: null, id: restaurantId },
+    });
+
+    const { boardToken: saved } = await this.prisma.restaurant.findUniqueOrThrow({
+      select: { boardToken: true },
+      where: { id: restaurantId },
+    });
+
+    return saved!;
+  }
+
+  /**
+   * The menu: for a room at the room price, or for pickup at the counter's. A restaurant without
+   * In Room Dining serves pickup only. Dishes off for now or sold out are listed, not available.
+   */
   async menu(restaurantId: string, token: string | undefined, channel: QrChannel = 'ROOM') {
     const restaurant = await this.restaurant(restaurantId, token);
     const counter = await this.openCounter(restaurant, restaurant.qrCounterId);
+    const served = restaurant.inRoomDiningEnabled ? channel : 'COUNTER';
     const menu = restaurant.qrCounterId
-      ? await this.pos.menu({ channel, counterId: restaurant.qrCounterId })
+      ? await this.pos.menu({ channel: served, counterId: restaurant.qrCounterId })
       : null;
 
     return {
+      address: restaurant.address ?? addressOf(restaurant.hospital),
       locationName: restaurant.location?.locationName ?? restaurant.hospital.hospitalName,
       /** False while the QR counter has no shift open: the page then takes no orders. */
       open: counter !== null,
       /** Where pickup orders are collected: the QR counter. */
       pickupCounter: counter?.counterName ?? null,
       restaurantName: restaurant.restaurantName,
+      /** Whether it delivers to rooms (In Room Dining); without it, pickup only. */
+      roomDelivery: restaurant.inRoomDiningEnabled,
       staffDiscount: restaurant.staffDiscountApplicable,
       items: (menu?.items ?? [])
-        .filter(
-          (item) => item.isOnSale && item.price !== null && (item.stock === null || item.stock > 0),
-        )
+        // Not sold this way at all (no room price): not on this menu.
+        .filter((item) => item.price !== null)
         .map((item) => ({
+          available: item.isOnSale && (item.stock === null || item.stock > 0),
           category: item.category,
           foodType: item.foodType,
           gstPercent: item.gstPercent,
@@ -184,57 +358,27 @@ export class QrOrdersService {
     };
   }
 
-  /** An active employee with a registered mobile who gets a discount at this restaurant. */
-  private async staffMember(
-    restaurant: { id: string; staffDiscountApplicable: boolean },
-    code: string,
-  ) {
-    if (!restaurant.staffDiscountApplicable) throw new NotFoundException(noStaff);
+  /**
+   * Sends a sign-in OTP to the guest's mobile. Once confirmed, the phone orders under that name
+   * and number, and an employee's registered mobile gets their staff discount by itself.
+   */
+  async sendGuestOtp(restaurantId: string, token: string | undefined, dto: QrGuestOtpDto) {
+    await this.restaurant(restaurantId, token);
+    const { mobile } = dto;
+    // Nothing about a guest is kept: the code, the wait and the day's count all expire.
+    const codeKey = `qr-guest:otp:${mobile}`;
+    const waitKey = `qr-guest:wait:${mobile}`;
+    const todayKey = `qr-guest:sent:${mobile}:${siteBusinessDate(new Date())}`;
 
-    const employee = await this.prisma.employee.findFirst({
-      select: { employeeCode: true, mobile: true },
-      where: {
-        deletedAt: null,
-        employeeCode: { equals: code.trim(), mode: 'insensitive' },
-        isActive: true,
-        mobile: { not: null },
-      },
-    });
-
-    if (!employee?.mobile) throw new NotFoundException(noStaff);
-
-    const { discountPercent } = await this.pos
-      .employeeDiscount({ restaurantId: restaurant.id }, employee.employeeCode)
-      .catch(() => ({ discountPercent: 0 }));
-
-    if (!discountPercent) throw new NotFoundException(noStaff);
-
-    return { discountPercent, employeeCode: employee.employeeCode, mobile: employee.mobile };
-  }
-
-  /** Sends an OTP to the employee's registered mobile; says only where, masked. */
-  async sendStaffOtp(restaurantId: string, token: string | undefined, code: string) {
-    const restaurant = await this.restaurant(restaurantId, token);
-    const staff = await this.staffMember(restaurant, code);
-    const now = Date.now();
-    const recent = await this.prisma.staffDiscountOtp.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-      where: {
-        createdAt: { gte: new Date(`${siteBusinessDate(new Date())}T00:00:00+05:30`) },
-        employeeCode: staff.employeeCode,
-      },
-    });
-
-    if (recent[0] && now - recent[0].createdAt.valueOf() < RESEND_AFTER_MS) {
+    if (!(await this.store.setIfAbsent(waitKey, '1', RESEND_AFTER_MS / 1000))) {
       throw new HttpException(
         'An OTP was just sent. Wait a minute before asking for another.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    if (recent.length >= MAX_SENDS_PER_DAY) {
+    if ((await this.store.increment(todayKey, DAY_SECONDS)) > MAX_SENDS_PER_DAY) {
       throw new HttpException(
-        'Too many OTPs today for this Employee ID. Please ask at the counter.',
+        'Too many OTPs today for this number. Please ask at the counter.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -243,97 +387,142 @@ export class QrOrdersService {
       this.config.get<string>('ALLOW_DEV_OTP') === 'true' &&
       this.config.get<string>('NODE_ENV') === 'development';
     const canSend = this.sms.isConfigured();
+    // Not sent: the number may ask again at once, and it does not count for the day.
+    const giveBack = async () => {
+      await this.store.delete(codeKey);
+      await this.store.delete(waitKey);
+      await this.store.decrement(todayKey);
+    };
 
     if (!canSend && !devOtp) {
+      await giveBack();
       throw new ServiceUnavailableException(
-        'Staff discount OTPs cannot be sent right now. Please ask at the counter.',
+        'OTPs cannot be sent right now. Please order at the counter.',
       );
     }
 
     const otp = canSend ? String(randomInt(0, 1_000_000)).padStart(6, '0') : '000000';
-    const id = randomUUID();
+    const nonce = randomUUID();
 
-    await this.prisma.staffDiscountOtp.create({
-      data: {
-        codeHash: sha256(`${id}:${otp}`),
-        employeeCode: staff.employeeCode,
-        expiresAt: new Date(now + OTP_TTL_MS),
-        id,
-        restaurantId: restaurant.id,
-      },
-    });
+    // A new code replaces any earlier one, and its wrong tries start again.
+    await this.store.setWithExpiry(
+      codeKey,
+      JSON.stringify({
+        codeHash: sha256(`${nonce}:${otp}`),
+        name: dto.name.trim().replace(/\s+/g, ' '),
+        nonce,
+      }),
+      OTP_TTL_MS / 1000,
+    );
+    await this.store.delete(`qr-guest:tries:${mobile}`);
 
     if (canSend) {
       try {
-        await this.sms.sendOtp(staff.mobile, otp);
+        await this.sms.sendOtp(mobile, otp);
       } catch (error) {
-        await this.prisma.staffDiscountOtp.delete({ where: { id } });
+        await giveBack();
         throw error;
       }
     }
 
-    return { sentTo: `******${staff.mobile.slice(-4)}` };
+    return { sentTo: `******${mobile.slice(-4)}` };
   }
 
-  /** Checks the OTP; right, it gives the phone a token for the discount at checkout. */
-  async verifyStaffOtp(restaurantId: string, token: string | undefined, code: string, otp: string) {
-    const restaurant = await this.restaurant(restaurantId, token);
-    const staff = await this.staffMember(restaurant, code);
-    const sent = await this.prisma.staffDiscountOtp.findFirst({
-      orderBy: { createdAt: 'desc' },
-      where: {
-        employeeCode: staff.employeeCode,
-        expiresAt: { gt: new Date() },
-        restaurantId: restaurant.id,
-        verifiedAt: null,
-      },
-    });
+  /** Checks the OTP; right, the phone gets its sign-in, good for 30 days. The code is gone. */
+  async verifyGuestOtp(restaurantId: string, token: string | undefined, dto: QrGuestVerifyDto) {
+    await this.restaurant(restaurantId, token);
+    const codeKey = `qr-guest:otp:${dto.mobile}`;
+    const triesKey = `qr-guest:tries:${dto.mobile}`;
+    const saved = await this.store.get(codeKey);
 
-    if (!sent) throw new BadRequestException('That OTP has expired. Ask for a new one.');
-    if (sent.attempts >= MAX_WRONG_TRIES) {
+    if (!saved) throw new BadRequestException('That OTP has expired. Ask for a new one.');
+    if (Number((await this.store.get(triesKey)) ?? 0) >= MAX_WRONG_TRIES) {
       throw new BadRequestException('Too many wrong tries. Ask for a new OTP.');
     }
 
-    const right = Buffer.from(sha256(`${sent.id}:${otp}`));
+    const sent = JSON.parse(saved) as { codeHash: string; name: string; nonce: string };
+    const right = Buffer.from(sha256(`${sent.nonce}:${dto.otp}`));
 
     if (!timingSafeEqual(right, Buffer.from(sent.codeHash))) {
-      await this.prisma.staffDiscountOtp.update({
-        data: { attempts: { increment: 1 } },
-        where: { id: sent.id },
-      });
+      await this.store.increment(triesKey, OTP_TTL_MS / 1000);
       throw new BadRequestException('That OTP is not right.');
     }
-
-    const staffToken = randomBytes(32).toString('base64url');
     // Only the first of two at once: a code works once.
-    const { count } = await this.prisma.staffDiscountOtp.updateMany({
-      data: { tokenHash: sha256(staffToken), verifiedAt: new Date() },
-      where: { id: sent.id, verifiedAt: null },
-    });
+    if (!(await this.store.delete(codeKey))) {
+      throw new BadRequestException('That OTP has expired. Ask for a new one.');
+    }
+    await this.store.delete(triesKey);
 
-    if (count !== 1) throw new BadRequestException('That OTP has expired. Ask for a new one.');
+    const expiresAt = Date.now() + GUEST_SESSION_MS;
 
-    return { discountPercent: staff.discountPercent, staffToken };
+    return {
+      expiresAt: new Date(expiresAt).toISOString(),
+      guestToken: this.guestToken({ e: expiresAt, m: dto.mobile, n: sent.name }),
+      mobile: dto.mobile,
+      name: sent.name,
+    };
   }
 
-  /** The employee a staff token confirmed at this restaurant within the last half hour. */
-  private async staffFor(restaurantId: string, staffToken: string | undefined) {
-    if (!staffToken) return undefined;
+  /** The staff discount a signed-in guest gets here: 0 unless theirs is an employee's mobile. */
+  async guestDiscount(restaurantId: string, token: string | undefined, guestToken: string) {
+    const restaurant = await this.restaurant(restaurantId, token);
+    const guest = this.guestFrom(guestToken);
+    const staff = await this.staffByMobile(restaurant, guest.mobile);
 
-    const confirmed = await this.prisma.staffDiscountOtp.findFirst({
-      select: { employeeCode: true },
-      where: {
-        restaurantId,
-        tokenHash: sha256(staffToken),
-        verifiedAt: { gte: new Date(Date.now() - STAFF_TOKEN_MS) },
-      },
-    });
+    return { discountPercent: staff?.discountPercent ?? 0 };
+  }
 
-    if (!confirmed) {
-      throw new BadRequestException('Your staff discount has expired. Confirm it again.');
+  /** A sign-in the server alone can make: name, mobile and expiry, with its HMAC. */
+  private guestToken(guest: { e: number; m: string; n: string }) {
+    const body = Buffer.from(JSON.stringify(guest)).toString('base64url');
+
+    return `${body}.${this.guestMac(body)}`;
+  }
+
+  private guestMac(body: string) {
+    return createHmac('sha256', this.secret).update(`qr-guest:${body}`).digest('base64url');
+  }
+
+  /** The name and mobile a sign-in confirmed; a forged, expired or missing one is refused. */
+  private guestFrom(guestToken: string | undefined) {
+    const [body = '', mac = ''] = (guestToken ?? '').split('.');
+    const expected = Buffer.from(this.guestMac(body));
+    const given = Buffer.from(mac);
+
+    if (!body || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+      throw new ForbiddenException(signInFirst);
     }
 
-    return confirmed.employeeCode;
+    const guest = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as {
+      e: number;
+      m: string;
+      n: string;
+    };
+
+    if (!(guest.e > Date.now())) throw new ForbiddenException(signInFirst);
+
+    return { mobile: guest.m, name: guest.n };
+  }
+
+  /** An active employee whose registered mobile this is, and their discount here, if any. */
+  private async staffByMobile(
+    restaurant: { id: string; staffDiscountApplicable: boolean },
+    mobile: string,
+  ) {
+    if (!restaurant.staffDiscountApplicable) return null;
+
+    const employee = await this.prisma.employee.findFirst({
+      select: { employeeCode: true },
+      where: { deletedAt: null, isActive: true, mobile: { endsWith: mobile } },
+    });
+
+    if (!employee) return null;
+
+    const { discountPercent } = await this.pos
+      .employeeDiscount({ restaurantId: restaurant.id }, employee.employeeCode)
+      .catch(() => ({ discountPercent: 0 }));
+
+    return discountPercent ? { discountPercent, employeeCode: employee.employeeCode } : null;
   }
 
   /**
@@ -342,6 +531,8 @@ export class QrOrdersService {
    */
   async createOrder(restaurantId: string, token: string | undefined, dto: CreateQrOrderDto) {
     const restaurant = await this.restaurant(restaurantId, token);
+    // Every QR order is a signed-in guest's: their confirmed name and mobile go on it.
+    const guest = this.guestFrom(dto.guestToken);
     const clientOrderId = dto.clientOrderId.trim();
     const existing = await this.prisma.qrOrder.findUnique({
       where: { restaurantId_clientOrderId: { clientOrderId, restaurantId: restaurant.id } },
@@ -350,10 +541,52 @@ export class QrOrdersService {
     if (existing) return this.view(existing.id);
 
     const channel = dto.channel ?? OrderChannel.ROOM;
-    const roomNumber = channel === OrderChannel.ROOM ? optionalText(dto.roomNumber) : undefined;
 
-    if (channel === OrderChannel.ROOM && !roomNumber) {
-      throw new BadRequestException('Enter your room number.');
+    if (channel === OrderChannel.ROOM && !restaurant.inRoomDiningEnabled) {
+      throw new BadRequestException(
+        'This restaurant does not deliver to rooms. Please pick up at the counter.',
+      );
+    }
+
+    // Rooms order from the bed's own QR, under the bed's own name; the restaurant's QR is pickup only.
+    const room =
+      channel === OrderChannel.ROOM && dto.roomId
+        ? await this.prisma.room.findFirst({
+            select: { roomName: true },
+            where: {
+              deletedAt: null,
+              hospitalId: restaurant.hospitalId,
+              id: dto.roomId,
+              isActive: true,
+              restaurantId: null,
+            },
+          })
+        : null;
+
+    if (channel === OrderChannel.ROOM && !room) {
+      throw new BadRequestException('To order to your room, scan the QR code on your bed.');
+    }
+
+    if (channel === OrderChannel.TABLE && !restaurant.atTableDining) {
+      throw new BadRequestException(notAtTable(restaurant.restaurantName));
+    }
+
+    // A table orders from its own QR, under its own name: one of this restaurant's tables.
+    const table =
+      channel === OrderChannel.TABLE && dto.tableId
+        ? await this.prisma.room.findFirst({
+            select: { roomName: true },
+            where: {
+              deletedAt: null,
+              id: dto.tableId,
+              isActive: true,
+              restaurantId: restaurant.id,
+            },
+          })
+        : null;
+
+    if (channel === OrderChannel.TABLE && !table) {
+      throw new BadRequestException('To order at your table, scan the QR code on it.');
     }
 
     const open = await this.openCounter(restaurant, restaurant.qrCounterId);
@@ -369,21 +602,27 @@ export class QrOrdersService {
       );
     }
 
+    // An employee's registered mobile gets their staff discount: nothing more to show.
+    const staff = await this.staffByMobile(restaurant, guest.mobile);
+
     return this.place({
-      bedNumber: roomNumber ? (optionalText(dto.bedNumber) ?? null) : null,
+      bedNumber: null,
       channel,
       clientOrderId,
       counter,
-      customerMobile: dto.customerMobile,
-      customerName: dto.customerName,
+      customerMobile: guest.mobile,
+      customerName: guest.name,
+      // Razorpay's checkout opens on the guest's page, their name and mobile filled in.
+      embedded: provider === 'RAZORPAY',
+      employeeCode: staff?.employeeCode,
       instructions: optionalText(dto.instructions) ?? null,
       lines: dto.lines,
       provider,
       restaurantId: restaurant.id,
       returnUrl: dto.returnUrl,
-      roomNumber: roomNumber ?? null,
+      roomNumber: room?.roomName ?? null,
       source: GuestOrderSource.QR,
-      staffToken: dto.staffToken,
+      tableName: table?.roomName ?? null,
     });
   }
 
@@ -426,6 +665,8 @@ export class QrOrdersService {
     dto: CreateKioskPaidOrderDto,
   ) {
     const restaurant = await this.restaurant(restaurantId, token);
+    // Signed in for this order only (the kiosk forgets them after): their name and mobile.
+    const guest = this.guestFrom(dto.guestToken);
     const clientOrderId = dto.clientOrderId.trim();
     const existing = await this.prisma.qrOrder.findUnique({
       where: { restaurantId_clientOrderId: { clientOrderId, restaurantId: restaurant.id } },
@@ -452,20 +693,24 @@ export class QrOrdersService {
       }
     }
 
+    // An employee's registered mobile gets their staff discount, as on the phone.
+    const staff = await this.staffByMobile(restaurant, guest.mobile);
+
     return this.place({
       bedNumber: null,
       channel: OrderChannel.COUNTER,
       clientOrderId,
       counter,
-      customerMobile: dto.customerMobile,
-      customerName: dto.customerName,
+      customerMobile: guest.mobile,
+      customerName: guest.name,
+      employeeCode: staff?.employeeCode,
       instructions: null,
       lines: dto.lines,
       provider,
       restaurantId: restaurant.id,
       roomNumber: null,
       source: GuestOrderSource.KIOSK,
-      staffToken: dto.staffToken,
+      tableName: null,
     });
   }
 
@@ -477,6 +722,10 @@ export class QrOrdersService {
     counter: Awaited<ReturnType<PosService['findCounter']>>;
     customerMobile?: string;
     customerName?: string;
+    /** Paid in the provider's checkout on the guest's page, not on a link page. */
+    embedded?: boolean;
+    /** The employee whose discount applies: the guest's confirmed mobile is theirs. */
+    employeeCode?: string;
     instructions: string | null;
     lines: Array<{ menuId: string; quantity: number }>;
     provider: PaymentProviderName;
@@ -484,10 +733,9 @@ export class QrOrdersService {
     returnUrl?: string;
     roomNumber: string | null;
     source: GuestOrderSource;
-    staffToken?: string;
+    tableName: string | null;
   }) {
-    const { channel, clientOrderId, counter, provider, restaurantId } = input;
-    const employeeCode = await this.staffFor(restaurantId, input.staffToken);
+    const { channel, clientOrderId, counter, employeeCode, provider, restaurantId } = input;
     const lines = input.lines.map(({ menuId, quantity }) => ({ menuId, quantity }));
     // Refuses what is not sold for this channel now, before any payment is opened.
     const totals = await this.pos.quoteBill(counter, { channel, employeeCode, lines });
@@ -505,6 +753,7 @@ export class QrOrdersService {
       },
       { actorId: undefined },
       returnAddress(input.returnUrl, id, key),
+      input.embedded,
     );
 
     try {
@@ -524,6 +773,7 @@ export class QrOrdersService {
           restaurantId,
           roomNumber: input.roomNumber,
           source: input.source,
+          tableName: input.tableName,
         },
       });
     } catch (error) {
@@ -626,6 +876,7 @@ export class QrOrdersService {
           onlinePaymentId: order.onlinePaymentId,
           paymentMode: PaymentMode.UPI,
           roomNumber: order.roomNumber ?? undefined,
+          tableName: order.tableName ?? undefined,
         },
         // The guest bills it: room orders are theirs to place.
         { actorId: undefined, permissions: ['POS_ROOM_ORDER'] },
@@ -658,29 +909,93 @@ export class QrOrdersService {
   private async view(id: string) {
     const order = await this.prisma.qrOrder.findUniqueOrThrow({
       include: {
-        billedOrder: { select: { billNumber: true, orderNumber: true, status: true } },
-        onlinePayment: { select: { paymentUrl: true, provider: true } },
+        billedOrder: {
+          select: {
+            billNumber: true,
+            deliveredAt: true,
+            lines: {
+              select: {
+                itemName: true,
+                lineTotal: true,
+                quantity: true,
+                restaurantMenu: { select: { preparationTimeMinutes: true } },
+              },
+            },
+            orderNumber: true,
+            placedAt: true,
+            readyAt: true,
+            status: true,
+          },
+        },
+        onlinePayment: {
+          select: {
+            customerMobile: true,
+            customerName: true,
+            paymentUrl: true,
+            provider: true,
+            providerRef: true,
+          },
+        },
         restaurant: { select: { restaurantName: true } },
       },
       where: { id },
     });
 
+    const billed = order.billedOrder;
+    const payment = order.onlinePayment;
+    const awaiting = order.status === QrOrderStatus.AWAITING_PAYMENT;
+    // A Razorpay order is paid in Razorpay's checkout on the guest's page: it needs the key id.
+    const keyId =
+      awaiting && payment.provider === 'RAZORPAY' && payment.providerRef.startsWith('order_')
+        ? (await providersAt(this.prisma, this.config, order.hospitalId)).get('RAZORPAY')?.publicKey
+        : undefined;
+    // The slowest dish sets when it should be ready, counted from when it was paid and billed.
+    const prepMinutes = Math.max(
+      0,
+      ...(billed?.lines ?? []).map((line) => line.restaurantMenu.preparationTimeMinutes ?? 0),
+    );
+
     return {
-      billNumber: order.billedOrder?.billNumber ?? null,
+      billNumber: billed?.billNumber ?? null,
       channel: order.channel,
+      checkout: keyId
+        ? {
+            amount: Math.round(toNumber(order.grandTotal) * 100),
+            currency: 'INR',
+            keyId,
+            name: order.restaurant.restaurantName,
+            orderId: payment.providerRef,
+            prefill: {
+              ...(payment.customerMobile ? { contact: `+91${payment.customerMobile}` } : {}),
+              ...(payment.customerName ? { name: payment.customerName } : {}),
+            },
+          }
+        : null,
+      deliveredAt: billed?.deliveredAt?.toISOString() ?? null,
       grandTotal: toNumber(order.grandTotal),
       id: order.id,
       key: this.keyFor(order.id),
       /** Where the kitchen has it: PLACED, PREPARING, READY, COLLECTED. */
       kitchenStatus: order.billedOrder?.status ?? null,
+      lines: (billed?.lines ?? []).map((line) => ({
+        amount: toNumber(line.lineTotal),
+        itemName: line.itemName,
+        quantity: line.quantity,
+      })),
       message: order.status === QrOrderStatus.PAID_NOT_BILLED ? notBilled : null,
       orderNumber: order.billedOrder?.orderNumber ?? null,
-      paymentUrl:
-        order.status === QrOrderStatus.AWAITING_PAYMENT ? order.onlinePayment.paymentUrl : null,
+      paymentUrl: awaiting ? payment.paymentUrl || null : null,
+      paidAt: billed?.placedAt.toISOString() ?? null,
       provider: order.onlinePayment.provider,
+      readyAt: billed?.readyAt?.toISOString() ?? null,
+      readyBy:
+        billed && prepMinutes
+          ? new Date(billed.placedAt.valueOf() + prepMinutes * 60_000).toISOString()
+          : null,
       restaurantName: order.restaurant.restaurantName,
       roomNumber: order.roomNumber,
       status: order.status,
+      tableName: order.tableName,
     };
   }
 }

@@ -1,4 +1,4 @@
-import { SmsService } from '@aahar/auth';
+import { RedisService, SmsService } from '@aahar/auth';
 import { Module } from '@nestjs/common';
 import { CommonModule } from '../common/common.module';
 import { KioskController } from './kiosk.controller';
@@ -28,6 +28,8 @@ import { ShiftsService } from './shifts.service';
     ShiftsService,
     OnlinePaymentsService,
     QrOrdersService,
+    // QR guests' sign-in codes: Redis when REDIS_URL is set, else this process's memory.
+    RedisService,
     SmsService,
   ],
 })

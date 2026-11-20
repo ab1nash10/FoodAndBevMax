@@ -37,14 +37,6 @@ export class CreateUserDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ format: 'password', minLength: 8 })
-  @IsString()
-  @MaxLength(128)
-  @Matches(/(?=.*[A-Za-z])(?=.*\d).{8,}/, {
-    message: 'Password must be at least 8 characters and include a letter and number.',
-  })
-  password!: string;
-
   @ApiProperty()
   @IsUUID()
   roleId!: string;

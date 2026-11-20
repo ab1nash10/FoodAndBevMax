@@ -4,17 +4,18 @@ import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler';
 import {
   CreateQrOrderDto,
+  QrGuestDto,
+  QrGuestOtpDto,
+  QrGuestVerifyDto,
   QrMenuQueryDto,
   QrOrderStatusQueryDto,
-  QrStaffOtpDto,
-  QrStaffVerifyDto,
 } from './dto/qr.dto';
 import { QrOrdersService } from './qr-orders.service';
 
 // Guests on the hospital's Wi-Fi share one network address.
 const sharedAddressLimit = { default: { limit: 600, ttl: 60_000 } };
-// Enough for staff typing their ID and code; too few to try IDs or guess codes.
-const staffLimit = { default: { limit: 10, ttl: 60_000 } };
+// Each OTP is an SMS: a few a minute from one address, five a day to one number (the service).
+const guestOtpLimit = { default: { limit: 20, ttl: 60_000 } };
 // In the address, as the board's and the kiosk's: a custom header would need a CORS preflight.
 const tokenQuery = { description: "The restaurant's board link secret.", name: 'token' };
 
@@ -25,6 +26,24 @@ const ok = <T>(data: T) => ({ data, message: 'Success', success: true });
 @Controller('qr')
 export class QrOrdersController {
   constructor(private readonly qr: QrOrdersService) {}
+
+  @Get('rooms/:roomId')
+  @Public()
+  @Throttle(sharedAddressLimit)
+  @ApiOperation({ summary: "A room's QR: the room and the restaurants that deliver to it" })
+  @ApiOkResponse({ description: 'Room returned.' })
+  async room(@Param('roomId', ParseUUIDPipe) roomId: string) {
+    return ok(await this.qr.room(roomId));
+  }
+
+  @Get('tables/:tableId')
+  @Public()
+  @Throttle(sharedAddressLimit)
+  @ApiOperation({ summary: "A table's QR: its restaurant's ordering link, with the table" })
+  @ApiOkResponse({ description: 'Table returned.' })
+  async table(@Param('tableId', ParseUUIDPipe) tableId: string) {
+    return ok(await this.qr.table(tableId));
+  }
 
   @Get(':restaurantId/menu')
   @Public()
@@ -38,32 +57,46 @@ export class QrOrdersController {
     return ok(await this.qr.menu(restaurantId, query.token, query.channel));
   }
 
-  @Post(':restaurantId/staff-otp')
+  @Post(':restaurantId/guest-otp')
   @Public()
-  @Throttle(staffLimit)
+  @Throttle(guestOtpLimit)
   @ApiQuery(tokenQuery)
-  @ApiOperation({ summary: "Send an OTP to an employee's registered mobile for their discount" })
+  @ApiOperation({ summary: 'A guest signs in: an OTP to the mobile they give, with their name' })
   @ApiOkResponse({ description: 'OTP sent; the mobile it went to, masked.' })
-  async staffOtp(
+  async guestOtp(
     @Param('restaurantId', ParseUUIDPipe) restaurantId: string,
     @Query('token') token: string | undefined,
-    @Body() body: QrStaffOtpDto,
+    @Body() body: QrGuestOtpDto,
   ) {
-    return ok(await this.qr.sendStaffOtp(restaurantId, token, body.employeeCode));
+    return ok(await this.qr.sendGuestOtp(restaurantId, token, body));
   }
 
-  @Post(':restaurantId/staff-verify')
+  @Post(':restaurantId/guest-verify')
   @Public()
-  @Throttle(staffLimit)
+  @Throttle(guestOtpLimit)
   @ApiQuery(tokenQuery)
-  @ApiOperation({ summary: 'Confirm the OTP: the discount and a token for checkout' })
-  @ApiOkResponse({ description: 'Discount confirmed.' })
-  async staffVerify(
+  @ApiOperation({ summary: "Confirms the guest's OTP: the phone's sign-in, good for 30 days" })
+  @ApiOkResponse({ description: 'Signed in.' })
+  async guestVerify(
     @Param('restaurantId', ParseUUIDPipe) restaurantId: string,
     @Query('token') token: string | undefined,
-    @Body() body: QrStaffVerifyDto,
+    @Body() body: QrGuestVerifyDto,
   ) {
-    return ok(await this.qr.verifyStaffOtp(restaurantId, token, body.employeeCode, body.otp));
+    return ok(await this.qr.verifyGuestOtp(restaurantId, token, body));
+  }
+
+  @Post(':restaurantId/guest-discount')
+  @Public()
+  @Throttle(sharedAddressLimit)
+  @ApiQuery(tokenQuery)
+  @ApiOperation({ summary: "A signed-in guest's staff discount here (an employee's mobile)" })
+  @ApiOkResponse({ description: 'The discount percent; 0 for anyone not an employee.' })
+  async guestDiscount(
+    @Param('restaurantId', ParseUUIDPipe) restaurantId: string,
+    @Query('token') token: string | undefined,
+    @Body() body: QrGuestDto,
+  ) {
+    return ok(await this.qr.guestDiscount(restaurantId, token, body.guestToken));
   }
 
   @Post(':restaurantId/orders')

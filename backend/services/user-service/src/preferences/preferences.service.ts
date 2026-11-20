@@ -1,13 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { hashPassword, verifyPassword, type JwtRequestUser } from '@aahar/auth';
-import { UserStatus } from '@prisma/client';
+import type { JwtRequestUser } from '@aahar/auth';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { parsePreferences, type UserPreferences } from '../common/preferences';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
-/** The signed-in user's own preferences and password. Never acts on anyone else's account. */
+/** The signed-in user's own preferences. Never acts on anyone else's account. */
 @Injectable()
 export class PreferencesService {
   constructor(
@@ -17,9 +15,9 @@ export class PreferencesService {
 
   // The default location is the user's home location (users.hospital_id), the one place every
   // user's starting location is kept; the rest of the preferences live in the JSON column.
-  async get(userId: string): Promise<UserPreferences & { hasPassword: boolean }> {
+  async get(userId: string): Promise<UserPreferences> {
     const user = await this.prisma.user.findFirst({
-      select: { hospitalId: true, passwordHash: true, preferences: true },
+      select: { hospitalId: true, preferences: true },
       where: { deletedAt: null, id: userId },
     });
 
@@ -30,8 +28,6 @@ export class PreferencesService {
     return {
       ...parsePreferences(user.preferences),
       defaultLocationId: user.hospitalId,
-      // So Preferences offers "Set password" (no current one to ask for) instead of "Change".
-      hasPassword: Boolean(user.passwordHash),
     };
   }
 
@@ -41,8 +37,11 @@ export class PreferencesService {
    * operational roles without HOSPITAL_VIEW still see where they work.
    */
   async access(actor: JwtRequestUser) {
-    const [{ defaultLocationId }, locations] = await Promise.all([
-      this.get(actor.id),
+    const [user, locations] = await Promise.all([
+      this.prisma.user.findFirst({
+        select: { employeeCode: true, hospitalId: true },
+        where: { deletedAt: null, id: actor.id },
+      }),
       this.prisma.hospital.findMany({
         select: {
           city: true,
@@ -63,8 +62,14 @@ export class PreferencesService {
       }),
     ]);
 
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     return {
-      defaultLocationId,
+      defaultLocationId: user.hospitalId,
+      // Shown under Preferences → My details; the access token does not carry it.
+      employeeCode: user.employeeCode,
       locationScope: actor.locationScope,
       // Titled as the Locations list titles them (the entity's Location, else the location's own
       // name), so renaming one there renames it in the header too.
@@ -81,11 +86,8 @@ export class PreferencesService {
     };
   }
 
-  async update(
-    actor: JwtRequestUser,
-    dto: UpdatePreferencesDto,
-  ): Promise<UserPreferences & { hasPassword: boolean }> {
-    const { hasPassword, ...current } = await this.get(actor.id);
+  async update(actor: JwtRequestUser, dto: UpdatePreferencesDto): Promise<UserPreferences> {
+    const current = await this.get(actor.id);
 
     if (dto.defaultLocationId !== undefined) {
       if (!dto.defaultLocationId) {
@@ -120,61 +122,7 @@ export class PreferencesService {
       oldValue: current,
     });
 
-    return { ...next, hasPassword };
-  }
-
-  async changePassword(
-    actor: JwtRequestUser,
-    dto: ChangePasswordDto,
-    ipAddress?: string,
-  ): Promise<{ changed: true }> {
-    const user = await this.prisma.user.findFirst({
-      select: { passwordHash: true },
-      where: { deletedAt: null, id: actor.id, status: UserStatus.ACTIVE },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Without a password yet (signed in by OTP, which already proved who they are), the user
-    // sets their first one. Once set, changing it needs the current one.
-    // 400, never 401: the portal treats every 401 as an expired session and signs the user out.
-    if (
-      user.passwordHash &&
-      !(await verifyPassword(dto.currentPassword ?? '', user.passwordHash))
-    ) {
-      throw new BadRequestException('Current password is incorrect');
-    }
-
-    if (dto.newPassword === dto.currentPassword) {
-      throw new BadRequestException('Choose a password different from the current one');
-    }
-
-    // Hashed before the transaction, so the connection is not held through the scrypt work.
-    const passwordHash = await hashPassword(dto.newPassword);
-
-    // A new password ends every session the user has open, this one included, as it does when
-    // an administrator sets it: their tokens carry the old session version, which the auth layer
-    // then refuses, so each device signs in again with the new password.
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        data: { passwordHash, sessionVersion: { increment: 1 }, updatedBy: actor.id },
-        where: { id: actor.id },
-      });
-      await this.auditLog.record(
-        {
-          action: 'USER_PASSWORD_CHANGE',
-          actorId: actor.id,
-          entityId: actor.id,
-          entityName: 'users',
-          ipAddress,
-        },
-        tx,
-      );
-    });
-
-    return { changed: true };
+    return next;
   }
 
   /** The same reach as the header's location selector: only locations the user can work in. */

@@ -1,10 +1,7 @@
 import { CurrentUser } from '@aahar/auth';
 import type { JwtRequestUser } from '@aahar/auth';
-import { Body, Controller, Get, Patch, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Patch, UnauthorizedException } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
-import { getIpAddress, type RequestContextLike } from '../common/request-context';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { PreferencesService } from './preferences.service';
 
@@ -61,23 +58,6 @@ export class PreferencesController {
     return {
       data: await this.preferences.update(requireUser(user), body),
       message: 'Success',
-      success: true,
-    };
-  }
-
-  // Throttled hard: the current password is checked here, so it must not be guessable.
-  @Post('password')
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @ApiBody({ type: ChangePasswordDto })
-  @ApiOperation({ summary: 'Change my password' })
-  async changePassword(
-    @Body() body: ChangePasswordDto,
-    @CurrentUser() user: JwtRequestUser | undefined,
-    @Req() request: RequestContextLike,
-  ) {
-    return {
-      data: await this.preferences.changePassword(requireUser(user), body, getIpAddress(request)),
-      message: 'Password changed',
       success: true,
     };
   }

@@ -67,6 +67,7 @@ const reportSelect = {
   status: true,
   stewardId: true,
   subtotal: true,
+  tableName: true,
 } satisfies Prisma.RestaurantOrderSelect;
 
 type ReportOrder = Prisma.RestaurantOrderGetPayload<{ select: typeof reportSelect }>;
@@ -117,6 +118,7 @@ export class OrderReportsService {
           { customerName: { contains: search, mode: 'insensitive' } },
           { employeeCode: { contains: search, mode: 'insensitive' } },
           { roomNumber: { contains: search, mode: 'insensitive' } },
+          { tableName: { contains: search, mode: 'insensitive' } },
           { paymentReference: { contains: search, mode: 'insensitive' } },
         ],
       });

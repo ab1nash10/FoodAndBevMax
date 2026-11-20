@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { OrderSource, OrderStatus, Prisma, UserStatus } from '@prisma/client';
+import { OrderChannel, OrderSource, OrderStatus, Prisma, UserStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -40,6 +40,7 @@ const orderSelect = {
   roomNumber: true,
   source: true,
   status: true,
+  tableName: true,
 } satisfies Prisma.RestaurantOrderSelect;
 
 /** The kitchen screen's: also who is taking it to the guest. Not for senders or the board. */
@@ -272,11 +273,17 @@ export class RestaurantOrdersService {
   /** Gives an order to a steward (or, with null, takes it off them) until it is handed over. */
   async setSteward(id: string, stewardId: string | null, context: ActorContext) {
     const order = await this.prisma.restaurantOrder.findFirst({
-      select: { hospitalId: true, status: true, stewardId: true },
+      select: { channel: true, hospitalId: true, status: true, stewardId: true },
       where: { id },
     });
 
     if (!order) throw new NotFoundException('Order not found');
+    // Stewards take orders to rooms. Taking one off a counter order is still allowed.
+    if (stewardId && order.channel !== OrderChannel.ROOM) {
+      throw new ConflictException(
+        'This order is picked up at the counter, so it needs no steward. Stewards are for room orders.',
+      );
+    }
     if (order.status === OrderStatus.COLLECTED) {
       throw new ConflictException(
         'This order is already handed over, so its steward cannot change.',
@@ -321,14 +328,60 @@ export class RestaurantOrdersService {
     return updated;
   }
 
+  /** A steward's own room orders today, at any restaurant: ready ones to take, and what is coming. */
+  async myDeliveries(stewardId: string) {
+    const orders = await this.prisma.restaurantOrder.findMany({
+      orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
+      select: { ...orderSelect, restaurant: { select: { restaurantName: true } } },
+      take: 100,
+      where: {
+        channel: OrderChannel.ROOM,
+        placedAt: { gte: activeSince() },
+        status: { in: ACTIVE_STATUSES },
+        stewardId,
+      },
+    });
+
+    return orders.map(({ restaurant, ...order }) => ({
+      ...order,
+      restaurantName: restaurant.restaurantName,
+    }));
+  }
+
+  /** The steward hands a ready room order over at the bed. Only theirs: anyone else's is not found. */
+  async markDelivered(id: string, context: ActorContext) {
+    const order = await this.prisma.restaurantOrder.findFirst({
+      select: { status: true, stewardId: true },
+      where: { id },
+    });
+
+    if (!order || !context.actorId || order.stewardId !== context.actorId) {
+      throw new NotFoundException('Order not found');
+    }
+    if (order.status !== OrderStatus.READY) {
+      throw new ConflictException('This order is not ready yet: the kitchen marks it ready first.');
+    }
+
+    return this.setStatus(id, OrderStatus.COLLECTED, context);
+  }
+
   async setStatus(id: string, status: OrderStatus, context: ActorContext) {
     const order = await this.prisma.restaurantOrder.findFirst({
-      select: { acceptedAt: true, source: true, status: true },
+      select: { acceptedAt: true, channel: true, source: true, status: true, stewardId: true },
       where: { id },
     });
 
     if (!order) {
       throw new NotFoundException('Order not found');
+    }
+
+    // Someone answers for every room delivery: no steward, no "Delivered".
+    if (
+      status === OrderStatus.COLLECTED &&
+      order.channel === OrderChannel.ROOM &&
+      !order.stewardId
+    ) {
+      throw new ConflictException('Give this room order to a steward before marking it delivered.');
     }
 
     // A counter bill is cancelled from its bill, which needs a reason and puts its stock back.
@@ -444,6 +497,10 @@ export class RestaurantOrdersService {
         },
         take: 300,
         where: {
+          // Room orders go to the bed and table orders to the table, so nobody looks for them on
+          // the pickup board. Orders with no channel (other apps) stay: "not in" alone would
+          // drop them too, as NULL.
+          OR: [{ channel: null }, { channel: { notIn: [OrderChannel.ROOM, OrderChannel.TABLE] } }],
           placedAt: { gte: activeSince() },
           restaurantId: restaurant.id,
           status: { in: ACTIVE_STATUSES },

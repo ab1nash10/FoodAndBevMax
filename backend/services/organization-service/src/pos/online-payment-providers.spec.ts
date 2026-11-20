@@ -141,6 +141,73 @@ test('a Razorpay link reads as paid, closed or still open from its status', asyn
   assert.equal(last.method, 'POST');
 });
 
+test('a phone checkout opens a Razorpay order (no link page), and offers its public key', async () => {
+  const razorpay = provider('RAZORPAY');
+  answer = () => Response.json({ id: 'order_9', status: 'created' });
+
+  const opened = await razorpay.create({
+    amount: 120,
+    customer: { mobile: '9876543210', name: 'Asha' },
+    description: 'Ppg Main Restaurant · Counter 1',
+    embedded: true,
+    reference: 'pay-1',
+  });
+
+  assert.deepEqual(opened, { paymentUrl: '', providerRef: 'order_9' });
+  assert.equal(calls[0]!.url, 'https://api.razorpay.com/v1/orders');
+  assert.deepEqual(JSON.parse(calls[0]!.body), {
+    amount: 12000,
+    currency: 'INR',
+    notes: { description: 'Ppg Main Restaurant · Counter 1' },
+    receipt: 'pay-1',
+  });
+  // The key id goes to the guest's browser for Razorpay's checkout; the secret never does.
+  assert.equal(razorpay.publicKey, 'rzp_test_fake');
+
+  answer = () => Response.json({ status: 'created' });
+  await assert.rejects(
+    razorpay.create({ amount: 1, description: 'x', embedded: true, reference: 'y' }),
+    BadGatewayException,
+  );
+});
+
+test('a Razorpay order is paid only once Razorpay holds a captured payment; an authorised one is captured', async () => {
+  const razorpay = provider('RAZORPAY');
+  const payments = (items: object[]) => () => Response.json({ items });
+
+  answer = payments([]);
+  assert.deepEqual(await razorpay.read('order_9'), { closed: false, paid: false, reference: null });
+  assert.equal(calls[0]!.url, 'https://api.razorpay.com/v1/orders/order_9/payments');
+
+  answer = payments([
+    { id: 'pay_x', status: 'failed' },
+    { id: 'pay_y', status: 'captured' },
+  ]);
+  assert.deepEqual(await razorpay.read('order_9'), {
+    closed: false,
+    paid: true,
+    reference: 'pay_y',
+  });
+
+  calls = [];
+  answer = (url) =>
+    url.endsWith('/capture')
+      ? Response.json({ id: 'pay_z', status: 'captured' })
+      : Response.json({ items: [{ amount: 12000, id: 'pay_z', status: 'authorized' }] });
+  assert.deepEqual(await razorpay.read('order_9'), {
+    closed: false,
+    paid: true,
+    reference: 'pay_z',
+  });
+  assert.equal(calls[1]!.url, 'https://api.razorpay.com/v1/payments/pay_z/capture');
+  assert.deepEqual(JSON.parse(calls[1]!.body), { amount: 12000, currency: 'INR' });
+
+  // An order has no cancel at Razorpay: letting it go asks nothing of Razorpay.
+  calls = [];
+  await razorpay.cancel('order_9', 120);
+  assert.equal(calls.length, 0);
+});
+
 test('a refusal passes on the provider’s reason; no answer at all is a service outage', async () => {
   const razorpay = provider('RAZORPAY');
 

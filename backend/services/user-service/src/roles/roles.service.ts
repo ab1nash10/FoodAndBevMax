@@ -9,6 +9,7 @@ import { Prisma, RecordStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertCanChangeRoles, assertHoldsPermissions } from '../common/actor-scope';
+import { isOperatorRole } from '../common/operator-roles';
 import { assertSuperAdminActor, isSuperAdminRole } from '../common/super-admin';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -41,6 +42,7 @@ function toRoleResponse(role: RoleWithPermissions) {
     deletedAt: role.deletedAt,
     description: role.description,
     id: role.id,
+    isOperator: isOperatorRole(role.name),
     locationScope: role.locationScope,
     name: role.name,
     permissions: role.permissions.map((rolePermission) => ({

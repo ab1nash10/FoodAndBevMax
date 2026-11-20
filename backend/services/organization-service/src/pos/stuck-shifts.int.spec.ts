@@ -122,7 +122,7 @@ describe.skipIf(!databaseUrl)('stuck shifts (integration)', { timeout: 30_000 },
     );
     await h.rawQuery(
       `INSERT INTO user_roles (id, user_id, role_id, updated_at)
-       SELECT gen_random_uuid(), $1::uuid, id, now() FROM roles WHERE name = 'POS Cashier' AND deleted_at IS NULL`,
+       SELECT gen_random_uuid(), $1::uuid, id, now() FROM roles WHERE name = 'Restaurant/POS Operator' AND deleted_at IS NULL`,
       user!.id,
     );
     await h.rawQuery(

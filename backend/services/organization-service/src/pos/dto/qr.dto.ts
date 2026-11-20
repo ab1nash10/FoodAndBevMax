@@ -16,8 +16,11 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-const qrChannels = [OrderChannel.ROOM, OrderChannel.COUNTER] as const;
-/** ROOM: delivered to a patient's room. COUNTER: staff and visitors pick it up at the QR counter. */
+const qrChannels = [OrderChannel.ROOM, OrderChannel.COUNTER, OrderChannel.TABLE] as const;
+/**
+ * ROOM: delivered to a patient's room. COUNTER: staff and visitors pick it up at the QR counter.
+ * TABLE: served at a dine-in table, from the counter menu.
+ */
 export type QrChannel = (typeof qrChannels)[number];
 
 export class QrMenuQueryDto {
@@ -33,18 +36,36 @@ export class QrMenuQueryDto {
   channel?: QrChannel;
 }
 
-export class QrStaffOtpDto {
-  @ApiProperty({ maxLength: 50 })
+const mobileRule = /^[6-9]\d{9}$/;
+
+/** A guest signs in with their name and mobile; an OTP goes to that mobile. */
+export class QrGuestOtpDto {
+  @ApiProperty({ maxLength: 100 })
   @IsString()
-  @MaxLength(50)
-  @Matches(/\S/, { message: 'Enter your Employee ID.' })
-  employeeCode!: string;
+  @MaxLength(100)
+  @Matches(/\S/, { message: 'Enter your name.' })
+  name!: string;
+
+  @ApiProperty({ example: '9876543210' })
+  @Matches(mobileRule, { message: 'Enter a 10-digit mobile number.' })
+  mobile!: string;
 }
 
-export class QrStaffVerifyDto extends QrStaffOtpDto {
+export class QrGuestVerifyDto {
+  @ApiProperty({ example: '9876543210' })
+  @Matches(mobileRule, { message: 'Enter a 10-digit mobile number.' })
+  mobile!: string;
+
   @ApiProperty({ example: '123456' })
   @Matches(/^\d{6}$/, { message: 'Enter the 6-digit OTP.' })
   otp!: string;
+}
+
+export class QrGuestDto {
+  @ApiProperty({ description: "The guest's sign-in, from guest-verify." })
+  @IsString()
+  @MaxLength(500)
+  guestToken!: string;
 }
 
 export class QrOrderLineDto {
@@ -70,7 +91,8 @@ export class CreateQrOrderDto {
 
   @ApiPropertyOptional({
     default: OrderChannel.ROOM,
-    description: 'ROOM: delivered to the room. COUNTER: picked up at the QR counter.',
+    description:
+      'ROOM: delivered to the room. COUNTER: picked up at the QR counter. TABLE: served at the table.',
     enum: qrChannels,
   })
   @IsOptional()
@@ -84,17 +106,19 @@ export class CreateQrOrderDto {
   @ValidateNested({ each: true })
   lines!: QrOrderLineDto[];
 
-  @ApiPropertyOptional({ description: 'The room a ROOM order is delivered to.' })
+  @ApiPropertyOptional({
+    description: "A ROOM order's room: the id on the bed's QR. The restaurant's QR is pickup only.",
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  roomNumber?: string;
+  @IsUUID()
+  roomId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: "A TABLE order's table: the id on the table's QR.",
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  bedNumber?: string;
+  @IsUUID()
+  tableId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -102,22 +126,13 @@ export class CreateQrOrderDto {
   @MaxLength(200)
   instructions?: string;
 
-  @ApiPropertyOptional({ description: 'From a confirmed staff-discount OTP.' })
-  @IsOptional()
+  @ApiProperty({
+    description:
+      "The guest's sign-in (name and mobile, confirmed by OTP). Their name and mobile go on the order, and an employee's registered mobile gets their staff discount.",
+  })
   @IsString()
-  @MaxLength(100)
-  staffToken?: string;
-
-  @ApiPropertyOptional({ description: 'Who is paying (optional).', maxLength: 100 })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  customerName?: string;
-
-  @ApiPropertyOptional({ example: '9876543210' })
-  @IsOptional()
-  @Matches(/^[6-9]\d{9}$/, { message: 'Enter a 10-digit mobile number.' })
-  customerMobile?: string;
+  @MaxLength(500)
+  guestToken!: string;
 
   @ApiPropertyOptional({ description: 'The page the payment provider sends the guest back to.' })
   @IsOptional()
@@ -156,20 +171,11 @@ export class CreateKioskPaidOrderDto {
   @IsIn(['CARD', 'UPI'])
   method!: 'CARD' | 'UPI';
 
-  @ApiPropertyOptional({ description: 'Who is paying (optional).', maxLength: 100 })
-  @IsOptional()
+  @ApiProperty({
+    description:
+      "The guest's sign-in for this order (name and mobile, confirmed by OTP); an employee's registered mobile gets their staff discount.",
+  })
   @IsString()
-  @MaxLength(100)
-  customerName?: string;
-
-  @ApiPropertyOptional({ example: '9876543210' })
-  @IsOptional()
-  @Matches(/^[6-9]\d{9}$/, { message: 'Enter a 10-digit mobile number.' })
-  customerMobile?: string;
-
-  @ApiPropertyOptional({ description: 'From a confirmed staff-discount OTP.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  staffToken?: string;
+  @MaxLength(500)
+  guestToken!: string;
 }

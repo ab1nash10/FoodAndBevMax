@@ -144,7 +144,7 @@ export function assertHoldsPermissions(codes: string[], actor: JwtRequestUser | 
 
 /**
  * Changing someone else needs the reach to grant everything they hold: their roles' location
- * scope and every permission. Setting their password, email or mobile lets the actor sign in as
+ * scope and every permission. Setting their email or mobile lets the actor sign in as
  * them and inherit their rights; changing their role, locations, status or permissions (`what`)
  * would let a location Admin disable or demote a peer who holds more than they do.
  */
@@ -168,7 +168,7 @@ export function assertHoldsAccessOf(
     throw new ForbiddenException(
       what
         ? `${target.name} has access you do not hold, so only a Super Admin can change their ${what}`
-        : `${target.name} has access you do not hold, so only they or a Super Admin can change their password, email or mobile`,
+        : `${target.name} has access you do not hold, so only a Super Admin can change their email or mobile`,
     );
   }
 }

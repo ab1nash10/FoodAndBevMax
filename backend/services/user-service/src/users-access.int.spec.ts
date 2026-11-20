@@ -9,7 +9,6 @@ process.env.TZ = 'UTC';
 
 import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { hashPassword } from '@aahar/auth';
 import { titleCase } from '@aahar/config';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -24,7 +23,6 @@ const run = Date.now().toString(36);
 const mobileStamp = String(Date.now()).slice(-6);
 let sequence = 10;
 const nextMobile = () => `57${mobileStamp}${sequence++}`;
-const PASSWORD = 'Secret123x';
 
 /**
  * No request may leave this machine: the .env carries live Microsoft Graph and SMS credentials.
@@ -73,11 +71,19 @@ const userShape = {
   employeeCode: 'string',
   hospitals: [{ id: 'string', name: 'string' }],
   id: 'string',
+  lastLoginAt: null,
   locationScope: 'string',
   mobile: 'string',
   name: 'string',
   roles: [
-    { description: null, id: 'string', locationScope: 'string', name: 'string', status: 'string' },
+    {
+      description: null,
+      id: 'string',
+      isOperator: 'boolean',
+      locationScope: 'string',
+      name: 'string',
+      status: 'string',
+    },
   ],
   status: 'string',
   updatedAt: 'string',
@@ -149,7 +155,6 @@ describe.skipIf(!databaseUrl)(
     async function dbUser(input: {
       hospitalIds: string[];
       label: string;
-      password?: string | null;
       roleId: string;
       status?: 'ACTIVE' | 'DISABLED';
     }) {
@@ -162,8 +167,6 @@ describe.skipIf(!databaseUrl)(
           hospitalId: input.hospitalIds[0] ?? null,
           mobile: nextMobile(),
           name: `Int ${input.label} ${n}`,
-          passwordHash:
-            input.password === null ? null : await hashPassword(input.password ?? PASSWORD),
           roles: { create: [{ roleId: input.roleId }] },
           status: input.status ?? 'ACTIVE',
         },
@@ -179,7 +182,6 @@ describe.skipIf(!databaseUrl)(
         hospitalIds: [hA],
         mobile: nextMobile(),
         name: `int api user ${n}`,
-        password: PASSWORD,
         roleId: staffRoleId,
         ...overrides,
       };
@@ -339,7 +341,6 @@ describe.skipIf(!databaseUrl)(
         ['GET', '/users/me/access'],
         ['GET', '/users/me/preferences'],
         ['PATCH', '/users/me/preferences'],
-        ['POST', '/users/me/password'],
       ];
       for (const [method, path] of [...guarded, ...selfService]) {
         const anonymous = await api(method, path, method === 'GET' ? undefined : {}, '');
@@ -374,18 +375,10 @@ describe.skipIf(!databaseUrl)(
     });
 
     describe('users', () => {
-      it('create: validates the body, then saves a normalised user with a hashed password', async () => {
+      it('create: validates the body, then saves a normalised user (no password)', async () => {
         const invalid: Array<[Body, string]> = [
           [{ email: undefined }, 'email must be an email'],
           [{ mobile: '12345' }, 'mobile must match /^\\d{10}$/ regular expression'],
-          [
-            { password: 'short' },
-            'Password must be at least 8 characters and include a letter and number.',
-          ],
-          [
-            { password: 'lettersonly' },
-            'Password must be at least 8 characters and include a letter and number.',
-          ],
           [{ roleId: 'nope' }, 'roleId must be a UUID'],
           [{ hospitalIds: ['nope'] }, 'each value in hospitalIds must be a UUID'],
           [{ status: 'GONE' }, 'status must be one of the following values: ACTIVE, DISABLED'],
@@ -453,7 +446,7 @@ describe.skipIf(!databaseUrl)(
         });
         expect(created.data).not.toHaveProperty('passwordHash');
         const row = await prisma.user.findUniqueOrThrow({ where: { id: String(created.data.id) } });
-        expect(row.passwordHash).toMatch(/^scrypt\$/);
+        expect(row.passwordHash).toBeNull();
         expect([row.createdBy, row.hospitalId, row.sessionVersion]).toEqual([superAdminId, hA, 0]);
 
         // A MULTI role keeps every location; the first becomes the default.
@@ -532,6 +525,32 @@ describe.skipIf(!databaseUrl)(
         expect(await idsOf('status=DISABLED')).not.toContain(inA.id);
         expect(await idsOf(`roleId=${adminRoleId}`)).toEqual([adminId]);
 
+        // The operator roles (a fixed list) have their own screen; everyone else is on Admins.
+        const kitchenOperator = await prisma.role.upsert({
+          create: { locationScope: 'SINGLE', name: 'Kitchen Operator' },
+          update: {},
+          where: { name: 'Kitchen Operator' },
+        });
+        const operator = await apiUser({ roleId: kitchenOperator.id });
+        expect(operator.roles).toEqual([
+          expect.objectContaining({ isOperator: true, name: 'Kitchen Operator' }),
+        ]);
+        expect(inA.roles).toEqual([expect.objectContaining({ isOperator: false })]);
+        expect(await idsOf('group=OPERATORS')).toEqual([operator.id]);
+        expect(await idsOf('group=ADMINS')).toEqual(
+          expect.arrayContaining([inA.id, inB.id, adminId]),
+        );
+        expect(await idsOf('group=ADMINS')).not.toContain(operator.id);
+        // When they last signed in, as the auth service stamps it.
+        const signedInAt = new Date('2026-11-18T10:19:58.000Z');
+        await prisma.user.update({
+          data: { lastLoginAt: signedInAt },
+          where: { id: String(operator.id) },
+        });
+        expect((await ok('GET', `/users/${String(operator.id)}`)).lastLoginAt).toBe(
+          signedInAt.toISOString(),
+        );
+
         // Newest first, paged.
         const page = await ok('GET', `/users?search=${run}&limit=1&page=2`);
         expect((page.items as Body[]).length).toBe(1);
@@ -542,6 +561,7 @@ describe.skipIf(!databaseUrl)(
           'limit=0',
           'page=0',
           'status=GONE',
+          'group=EVERYONE',
           'roleId=nope',
           'hospitalId=1',
         ]) {
@@ -945,7 +965,6 @@ describe.skipIf(!databaseUrl)(
           // Editing, demoting, disabling or deleting a Super Admin user.
           ['PUT', `/users/${id}`, { name: 'Taken Over' }],
           ['PUT', `/users/${id}`, { status: 'ACTIVE' }],
-          ['PUT', `/users/${id}`, { password: 'Hijack123' }],
           ['PUT', `/users/${id}`, { hospitalIds: [hA], roleId: staffRoleId }],
           ['DELETE', `/users/${id}`, undefined],
           ['POST', `/users/${id}/roles`, { roleId: staffRoleId }],
@@ -1046,9 +1065,9 @@ describe.skipIf(!databaseUrl)(
           id,
         );
       const LOCKED =
-        / is signed in\. Their password, email and mobile can be changed after \d+ \w+ \d{4}, \d+:\d\d [ap]m, or once they sign out\.$/;
+        / is signed in\. Their email and mobile can be changed after \d+ \w+ \d{4}, \d+:\d\d [ap]m, or once they sign out\.$/;
 
-      it('an admin cannot change a signed-in user’s email, mobile or password for 8 hours', async () => {
+      it('an admin cannot change a signed-in user’s email or mobile for 8 hours', async () => {
         const user = await apiUser();
         const id = String(user.id);
         await setActive(id, 'now()');
@@ -1057,11 +1076,7 @@ describe.skipIf(!databaseUrl)(
         const until = new Date(String(read.credentialsLockedUntil)).getTime();
         expect(Math.abs(until - (Date.now() + 8 * 3_600_000))).toBeLessThan(120_000);
 
-        for (const body of [
-          { mobile: nextMobile() },
-          { email: `locked-${run}@int.test` },
-          { password: 'Another123' },
-        ]) {
+        for (const body of [{ mobile: nextMobile() }, { email: `locked-${run}@int.test` }]) {
           const result = await api('PUT', `/users/${id}`, body, adminToken);
           expect(result.status).toBe(409);
           expect(String(result.body.message)).toMatch(LOCKED);
@@ -1091,7 +1106,7 @@ describe.skipIf(!databaseUrl)(
         // Signed out (null), it is free straight away.
         await setActive(id, 'NULL');
         expect(
-          (await api('PUT', `/users/${id}`, { password: 'Another123' }, adminToken)).status,
+          (await api('PUT', `/users/${id}`, { mobile: nextMobile() }, adminToken)).status,
         ).toBe(200);
       });
 
@@ -1103,7 +1118,6 @@ describe.skipIf(!databaseUrl)(
         const changed = await ok('PUT', `/users/${id}`, {
           email: `exempt-${run}@int.test`,
           mobile,
-          password: 'Another123',
         });
         expect(changed).toMatchObject({ email: `exempt-${run}@int.test`, mobile });
         expect(changed.credentialsLockedUntil).not.toBeNull();
@@ -1117,52 +1131,21 @@ describe.skipIf(!databaseUrl)(
           ),
         ).toEqual([
           403,
-          `${String(extra.name)} has access you do not hold, so only they or a Super Admin can change their password, email or mobile`,
+          `${String(extra.name)} has access you do not hold, so only a Super Admin can change their email or mobile`,
         ]);
       });
 
-      it('your own change is never locked, but needs your current password', async () => {
-        await setActive(adminId, 'now()');
-        const mobile = nextMobile();
-        expect(refused(await api('PUT', `/users/${adminId}`, { mobile }, adminToken))).toEqual([
-          400,
-          'Enter your current password to change your password, email or mobile',
-        ]);
+      it('your own email and mobile are changed by another administrator, never by you', async () => {
+        const own =
+          'Your own email and mobile receive your sign-in codes, so another administrator changes them.';
+        expect(
+          refused(await api('PUT', `/users/${adminId}`, { mobile: nextMobile() }, adminToken)),
+        ).toEqual([400, own]);
         expect(
           refused(
-            await api('PUT', `/users/${adminId}`, { currentPassword: 'wrong', mobile }, adminToken),
+            await api('PUT', `/users/${adminId}`, { email: `self-${run}@int.test` }, adminToken),
           ),
-        ).toEqual([400, 'Enter your current password to change your password, email or mobile']);
-        const changed = await ok(
-          'PUT',
-          `/users/${adminId}`,
-          { currentPassword: PASSWORD, mobile },
-          adminToken,
-        );
-        expect(changed.mobile).toBe(mobile);
-        // The change ended the admin's own sessions.
-        expect((await api('GET', '/users', undefined, adminToken)).status).toBe(401);
-        adminToken = await tokenOf(adminId);
-
-        const noPassword = await dbUser({
-          hospitalIds: [hA],
-          label: 'nopass',
-          password: null,
-          roleId: adminRoleId,
-        });
-        expect(
-          refused(
-            await api(
-              'PUT',
-              `/users/${noPassword.id}`,
-              { mobile: nextMobile() },
-              signFor(noPassword),
-            ),
-          ),
-        ).toEqual([
-          400,
-          'Your account has no password yet. Ask another administrator to change these details.',
-        ]);
+        ).toEqual([400, own]);
       });
     });
 
@@ -1261,6 +1244,7 @@ describe.skipIf(!databaseUrl)(
           deletedAt: null,
           description: 'string',
           id: 'string',
+          isOperator: 'boolean',
           locationScope: 'string',
           name: 'string',
           permissions: [
@@ -1559,7 +1543,6 @@ describe.skipIf(!databaseUrl)(
 
         expect(await ok('GET', '/users/me/preferences', undefined, as)).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: null,
           theme: null,
         });
@@ -1593,7 +1576,6 @@ describe.skipIf(!databaseUrl)(
         );
         expect(set).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: '/inventory/grns',
           theme: 'dark',
         });
@@ -1608,13 +1590,11 @@ describe.skipIf(!databaseUrl)(
         // Omitted fields are kept; null clears one.
         expect(await ok('PATCH', '/users/me/preferences', { theme: null }, as)).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: '/inventory/grns',
           theme: null,
         });
         expect(await ok('PATCH', '/users/me/preferences', {}, as)).toEqual({
           defaultLocationId: hA,
-          hasPassword: true,
           startPage: '/inventory/grns',
           theme: null,
         });
@@ -1657,50 +1637,6 @@ describe.skipIf(!databaseUrl)(
         expect(
           refused(await api('PATCH', '/users/me/preferences', { defaultLocationId: randomUUID() })),
         ).toEqual([400, 'Location not found']);
-      });
-
-      it('change my password: checks the current one, then ends my sessions', async () => {
-        const me = await dbUser({ hospitalIds: [hA], label: 'pw', roleId: staffRoleId });
-        const as = signFor(me);
-        const change = (body: Body) => api('POST', '/users/me/password', body, as);
-
-        expect(
-          refused(await change({ currentPassword: 'wrong', newPassword: 'Brandnew123' })),
-        ).toEqual([400, 'Current password is incorrect']);
-        expect(refused(await change({ currentPassword: PASSWORD, newPassword: PASSWORD }))).toEqual(
-          [400, 'Choose a password different from the current one'],
-        );
-        expect(refused(await change({ currentPassword: PASSWORD, newPassword: 'short' }))).toEqual([
-          400,
-          'Password must be at least 8 characters and include a letter and number.',
-        ]);
-        const done = await change({ currentPassword: PASSWORD, newPassword: 'Brandnew123' });
-        expect([done.status, done.body.message, done.data]).toEqual([
-          201,
-          'Password changed',
-          { changed: true },
-        ]);
-        const row = await prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-        expect([row.sessionVersion, row.passwordHash === me.passwordHash]).toEqual([1, false]);
-        expect(refused(await api('GET', '/users/me/preferences', undefined, as))).toEqual([
-          401,
-          'Your account was updated. Please sign in again.',
-        ]);
-
-        const noPassword = await dbUser({
-          hospitalIds: [hA],
-          label: 'pw0',
-          password: null,
-          roleId: staffRoleId,
-        });
-        // Without a password yet, a user sets their first one: no current password is asked for.
-        const first = await api(
-          'POST',
-          '/users/me/password',
-          { newPassword: 'Brandnew123' },
-          signFor(noPassword),
-        );
-        expect([first.status, first.body.message]).toEqual([201, 'Password changed']);
       });
     });
   },

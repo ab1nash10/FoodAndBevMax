@@ -37,11 +37,21 @@ export class TransfersController {
     'COUNTER_STOCK_RECEIVE',
     'RESTAURANT_TRANSFER_SEND',
     'RESTAURANT_TRANSFER_RECEIVE',
+    // The store sees the returns it counts in.
+    'GRN_POST',
   )
   @ApiOperation({ summary: 'Get transfers' })
   @ApiOkResponse({ description: 'Transfers returned successfully.' })
   async list(@Query() query: ListTransfersQueryDto) {
     return { data: await this.transfers.list(query), message: 'Success', success: true };
+  }
+
+  // Before ':id', which would take 'receivers' for an id.
+  @Get('receivers')
+  @Permissions('TRANSFER_CREATE', 'TRANSFER_VIEW')
+  @ApiOperation({ summary: 'Operators of a location who can be named to receive a transfer' })
+  async receivers(@Query('hospitalId', ParseUUIDPipe) hospitalId: string) {
+    return { data: await this.transfers.receivers(hospitalId), message: 'Success', success: true };
   }
 
   @Get(':id')
@@ -51,6 +61,8 @@ export class TransfersController {
     'COUNTER_STOCK_RECEIVE',
     'RESTAURANT_TRANSFER_SEND',
     'RESTAURANT_TRANSFER_RECEIVE',
+    // The store sees the returns it counts in.
+    'GRN_POST',
   )
   @ApiOperation({ summary: 'Get transfer by ID' })
   @ApiParam({ name: 'id' })

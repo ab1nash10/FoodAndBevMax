@@ -7,6 +7,7 @@ import type { CreateTransferDto } from './dto/create-transfer.dto';
 import { stockKey } from './transfers.helpers';
 import type { TransfersRepository } from './transfers.repository';
 import { TransfersService } from './transfers.service';
+import type { PrismaService } from '../common/prisma/prisma.service';
 
 type Balance = {
   availableQty: number;
@@ -119,6 +120,7 @@ function setup(balances: Balance[], transfers: Transfer[] = []) {
   const service = new TransfersService(
     { record: () => Promise.resolve() } as unknown as AuditLogService,
     repository as unknown as TransfersRepository,
+    {} as unknown as PrismaService,
   );
 
   return { balances, ledger, service, transactions: () => transactions, transfers };
@@ -188,7 +190,7 @@ test('a kitchen-only grant is refused before anything is read', async () => {
   assert.equal(transactions(), 0);
 });
 
-test('where stock may go: never to itself, only to a restaurant or counter, in the same location', async () => {
+test('where stock may go: never to itself, to a restaurant or counter (a store only from a restaurant), in the same location', async () => {
   const { service } = setup([storeCoke(10)]);
   const send = (over: Record<string, unknown>) =>
     service.create(fromStore([cokeLine(1)], over), sender);
@@ -199,7 +201,7 @@ test('where stock may go: never to itself, only to a restaurant or counter, in t
   );
   await assert.rejects(
     send({ destinationType: InventoryLocationType.STORE }),
-    refusedWith(/^Destination must be a restaurant or a counter$/),
+    refusedWith(/^Only a restaurant sends stock back to a store$/),
   );
   await assert.rejects(
     send({ sourceType: InventoryLocationType.COUNTER }),

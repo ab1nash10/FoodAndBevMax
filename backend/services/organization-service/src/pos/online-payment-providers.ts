@@ -18,16 +18,22 @@ export interface ProviderState {
 export interface PaymentProvider {
   /** amount: what the payment was for, in rupees (Pine Labs needs it to clear the machine). */
   cancel(providerRef: string, amount: number): Promise<void>;
-  /** returnUrl: where the provider sends a guest who paid on their own phone (QR orders). */
-  /** customer: the payer, when given; Razorpay shows them on its page. */
+  /**
+   * returnUrl: where the provider sends a guest who paid on their own phone (QR orders).
+   * customer: the payer, when given. embedded: paid in the provider's checkout on our own page
+   * (Razorpay: an order, no link page); paymentUrl is then empty.
+   */
   create(input: {
     amount: number;
     customer?: { mobile?: string | null; name?: string | null };
     description: string;
+    embedded?: boolean;
     reference: string;
     returnUrl?: string;
   }): Promise<ProviderLink>;
   read(providerRef: string): Promise<ProviderState>;
+  /** The key a browser opens the provider's checkout with (Razorpay's key id); never a secret. */
+  publicKey?: string;
 }
 
 export const providerLabels: Record<OnlinePaymentProvider, string> = {
@@ -83,19 +89,71 @@ async function call(provider: OnlinePaymentProvider, url: string, init: RequestI
   return body ?? {};
 }
 
-/** Razorpay Payment Links: amounts in paise, Basic auth with the key id and secret. */
+/**
+ * Razorpay: Payment Links (the till's QR, the kiosk), or an Order paid in Razorpay's checkout on
+ * the guest's own phone page (QR orders: the link page asks for the mobile again, the checkout
+ * takes it prefilled). Amounts in paise, Basic auth with the key id and secret.
+ */
 function razorpay(keyId: string, keySecret: string): PaymentProvider {
   const base = 'https://api.razorpay.com/v1/payment_links';
+  const api = 'https://api.razorpay.com/v1';
   const headers = {
     authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
     'content-type': 'application/json',
   };
+  const isOrder = (providerRef: string) => providerRef.startsWith('order_');
+
+  /**
+   * Paid once Razorpay holds a captured payment for the order: asked here with the secret, so a
+   * browser saying "paid" proves nothing. An authorised one (an account capturing by hand) is
+   * captured now; Razorpay would refund it otherwise.
+   */
+  async function readOrder(orderId: string): Promise<ProviderState> {
+    const body = await call('RAZORPAY', `${api}/orders/${orderId}/payments`, { headers });
+    const items = (body.items ?? []) as Json[];
+    let captured: Json | undefined = items.find((payment) => payment.status === 'captured');
+    const authorized = captured ? undefined : items.find((item) => item.status === 'authorized');
+
+    if (authorized) {
+      captured = await call('RAZORPAY', `${api}/payments/${text(authorized.id)}/capture`, {
+        body: JSON.stringify({ amount: authorized.amount, currency: 'INR' }),
+        headers,
+        method: 'POST',
+      });
+    }
+
+    return { closed: false, paid: Boolean(captured), reference: text(captured?.id) || null };
+  }
 
   return {
     async cancel(providerRef) {
+      // ponytail: Razorpay has no cancel for an order; an unpaid one just lapses, and the guest
+      // closed its checkout on our page. A payment after that is found by the next check.
+      if (isOrder(providerRef)) return;
       await call('RAZORPAY', `${base}/${providerRef}/cancel`, { headers, method: 'POST' });
     },
-    async create({ amount, customer, description, reference, returnUrl }) {
+    async create({ amount, customer, description, embedded, reference, returnUrl }) {
+      if (embedded) {
+        const order = await call('RAZORPAY', `${api}/orders`, {
+          body: JSON.stringify({
+            amount: Math.round(amount * 100),
+            currency: 'INR',
+            notes: { description },
+            receipt: reference,
+          }),
+          headers,
+          method: 'POST',
+        });
+
+        if (!text(order.id)) {
+          throw new BadGatewayException(
+            'Razorpay did not open the payment. Try again, or take the payment another way.',
+          );
+        }
+
+        return { paymentUrl: '', providerRef: text(order.id) };
+      }
+
       const payer = {
         ...(customer?.mobile ? { contact: `+91${customer.mobile}` } : {}),
         ...(customer?.name ? { name: customer.name } : {}),
@@ -118,7 +176,9 @@ function razorpay(keyId: string, keySecret: string): PaymentProvider {
 
       return link('RAZORPAY', body.short_url, body.id);
     },
+    publicKey: keyId,
     async read(providerRef) {
+      if (isOrder(providerRef)) return readOrder(providerRef);
       const body = await call('RAZORPAY', `${base}/${providerRef}`, { headers });
       const payments = (body.payments ?? []) as Json[];
 

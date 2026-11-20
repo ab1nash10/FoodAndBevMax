@@ -68,8 +68,16 @@ export class OnlinePaymentsService {
     return machine ? { name: machine.name } : null;
   }
 
-  /** returnUrl: where a guest paying on their own phone comes back to (QR orders). */
-  async start(dto: StartOnlinePaymentDto, context: ActorContext, returnUrl?: string) {
+  /**
+   * returnUrl: where a guest paying on their own phone comes back to (QR orders). embedded: paid
+   * in the provider's checkout on the guest's page instead of a link page (Razorpay).
+   */
+  async start(
+    dto: StartOnlinePaymentDto,
+    context: ActorContext,
+    returnUrl?: string,
+    embedded = false,
+  ) {
     const machine =
       dto.provider === 'PINELABS' && this.plutusUrl
         ? await this.findCardMachine({ counterId: dto.counterId })
@@ -108,6 +116,7 @@ export class OnlinePaymentsService {
       amount: grandTotal,
       customer,
       description: `${counter.restaurant.restaurantName} · ${counter.counterName}`,
+      embedded,
       reference: id,
       returnUrl,
     });

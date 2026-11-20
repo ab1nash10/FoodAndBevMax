@@ -1,60 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { BadRequestException } from '@nestjs/common';
-import { hashPassword, verifyPassword, type JwtRequestUser } from '@aahar/auth';
+import type { JwtRequestUser } from '@aahar/auth';
 import { test, vi } from 'vitest';
 import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
 import { PreferencesService } from './preferences.service';
 
 const actor = { id: 'user-1' } as JwtRequestUser;
-
-async function serviceWithPassword(current: string | null) {
-  const update = vi.fn();
-  const record = vi.fn<(entry: { action: string }) => Promise<void>>();
-  const prisma = {
-    $transaction: (work: (tx: unknown) => Promise<unknown>) => work({ user: { update } }),
-    user: {
-      findFirst: vi.fn().mockResolvedValue({
-        hospitalId: null,
-        passwordHash: current === null ? null : await hashPassword(current),
-        preferences: {},
-      }),
-    },
-  };
-  const service = new PreferencesService(
-    { record } as unknown as AuditLogService,
-    prisma as unknown as PrismaService,
-  );
-
-  return { record, service, update };
-}
-
-test('changing your own password stores the new one and ends every session', async () => {
-  const { record, service, update } = await serviceWithPassword('Current123');
-
-  assert.deepEqual(
-    await service.changePassword(actor, {
-      currentPassword: 'Current123',
-      newPassword: 'Newpass456',
-    }),
-    { changed: true },
-  );
-
-  assert.equal(update.mock.calls.length, 1);
-  const { data, where } = update.mock.calls[0]?.[0] as {
-    data: { passwordHash: string; sessionVersion: unknown; updatedBy: string };
-    where: { id: string };
-  };
-  assert.deepEqual(where, { id: 'user-1' });
-  assert.deepEqual(
-    data.sessionVersion,
-    { increment: 1 },
-    'the session version moves on, so every token issued before the change is refused',
-  );
-  assert.equal(await verifyPassword('Newpass456', data.passwordHash), true);
-  assert.equal(data.updatedBy, 'user-1');
-  assert.equal(record.mock.calls[0]?.[0].action, 'USER_PASSWORD_CHANGE');
-});
 
 // A user working at locations a and b, home a, with a theme saved and an old JSON default.
 function serviceForDefaults(allowedHospitalIds: string[] | null) {
@@ -74,6 +26,7 @@ function serviceForDefaults(allowedHospitalIds: string[] | null) {
     },
     user: {
       findFirst: vi.fn().mockResolvedValue({
+        employeeCode: 'E1001',
         hospitalId: 'hospital-a',
         preferences: { defaultLocationId: 'all', theme: 'dark' },
       }),
@@ -100,6 +53,8 @@ test('the default location is the home location, not the old JSON value', async 
   assert.equal((await service.get('user-1')).defaultLocationId, 'hospital-a');
   assert.deepEqual(await service.access(user), {
     defaultLocationId: 'hospital-a',
+    // Shown under Preferences → My details.
+    employeeCode: 'E1001',
     locationScope: 'MULTI',
     // Named as the Locations list names them: the entity's Location, else the location's own
     // title; in that order. A location without a display name shows its name there.
@@ -190,49 +145,18 @@ test('a user who reaches every location may choose any location as default', asy
   );
 });
 
-test('a wrong current password changes nothing and keeps the sessions', async () => {
-  const { service, update } = await serviceWithPassword('Current123');
-
-  await assert.rejects(
-    service.changePassword(actor, { currentPassword: 'Wrong999', newPassword: 'Newpass456' }),
-    (error: unknown) =>
-      error instanceof BadRequestException && error.message === 'Current password is incorrect',
+test('your preferences say nothing about a password: sign-in is by code only', async () => {
+  const findFirst = vi.fn().mockResolvedValue({ hospitalId: null, preferences: {} });
+  const service = new PreferencesService(
+    { record: vi.fn() } as unknown as AuditLogService,
+    { user: { findFirst } } as unknown as PrismaService,
   );
-  assert.equal(update.mock.calls.length, 0);
-});
 
-test('with no password yet, you set one without a current password', async () => {
-  const { record, service, update } = await serviceWithPassword(null);
+  const preferences = await service.get(actor.id);
 
-  assert.deepEqual(await service.changePassword(actor, { newPassword: 'Newpass456' }), {
-    changed: true,
-  });
-
-  const { data } = update.mock.calls[0]?.[0] as {
-    data: { passwordHash: string; sessionVersion: unknown };
-  };
-  assert.equal(await verifyPassword('Newpass456', data.passwordHash), true);
-  assert.deepEqual(data.sessionVersion, { increment: 1 });
-  assert.equal(record.mock.calls[0]?.[0].action, 'USER_PASSWORD_CHANGE');
-});
-
-test('with a password, leaving out the current one changes nothing', async () => {
-  const { service, update } = await serviceWithPassword('Current123');
-
-  await assert.rejects(
-    service.changePassword(actor, { newPassword: 'Newpass456' }),
-    (error: unknown) =>
-      error instanceof BadRequestException && error.message === 'Current password is incorrect',
+  assert.equal('hasPassword' in preferences, false);
+  assert.equal(
+    'passwordHash' in (findFirst.mock.calls[0]?.[0] as { select: object }).select,
+    false,
   );
-  assert.equal(update.mock.calls.length, 0);
-});
-
-test('your preferences say whether you have a password, never the password itself', async () => {
-  const withPassword = await serviceWithPassword('Current123');
-  const withoutPassword = await serviceWithPassword(null);
-
-  const preferences = await withPassword.service.get(actor.id);
-  assert.equal(preferences.hasPassword, true);
-  assert.equal('passwordHash' in preferences, false);
-  assert.equal((await withoutPassword.service.get(actor.id)).hasPassword, false);
 });

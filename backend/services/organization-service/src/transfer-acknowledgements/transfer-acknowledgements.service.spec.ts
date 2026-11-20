@@ -12,6 +12,7 @@ import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { CreateTransferAcknowledgementDto } from './dto/create-transfer-acknowledgement.dto';
 import type { TransferAcknowledgementsRepository } from './transfer-acknowledgements.repository';
 import { TransferAcknowledgementsService } from './transfer-acknowledgements.service';
+import type { StoreArrivals } from '../common/store-arrivals';
 
 type TransferLine = {
   batchNumber: string | null;
@@ -124,6 +125,7 @@ function setup(transfer: Transfer | null, alreadyAcknowledged = false, raced = f
   const service = new TransferAcknowledgementsService(
     repository as unknown as TransferAcknowledgementsRepository,
     { record: () => Promise.resolve() } as unknown as AuditLogService,
+    { arrived: () => Promise.resolve(), listen: () => undefined } as unknown as StoreArrivals,
   );
 
   return { credits, ledger, lineUpdates, savedLines, service };

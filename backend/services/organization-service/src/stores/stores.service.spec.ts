@@ -180,7 +180,7 @@ test('a store needs an active location, and an area only of that location', asyn
   );
 });
 
-test('a store moved to another location leaves the old location\'s area behind', async () => {
+test("a store moved to another location leaves the old location's area behind", async () => {
   const { service, stores } = serviceWith({
     hospitals: { saket: true, vaishali: true },
     locations: { 'saket-ground': { hospitalId: 'saket', isActive: true } },

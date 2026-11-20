@@ -136,6 +136,39 @@ export class RestaurantOrdersController {
     };
   }
 
+  @Get('restaurant-orders/deliveries')
+  @ApiBearerAuth('access-token')
+  @Permissions('ORDER_DELIVER')
+  @ApiOperation({ summary: "A steward's own room orders today: ready to take, and coming" })
+  @ApiOkResponse({ description: 'Deliveries returned.' })
+  async myDeliveries(@CurrentUser() user: JwtRequestUser | undefined) {
+    return {
+      data: await this.orders.myDeliveries(getActorId(user) ?? ''),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('restaurant-orders/:id/delivered')
+  @ApiBearerAuth('access-token')
+  @Permissions('ORDER_DELIVER')
+  @ApiOperation({ summary: 'The steward hands over a ready room order given to them' })
+  @ApiOkResponse({ description: 'Order delivered.' })
+  async markDelivered(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.orders.markDelivered(id, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
   @Patch('restaurant-orders/:id/status')
   @ApiBearerAuth('access-token')
   @Permissions('ORDER_UPDATE')

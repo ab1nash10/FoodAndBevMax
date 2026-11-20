@@ -97,7 +97,7 @@ test('a refused item does not use up an item code', async () => {
   assert.equal(next?.itemCode, 'ITM0002');
 });
 
-test('only a user who reaches every location may add, change or remove an item', async () => {
+test('only a user who reaches every location may add or change an item', async () => {
   const items: StoredItem[] = [
     { categoryId: null, id: 'a', itemName: 'Samosa', normalizedName: 'samosa' },
   ];
@@ -111,7 +111,6 @@ test('only a user who reaches every location may add, change or remove an item',
     await assert.rejects(service.create(newItem('Kachori'), actor), isRefused);
     await assert.rejects(service.update('a', { itemName: 'Vada' }, actor), isRefused);
     await assert.rejects(service.update('a', { isActive: false }, actor), isRefused);
-    await assert.rejects(service.remove('a', actor), isRefused);
   });
   assert.deepEqual(
     items.map((item) => item.itemName),

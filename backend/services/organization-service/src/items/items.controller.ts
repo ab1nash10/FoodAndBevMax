@@ -1,17 +1,6 @@
 import { CurrentUser, Permissions } from '@aahar/auth';
 import type { JwtRequestUser } from '@aahar/auth';
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Put,
-  Query,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -119,26 +108,6 @@ export class ItemsController {
   ) {
     return {
       data: await this.items.update(id, body, {
-        actorId: getActorId(user),
-        ipAddress: getIpAddress(request),
-      }),
-      message: 'Success',
-      success: true,
-    };
-  }
-
-  @Delete(':id')
-  @Permissions('ITEM_DELETE')
-  @ApiOperation({ summary: 'Delete item' })
-  @ApiParam({ name: 'id' })
-  @ApiOkResponse({ description: 'Item deleted successfully.' })
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: JwtRequestUser | undefined,
-    @Req() request: RequestContextLike,
-  ) {
-    return {
-      data: await this.items.remove(id, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),

@@ -203,39 +203,6 @@ export class ItemsService {
     }
   }
 
-  async remove(id: string, context: ActorContext) {
-    assertMayChangeShared(null, 'items');
-
-    const existing = await this.findActiveItem(id);
-
-    await this.items.transaction(async (tx) => {
-      await this.items.update(
-        id,
-        {
-          deletedAt: new Date(),
-          isActive: false,
-          updatedBy: context.actorId,
-        },
-        tx,
-      );
-      await this.auditLog.record(
-        {
-          action: 'ITEM_DELETE',
-          actorId: context.actorId,
-          entityId: id,
-          entityName: 'items',
-          ipAddress: context.ipAddress,
-          oldValue: toItemResponse(existing),
-        },
-        tx,
-      );
-    });
-
-    return {
-      id,
-    };
-  }
-
   private async assertUniqueNormalizedItemName(
     normalizedName: string,
     excludeId: string | undefined,

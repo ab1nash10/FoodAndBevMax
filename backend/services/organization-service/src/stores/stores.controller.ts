@@ -33,7 +33,8 @@ export class StoresController {
   constructor(private readonly stores: StoresService) {}
 
   @Get()
-  @Permissions('STORE_VIEW')
+  // Restaurant staff see which store to send stock back to.
+  @Permissions('STORE_VIEW', 'RESTAURANT_TRANSFER_SEND')
   @ApiOperation({ summary: 'Get stores' })
   @ApiOkResponse({ description: 'Stores returned successfully.' })
   async list(@Query() query: ListStoresQueryDto) {

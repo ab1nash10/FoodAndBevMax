@@ -18,6 +18,7 @@ import { itemsLabel, qty, total } from '../common/audit/audit-summary';
 import { stockItemType } from '../common/item-classification';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import type { ActorContext } from '../common/request-context';
+import { StoreArrivals, type StoreArrival } from '../common/store-arrivals';
 import {
   CreateTransferAcknowledgementDto,
   CreateTransferAcknowledgementLineDto,
@@ -111,6 +112,7 @@ export class TransferAcknowledgementsService {
   constructor(
     private readonly acknowledgements: TransferAcknowledgementsRepository,
     private readonly auditLog: AuditLogService,
+    private readonly arrivals: StoreArrivals,
   ) {}
 
   async list(query: ListTransferAcknowledgementsQueryDto) {
@@ -169,7 +171,8 @@ export class TransferAcknowledgementsService {
   }
 
   async create(dto: CreateTransferAcknowledgementDto, context: ActorContext) {
-    return this.acknowledgements
+    const arrivals: StoreArrival[] = [];
+    const created = await this.acknowledgements
       .transaction(async (tx) => {
         const transfer = await this.findTransferForAcknowledgement(dto.transferId, tx, context);
         const existing = await this.acknowledgements.findExistingForTransfer(dto.transferId, tx);
@@ -224,6 +227,21 @@ export class TransferAcknowledgementsService {
 
           await this.postAcceptedStock(transfer, acknowledgement.id, line, context, tx);
           await this.postRejectedReturn(transfer, acknowledgement.id, line, context, tx);
+
+          // A return counted into the store, or a refused delivery going back to it.
+          const store =
+            transfer.destinationType === InventoryLocationType.STORE && line.acceptedQty > 0
+              ? transfer.destinationId
+              : transfer.sourceType === InventoryLocationType.STORE && line.rejectedQty > 0
+                ? transfer.sourceId
+                : null;
+          if (store && line.transferLine.batchNumber) {
+            arrivals.push({
+              batchNumber: line.transferLine.batchNumber,
+              itemId: line.transferLine.itemId,
+              storeId: store,
+            });
+          }
         }
 
         await this.acknowledgements.updateTransfer(
@@ -280,6 +298,10 @@ export class TransferAcknowledgementsService {
 
         throw error;
       });
+
+    await this.arrivals.arrived(arrivals);
+
+    return created;
   }
 
   private async findActiveAcknowledgement(
@@ -314,22 +336,43 @@ export class TransferAcknowledgementsService {
       throw new BadRequestException('Transfer source must be a store, kitchen or restaurant');
     }
 
+    const toStore = transfer.destinationType === InventoryLocationType.STORE;
+
     if (
+      !toStore &&
       transfer.destinationType !== InventoryLocationType.RESTAURANT &&
       transfer.destinationType !== InventoryLocationType.COUNTER
     ) {
-      throw new BadRequestException('Transfer destination must be a restaurant or a counter');
+      throw new BadRequestException(
+        'Transfer destination must be a restaurant, a counter or a store',
+      );
+    }
+
+    if (
+      transfer.receiverId &&
+      transfer.receiverId !== context.actorId &&
+      !context.roles?.includes('Super Admin')
+    ) {
+      const [receiver] = await client.user.findMany({
+        select: { name: true },
+        where: { id: transfer.receiverId },
+      });
+      throw new ForbiddenException(
+        `Only ${receiver?.name ?? 'the operator it was sent to'}, the operator it was sent to, can acknowledge it`,
+      );
     }
 
     // A cashier receives at their counter, restaurant staff take another restaurant's leftovers;
     // every other restaurant receipt stays with TRANSFER_ACKNOWLEDGE.
     const permissions = context.permissions ?? [];
-    const mayReceive =
-      permissions.includes('TRANSFER_ACKNOWLEDGE') ||
-      (transfer.destinationType === InventoryLocationType.COUNTER &&
-        permissions.includes('COUNTER_STOCK_RECEIVE')) ||
-      (transfer.sourceType === InventoryLocationType.RESTAURANT &&
-        permissions.includes('RESTAURANT_TRANSFER_RECEIVE'));
+    // The store counts a restaurant's return in: store staff who post goods into stock.
+    const mayReceive = toStore
+      ? permissions.includes('GRN_POST')
+      : permissions.includes('TRANSFER_ACKNOWLEDGE') ||
+        (transfer.destinationType === InventoryLocationType.COUNTER &&
+          permissions.includes('COUNTER_STOCK_RECEIVE')) ||
+        (transfer.sourceType === InventoryLocationType.RESTAURANT &&
+          permissions.includes('RESTAURANT_TRANSFER_RECEIVE'));
 
     if (!mayReceive) {
       throw new ForbiddenException('You do not have permission to receive this transfer.');
@@ -458,7 +501,9 @@ export class TransferAcknowledgementsService {
         transactionType:
           transfer.destinationType === InventoryLocationType.COUNTER
             ? StockTransactionType.COUNTER_RECEIVE_IN
-            : StockTransactionType.RESTAURANT_TRANSFER_IN,
+            : transfer.destinationType === InventoryLocationType.STORE
+              ? StockTransactionType.STORE_RETURN_IN
+              : StockTransactionType.RESTAURANT_TRANSFER_IN,
         updatedBy: context.actorId,
       },
       client,

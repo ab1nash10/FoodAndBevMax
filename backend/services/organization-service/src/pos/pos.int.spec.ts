@@ -260,7 +260,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
       employmentType: 'ON_ROLL',
     });
 
-    const cashier = await newUser('POS Cashier', 'IC');
+    const cashier = await newUser('Restaurant/POS Operator', 'IC');
     users.cashier = cashier.token;
     users.cashierId = cashier.id;
     // The cashier works this run's till: listed on it, they typed its computer's name there.
@@ -571,6 +571,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
             "id": "string",
           },
           "customerMobile": null,
+          "customerName": null,
           "discountPercent": null,
           "discountTotal": "number",
           "employeeCode": null,
@@ -626,6 +627,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
           "roundOff": "number",
           "status": "string",
           "subtotal": "number",
+          "tableName": null,
         },
         "message": "string",
         "success": "boolean",
@@ -732,7 +734,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
         "credit": "paymentMode must be one of the following values: CARD, UPI, CASH, OTHER",
         "empty": "lines must contain at least 1 elements",
         "no-mode": "paymentMode must be one of the following values: CARD, UPI, CASH, OTHER",
-        "no-room": "roomNumber must be shorter than or equal to 20 characters, roomNumber must be a string",
+        "no-room": "roomNumber must be shorter than or equal to 50 characters, roomNumber must be a string",
         "zero": "lines.0.quantity must not be less than 1",
       }
     `);
@@ -1064,6 +1066,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
                 "id": "string",
               },
               "customerMobile": null,
+              "customerName": null,
               "discountPercent": null,
               "discountTotal": "number",
               "employeeCode": "string",
@@ -1091,6 +1094,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
               "roomNumber": null,
               "status": "string",
               "subtotal": "number",
+              "tableName": null,
             },
           ],
           "meta": {
@@ -1137,6 +1141,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
             "id": "string",
           },
           "customerMobile": null,
+          "customerName": null,
           "discountPercent": null,
           "discountTotal": "number",
           "employeeCode": null,
@@ -1192,6 +1197,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
           "roundOff": "number",
           "status": "string",
           "subtotal": "number",
+          "tableName": null,
         },
         "message": "string",
         "success": "boolean",
@@ -1662,7 +1668,10 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     expect(shift.data).toMatchObject({ openedBy: users.cashierId, takenOverFromId: null });
     const sale = await bill('cashier', { counterId: fx.counter2Id }, users.cashier);
     expect(sale.status).toBe(201);
-    expect(sale.data).toMatchObject({ cashierName: `Int POS Cashier ${run}`, grandTotal: 25 });
+    expect(sale.data).toMatchObject({
+      cashierName: `Int Restaurant/POS Operator ${run}`,
+      grandTotal: 25,
+    });
     // Room orders are theirs to bill; complimentary meals, cancelling and day close are not.
     const room = await bill(
       'cashier-room',
@@ -1851,12 +1860,24 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     ).data as unknown as Body[];
     expect(stewards.map((entry) => entry.id)).toContain(steward.id);
     expect(stewards.map((entry) => entry.id)).not.toContain(users.cashierId);
+    // Stewards take room orders; a counter pickup needs none.
     const [open] = items(
-      await h.ok('GET', `/pos/orders?counterId=${fx.counterId}&status=PLACED&limit=1`),
+      await h.ok('GET', `/pos/orders?counterId=${fx.counterId}&status=PLACED&channel=ROOM&limit=1`),
     );
     const openId = idOf(open!);
     const assign = (id: string, stewardId: string | null, token: string) =>
       as(token).api('PATCH', `/restaurant-orders/${id}/steward`, { stewardId });
+    const [pickupOrder] = items(
+      await h.ok(
+        'GET',
+        `/pos/orders?counterId=${fx.counterId}&status=PLACED&channel=COUNTER&limit=1`,
+      ),
+    );
+    const noSteward = await assign(idOf(pickupOrder!), steward.id, users.kitchen);
+    expect([noSteward.status, noSteward.body.message]).toEqual([
+      409,
+      'This order is picked up at the counter, so it needs no steward. Stewards are for room orders.',
+    ]);
     const assigned = await assign(openId, steward.id, users.kitchen);
     expect([assigned.status, assigned.data.stewardName]).toEqual([
       200,
@@ -1879,12 +1900,25 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     expect(
       firstOf(items(await h.ok('GET', `/order-reports?search=${open!.billNumber as string}`))),
     ).toMatchObject({ stewardAssigned: true, stewardName: `Int Delivery Operator ${run}` });
-    const delivered = await assign(cashId, steward.id, users.kitchen);
+    // A steward can be taken off again, until the order is handed over.
+    expect((await assign(openId, null, users.kitchen)).data.stewardId).toBe(null);
+    const kitchenMarks = (status: string) =>
+      as(users.kitchen).api('PATCH', `/restaurant-orders/${openId}/status`, { status });
+    await kitchenMarks('PREPARING');
+    await kitchenMarks('READY');
+    // No steward, no "Delivered": someone answers for every room delivery.
+    const unowned = await kitchenMarks('COLLECTED');
+    expect([unowned.status, unowned.body.message]).toEqual([
+      409,
+      'Give this room order to a steward before marking it delivered.',
+    ]);
+    await assign(openId, steward.id, users.kitchen);
+    expect((await kitchenMarks('COLLECTED')).status).toBe(200);
+    const delivered = await assign(openId, null, users.kitchen);
     expect([delivered.status, delivered.body.message]).toEqual([
       409,
       'This order is already handed over, so its steward cannot change.',
     ]);
-    expect((await assign(openId, null, users.kitchen)).data.stewardId).toBe(null);
 
     // Two days later it can no longer be amended, and is not found to amend.
     await h.rawQuery(

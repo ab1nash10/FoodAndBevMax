@@ -1,5 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryLocationType, Prisma, StockReferenceType, TransferStatus } from '@prisma/client';
+import {
+  InventoryLocationType,
+  ItemType,
+  Prisma,
+  StockReferenceType,
+  TransferStatus,
+} from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { stockItemType } from '../common/item-classification';
 import {
@@ -8,6 +14,8 @@ import {
   getPagination,
   toStatusCounts,
 } from '../common/pagination';
+import { holdsPermission, worksAt } from '../common/permission-holders';
+import { PrismaService } from '../common/prisma/prisma.service';
 import { lockRow } from '../common/row-lock';
 import type { ActorContext } from '../common/request-context';
 import { CreateTransferDto, CreateTransferLineDto } from './dto/create-transfer.dto';
@@ -20,7 +28,7 @@ import {
   dispatchTransactionType,
   insufficientStockMessage,
   sourceDisplayName,
-  sourceItemType,
+  transferItemType,
   stockBalanceKey,
   stockKey,
   toNullableDate,
@@ -36,6 +44,7 @@ export class TransfersService {
   constructor(
     private readonly auditLog: AuditLogService,
     private readonly transfers: TransfersRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
   async list(query: ListTransfersQueryDto) {
@@ -107,23 +116,50 @@ export class TransfersService {
     return transfer;
   }
 
-  /** Adds who raised each transfer (its distributor), by name. */
-  private async withCreatorNames<T extends { createdBy: string | null }>(transfers: T[]) {
-    const ids = [...new Set(transfers.flatMap((transfer) => transfer.createdBy ?? []))];
+  /** Adds who raised each transfer (its distributor) and the operator it is for, by name. */
+  private async withCreatorNames<T extends { createdBy: string | null; receiverId: string | null }>(
+    transfers: T[],
+  ) {
+    const ids = [
+      ...new Set(transfers.flatMap((transfer) => [transfer.createdBy, transfer.receiverId])),
+    ].filter((id): id is string => Boolean(id));
     const users = ids.length ? await this.transfers.findUserNames(ids) : [];
     const names = new Map(users.map((user) => [user.id, user.name]));
+    const nameOf = (id: string | null) => (id ? (names.get(id) ?? null) : null);
 
     return transfers.map((transfer) => ({
       ...transfer,
-      createdByName: transfer.createdBy ? (names.get(transfer.createdBy) ?? null) : null,
+      createdByName: nameOf(transfer.createdBy),
+      receiverName: nameOf(transfer.receiverId),
     }));
+  }
+
+  /**
+   * Who can be named to receive stock at a location: its active users (or those with every
+   * location) who may acknowledge transfers, through a role or a grant, and are not denied it.
+   */
+  async receivers(hospitalId: string) {
+    return this.prisma.user.findMany({
+      orderBy: { name: 'asc' },
+      select: { employeeCode: true, id: true, name: true },
+      where: receiversAt(hospitalId),
+    });
   }
 
   async create(dto: CreateTransferDto, context: ActorContext) {
     assertCanMoveStockFrom(dto.sourceType, 'CREATE', context.permissions);
 
-    return this.transfers.transaction(async (tx) => {
+    const created = await this.transfers.transaction(async (tx) => {
       await this.assertTransferHeader(dto, tx);
+      if (
+        dto.receiverId &&
+        !(await tx.user.findFirst({
+          select: { id: true },
+          where: { ...receiversAt(dto.hospitalId), id: dto.receiverId },
+        }))
+      ) {
+        throw new BadRequestException('Choose an operator of this location who can receive stock');
+      }
       const transferDate = toDate(dto.transferDate);
       const businessDate = dto.businessDate
         ? toDateOnly(dto.businessDate)
@@ -133,6 +169,7 @@ export class TransfersService {
         dto.hospitalId,
         dto.sourceId,
         dto.sourceType,
+        dto.destinationType,
         businessDate,
         tx,
       );
@@ -144,6 +181,7 @@ export class TransfersService {
           destinationId: dto.destinationId,
           destinationType: dto.destinationType,
           hospitalId: dto.hospitalId,
+          receiverId: dto.receiverId ?? null,
           remarks: optionalText(dto.remarks),
           sourceId: dto.sourceId,
           sourceType: dto.sourceType,
@@ -188,6 +226,11 @@ export class TransfersService {
 
       return newValue;
     });
+    const [receiver] = created.receiverId
+      ? await this.transfers.findUserNames([created.receiverId])
+      : [];
+
+    return { ...created, receiverName: receiver?.name ?? null };
   }
 
   async dispatch(id: string, context: ActorContext) {
@@ -217,6 +260,7 @@ export class TransfersService {
           existing.hospitalId,
           existing.sourceId,
           existing.sourceType,
+          existing.destinationType,
           existing.businessDate,
           line,
           tx,
@@ -255,7 +299,7 @@ export class TransfersService {
             referenceType: StockReferenceType.TRANSFER,
             remarks: existing.remarks,
             transactionDateTime: new Date(),
-            transactionType: dispatchTransactionType(existing.sourceType),
+            transactionType: dispatchTransactionType(existing.sourceType, existing.destinationType),
             updatedBy: context.actorId,
           },
           tx,
@@ -345,9 +389,14 @@ export class TransfersService {
     assertSupportedSource(transfer.sourceType);
 
     const toCounter = transfer.destinationType === InventoryLocationType.COUNTER;
+    const toStore = transfer.destinationType === InventoryLocationType.STORE;
 
-    if (!toCounter && transfer.destinationType !== InventoryLocationType.RESTAURANT) {
-      throw new BadRequestException('Destination must be a restaurant or a counter');
+    if (toStore && transfer.sourceType !== InventoryLocationType.RESTAURANT) {
+      throw new BadRequestException('Only a restaurant sends stock back to a store');
+    }
+
+    if (!toCounter && !toStore && transfer.destinationType !== InventoryLocationType.RESTAURANT) {
+      throw new BadRequestException('Destination must be a restaurant, a counter or a store');
     }
 
     if (toCounter && transfer.sourceType === InventoryLocationType.RESTAURANT) {
@@ -361,9 +410,11 @@ export class TransfersService {
         : transfer.sourceType === InventoryLocationType.RESTAURANT
           ? this.transfers.findActiveRestaurant(transfer.sourceId, client)
           : this.transfers.findActiveStore(transfer.sourceId, client),
-      toCounter
-        ? this.transfers.findActiveCounter(transfer.destinationId, client)
-        : this.transfers.findActiveRestaurant(transfer.destinationId, client),
+      toStore
+        ? this.transfers.findActiveStore(transfer.destinationId, client)
+        : toCounter
+          ? this.transfers.findActiveCounter(transfer.destinationId, client)
+          : this.transfers.findActiveRestaurant(transfer.destinationId, client),
     ]);
 
     if (!hospital || !hospital.isActive) {
@@ -376,7 +427,7 @@ export class TransfersService {
       );
     }
 
-    const destinationName = toCounter ? 'Counter' : 'Restaurant';
+    const destinationName = toStore ? 'Store' : toCounter ? 'Counter' : 'Restaurant';
 
     if (!restaurant || !restaurant.isActive) {
       throw new BadRequestException(`${destinationName} not found or inactive`);
@@ -410,6 +461,7 @@ export class TransfersService {
     hospitalId: string,
     sourceId: string,
     sourceType: InventoryLocationType,
+    destinationType: InventoryLocationType,
     businessDate: Date,
     line: TransferWithRelations['lines'][number],
     client: TransferClient,
@@ -426,7 +478,7 @@ export class TransfersService {
       hospitalId,
       sourceId,
       sourceType,
-      sourceItemType(sourceType),
+      transferItemType(sourceType, destinationType),
       [lineStockKey],
       client,
     );
@@ -454,13 +506,16 @@ export class TransfersService {
     hospitalId: string,
     sourceId: string,
     sourceType: InventoryLocationType,
+    destinationType: InventoryLocationType,
     businessDate: Date,
     client: TransferClient,
   ): Promise<PreparedTransferLine[]> {
     const itemIds = [...new Set(lines.map((line) => line.itemId))];
     const items = await this.transfers.findItemsByIds(itemIds, client);
     const itemMap = new Map(items.map((item) => [item.id, item]));
-    const expectedItemType = sourceItemType(sourceType);
+    const expectedItemType = transferItemType(sourceType, destinationType);
+    // MRP stock is kept by batch: a store's, and a restaurant's sending it back.
+    const byBatch = expectedItemType === ItemType.MRP;
     const prepared = lines.map((line, index) => {
       const item = itemMap.get(line.itemId);
       const lineLabel = `Line ${index + 1}`;
@@ -477,15 +532,15 @@ export class TransfersService {
         );
       }
 
-      if (sourceType === InventoryLocationType.STORE && !batchNumber) {
+      if (byBatch && !batchNumber) {
         throw new BadRequestException(`${lineLabel}: batch number is required`);
       }
 
-      if (sourceType === InventoryLocationType.STORE && !expiryDate) {
+      if (byBatch && !expiryDate) {
         throw new BadRequestException(`${lineLabel}: expiry date is required`);
       }
 
-      if (sourceType !== InventoryLocationType.STORE && (batchNumber || expiryDate)) {
+      if (!byBatch && (batchNumber || expiryDate)) {
         throw new BadRequestException(
           `${lineLabel}: READYMADE transfers must not include batch or expiry`,
         );
@@ -539,3 +594,16 @@ export class TransfersService {
     return prepared;
   }
 }
+
+/** Users who can be named to receive stock at a location (see TransfersService.receivers). */
+export const receiversAt = (hospitalId: string): Prisma.UserWhereInput => ({
+  AND: [
+    {
+      OR: [
+        ...(worksAt(hospitalId).OR ?? []),
+        { roles: { some: { deletedAt: null, role: { deletedAt: null, locationScope: 'ALL' } } } },
+      ],
+    },
+    holdsPermission('TRANSFER_ACKNOWLEDGE'),
+  ],
+});

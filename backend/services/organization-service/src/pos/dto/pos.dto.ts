@@ -30,6 +30,8 @@ import {
 import { StatusCountsQueryDto } from '../../common/dto/status-counts-query.dto';
 import { toOptionalBoolean } from '../../common/values';
 
+const tillChannels = [OrderChannel.COUNTER, OrderChannel.ROOM];
+
 export class PosCountersQueryDto {
   @ApiPropertyOptional({
     description:
@@ -58,8 +60,8 @@ export class PosMenuQueryDto {
   @IsUUID()
   counterId!: string;
 
-  @ApiProperty({ enum: OrderChannel })
-  @IsEnum(OrderChannel)
+  @ApiProperty({ enum: tillChannels })
+  @IsIn(tillChannels)
   channel!: OrderChannel;
 }
 
@@ -93,8 +95,10 @@ export class CreatePosOrderDto {
   @MaxLength(64)
   clientOrderId!: string;
 
-  @ApiProperty({ enum: OrderChannel })
-  @IsEnum(OrderChannel)
+  // ponytail: the till bills counter and room orders; TABLE comes only from a table's QR until
+  // the POS gets a table picker.
+  @ApiProperty({ enum: tillChannels })
+  @IsIn(tillChannels)
   channel!: OrderChannel;
 
   @ApiProperty({ type: [PosOrderLineDto] })
@@ -124,7 +128,7 @@ export class CreatePosOrderDto {
   @ApiPropertyOptional({ description: 'Required for a room order.' })
   @ValidateIf((dto: CreatePosOrderDto) => dto.channel === OrderChannel.ROOM)
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   roomNumber?: string;
 
   @ApiPropertyOptional()
@@ -132,6 +136,13 @@ export class CreatePosOrderDto {
   @IsString()
   @MaxLength(20)
   bedNumber?: string;
+
+  /** A TABLE order's table, by name: set by a table's QR order when it is billed. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  tableName?: string;
 
   @ApiPropertyOptional({ maxLength: 200 })
   @IsOptional()

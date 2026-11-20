@@ -37,7 +37,24 @@ export function sourceItemType(sourceType: InventoryLocationType): ItemType {
   return sourceType === InventoryLocationType.STORE ? ItemType.MRP : ItemType.READYMADE;
 }
 
-export function dispatchTransactionType(sourceType: InventoryLocationType): StockTransactionType {
+/** What a transfer carries: a return to the store is the store's MRP batches coming back. */
+export function transferItemType(
+  sourceType: InventoryLocationType,
+  destinationType: InventoryLocationType,
+): ItemType {
+  return destinationType === InventoryLocationType.STORE
+    ? ItemType.MRP
+    : sourceItemType(sourceType);
+}
+
+export function dispatchTransactionType(
+  sourceType: InventoryLocationType,
+  destinationType?: InventoryLocationType,
+): StockTransactionType {
+  if (destinationType === InventoryLocationType.STORE) {
+    return StockTransactionType.RESTAURANT_RETURN_OUT;
+  }
+
   if (sourceType === InventoryLocationType.RESTAURANT) {
     return StockTransactionType.RESTAURANT_TRANSFER_OUT;
   }
@@ -150,6 +167,7 @@ export function toTransferResponse(transfer: TransferWithRelations) {
       transferId: line.transferId,
       updatedAt: line.updatedAt,
     })),
+    receiverId: transfer.receiverId,
     remarks: transfer.remarks,
     sourceId: transfer.sourceId,
     sourceType: transfer.sourceType,

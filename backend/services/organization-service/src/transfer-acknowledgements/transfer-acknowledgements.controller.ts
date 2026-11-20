@@ -38,7 +38,13 @@ export class TransferAcknowledgementsController {
   }
 
   @Post()
-  @Permissions('TRANSFER_ACKNOWLEDGE', 'COUNTER_STOCK_RECEIVE', 'RESTAURANT_TRANSFER_RECEIVE')
+  // GRN_POST: the store counting a restaurant's return in (the service holds it to that).
+  @Permissions(
+    'TRANSFER_ACKNOWLEDGE',
+    'COUNTER_STOCK_RECEIVE',
+    'RESTAURANT_TRANSFER_RECEIVE',
+    'GRN_POST',
+  )
   @ApiBody({ type: CreateTransferAcknowledgementDto })
   @ApiOperation({ summary: 'Acknowledge restaurant transfer receipt' })
   @ApiOkResponse({ description: 'Transfer acknowledged successfully.' })
@@ -52,6 +58,7 @@ export class TransferAcknowledgementsController {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
         permissions: user?.permissions,
+        roles: user?.roles,
       }),
       message: 'Success',
       success: true,

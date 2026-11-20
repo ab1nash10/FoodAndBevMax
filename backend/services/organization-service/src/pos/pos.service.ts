@@ -135,7 +135,7 @@ type OrderDetail = Prisma.RestaurantOrderGetPayload<{ include: typeof orderDetai
 const money = (value: Prisma.Decimal | null) => (value === null ? null : toNumber(value));
 
 /** Which menu items a channel sells, by the item's serveAt. */
-function servedOn(channel: OrderChannel): MenuServeAt[] {
+export function servedOn(channel: OrderChannel): MenuServeAt[] {
   return [MenuServeAt.BOTH, channel === OrderChannel.ROOM ? MenuServeAt.ROOM : MenuServeAt.COUNTER];
 }
 
@@ -210,6 +210,7 @@ function toOrderResponse(
     roundOff: money(order.roundOff),
     status: order.status,
     subtotal: money(order.subtotal),
+    tableName: order.tableName,
   };
 }
 
@@ -762,6 +763,11 @@ export class PosService {
   /** Bills at a counter; `tillId` is the till (POS device) it was billed at. */
   async createOrder(dto: CreatePosOrderDto, context: ActorContext, tillId?: string) {
     // Operator access, as the previous system's operator master set it per person.
+    // A table order is served at its table: one without it would be lost on the floor.
+    if (dto.channel === OrderChannel.TABLE && !optionalText(dto.tableName)) {
+      throw new BadRequestException('A table order needs its table.');
+    }
+
     if (dto.channel === OrderChannel.ROOM && !context.permissions?.includes('POS_ROOM_ORDER')) {
       throw new ForbiddenException('You do not have access to bill room orders.');
     }
@@ -1069,6 +1075,7 @@ export class PosService {
         restaurantId: counter.restaurantId,
         roomNumber: optionalText(dto.roomNumber),
         roundOff: totals.roundOff,
+        tableName: dto.channel === OrderChannel.TABLE ? optionalText(dto.tableName) : null,
         senderId: counter.id,
         shiftId: shift.id,
         source: OrderSource.COUNTER,
@@ -1415,6 +1422,7 @@ export class PosService {
               { employeeCode: { contains: search, mode: 'insensitive' } },
               { orderNumber: { contains: search, mode: 'insensitive' } },
               { roomNumber: { contains: search, mode: 'insensitive' } },
+              { tableName: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -1452,6 +1460,7 @@ export class PosService {
           roomNumber: true,
           status: true,
           subtotal: true,
+          tableName: true,
         },
         skip: (page - 1) * limit,
         take: limit,

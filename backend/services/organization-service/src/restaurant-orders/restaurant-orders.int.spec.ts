@@ -213,7 +213,7 @@ describe.skipIf(!databaseUrl)(
         `Int Orders Elsewhere ${run}`,
       );
       fx.elsewhereId = elsewhere!.id;
-      as.cashier = await userWith('POS Cashier', fx.hospitalId, 'C');
+      as.cashier = await userWith('Restaurant/POS Operator', fx.hospitalId, 'C');
       // The cashier works this run's till: listed on it, they typed its computer's name there.
       const [cashier] = await h.rawQuery<{ id: string }>(
         'SELECT id FROM users WHERE employee_code = $1',
@@ -221,7 +221,7 @@ describe.skipIf(!databaseUrl)(
       );
       await listOnTill(h, h.tillKey, cashier!.id);
       await h.ok('POST', '/pos/till', { computerName: `ORD-TILL-${run}` }, as.cashier);
-      as.elsewhere = await userWith('POS Cashier', fx.elsewhereId, 'E');
+      as.elsewhere = await userWith('Restaurant/POS Operator', fx.elsewhereId, 'E');
       as.stock = await userWith('Inventory Manager', fx.hospitalId, 'S');
 
       fx.orderKey = (await h.ok('POST', `/restaurants/${fx.restaurantId}/order-key`))
@@ -319,30 +319,31 @@ describe.skipIf(!databaseUrl)(
         status: 'PLACED',
       });
       expect(shape(placed.body)).toMatchInlineSnapshot(`
-      {
-        "data": {
-          "bedNumber": null,
-          "billNumber": null,
-          "channel": null,
-          "id": "string",
-          "instructions": null,
-          "items": [
-            {
-              "name": "string",
-              "quantity": "number",
-            },
-          ],
-          "orderNumber": "string",
-          "placedAt": "string",
-          "readyAt": null,
-          "roomNumber": null,
-          "source": "string",
-          "status": "string",
-        },
-        "message": "string",
-        "success": "boolean",
-      }
-    `);
+        {
+          "data": {
+            "bedNumber": null,
+            "billNumber": null,
+            "channel": null,
+            "id": "string",
+            "instructions": null,
+            "items": [
+              {
+                "name": "string",
+                "quantity": "number",
+              },
+            ],
+            "orderNumber": "string",
+            "placedAt": "string",
+            "readyAt": null,
+            "roomNumber": null,
+            "source": "string",
+            "status": "string",
+            "tableName": null,
+          },
+          "message": "string",
+          "success": "boolean",
+        }
+      `);
 
       // A resend updates the same order, it never makes a second one.
       const again = await push({ ...order, orderNumber: 'K-1b' });
@@ -415,6 +416,7 @@ describe.skipIf(!databaseUrl)(
           "status": "string",
           "stewardId": null,
           "stewardName": null,
+          "tableName": null,
         }
       `);
       const placedAts = listed.map((o) => Date.parse(String(o.placedAt)));
@@ -432,25 +434,26 @@ describe.skipIf(!databaseUrl)(
       expect(preparing.status).toBe(200);
       expect(preparing.data).toMatchObject({ readyAt: null, status: 'PREPARING' });
       expect(shape(preparing.body)).toMatchInlineSnapshot(`
-      {
-        "data": {
-          "bedNumber": null,
-          "billNumber": null,
-          "channel": null,
-          "id": "string",
-          "instructions": null,
-          "items": [],
-          "orderNumber": "string",
-          "placedAt": "string",
-          "readyAt": null,
-          "roomNumber": null,
-          "source": "string",
-          "status": "string",
-        },
-        "message": "string",
-        "success": "boolean",
-      }
-    `);
+        {
+          "data": {
+            "bedNumber": null,
+            "billNumber": null,
+            "channel": null,
+            "id": "string",
+            "instructions": null,
+            "items": [],
+            "orderNumber": "string",
+            "placedAt": "string",
+            "readyAt": null,
+            "roomNumber": null,
+            "source": "string",
+            "status": "string",
+            "tableName": null,
+          },
+          "message": "string",
+          "success": "boolean",
+        }
+      `);
 
       // A resend never moves the kitchen's progress back.
       expect(
@@ -1001,12 +1004,29 @@ describe.skipIf(!databaseUrl)(
         const guest = (method: string, path: string, body?: unknown) =>
           h.api(method, path, body, '');
         const qr = (path: string) => `/qr/${fx.restaurantId}${path}?token=${fx.boardToken}`;
+        // Room service: In Room Dining on, and a bed whose QR orders to it.
+        await h.rawQuery(
+          `UPDATE restaurants SET in_room_dining_enabled = true WHERE id = $1::uuid`,
+          fx.restaurantId,
+        );
+        const bedName = `Int Bed ${run}`;
+        const [bed] = await h.rawQuery<{ id: string }>(
+          `INSERT INTO rooms (id, hospital_id, room_code, room_name, updated_at)
+           VALUES (gen_random_uuid(), $1::uuid, $2, $3, now()) RETURNING id`,
+          fx.hospitalId,
+          `INT-${run}`,
+          bedName,
+        );
+        const roomId = bed!.id;
+        // Every QR order is a signed-in guest's (name and mobile, confirmed by OTP).
+        let guestToken = '';
         const order = (name: string, extra: Body = {}) =>
           guest('POST', qr('/orders'), {
             clientOrderId: `qr-${name}-${run}`,
+            guestToken,
             lines: [{ menuId: fx.menuId, quantity: 1 }],
             returnUrl: 'http://localhost:3000/fandb/order/status',
-            roomNumber: '412',
+            roomId,
             ...extra,
           });
         // The room menu (a ROOM order; pickup orders use the counter menu): the dosa is sold for
@@ -1021,29 +1041,11 @@ describe.skipIf(!databaseUrl)(
         expect(await h.ok('GET', qr('/menu'), undefined, '')).toMatchObject({
           open: false,
           restaurantName: anyString,
+          roomDelivery: true,
         });
         expect((await guest('GET', `/qr/${fx.restaurantId}/menu?token=wrong`)).status).toBe(404);
-        const closed = await order('closed');
-        expect([closed.status, closed.body.message]).toEqual([
-          409,
-          'Ordering is closed right now. Please try again later.',
-        ]);
 
-        const shift = await h.ok('POST', '/pos/shifts', {
-          counterId: fx.counterId,
-          openingCash: 0,
-        });
-        const menu = await h.ok('GET', qr('/menu'), undefined, '');
-        expect(menu).toMatchObject({ open: true });
-        // The room menu: what is sold for rooms, at the room price.
-        expect((menu.items as Body[]).map((item) => item.id)).toContain(fx.menuId);
-        expect((menu.items as Body[]).map((item) => item.id)).not.toContain(fx.inclusiveMenuId);
-        // Staff and visitors pick up at the counter: the counter menu, the tea on it too.
-        const pickup = await h.ok('GET', `${qr('/menu')}&channel=COUNTER`, undefined, '');
-        expect(pickup).toMatchObject({ open: true, pickupCounter: anyString });
-        expect((pickup.items as Body[]).map((item) => item.id)).toContain(fx.inclusiveMenuId);
-
-        // Staff discount: the Employee ID gets an OTP on its registered mobile, then a token.
+        // Staff discount: an employee whose registered mobile this is gets 10% by themselves.
         await h.rawQuery(
           `UPDATE restaurant_menus SET is_discountable = true WHERE id = $1::uuid`,
           fx.menuId,
@@ -1068,85 +1070,125 @@ describe.skipIf(!databaseUrl)(
             mobile: staffMobile,
           })
         ).employeeCode as string;
+
+        // The guest signs in: name and mobile, an OTP to that mobile, a sign-in for the phone.
         const sent: Array<{ mobile: string; otp: string }> = [];
         vi.spyOn(SmsService.prototype, 'isConfigured').mockReturnValue(true);
         vi.spyOn(SmsService.prototype, 'sendOtp').mockImplementation((mobile, otp) => {
           sent.push({ mobile, otp });
           return Promise.resolve();
         });
-        const unknownStaff = await guest('POST', qr('/staff-otp'), { employeeCode: 'NOPE-1' });
-        expect([unknownStaff.status, unknownStaff.body.message]).toEqual([
-          404,
-          'No employee with this ID gets a staff discount here.',
-        ]);
-        const otpSent = await guest('POST', qr('/staff-otp'), { employeeCode: staffCode });
+        const guestName = `Int Guest ${run}`;
+        const otpSent = await guest('POST', qr('/guest-otp'), {
+          mobile: staffMobile,
+          name: guestName,
+        });
         expect([otpSent.status, otpSent.data.sentTo]).toEqual([
           201,
           `******${staffMobile.slice(-4)}`,
         ]);
         expect(sent.map((entry) => entry.mobile)).toEqual([staffMobile]);
-        const again = await guest('POST', qr('/staff-otp'), { employeeCode: staffCode });
+        const again = await guest('POST', qr('/guest-otp'), {
+          mobile: staffMobile,
+          name: guestName,
+        });
         expect([again.status, again.body.message]).toEqual([
           429,
           'An OTP was just sent. Wait a minute before asking for another.',
         ]);
-        const wrong = await guest('POST', qr('/staff-verify'), {
-          employeeCode: staffCode,
+        const wrong = await guest('POST', qr('/guest-verify'), {
+          mobile: staffMobile,
           otp: sent[0]!.otp === '111111' ? '222222' : '111111',
         });
         expect([wrong.status, wrong.body.message]).toEqual([400, 'That OTP is not right.']);
-        const verified = await guest('POST', qr('/staff-verify'), {
-          employeeCode: staffCode,
+        const verified = await guest('POST', qr('/guest-verify'), {
+          mobile: staffMobile,
           otp: sent[0]!.otp,
         });
         expect(verified.status).toBe(201);
         expect(verified.data).toMatchObject({
-          discountPercent: 10,
-          staffToken: anyString,
+          guestToken: anyString,
+          mobile: staffMobile,
+          name: guestName,
         });
         // A used OTP does not work twice.
         expect(
-          (await guest('POST', qr('/staff-verify'), { employeeCode: staffCode, otp: sent[0]!.otp }))
+          (await guest('POST', qr('/guest-verify'), { mobile: staffMobile, otp: sent[0]!.otp }))
             .status,
         ).toBe(400);
+        guestToken = verified.data.guestToken as string;
+        // Theirs is an employee's mobile: the staff discount, with nothing more to show.
+        expect((await guest('POST', qr('/guest-discount'), { guestToken })).data).toEqual({
+          discountPercent: 10,
+        });
+        // No sign-in, no order.
+        expect((await order('forged', { guestToken: 'forged.token' })).status).toBe(403);
 
-        // The order: priced by the server with the discount, a Razorpay link that comes back here.
+        const closed = await order('closed');
+        expect([closed.status, closed.body.message]).toEqual([
+          409,
+          'Ordering is closed right now. Please try again later.',
+        ]);
+
+        const shift = await h.ok('POST', '/pos/shifts', {
+          counterId: fx.counterId,
+          openingCash: 0,
+        });
+        const menu = await h.ok('GET', qr('/menu'), undefined, '');
+        expect(menu).toMatchObject({ open: true });
+        // The room menu: what is sold for rooms, at the room price.
+        expect((menu.items as Body[]).map((item) => item.id)).toContain(fx.menuId);
+        expect((menu.items as Body[]).map((item) => item.id)).not.toContain(fx.inclusiveMenuId);
+        // Staff and visitors pick up at the counter: the counter menu, the tea on it too.
+        const pickup = await h.ok('GET', `${qr('/menu')}&channel=COUNTER`, undefined, '');
+        expect(pickup).toMatchObject({ open: true, pickupCounter: anyString });
+        expect((pickup.items as Body[]).map((item) => item.id)).toContain(fx.inclusiveMenuId);
+
+        // The order: priced by the server with the discount, paid in Razorpay's checkout on the
+        // guest's own page (a Razorpay order, not a link page that asks for the mobile again).
         gatewayCalls.length = 0;
-        gatewayReply = () => created(`plink_${run}_qr`);
-        const placed = await order('paid', { staffToken: verified.data.staffToken });
+        gatewayReply = () => created(`order_${run}_qr`);
+        const placed = await order('paid');
         expect(placed.status).toBe(201);
         expect(placed.data).toMatchObject({
+          // Their confirmed name and number, filled in: nothing to type there.
+          checkout: {
+            amount: 5300,
+            keyId: anyString,
+            orderId: `order_${run}_qr`,
+            prefill: { contact: `+91${staffMobile}`, name: guestName },
+          },
           discountTotal: anyNumber,
           grandTotal: 53,
-          paymentUrl: `https://rzp.io/i/plink_${run}_qr`,
+          paymentUrl: null,
           status: 'AWAITING_PAYMENT',
         });
-        expect(gatewayCalls[0]?.body).toMatchObject({
-          amount: 5300,
-          callback_method: 'get',
-          callback_url: expect.stringContaining(
-            'http://localhost:3000/fandb/order/status',
-          ) as unknown,
+        expect(gatewayCalls[0]).toMatchObject({
+          body: { amount: 5300, currency: 'INR' },
+          url: 'https://api.razorpay.com/v1/orders',
         });
         const { id, key } = placed.data as { id: string; key: string };
         // Sending it again (a double tap) is the same order and no second link.
-        const twice = await order('paid', { staffToken: verified.data.staffToken });
+        const twice = await order('paid');
         expect([twice.data.id, gatewayCalls.length]).toEqual([id, 1]);
         const status = (orderKey = key) => guest('GET', `/qr/orders/${id}?key=${orderKey}`);
         expect((await status('wrong-key')).status).toBe(404);
         gatewayReply = () => ({ body: { status: 'created' }, status: 200 });
         expect((await status()).data).toMatchObject({ status: 'AWAITING_PAYMENT' });
 
-        // Paid: billed at the QR counter as UPI with the payment, and on the kitchen screen.
+        // Paid (Razorpay holds a captured payment for the order): billed at the QR counter as UPI,
+        // and on the kitchen screen.
         gatewayReply = () => ({
-          body: { payments: [{ payment_id: `pay_${run}_qr` }], status: 'paid' },
+          body: { items: [{ id: `pay_${run}_qr`, status: 'captured' }] },
           status: 200,
         });
         const billed = (await status()).data;
         expect(billed).toMatchObject({
           billNumber: anyString,
           kitchenStatus: 'PLACED',
+          lines: [{ amount: anyNumber, itemName: anyString, quantity: 1 }],
           orderNumber: anyString,
+          paidAt: anyString,
           status: 'BILLED',
         });
         const [bill] = (
@@ -1155,15 +1197,18 @@ describe.skipIf(!databaseUrl)(
             `/pos/orders?counterId=${fx.counterId}&search=${billed.billNumber as string}`,
           )
         ).items as Body[];
+        // The bed's own name, and the guest's confirmed name and mobile, on the bill.
         expect(bill).toMatchObject({
           channel: 'ROOM',
+          customerMobile: staffMobile,
+          customerName: guestName,
           employeeCode: staffCode,
           grandTotal: 53,
           paymentMode: 'UPI',
           paymentReference: `pay_${run}_qr`,
-          roomNumber: '412',
+          roomNumber: bedName,
         });
-        expect(billed).toMatchObject({ channel: 'ROOM', roomNumber: '412' });
+        expect(billed).toMatchObject({ channel: 'ROOM', roomNumber: bedName });
         expect((await listOrders()).map((o) => o.billNumber)).toContain(billed.billNumber);
         const [row] = (await h.ok('GET', `/order-reports?search=${billed.billNumber as string}`))
           .items as Body[];
@@ -1171,19 +1216,88 @@ describe.skipIf(!databaseUrl)(
         // Asked again, the same bill: billed once.
         expect((await status()).data.billNumber).toBe(billed.billNumber);
 
-        // A room order needs the room number, and sells only room items.
-        const noRoom = await order('room', { roomNumber: ' ' });
-        expect([noRoom.status, noRoom.body.message]).toEqual([400, 'Enter your room number.']);
-        // Staff and visitors pick up at the counter: no room, and the counter menu (the tea).
-        gatewayReply = () => created(`plink_${run}_pickup`);
+        // A dine-in table (At Table Dining on): its own QR orders from the counter menu, and the
+        // table's name goes on the bill. Staff bring it over, so it stays off the pickup board.
+        await h.rawQuery(
+          `UPDATE restaurants SET at_table_dining = true WHERE id = $1::uuid`,
+          fx.restaurantId,
+        );
+        const tableName = `Int T5 ${run}`;
+        const [table] = await h.rawQuery<{ id: string }>(
+          `INSERT INTO rooms (id, hospital_id, restaurant_id, room_code, room_name, updated_at)
+           VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3, $4, now()) RETURNING id`,
+          fx.hospitalId,
+          fx.restaurantId,
+          `INT-T-${run}`,
+          tableName,
+        );
+        const atTable = (name: string, extra: Body = {}) =>
+          order(name, {
+            channel: 'TABLE',
+            lines: [{ menuId: fx.inclusiveMenuId, quantity: 1 }],
+            roomId: undefined,
+            tableId: table!.id,
+            ...extra,
+          });
+        expect((await h.ok('GET', `/qr/tables/${table!.id}`, undefined, '')).restaurantId).toBe(
+          fx.restaurantId,
+        );
+        gatewayReply = () => created(`order_${run}_table`);
+        const tableOrder = await atTable('table');
+        expect(tableOrder.status).toBe(201);
+        expect(tableOrder.data).toMatchObject({ channel: 'TABLE', roomNumber: null, tableName });
+        gatewayReply = () => ({
+          body: { items: [{ id: `pay_${run}_table`, status: 'captured' }] },
+          status: 200,
+        });
+        const served = (
+          await guest(
+            'GET',
+            `/qr/orders/${tableOrder.data.id as string}?key=${tableOrder.data.key as string}`,
+          )
+        ).data;
+        expect(served).toMatchObject({ channel: 'TABLE', status: 'BILLED', tableName });
+        const [tableBill] = (
+          await h.ok(
+            'GET',
+            `/pos/orders?counterId=${fx.counterId}&search=${served.billNumber as string}`,
+          )
+        ).items as Body[];
+        expect(tableBill).toMatchObject({ channel: 'TABLE', roomNumber: null, tableName });
+        expect((await listOrders()).find((o) => o.billNumber === served.billNumber)).toMatchObject({
+          channel: 'TABLE',
+          tableName,
+        });
+        expect(((await board()).data.orders as Body[]).map((o) => o.orderNumber)).not.toContain(
+          served.orderNumber,
+        );
+        const [tableRow] = (
+          await h.ok('GET', `/order-reports?search=${served.billNumber as string}`)
+        ).items as Body[];
+        expect(tableRow).toMatchObject({ inRoom: false, tableName });
+        // Only a table's own QR orders to it.
+        const noTable = await atTable('table-2', { tableId: undefined });
+        expect([noTable.status, noTable.body.message]).toEqual([
+          400,
+          'To order at your table, scan the QR code on it.',
+        ]);
+
+        // A room order comes from a bed's QR; the restaurant's own QR is pickup only.
+        const noRoom = await order('room', { roomId: undefined });
+        expect([noRoom.status, noRoom.body.message]).toEqual([
+          400,
+          'To order to your room, scan the QR code on your bed.',
+        ]);
+        // Pickup at the counter: no room, and the counter menu (the tea).
+        gatewayReply = () => created(`order_${run}_pickup`);
         const pickupOrder = await order('pickup', {
           channel: 'COUNTER',
           lines: [{ menuId: fx.inclusiveMenuId, quantity: 1 }],
-          roomNumber: undefined,
+          roomId: undefined,
         });
         expect(pickupOrder.status).toBe(201);
         expect(pickupOrder.data).toMatchObject({ channel: 'COUNTER', roomNumber: null });
-        gatewayReply = () => created(`plink_${run}_room`);
+        gatewayReply = () => created(`order_${run}_room`);
         const counterOnly = await order('room-2', {
           lines: [{ menuId: fx.inclusiveMenuId, quantity: 1 }],
         });
@@ -1193,12 +1307,12 @@ describe.skipIf(!databaseUrl)(
         ]);
 
         // Paid after the shift ended: kept as paid, not billed, for a refund.
-        gatewayReply = () => created(`plink_${run}_late`);
+        gatewayReply = () => created(`order_${run}_late`);
         const late = await order('late');
         expect(late.status).toBe(201);
         await h.ok('PATCH', `/pos/shifts/${idOf(shift)}/end`, { countedCash: 0, handover: false });
         gatewayReply = () => ({
-          body: { payments: [{ payment_id: `pay_${run}_late` }], status: 'paid' },
+          body: { items: [{ id: `pay_${run}_late`, status: 'captured' }] },
           status: 200,
         });
         const lateStatus = await guest(
@@ -1213,7 +1327,8 @@ describe.skipIf(!databaseUrl)(
         const unbilled = (await h.ok('GET', '/order-reports/paid-not-billed')).items as Body[];
         expect(unbilled.map((entry) => entry.id)).toContain(late.data.id);
         expect(unbilled.find((entry) => entry.id === late.data.id)).toMatchObject({
-          amount: 58,
+          // The same signed-in employee: their 10% staff discount, by itself.
+          amount: 53,
           paymentReference: `pay_${run}_late`,
           reason: 'Open a shift at this counter before billing.',
         });
@@ -1223,12 +1338,33 @@ describe.skipIf(!databaseUrl)(
         const guest = (method: string, path: string, body?: unknown) =>
           h.api(method, path, body, '');
         const kiosk = (path: string) => `/kiosk/${fx.restaurantId}${path}?token=${fx.boardToken}`;
-        const pay = (name: string, method: string) =>
+        const qr = (path: string) => `/qr/${fx.restaurantId}${path}?token=${fx.boardToken}`;
+        // The guest signs in on the kiosk for this order: name and mobile, an OTP to that mobile.
+        const sent: string[] = [];
+        vi.spyOn(SmsService.prototype, 'isConfigured').mockReturnValue(true);
+        vi.spyOn(SmsService.prototype, 'sendOtp').mockImplementation((_mobile, otp) => {
+          sent.push(otp);
+          return Promise.resolve();
+        });
+        const visitorMobile = `7${String(Date.now()).slice(-9)}`;
+        expect(
+          (await guest('POST', qr('/guest-otp'), { mobile: visitorMobile, name: 'Kiosk Guest' }))
+            .status,
+        ).toBe(201);
+        const signedIn = await guest('POST', qr('/guest-verify'), {
+          mobile: visitorMobile,
+          otp: sent[0],
+        });
+        const guestToken = signedIn.data.guestToken as string;
+        const pay = (name: string, method: string, signIn = guestToken) =>
           guest('POST', kiosk('/paid-orders'), {
             clientOrderId: `kiosk-pay-${name}-${run}`,
+            guestToken: signIn,
             lines: [{ menuId: fx.menuId, quantity: 1 }],
             method,
           });
+        // No sign-in, no kiosk order.
+        expect((await pay('anonymous', 'UPI', '')).status).toBe(403);
         const setKioskCounter = (counterId: string | null, token?: string) =>
           h.api('PUT', `/restaurants/${fx.restaurantId}/kiosk-counter`, { counterId }, token);
 

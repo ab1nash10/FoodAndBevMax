@@ -1088,7 +1088,7 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     );
     await rawQuery(
       `INSERT INTO user_roles (id, user_id, role_id, updated_at)
-       SELECT gen_random_uuid(), $1::uuid, id, now() FROM roles WHERE name = 'POS Cashier'`,
+       SELECT gen_random_uuid(), $1::uuid, id, now() FROM roles WHERE name = 'Restaurant/POS Operator'`,
       cashier!.id,
     );
     await rawQuery(
@@ -1125,6 +1125,65 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     }
     // One open shift per user: close this till so the next tests can open their own.
     await ok('PATCH', `/pos/shifts/${idOf(till)}/end`, { countedCash: 0, handover: false });
+  });
+
+  it("every stock screen reads back its location's stock: levels, movements, balances, ledgers", async () => {
+    const read = async (path: string) => {
+      const response = await api('GET', path);
+      expect(response.status, path).toBe(200);
+      return response.data;
+    };
+    const has = (rows: Body[], match: Body) =>
+      rows.some((row) => Object.entries(match).every(([key, value]) => row[key] === value));
+
+    // The store: its items against their days of cover, and what came in and went out per day.
+    const storeLevels = await read(
+      `/store-stock/levels?hospitalId=${fx.hospitalId}&storeId=${fx.storeId}`,
+    );
+    expect([typeof storeLevels.lowCoverDays, typeof storeLevels.windowDays]).toEqual([
+      'number',
+      'number',
+    ]);
+    expect(has(items(storeLevels), { itemId: fx.mrpItemId, storeId: fx.storeId })).toBe(true);
+    const moves = await read(
+      `/store-stock/movements?storeId=${fx.storeId}&itemId=${fx.mrpItemId}&days=7`,
+    );
+    const days = moves.days as Body[];
+    expect(days).toHaveLength(7);
+    // Received by GRN and sent out by transfer, all within the week.
+    expect(days.reduce((sum, day) => sum + Number(day.qtyIn), 0)).toBeGreaterThan(0);
+    expect(days.reduce((sum, day) => sum + Number(day.qtyOut), 0)).toBeGreaterThan(0);
+    expect((await api('GET', '/store-stock/movements?days=0')).status).toBe(400);
+    expect((await api('GET', '/store-stock/movements?days=91')).status).toBe(400);
+
+    // The restaurant: what transfers credited, its ledger, and its items' cover.
+    const at = `hospitalId=${fx.hospitalId}&locationId=${fx.restaurantId}`;
+    expect(
+      has(items(await read(`/restaurant-stock?${at}&itemId=${fx.mrpItemId}`)), {
+        itemId: fx.mrpItemId,
+      }),
+    ).toBe(true);
+    expect(
+      items(await read(`/restaurant-stock-ledgers?${at}&itemId=${fx.mrpItemId}`)).length,
+    ).toBeGreaterThan(0);
+    expect(has(items(await read(`/restaurant-stock/levels?${at}`)), { itemId: fx.mrpItemId })).toBe(
+      true,
+    );
+
+    // The kitchen: production posted there, then sent on.
+    const kitchen = `hospitalId=${fx.hospitalId}&locationId=${fx.kitchenId}`;
+    expect(Array.isArray(items(await read(`/kitchen-stock?${kitchen}`)))).toBe(true);
+    expect(items(await read(`/kitchen-stock-ledgers?${kitchen}`)).length).toBeGreaterThan(0);
+
+    // The counters: received there and billed from.
+    const counters = `hospitalId=${fx.hospitalId}&itemId=${fx.mrpItemId}`;
+    expect(items(await read(`/counter-stock?${counters}`)).length).toBeGreaterThan(0);
+    expect(items(await read(`/counter-stock-ledgers?${counters}`)).length).toBeGreaterThan(0);
+    expect(
+      has(items(await read(`/counter-stock/levels?hospitalId=${fx.hospitalId}`)), {
+        itemId: fx.mrpItemId,
+      }),
+    ).toBe(true);
   });
 
   it('shifts: count the cash, hand over, close; a closed day bills on the next one', async () => {

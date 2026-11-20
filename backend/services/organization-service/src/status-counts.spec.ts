@@ -12,6 +12,7 @@ import { PosService } from './pos/pos.service';
 import type { StockRepository } from './stock/stock.repository';
 import { StockService } from './stock/stock.service';
 import { TransfersService } from './transfers/transfers.service';
+import type { StoreArrivals } from './common/store-arrivals';
 
 // A list screen's status tabs used to cost one count request per tab (5 for Transfers). With
 // statusCounts the list answers every tab from one grouped query, under the same other filters.
@@ -38,11 +39,16 @@ function fakeRepository() {
 }
 
 const services = {
-  grns: (repository: unknown) => new GrnsService(audit, repository as GrnsRepository),
+  grns: (repository: unknown) =>
+    new GrnsService(
+      audit,
+      repository as GrnsRepository,
+      { arrived: () => Promise.resolve(), listen: () => undefined } as unknown as StoreArrivals,
+    ),
   productions: (repository: unknown) =>
     new KitchenProductionsService(audit, repository as KitchenProductionsRepository),
   transfers: (repository: unknown) =>
-    new TransfersService(audit, repository as TransfersRepository),
+    new TransfersService(audit, repository as TransfersRepository, {} as unknown as PrismaService),
 };
 
 test('grouped rows become a count per status', () => {

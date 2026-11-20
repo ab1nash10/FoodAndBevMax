@@ -75,7 +75,7 @@ test('actor reach rules', () => {
   assert.throws(() => assertHoldsPermissions(['USER_DELETE'], admin), ForbiddenException);
   assert.doesNotThrow(() => assertHoldsPermissions(['USER_DELETE'], superAdmin));
 
-  // Changing someone's sign-in (password, email, mobile)
+  // Changing someone's sign-in (email, mobile)
   const cashier = { name: 'Cashier', permissionCodes: ['GRN_VIEW'], scopes: ['SINGLE' as const] };
   assert.doesNotThrow(() => assertHoldsAccessOf(cashier, admin));
   assert.throws(
