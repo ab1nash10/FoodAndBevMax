@@ -61,7 +61,9 @@ export class ErpGrnsController {
   @ApiOkResponse({
     description:
       'Saved and its stock moved (the same grn_No again adds its rows to that GRN): ' +
-      '{ transaction_number, message: "We have successfully received the request", success: true }. ' +
+      '{ transaction_number, message: "We have successfully received the request", success: true }, ' +
+      'plus shortfalls: [{ batch, part_item_code, requested, returned, owed }] when a return (flag 1) ' +
+      'asked for more than the Main Store held; the rest is taken when the batch comes back. ' +
       'Refused, and listed on ERP GRN errors: { transaction_number: null, message: "Request ' +
       'failed", success: false, errors: [...] }.',
   })
@@ -70,10 +72,15 @@ export class ErpGrnsController {
     rows: ErpGrnRowDto[],
     @Req() request: RequestContextLike,
   ) {
-    const { transactionNumber } = await this.erpGrns.receive(rows, getIpAddress(request));
+    const { shortfalls, transactionNumber } = await this.erpGrns.receive(
+      rows,
+      getIpAddress(request),
+    );
 
     return {
       message: 'We have successfully received the request',
+      // Returns the Main Store could not cover in full: what went back and what is still owed.
+      ...(shortfalls.length > 0 ? { shortfalls } : {}),
       success: true,
       transaction_number: transactionNumber,
     };

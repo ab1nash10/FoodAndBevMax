@@ -7,9 +7,9 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { useAuth } from '@/components/auth-provider';
 import { KeyboardHint } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
-import { organizationApi } from '@/lib/api';
+import { grnEntriesApi, organizationApi } from '@/lib/api';
 import { OPEN_COMMAND_PALETTE_EVENT } from '@/lib/command-palette-events';
-import { canOpenPath, findSubRoute, getActiveNavHref } from '@/lib/navigation';
+import { canOpenPath, erpGrnHref, findSubRoute, getActiveNavHref } from '@/lib/navigation';
 import { statusPresentation } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import { queryKeys } from '@/lib/query-keys';
@@ -57,13 +57,14 @@ export const createCommands: Array<Command & { permissions: string[] }> = [
     permissions: routePermissions('/inventory/transfers/new'),
     tone: 'info',
   },
+  // Goods now come in from the ERP: no delivery is received here, so N G opens its GRNs.
   {
-    abbr: '+G',
-    hint: 'Receive goods into a store',
-    href: '/inventory/grns/new',
+    abbr: 'GR',
+    hint: 'Goods the ERP sent into a store',
+    href: '/inventory/erp-grns',
     keys: 'N G',
-    label: 'Receive a delivery (GRN)',
-    permissions: routePermissions('/inventory/grns/new'),
+    label: 'ERP GRNs',
+    permissions: ['GRN_VIEW'],
     tone: 'stores',
   },
   {
@@ -81,7 +82,7 @@ export const createCommands: Array<Command & { permissions: string[] }> = [
 const sequences: Record<'g' | 'n', Record<string, string>> = {
   // Go-to order is the order the palette lists them in.
   g: { d: '/dashboard', t: '/inventory/transfers', i: '/masters/items', p: '/kitchen/productions' },
-  n: { g: '/inventory/grns/new', p: '/kitchen/productions/new', t: '/inventory/transfers/new' },
+  n: { g: '/inventory/erp-grns', p: '/kitchen/productions/new', t: '/inventory/transfers/new' },
 };
 const goToKeys = Object.fromEntries(
   Object.entries(sequences.g).map(([letter, href]) => [href, `G ${letter.toUpperCase()}`]),
@@ -179,7 +180,7 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
             organizationApi.listPosBills({ ...base, sortBy: 'placedAt', sortOrder: 'desc' }),
           ),
           listIf(canSee.transfers, () => organizationApi.listTransfers(base)),
-          listIf(canSee.grns, () => organizationApi.listGrns(base)),
+          listIf(canSee.grns, () => grnEntriesApi.listGrnEntries(base)),
           listIf(canSee.productions, () => organizationApi.listKitchenProductions(base)),
           listIf(canSee.items, () => organizationApi.listItems({ limit: 3, search: term })),
           listIf(canSee.employees, () => organizationApi.listEmployees(masters)),
@@ -220,9 +221,9 @@ function useRecordSearch(term: string): { isFetching: boolean; records: Command[
 
           return {
             abbr: 'GR',
-            hint: `${status.label} · ${grn.vendorName ?? grn.store.storeName}`,
-            href: `/inventory/grns?id=${grn.id}`,
-            label: grn.grnNumber,
+            hint: `ERP GRN · ${status.label} · ${grn.store_name}`,
+            href: erpGrnHref(grn.grn_No),
+            label: grn.grn_No,
             tone: status.tone,
           };
         }),

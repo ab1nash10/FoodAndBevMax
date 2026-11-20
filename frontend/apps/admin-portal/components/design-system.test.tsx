@@ -176,7 +176,7 @@ describe('quick tiles', () => {
             count: 2,
             countLabel: 'to verify',
             detail: 'Check and post',
-            href: '/inventory/grns',
+            href: '/inventory/erp-grns',
             icon: ClipboardCheck,
             title: 'GRNs',
             tone: 'blue',
@@ -194,7 +194,10 @@ describe('quick tiles', () => {
     );
 
     const tiles = within(screen.getByRole('navigation', { name: 'Quick actions' }));
-    expect(tiles.getByRole('link', { name: /GRNs/ })).toHaveAttribute('href', '/inventory/grns');
+    expect(tiles.getByRole('link', { name: /GRNs/ })).toHaveAttribute(
+      'href',
+      '/inventory/erp-grns',
+    );
     expect(tiles.getByRole('link', { name: /GRNs/ })).toHaveTextContent('2 to verify');
     expect(tiles.getByRole('link', { name: /Transfers/ })).toHaveTextContent('All done');
   });

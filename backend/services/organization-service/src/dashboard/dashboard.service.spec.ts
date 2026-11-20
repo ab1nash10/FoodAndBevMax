@@ -160,7 +160,13 @@ test('records: each source is asked like the portal asked the list, with the cap
   };
   assert.deepEqual(calls.transfers, { ...period, sortBy: 'transferDate' });
   assert.deepEqual(calls.productions, { ...period, sortBy: 'productionDate', status: 'POSTED' });
-  assert.deepEqual(calls.grns, { ...period, sortBy: 'receivedDate', status: 'POSTED_TO_STOCK' });
+  // ERP GRNs received in the period (Deliveries are gone), any status.
+  assert.deepEqual(calls.grns, {
+    hospitalId: 'h1',
+    limit: DASHBOARD_RECORDS_CAP,
+    page: 1,
+    receivedFrom: '2026-09-01T00:00:00.000Z',
+  });
 });
 
 test('records: only the fields the dashboard reads, and truncated when the total is larger', async () => {
@@ -211,7 +217,13 @@ test('records: a source the user may not view is neither read nor returned', asy
 });
 
 test('setup: counts what each list totals, here or everywhere as the dashboard did', async () => {
-  const { calls, service } = serviceWith({ grns: { items: [{ grnNumber: 'GRN-1' }] } });
+  const firstErpGrn = {
+    grn_No: 'GRN-1',
+    received_at: '2026-09-02T04:30:00.000Z',
+    rows: [{ accepted_qty: 3, rejected_qty: 0, supplier: 'CAGR0008' }],
+    status: 'VERIFIED',
+  };
+  const { calls, service } = serviceWith({ grns: { items: [firstErpGrn] } });
   const all = [
     'EMPLOYEE_VIEW',
     'GRN_VIEW',
@@ -239,21 +251,21 @@ test('setup: counts what each list totals, here or everywhere as the dashboard d
     storeItems: 7,
     stores: 7,
   });
-  assert.deepEqual(result.firstGrn, { grnNumber: 'GRN-1' });
+  // The first ERP GRN, in the shape the dashboard read delivery GRNs in.
+  assert.deepEqual(result.firstGrn, {
+    grnNumber: 'GRN-1',
+    lines: [{ acceptedQty: 3, rejectedQty: 0 }],
+    receivedDate: '2026-09-02T04:30:00.000Z',
+    status: 'VERIFIED',
+    vendorName: 'CAGR0008',
+  });
   assert.equal(result.firstTransfer, null);
   // Totals are counts only (limit 0: no rows loaded); locations and items are not limited to the
   // location. The first GRN and transfer still read one row.
   assert.deepEqual(calls.stores, { hospitalId: 'h1', limit: 0, page: 1 });
   assert.deepEqual(calls.hospitals, { limit: 0, page: 1 });
   assert.deepEqual(calls.items, { limit: 0, page: 1 });
-  assert.deepEqual(calls.grns, {
-    hospitalId: 'h1',
-    limit: 1,
-    page: 1,
-    sortBy: 'createdAt',
-    sortOrder: 'asc',
-    status: 'POSTED_TO_STOCK',
-  });
+  assert.deepEqual(calls.grns, { hospitalId: 'h1', limit: 1, page: 1, sortOrder: 'asc' });
   assert.deepEqual(calls.transfers, {
     hospitalId: 'h1',
     limit: 1,
@@ -310,7 +322,8 @@ test('navCounts: each badge is its list asked for a count only, with the same fi
   // Built as the list endpoints build their queries (sortOrder left to each list's default).
   const here = { hospitalId: 'h1', limit: 0, page: 1 };
   assert.deepEqual(calls.transfers, { ...here, status: 'PENDING_ACKNOWLEDGEMENT' });
-  assert.deepEqual(calls.grns, { ...here, status: 'DRAFT' });
+  // ERP GRNs with a return still waiting.
+  assert.deepEqual(calls.grns, { ...here, status: 'PENDING' });
   assert.deepEqual(calls.productions, { ...here, status: 'DRAFT' });
   assert.deepEqual(counts, { grns: 7, productions: 7, transfers: 7 });
 });

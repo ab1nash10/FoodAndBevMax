@@ -1,4 +1,4 @@
-// Characterisation of the stock and money paths over HTTP: GRN → store stock, store transfer →
+// Characterisation of the stock and money paths over HTTP: store stock → store transfer →
 // acknowledgement (full, partial, rejected), kitchen production → kitchen transfer, and the stock
 // views. It pins today's behaviour (statuses, quantities, ledger rows, messages and response
 // shapes) so refactors can be checked against it.
@@ -9,7 +9,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { listOnTill } from './testing/int-harness.js';
+import { listOnTill, receiveStock } from './testing/int-harness.js';
 import { superAdminForRun } from './testing/super-admin-for-run.js';
 
 type Body = Record<string, unknown>;
@@ -122,54 +122,12 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     (await balances(fx.mrpItemId, 'RESTAURANT')).find((b) => b.batchNumber === batchNumber);
   const lineIdOf = (transfer: Body) => idOf(firstOf(transfer.lines as Body[]));
 
-  function grnBody(
-    batches: {
-      acceptedQty: number;
-      batchNumber: string;
-      expiryDate?: string;
-      rejectedQty: number;
-    }[],
-  ) {
-    const lineBatches = batches.map((batch) => ({
-      acceptedQty: batch.acceptedQty,
-      batchNumber: batch.batchNumber,
-      expiryDate: batch.expiryDate ?? day(60),
-      receivedQty: batch.acceptedQty + batch.rejectedQty,
-      rejectedQty: batch.rejectedQty,
-      ...(batch.rejectedQty ? { rejectionReason: 'Damaged' } : {}),
-    }));
-    const total = (key: 'acceptedQty' | 'receivedQty' | 'rejectedQty') =>
-      lineBatches.reduce((sum, batch) => sum + batch[key], 0);
-    return {
-      hospitalId: fx.hospitalId,
-      items: [
-        {
-          acceptedQty: total('acceptedQty'),
-          batches: lineBatches,
-          itemId: fx.mrpItemId,
-          receivedQty: total('receivedQty'),
-          rejectedQty: total('rejectedQty'),
-        },
-      ],
-      receivedBy: 'Characterisation',
-      receivedDate: today,
-      storeId: fx.storeId,
-      vendorName: `Vendor ${run}`,
-    };
-  }
-
-  /** Puts `qty` of a fresh batch into the store through a posted GRN. */
-  async function stockBatch(label: string, qty: number): Promise<Batch> {
-    const batchNumber = `${label}-${run}`;
-    const grn = await ok(
-      'POST',
-      '/grns',
-      grnBody([{ acceptedQty: qty, batchNumber, rejectedQty: 0 }]),
+  /** Puts `qty` of a fresh batch (60 days to expiry) into the store. */
+  const stockBatch = (label: string, qty: number): Promise<Batch> =>
+    receiveStock(
+      { app: app!, baseUrl, rawQuery },
+      { batchNumber: `${label}-${run}`, itemId: fx.mrpItemId, qty, storeId: fx.storeId },
     );
-    await ok('PATCH', `/grns/${idOf(grn)}/post-to-stock`);
-    const balance = await storeBatch(batchNumber);
-    return { batchNumber, expiryDate: String(balance?.expiryDate).slice(0, 10) };
-  }
 
   const storeTransfer = (batch: Batch, sentQty: number) =>
     ok('POST', '/transfers', {
@@ -279,69 +237,6 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
 
   afterAll(async () => {
     await app?.close();
-  });
-
-  it('GRN: draft, post to stock per accepted batch, then refuses a second post', async () => {
-    const accepted = `GA-${run}`;
-    const partial = `GB-${run}`;
-    const created = await api(
-      'POST',
-      '/grns',
-      grnBody([
-        { acceptedQty: 30, batchNumber: accepted, rejectedQty: 0 },
-        { acceptedQty: 6, batchNumber: partial, rejectedQty: 4 },
-      ]),
-    );
-    expect(created.status).toBe(201);
-    expect(created.data.status).toBe('DRAFT');
-    expect(shape(created.body)).toMatchSnapshot('grn created');
-    // Nothing reaches stock while the GRN is a draft.
-    expect(await storeBatch(accepted)).toBeUndefined();
-
-    const grnId = idOf(created.data);
-    const posted = await api('PATCH', `/grns/${grnId}/post-to-stock`);
-    expect(posted.status).toBe(200);
-    expect(posted.data.status).toBe('POSTED_TO_STOCK');
-    expect(shape(posted.body)).toMatchSnapshot('grn posted');
-
-    // Only accepted quantity is stocked; rejected quantity never is.
-    expect(await storeBatch(accepted)).toMatchObject({
-      availableQty: 30,
-      locationType: 'STORE',
-      reservedQty: 0,
-    });
-    expect(await storeBatch(partial)).toMatchObject({ availableQty: 6, reservedQty: 0 });
-    expect(String((await storeBatch(accepted))?.expiryDate).slice(0, 10)).toBe(day(60));
-    const entries = await ledger(fx.mrpItemId, grnId);
-    expect(entries.map((e) => [e.batchNumber, ...ledgerRow(e)]).sort()).toEqual([
-      [accepted, 'GRN_IN', 'GRN', 'STORE', 30, 0, 30],
-      [partial, 'GRN_IN', 'GRN', 'STORE', 6, 0, 6],
-    ]);
-    expect(shape(entries[0])).toMatchSnapshot('stock ledger entry');
-
-    const again = await api('PATCH', `/grns/${grnId}/post-to-stock`);
-    expect([again.status, again.body.message]).toEqual([400, 'GRN is already posted to stock']);
-    expect(shape(again.body)).toMatchSnapshot('error body');
-  });
-
-  it('GRN: validation messages for quantities and expired batches', async () => {
-    const mismatch = grnBody([{ acceptedQty: 5, batchNumber: `GM-${run}`, rejectedQty: 0 }]);
-    mismatch.items = mismatch.items.map((line) => ({ ...line, receivedQty: 6 }));
-    const unequal = await api('POST', '/grns', mismatch);
-    expect([unequal.status, unequal.body.message]).toEqual([
-      400,
-      'Line 1: received quantity must equal accepted plus rejected quantity',
-    ]);
-
-    const expired = await api(
-      'POST',
-      '/grns',
-      grnBody([{ acceptedQty: 5, batchNumber: `GX-${run}`, expiryDate: day(-1), rejectedQty: 0 }]),
-    );
-    expect([expired.status, expired.body.message]).toEqual([
-      400,
-      'Line 1, batch 1: expired batch cannot be accepted',
-    ]);
   });
 
   it('store transfer: nothing moves on create, dispatch deducts, ACCEPTED_FULL credits the restaurant', async () => {
@@ -661,66 +556,6 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     });
   });
 
-  it('GRN lifecycle: drafts can be edited, cancelled or deleted; posted ones cannot', async () => {
-    const draft = await ok(
-      'POST',
-      '/grns',
-      grnBody([{ acceptedQty: 4, batchNumber: `GL-${run}`, rejectedQty: 0 }]),
-    );
-    const edited = await api('PUT', `/grns/${idOf(draft)}`, {
-      ...grnBody([{ acceptedQty: 7, batchNumber: `GL-${run}`, rejectedQty: 1 }]),
-      vendorName: `Edited ${run}`,
-    });
-    expect(edited.status).toBe(200);
-    expect(edited.data).toMatchObject({
-      status: 'DRAFT',
-      vendorName: `Edited ${run[0]!.toUpperCase()}${run.slice(1)}`,
-    });
-    expect((edited.data.lines as Body[])[0]).toMatchObject({
-      acceptedQty: 7,
-      receivedQty: 8,
-      rejectedQty: 1,
-    });
-
-    const cancelled = await api('PATCH', `/grns/${idOf(draft)}/cancel`);
-    expect([cancelled.status, cancelled.data.status]).toEqual([200, 'CANCELLED']);
-    // Cancelling again is a no-op, not an error.
-    expect((await api('PATCH', `/grns/${idOf(draft)}/cancel`)).data.status).toBe('CANCELLED');
-    for (const [method, path, message] of [
-      ['PATCH', `/grns/${idOf(draft)}/post-to-stock`, 'Cancelled GRN cannot be posted to stock'],
-      ['PUT', `/grns/${idOf(draft)}`, 'Cancelled GRN cannot be edited'],
-    ] as const) {
-      const refused = await api(method, path, method === 'PUT' ? { vendorName: 'x' } : undefined);
-      expect([refused.status, refused.body.message]).toEqual([400, message]);
-    }
-    expect(await storeBatch(`GL-${run}`)).toBeUndefined();
-
-    const doomed = await ok(
-      'POST',
-      '/grns',
-      grnBody([{ acceptedQty: 2, batchNumber: `GD-${run}`, rejectedQty: 0 }]),
-    );
-    const removed = await api('DELETE', `/grns/${idOf(doomed)}`);
-    expect([removed.status, removed.data]).toEqual([200, { id: idOf(doomed) }]);
-    const gone = await api('GET', `/grns/${idOf(doomed)}`);
-    expect([gone.status, gone.body.message]).toEqual([404, 'GRN not found']);
-
-    const posted = await ok(
-      'POST',
-      '/grns',
-      grnBody([{ acceptedQty: 2, batchNumber: `GP-${run}`, rejectedQty: 0 }]),
-    );
-    await ok('PATCH', `/grns/${idOf(posted)}/post-to-stock`);
-    for (const [method, path, message] of [
-      ['PATCH', `/grns/${idOf(posted)}/cancel`, 'Posted GRN cannot be cancelled'],
-      ['PUT', `/grns/${idOf(posted)}`, 'Posted GRN cannot be edited'],
-      ['DELETE', `/grns/${idOf(posted)}`, 'Posted GRN cannot be edited'],
-    ] as const) {
-      const refused = await api(method, path, method === 'PUT' ? { vendorName: 'x' } : undefined);
-      expect([refused.status, refused.body.message]).toEqual([400, message]);
-    }
-  });
-
   it('kitchen production lifecycle: edit recalculates acceptance; cancel and delete drafts only', async () => {
     const body = (line: Body) => ({
       businessDate: today,
@@ -812,9 +647,9 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
   });
 
   // The number defaults used to pad with lpad, which also truncates, so the 10,000th transfer or
-  // production (and the 1,000,000th GRN) repeated an earlier number and every create failed from
-  // then on (migration 20261006030000). Read-only: each column's real default is evaluated with a
-  // given sequence value.
+  // production repeated an earlier number and every create failed from then on (migration
+  // 20261006030000). Read-only: each column's real default is evaluated with a given sequence
+  // value.
   it('document numbers keep their padding, then keep growing past it', async () => {
     const nextNumber = async (table: string, column: string, sequenceValue: number) => {
       const [row] = await rawQuery<{ expr: string }>(
@@ -834,8 +669,6 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     expect(await nextNumber('transfers', 'transfer_number', 10_000)).toBe('TRF10000');
     expect(await nextNumber('kitchen_productions', 'production_number', 7)).toBe('PRD0007');
     expect(await nextNumber('kitchen_productions', 'production_number', 10_000)).toBe('PRD10000');
-    expect(await nextNumber('grns', 'grn_number', 123)).toBe('GRN000123');
-    expect(await nextNumber('grns', 'grn_number', 1_000_000)).toBe('GRN1000000');
   });
 
   // Sorting the number's text would put TRF10000 between TRF1000 and TRF1001; a sort by number
@@ -843,7 +676,6 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
   it('sorting by document number follows the numbers, not their text', async () => {
     for (const [path, field] of [
       ['/transfers', 'transferNumber'],
-      ['/grns', 'grnNumber'],
       ['/kitchen-productions', 'productionNumber'],
     ] as const) {
       for (const order of ['asc', 'desc'] as const) {
@@ -1354,11 +1186,6 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
         process.env.TZ = 'UTC';
       }
     }
-
-    it('a GRN batch keeps the expiry date it was received with', () =>
-      inKolkata(async () => {
-        expect((await stockBatch('IST', 3)).expiryDate).toBe(day(60));
-      }));
 
     it('stock filters by expiry date find the batch received with that date', () =>
       inKolkata(async () => {

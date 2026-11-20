@@ -2,8 +2,6 @@ import { strict as assert } from 'node:assert';
 import { test } from 'vitest';
 import type { AuditLogService } from './common/audit/audit-log.service';
 import { toStatusCounts } from './common/pagination';
-import type { GrnsRepository } from './grns/grns.repository';
-import { GrnsService } from './grns/grns.service';
 import type { PrismaService } from './common/prisma/prisma.service';
 import type { KitchenProductionsRepository } from './kitchen-productions/kitchen-productions.repository';
 import { KitchenProductionsService } from './kitchen-productions/kitchen-productions.service';
@@ -12,7 +10,6 @@ import { PosService } from './pos/pos.service';
 import type { StockRepository } from './stock/stock.repository';
 import { StockService } from './stock/stock.service';
 import { TransfersService } from './transfers/transfers.service';
-import type { StoreArrivals } from './common/store-arrivals';
 
 // A list screen's status tabs used to cost one count request per tab (5 for Transfers). With
 // statusCounts the list answers every tab from one grouped query, under the same other filters.
@@ -39,12 +36,6 @@ function fakeRepository() {
 }
 
 const services = {
-  grns: (repository: unknown) =>
-    new GrnsService(
-      audit,
-      repository as GrnsRepository,
-      { arrived: () => Promise.resolve(), listen: () => undefined } as unknown as StoreArrivals,
-    ),
   productions: (repository: unknown) =>
     new KitchenProductionsService(audit, repository as KitchenProductionsRepository),
   transfers: (repository: unknown) =>

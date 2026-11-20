@@ -5,8 +5,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { ShortCache } from '../common/short-cache';
 import { ListEmployeesQueryDto } from '../employees/dto/list-employees-query.dto';
 import { EmployeesService } from '../employees/employees.service';
-import { ListGrnsQueryDto } from '../grns/dto/list-grns-query.dto';
-import { GrnsService } from '../grns/grns.service';
+import { ListGrnEntriesQueryDto } from '../erp-grns/dto/erp-grn.dto';
+import { ErpGrnsService } from '../erp-grns/erp-grns.service';
 import { ListHospitalsQueryDto } from '../hospitals/dto/list-hospitals-query.dto';
 import { HospitalsService } from '../hospitals/hospitals.service';
 import { ListItemsQueryDto } from '../items/dto/list-items-query.dto';
@@ -45,7 +45,7 @@ async function totalIf(
 
 type TransferRow = Awaited<ReturnType<TransfersService['list']>>['items'][number];
 type ProductionRow = Awaited<ReturnType<KitchenProductionsService['list']>>['items'][number];
-type GrnRow = Awaited<ReturnType<GrnsService['list']>>['items'][number];
+type GrnRow = Awaited<ReturnType<ErpGrnsService['list']>>['items'][number];
 
 // Only the fields the dashboard's numbers read (portal lib/dashboard-stats.ts), taken from the
 // list endpoints' own responses so the values are the same ones the lists return.
@@ -81,14 +81,17 @@ const toProduction = (production: ProductionRow) => ({
   status: production.status,
 });
 
+// An ERP GRN in the shape the dashboard read delivery GRNs in (Deliveries were removed): the
+// vendor is the ERP's supplier code, as the ERP sends no vendor name.
 const toGrn = (grn: GrnRow) => ({
-  lines: grn.lines.map((line) => ({
-    acceptedQty: line.acceptedQty,
-    rejectedQty: line.rejectedQty,
+  grnNumber: grn.grn_No,
+  lines: grn.rows.map((row) => ({
+    acceptedQty: row.accepted_qty,
+    rejectedQty: row.rejected_qty,
   })),
-  receivedDate: grn.receivedDate,
+  receivedDate: grn.received_at,
   status: grn.status,
-  vendorName: grn.vendorName,
+  vendorName: grn.rows[0]?.supplier ?? null,
 });
 
 /**
@@ -125,7 +128,7 @@ export class DashboardService {
 
   constructor(
     private readonly employees: EmployeesService,
-    private readonly grns: GrnsService,
+    private readonly grns: ErpGrnsService,
     private readonly hospitals: HospitalsService,
     private readonly items: ItemsService,
     private readonly kitchenItems: KitchenItemsService,
@@ -141,8 +144,8 @@ export class DashboardService {
 
   /**
    * The nav badges' three counts in one request instead of three: transfers waiting for
-   * acknowledgement, draft GRNs and draft productions, each the total its own list endpoint
-   * gives for the same filters, and only when the user may view that list.
+   * acknowledgement, ERP GRNs with a return still waiting and draft productions, each the total
+   * its own list endpoint gives for the same filters, and only when the user may view that list.
    */
   navCounts(query: DashboardSetupQueryDto, permissions: readonly string[]) {
     // Every signed-in tab asks each minute (10% of all requests with 2,000 users): shared 15 s.
@@ -161,7 +164,7 @@ export class DashboardService {
         ),
       ),
       totalIf(can('GRN_VIEW'), () =>
-        this.grns.list(plainToInstance(ListGrnsQueryDto, { ...here, status: 'DRAFT' })),
+        this.grns.list(plainToInstance(ListGrnEntriesQueryDto, { ...here, status: 'PENDING' })),
       ),
       totalIf(can('KITCHEN_PRODUCTION_VIEW'), () =>
         this.productions.list(
@@ -226,7 +229,7 @@ export class DashboardService {
     return { counters, kitchens, restaurants, stores };
   }
 
-  /** Transfers, posted productions and posted GRNs from `fromDate`, newest first. */
+  /** Transfers, posted productions and ERP GRNs received from `fromDate`, newest first. */
   records(query: DashboardRecordsQueryDto, permissions: readonly string[]) {
     const filters = { fromDate: query.fromDate, hospitalId: query.hospitalId };
 
@@ -261,10 +264,11 @@ export class DashboardService {
         : undefined,
       can('GRN_VIEW')
         ? this.grns.list(
-            plainToInstance(ListGrnsQueryDto, {
-              ...period,
-              sortBy: 'receivedDate',
-              status: 'POSTED_TO_STOCK',
+            plainToInstance(ListGrnEntriesQueryDto, {
+              hospitalId: query.hospitalId,
+              limit: DASHBOARD_RECORDS_CAP,
+              page: 1,
+              receivedFrom: query.fromDate,
             }),
           )
         : undefined,
@@ -277,7 +281,7 @@ export class DashboardService {
     };
   }
 
-  /** The master-data totals and the first posted GRN and acknowledged transfer. */
+  /** The master-data totals and the first ERP GRN received and acknowledged transfer. */
   setup(query: DashboardSetupQueryDto, permissions: readonly string[]) {
     return this.setupCache.get(shareKey(permissions, { hospitalId: query.hospitalId }), () =>
       this.loadSetup(query, permissions),
@@ -332,8 +336,15 @@ export class DashboardService {
       ),
       can('GRN_VIEW')
         ? this.grns
-            .list(plainToInstance(ListGrnsQueryDto, { ...first, status: 'POSTED_TO_STOCK' }))
-            .then((page) => page.items[0] ?? null)
+            .list(
+              plainToInstance(ListGrnEntriesQueryDto, {
+                hospitalId,
+                limit: 1,
+                page: 1,
+                sortOrder: 'asc',
+              }),
+            )
+            .then((page) => (page.items[0] ? toGrn(page.items[0]) : null))
         : undefined,
       can('TRANSFER_VIEW', 'KITCHEN_TRANSFER_VIEW')
         ? this.transfers

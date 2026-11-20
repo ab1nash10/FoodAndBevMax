@@ -13,6 +13,7 @@ import {
   day,
   firstOf,
   listOnTill,
+  receiveStock,
   run,
   shape,
   startHarness,
@@ -768,35 +769,21 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
   });
 
   it('counter stock: received by transfer, sold earliest expiry first, expired skipped, put back on cancel', async () => {
-    // Three batches into the store (GRN), sent to the counter and acknowledged there.
+    // Three batches into the store, sent to the counter and acknowledged there.
     const batches = [
       ['EXP', 4, day(5)],
       ['SOON', 3, day(10)],
       ['LATE', 5, day(30)],
     ] as const;
-    const grn = await h.ok('POST', '/grns', {
-      hospitalId: fx.hospitalId,
-      items: [
-        {
-          acceptedQty: 12,
-          batches: batches.map(([label, qty, expiryDate]) => ({
-            acceptedQty: qty,
-            batchNumber: `${label}-${run}`,
-            expiryDate,
-            receivedQty: qty,
-            rejectedQty: 0,
-          })),
-          itemId: sandwich.itemId,
-          receivedQty: 12,
-          rejectedQty: 0,
-        },
-      ],
-      receivedBy: 'Int Pos',
-      receivedDate: today,
-      storeId: fx.storeId,
-      vendorName: `Vendor ${run}`,
-    });
-    await h.ok('PATCH', `/grns/${idOf(grn)}/post-to-stock`);
+    for (const [label, qty, expiryDate] of batches) {
+      await receiveStock(h, {
+        batchNumber: `${label}-${run}`,
+        expiryDate,
+        itemId: sandwich.itemId,
+        qty,
+        storeId: fx.storeId,
+      });
+    }
     const transfer = await h.ok('POST', '/transfers', {
       businessDate: today,
       destinationId: fx.counterId,

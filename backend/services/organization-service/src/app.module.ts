@@ -32,7 +32,6 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { EmployeesModule } from './employees/employees.module';
 import { ErpGrnsModule } from './erp-grns/erp-grns.module';
 import { ErpPostingsModule } from './erp-postings/erp-postings.module';
-import { GrnsModule } from './grns/grns.module';
 import { CommonModule } from './common/common.module';
 import { PrismaService } from './common/prisma/prisma.service';
 import { HealthController } from './health.controller';
@@ -99,7 +98,6 @@ import { TransfersModule } from './transfers/transfers.module';
     DashboardModule,
     EmployeesModule,
     ErpGrnsModule,
-    GrnsModule,
     HospitalsModule,
     ItemCategoriesModule,
     LegalEntitiesModule,

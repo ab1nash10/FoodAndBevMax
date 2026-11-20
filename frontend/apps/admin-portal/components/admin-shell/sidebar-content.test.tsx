@@ -26,7 +26,7 @@ const may = (allowed: string[]) => (wanted: string | string[]) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  at('/inventory/grns');
+  at('/inventory/erp-grns');
   atLocation(ppg);
 });
 
@@ -46,10 +46,7 @@ describe('the side menu', () => {
       'aria-expanded',
       'false',
     );
-    expect(menu.getByRole('link', { name: 'Deliveries (GRN)' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(menu.getByRole('link', { name: 'ERP GRNs' })).toHaveAttribute('aria-current', 'page');
     expect(menu.getByRole('link', { name: 'Store Stock' })).toBeInTheDocument();
     expect(menu.queryByRole('button', { name: 'Access' })).not.toBeInTheDocument();
     expect(menu.queryByRole('link', { name: 'Transfers' })).not.toBeInTheDocument();
@@ -70,9 +67,8 @@ describe('the side menu', () => {
     const user = userEvent.setup();
     render(<SidebarContent counts={{ grns: 4 }} hasPermission={may(['GRN_VIEW'])} />);
 
-    expect(
-      screen.getByRole('link', { name: /Deliveries \(GRN\)\s*4\s*waiting/ }),
-    ).toBeInTheDocument();
+    // ERP GRNs carry the count of GRNs waiting on the store.
+    expect(screen.getByRole('link', { name: /ERP GRNs\s*4\s*waiting/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Inventory' }));
     expect(screen.getByRole('button', { name: /Inventory\s*4\s*waiting/ })).toBeInTheDocument();
   });
@@ -117,7 +113,7 @@ describe('the work-waiting counts', () => {
 describe('the phone tab bar', () => {
   const pages = [
     { group: 'Overview', href: '/dashboard' },
-    { group: 'Inventory', href: '/inventory/grns' },
+    { group: 'Inventory', href: '/inventory/erp-grns' },
     { group: 'Inventory', href: '/inventory/store-stock' },
   ];
 
@@ -129,7 +125,10 @@ describe('the phone tab bar', () => {
       'Today',
       'Inventory',
     ]);
-    expect(bar.getByRole('link', { name: 'Inventory' })).toHaveAttribute('href', '/inventory/grns');
+    expect(bar.getByRole('link', { name: 'Inventory' })).toHaveAttribute(
+      'href',
+      '/inventory/erp-grns',
+    );
     expect(bar.getByRole('link', { name: 'Inventory' })).toHaveAttribute('aria-current', 'page');
   });
 

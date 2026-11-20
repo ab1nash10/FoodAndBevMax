@@ -96,7 +96,17 @@ export function ErpGrnsPageClient({ log = false }: Readonly<{ log?: boolean }> =
     refetchInterval: REFRESH_MS,
   });
   const grns = query.data?.items ?? [];
-  const opened = grns.find((grn) => grn.grn_No === openGrn);
+  const listed = grns.find((grn) => grn.grn_No === openGrn);
+  // A link (dashboard, ledger, search) names a GRN that may be on another page of the list.
+  const linked = useQuery({
+    enabled: query.isSuccess && Boolean(openGrn) && !listed,
+    queryFn: async () =>
+      (
+        await grnEntriesApi.listGrnEntries({ hospitalId: scopedHospitalId, search: openGrn })
+      ).data.items.find((grn) => grn.grn_No === openGrn) ?? null,
+    queryKey: queryKeys.grnEntries('one', scopedHospitalId ?? 'all', openGrn),
+  });
+  const opened = listed ?? linked.data ?? undefined;
   const activeFilters = [status, search, receivedFrom, receivedTo].filter(Boolean).length;
 
   useOnScopeChange(scopedHospitalId, isLoadingLocations, () => setPage(1));
@@ -104,7 +114,7 @@ export function ErpGrnsPageClient({ log = false }: Readonly<{ log?: boolean }> =
   return (
     <section className="space-y-4">
       <AppPageHeader
-        description="GRNs the ERP sent. Goods in go into the location's Main Store as they arrive and a reverse takes the batch back out; a GRN AAHAR cannot take is on ERP GRN errors."
+        description="GRNs the ERP sent. Goods in go into the location's Main Store as they arrive; a reverse takes what the store holds, and the rest stays owed (Pending) until the batch comes back. A GRN AAHAR cannot take is on ERP GRN errors."
         eyebrow={log ? 'Logs' : 'Inventory'}
         title={log ? 'ERP GRN log' : 'ERP GRNs'}
       />

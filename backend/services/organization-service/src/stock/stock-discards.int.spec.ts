@@ -1,4 +1,4 @@
-// Discarding stock over HTTP: a store batch is filled through a posted GRN, then part of it is
+// Discarding stock over HTTP: a store batch is filled (as a GRN fills it), then part of it is
 // thrown away. Pins the balance, the DISCARD_OUT ledger line, the audit row, the refusals, who
 // may discard where, and that two discards at once never take a batch below zero.
 // Runs only with DATABASE_URL_TEST.
@@ -6,8 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   databaseUrl,
-  day,
   firstOf,
+  receiveStock,
   run,
   startHarness,
   type Body,
@@ -19,21 +19,10 @@ describe.skipIf(!databaseUrl)('stock discards (integration)', { timeout: 30_000 
   const fx = { hospitalId: '', itemId: '', otherHospitalId: '', storeId: '' };
   let batchSeq = 0;
 
-  /** Puts `qty` of a fresh batch into the store through a posted GRN; returns its balance id. */
+  /** Puts `qty` of a fresh batch into the store; returns its balance id. */
   async function stockBatch(qty: number): Promise<string> {
     const batchNumber = `D-${run}-${++batchSeq}`;
-    const batch = { acceptedQty: qty, batchNumber, expiryDate: day(60), receivedQty: qty };
-    const grn = await h.ok('POST', '/grns', {
-      hospitalId: fx.hospitalId,
-      items: [{ acceptedQty: qty, batches: [{ ...batch, rejectedQty: 0 }], itemId: fx.itemId }].map(
-        (line) => ({ ...line, receivedQty: qty, rejectedQty: 0 }),
-      ),
-      receivedBy: 'Discard test',
-      receivedDate: day(0),
-      storeId: fx.storeId,
-      vendorName: `Vendor ${run}`,
-    });
-    await h.ok('PATCH', `/grns/${grn.id as string}/post-to-stock`);
+    await receiveStock(h, { batchNumber, itemId: fx.itemId, qty, storeId: fx.storeId });
     const balances = (
       await h.ok('GET', `/stock-balances?itemId=${fx.itemId}&locationType=STORE&limit=100`)
     ).items as Body[];

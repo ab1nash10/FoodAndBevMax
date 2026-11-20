@@ -103,7 +103,7 @@ describe('the portal shell', () => {
 
   it('adds the work waiting in a module to its pill', async () => {
     signedIn(['GRN_VIEW']);
-    at('/inventory/grns');
+    at('/inventory/erp-grns');
     renderShell();
 
     const pills = within(screen.getByRole('navigation', { name: 'Modules' }));

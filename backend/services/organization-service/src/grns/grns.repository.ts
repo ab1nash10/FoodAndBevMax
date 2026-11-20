@@ -1,145 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import {
-  Hospital,
-  InventoryLocationType,
-  Item,
-  ItemType,
-  Prisma,
-  StockBalance,
-  Store,
-} from '@prisma/client';
+import { InventoryLocationType, Item, ItemType, Prisma, StockBalance } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
-
-export const grnInclude = {
-  hospital: {
-    select: {
-      hospitalCode: true,
-      hospitalName: true,
-      id: true,
-      isActive: true,
-    },
-  },
-  lines: {
-    include: {
-      batches: {
-        orderBy: {
-          createdAt: 'asc',
-        },
-        where: {
-          deletedAt: null,
-        },
-      },
-      item: {
-        select: {
-          id: true,
-          isActive: true,
-          itemCode: true,
-          itemName: true,
-          itemType: true,
-          type: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-    where: {
-      deletedAt: null,
-    },
-  },
-  store: {
-    select: {
-      hospitalId: true,
-      id: true,
-      isActive: true,
-      storeCode: true,
-      storeName: true,
-    },
-  },
-} satisfies Prisma.GrnInclude;
-
-export type GrnWithRelations = Prisma.GrnGetPayload<{ include: typeof grnInclude }>;
 
 type GrnClient = Prisma.TransactionClient | PrismaService;
 
+/**
+ * Stock coming into a store: the store-item mappings a GRN's items must have, and the store's
+ * balance of a batch. ERP GRNs are the only way stock comes in (Deliveries were removed on
+ * 2026-11-20); old delivery GRNs stay in the database as history.
+ */
 @Injectable()
 export class GrnsRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async transaction<T>(handler: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    return this.prisma.$transaction(handler);
-  }
-
-  async count(args: Prisma.GrnCountArgs): Promise<number> {
-    return this.prisma.grn.count(args);
-  }
-
-  async countByStatus(where: Prisma.GrnWhereInput) {
-    return this.prisma.grn.groupBy({ _count: { _all: true }, by: ['status'], where });
-  }
-
-  async create(
-    data: Prisma.GrnUncheckedCreateInput,
-    client: GrnClient,
-  ): Promise<{ hospitalId: string; id: string }> {
-    // Callers only need the new row's keys and read the record back once its lines exist, so
-    // loading every relation here was wasted queries.
-    return client.grn.create({
-      data,
-      select: { hospitalId: true, id: true },
-    });
-  }
-
-  async createBatch(data: Prisma.GrnBatchUncheckedCreateInput, client: GrnClient): Promise<void> {
-    await client.grnBatch.create({ data });
-  }
-
-  async createLine(data: Prisma.GrnLineUncheckedCreateInput, client: GrnClient): Promise<void> {
-    await client.grnLine.create({ data });
-  }
-
-  async createStockLedger(
-    data: Prisma.StockLedgerUncheckedCreateInput,
-    client: GrnClient,
-  ): Promise<void> {
-    await client.stockLedger.create({ data });
-  }
-
-  async findActiveById(
-    id: string,
-    client: GrnClient = this.prisma,
-  ): Promise<GrnWithRelations | null> {
-    return client.grn.findFirst({
-      include: grnInclude,
-      where: {
-        deletedAt: null,
-        id,
-      },
-    });
-  }
-
-  async findActiveHospital(id: string, client: GrnClient): Promise<Hospital | null> {
-    return client.hospital.findFirst({
-      where: {
-        deletedAt: null,
-        id,
-      },
-    });
-  }
-
-  async findActiveStore(id: string, client: GrnClient): Promise<Store | null> {
-    return client.store.findFirst({
-      where: {
-        deletedAt: null,
-        hospital: {
-          deletedAt: null,
-          isActive: true,
-        },
-        id,
-      },
-    });
-  }
-
   async findActiveStoreMappings(
     storeId: string,
     itemIds: string[],
@@ -162,13 +33,6 @@ export class GrnsRepository {
         },
         storeId,
       },
-    });
-  }
-
-  async findMany(args: Prisma.GrnFindManyArgs): Promise<GrnWithRelations[]> {
-    return this.prisma.grn.findMany({
-      ...args,
-      include: grnInclude,
     });
   }
 
@@ -198,58 +62,6 @@ export class GrnsRepository {
         itemType: ItemType.MRP,
         locationId,
         locationType: InventoryLocationType.STORE,
-      },
-    });
-  }
-
-  async softDeleteLinesAndBatches(grnId: string, actorId: string | undefined, client: GrnClient) {
-    const now = new Date();
-    const lines = await client.grnLine.findMany({
-      select: { id: true },
-      where: {
-        deletedAt: null,
-        grnId,
-      },
-    });
-    const lineIds = lines.map((line) => line.id);
-
-    if (lineIds.length > 0) {
-      await client.grnBatch.updateMany({
-        data: {
-          deletedAt: now,
-          updatedBy: actorId,
-        },
-        where: {
-          deletedAt: null,
-          grnLineId: {
-            in: lineIds,
-          },
-        },
-      });
-    }
-
-    await client.grnLine.updateMany({
-      data: {
-        deletedAt: now,
-        updatedBy: actorId,
-      },
-      where: {
-        deletedAt: null,
-        grnId,
-      },
-    });
-  }
-
-  async update(
-    id: string,
-    data: Prisma.GrnUpdateInput,
-    client: GrnClient,
-  ): Promise<GrnWithRelations> {
-    return client.grn.update({
-      data,
-      include: grnInclude,
-      where: {
-        id,
       },
     });
   }

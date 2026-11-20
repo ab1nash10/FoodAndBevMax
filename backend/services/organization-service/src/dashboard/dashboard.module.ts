@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CommonModule } from '../common/common.module';
 import { EmployeesModule } from '../employees/employees.module';
-import { GrnsModule } from '../grns/grns.module';
+import { ErpGrnsModule } from '../erp-grns/erp-grns.module';
 import { HospitalsModule } from '../hospitals/hospitals.module';
 import { ItemsModule } from '../items/items.module';
 import { KitchenItemsModule } from '../kitchen-items/kitchen-items.module';
@@ -20,7 +20,7 @@ import { DashboardService } from './dashboard.service';
   imports: [
     CommonModule,
     EmployeesModule,
-    GrnsModule,
+    ErpGrnsModule,
     HospitalsModule,
     ItemsModule,
     KitchenItemsModule,

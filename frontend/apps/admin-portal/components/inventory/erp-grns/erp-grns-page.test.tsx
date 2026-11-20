@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import type { GrnEntry, GrnEntryRow } from '@aahar/api-client';
+import type { GrnEntry, GrnEntryQuery, GrnEntryRow } from '@aahar/api-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { at } from '@/test/next-navigation';
 import { grnEntriesApi } from '@/lib/api';
@@ -149,6 +149,17 @@ describe('ERP GRNs', () => {
     expect(api.listGrnEntries).toHaveBeenCalledWith(
       expect.objectContaining({ hospitalId: ppg.id, page: 1 }),
     );
+  });
+
+  it('opens a GRN a link names, even when it is on another page of the list', async () => {
+    const older: GrnEntry = { ...waiting, grn_No: 'ERP-0' };
+    api.listGrnEntries.mockImplementation(((query: GrnEntryQuery) =>
+      page(query.search === 'ERP-0' ? [older] : [waiting, done, closed])) as never);
+    at('/inventory/erp-grns', 'grn=ERP-0');
+    renderScreen(<ErpGrnsPageClient />);
+
+    expect(await screen.findByRole('dialog', { name: 'GRN ERP-0' })).toBeInTheDocument();
+    expect(api.listGrnEntries).toHaveBeenCalledWith({ hospitalId: ppg.id, search: 'ERP-0' });
   });
 
   it('says so when the ERP has sent nothing', async () => {

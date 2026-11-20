@@ -15,10 +15,10 @@ type NavCounts = Partial<Record<NavBadge, number>>;
 
 /**
  * Work waiting in each queue, for the sidebar badges: transfers awaiting acknowledgement,
- * draft GRNs (not yet verified and posted) and draft productions, in one request (GET
+ * ERP GRNs waiting on the store (PENDING) and draft productions, in one request (GET
  * /dashboard/nav-counts) instead of three. Keyed under ['dashboard'], so the existing query
- * invalidation refreshes them after every GRN, transfer or production change; a count the user
- * may not view comes back undefined.
+ * invalidation refreshes them after every ERP GRN, transfer or production change; a count the
+ * user may not view comes back undefined.
  */
 export function useNavCounts(hasPermission: (permission: string | string[]) => boolean): NavCounts {
   // Called by the shell before it waits for the location, so the counts wait for it here.

@@ -12,12 +12,17 @@ import {
   GrnEntryStatus,
   InventoryLocationType,
   ItemType,
+  LocationScope,
   Prisma,
+  RecordStatus,
   StockReferenceType,
   StockTransactionType,
+  UserStatus,
 } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { Mailer } from '../common/mailer';
 import { getPageMeta, getPagination } from '../common/pagination';
+import { worksAt } from '../common/permission-holders';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { StoreArrivals, type StoreArrival } from '../common/store-arrivals';
@@ -78,13 +83,17 @@ export function indiaTime(value: string): Date {
   return new Date(`${text.length === 10 ? `${text}T00:00:00` : text}+05:30`);
 }
 
+/** The role whose holders hear about a return the Main Store could not cover. */
+const F_AND_B_ADMIN = 'F&B Admin';
+
 /**
  * GRNs from the ERP. The store person checks the goods in the ERP, so a GRN moves AAHAR's stock
  * the moment it arrives: goods in (flag 0) go into the location's Main Store; a reverse (flag 1)
- * takes the batch back out, and is refused whole when the store holds less. A refused GRN is kept
- * for the store team (ERP GRN errors). Reverses from before that rule may still wait, PENDING:
- * one runs again whenever its batch reaches the store, when the store runs it, or when its
- * automatic rerun is resumed; a store admin can close it with a reason.
+ * takes what the store holds of the batch, and the rest is owed: the GRN waits, PENDING, the ERP
+ * is told the shortfall and the location's F&B Admins are emailed. A waiting reverse runs again
+ * whenever its batch reaches the store, when the store runs it, or when its automatic rerun is
+ * resumed; a store admin can close it with a reason. A GRN AAHAR cannot take is refused and kept
+ * for the store team (ERP GRN errors).
  */
 @Injectable()
 export class ErpGrnsService implements OnModuleInit {
@@ -93,6 +102,7 @@ export class ErpGrnsService implements OnModuleInit {
     private readonly auditLog: AuditLogService,
     private readonly grns: GrnsRepository,
     private readonly prisma: PrismaService,
+    private readonly mailer: Mailer,
   ) {}
 
   /** Stock reaching a store from anywhere (a restaurant return, Deliveries) runs waiting reverses. */
@@ -151,13 +161,8 @@ export class ErpGrnsService implements OnModuleInit {
           (row) =>
             `Batch ${row.batch.trim()} of item ${items.get(code(row.part_item_code))!.itemCode} has expired and cannot be received`,
         );
-      const stockProblems = [
-        ...new Set(expired),
-        ...(await this.storeShortfalls(rows, items, store.id)),
-      ];
-
-      if (stockProblems.length > 0) {
-        throw unprocessable(grnNumber, stockProblems);
+      if (expired.length > 0) {
+        throw unprocessable(grnNumber, [...new Set(expired)]);
       }
 
       // AAHAR's number for this request, kept on each of its rows and given back to the ERP.
@@ -220,7 +225,23 @@ export class ErpGrnsService implements OnModuleInit {
           .map((row) => ({ batchNumber: row.batchNumber, itemId: row.itemId, storeId: store.id })),
       );
 
-      return { transactionNumber };
+      // Returns the store could not cover in full: owed until the batch comes back.
+      const owed = await this.owedBy(transactionNumber);
+
+      if (owed.length > 0) {
+        await this.alertOwed(owed);
+      }
+
+      return {
+        shortfalls: owed.map((row) => ({
+          batch: row.batchNumber,
+          owed: remainingOf(row),
+          part_item_code: row.itemCode,
+          requested: toNumber(row.sentQty),
+          returned: toNumber(row.acceptedQty ?? 0),
+        })),
+        transactionNumber,
+      };
     } catch (error) {
       if (error instanceof UnprocessableEntityException) {
         await this.keepRefusal(grnNumber, location, hospitalId, rows, error);
@@ -253,72 +274,128 @@ export class ErpGrnsService implements OnModuleInit {
     }
   }
 
-  /**
-   * Reverses (flag 1) asking for more of a batch than the Main Store holds plus what this GRN
-   * brings in, less what reverses already waiting still need. Stock out in the restaurants does
-   * not count: a return has to be in the store.
-   */
-  // ponytail: checked before the GRN's lock, so a sale of the batch at the same moment can still
-  // leave part of a reverse waiting (PENDING); move the check under a per-batch lock if that bites.
-  private async storeShortfalls(
-    rows: ErpGrnRowDto[],
-    items: Map<string, { id: string; itemCode: string }>,
-    storeId: string,
-  ) {
-    const batches = new Map<string, Batch>();
-
-    for (const row of rows) {
-      const item = items.get(code(row.part_item_code))!;
-      const batch = row.batch.trim();
-      const entry = batches.get(`${item.id}\n${batch}`) ?? { batch, in: 0, item, out: 0 };
-      entry[row.flag === 1 ? 'out' : 'in'] += Number(row.transaction_qty);
-      batches.set(`${item.id}\n${batch}`, entry);
-    }
-
-    const returned = [...batches.values()].filter((entry) => entry.out > 0);
-
-    if (returned.length === 0) {
-      return [];
-    }
-
-    const batchesOf = returned.map((entry) => ({
-      batchNumber: entry.batch,
-      itemId: entry.item.id,
-    }));
-    const [held, waiting] = await Promise.all([
-      this.prisma.stockBalance.groupBy({
-        _sum: { availableQty: true },
-        by: ['itemId', 'batchNumber'],
-        where: {
-          deletedAt: null,
-          itemType: ItemType.MRP,
-          locationId: storeId,
-          locationType: InventoryLocationType.STORE,
-          OR: batchesOf,
-        },
-      }),
-      this.prisma.grnEntry.groupBy({
-        _sum: { acceptedQty: true, rejectedQty: true, sentQty: true },
-        by: ['itemId', 'batchNumber'],
-        where: { flag: 1, OR: batchesOf, status: GrnEntryStatus.PENDING, storeId },
-      }),
-    ]);
-    const isOf = (entry: Batch) => (row: { batchNumber: string | null; itemId: string }) =>
-      row.itemId === entry.item.id && row.batchNumber === entry.batch;
-
-    return returned.flatMap((entry) => {
-      const claim = waiting.find(isOf(entry))?._sum;
-      const pending = claim ? remainingOf(claim) : 0;
-      const stock = toNumber(held.find(isOf(entry))?._sum.availableQty ?? 0);
-      const available = Math.max(0, round(stock + entry.in - pending));
-
-      return entry.out > available
-        ? [
-            `Batch ${entry.batch} of item ${entry.item.itemCode}: the Main Store has only ${available}, not ${entry.out}` +
-              (pending > 0 ? ` (${pending} already waiting in other returns)` : ''),
-          ]
-        : [];
+  /** A request's returns (flag 1) the Main Store could not cover in full: still owed. */
+  private async owedBy(transactionNumber: string) {
+    const rows = await this.prisma.grnEntry.findMany({
+      include: entryInclude,
+      orderBy: rowOrder,
+      where: { flag: 1, status: GrnEntryStatus.PENDING, transactionNumber },
     });
+
+    return rows.filter((row) => remainingOf(row) > 0);
+  }
+
+  /**
+   * Emails the location's F&B Admins (the role by that name, at this location or over all of
+   * them) when a return could not be covered in full: each batch, how much is still owed to the
+   * vendor, and which restaurant or counter holds it. Best effort: the GRN is saved either way.
+   */
+  private async alertOwed(rows: Entry[]) {
+    const { grnNumber, hospital, hospitalId, transactionNumber } = rows[0]!;
+
+    try {
+      const admin = { equals: F_AND_B_ADMIN, mode: 'insensitive' as const };
+      const [held, people] = await Promise.all([
+        this.prisma.stockBalance.findMany({
+          select: {
+            availableQty: true,
+            batchNumber: true,
+            itemId: true,
+            locationId: true,
+            locationType: true,
+          },
+          where: {
+            availableQty: { gt: 0 },
+            deletedAt: null,
+            hospitalId,
+            itemType: ItemType.MRP,
+            locationType: { in: [InventoryLocationType.RESTAURANT, InventoryLocationType.COUNTER] },
+            OR: rows.map((row) => ({ batchNumber: row.batchNumber, itemId: row.itemId })),
+          },
+        }),
+        this.prisma.user.findMany({
+          select: { email: true },
+          where: {
+            AND: [
+              {
+                OR: [
+                  worksAt(hospitalId),
+                  {
+                    roles: {
+                      some: {
+                        deletedAt: null,
+                        role: { locationScope: LocationScope.ALL, name: admin },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+            deletedAt: null,
+            email: { not: null },
+            roles: {
+              some: {
+                deletedAt: null,
+                role: { deletedAt: null, name: admin, status: RecordStatus.ACTIVE },
+              },
+            },
+            status: UserStatus.ACTIVE,
+          },
+        }),
+      ]);
+      const idsOf = (type: InventoryLocationType) => [
+        ...new Set(held.filter((b) => b.locationType === type).map((b) => b.locationId)),
+      ];
+      const [restaurants, counters] = await Promise.all([
+        this.prisma.restaurant.findMany({
+          select: { id: true, restaurantName: true },
+          where: { id: { in: idsOf(InventoryLocationType.RESTAURANT) } },
+        }),
+        this.prisma.counter.findMany({
+          select: { counterName: true, id: true },
+          where: { id: { in: idsOf(InventoryLocationType.COUNTER) } },
+        }),
+      ]);
+      const names = new Map([
+        ...restaurants.map((r) => [r.id, r.restaurantName] as const),
+        ...counters.map((c) => [c.id, c.counterName] as const),
+      ]);
+      const { html, subject } = owedReturnEmail({
+        batches: rows.map((row) => {
+          const byPlace = new Map<string, number>();
+          for (const b of held) {
+            if (b.itemId === row.itemId && b.batchNumber === row.batchNumber) {
+              byPlace.set(
+                b.locationId,
+                round((byPlace.get(b.locationId) ?? 0) + toNumber(b.availableQty)),
+              );
+            }
+          }
+
+          return {
+            batch: row.batchNumber,
+            holders: [...byPlace].map(([id, qty]) => ({
+              name: names.get(id) ?? 'A restaurant no longer in AAHAR',
+              qty,
+            })),
+            itemCode: row.itemCode,
+            itemName: row.itemName,
+            owed: remainingOf(row),
+          };
+        }),
+        grnNumber,
+        locationName: hospital.hospitalName,
+        transactionNumber,
+      });
+
+      await this.mailer.send(
+        people.flatMap((person) => person.email ?? []),
+        subject,
+        html,
+      );
+    } catch (error) {
+      logger.error({ err: error, grnNumber }, 'erp_grn_owed_alert_failed');
+    }
   }
 
   /**
@@ -360,6 +437,12 @@ export class ErpGrnsService implements OnModuleInit {
     if (after.every((row) => remainingOf(row) === 0)) {
       await tx.grnEntry.updateMany({
         data: { status: GrnEntryStatus.VERIFIED, verifiedAt: now, verifiedBy: actorId ?? null },
+        where: { grnNumber },
+      });
+    } else if (after.some((row) => row.status !== GrnEntryStatus.PENDING)) {
+      // One status for the whole GRN: a later request of it that leaves something owed reopens it.
+      await tx.grnEntry.updateMany({
+        data: { status: GrnEntryStatus.PENDING, verifiedAt: null, verifiedBy: null },
         where: { grnNumber },
       });
     }
@@ -822,9 +905,6 @@ function receivedBetween(from?: string, to?: string): Prisma.DateTimeFilter | un
   };
 }
 
-/** One batch of one item in a request: how much comes in and how much goes back. */
-type Batch = { batch: string; in: number; item: { id: string; itemCode: string }; out: number };
-
 /** Serialises everything done to one GRN number, even before it has any rows to lock. */
 async function lockGrn(tx: Tx, grnNumber: string) {
   await tx.$queryRaw`SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(${`erp-grn:${grnNumber}`}))) AS locked`;
@@ -900,5 +980,61 @@ function toGrnResponse(rows: Entry[]) {
     },
     verified_at: first.verifiedAt,
     verified_by: first.verifier,
+  };
+}
+
+/** A batch a return still owes the vendor, and where the location holds it. */
+export interface OwedBatch {
+  batch: string;
+  holders: Array<{ name: string; qty: number }>;
+  itemCode: string;
+  itemName: string | null;
+  owed: number;
+}
+
+const HTML_ESCAPES: Record<string, string> = {
+  '"': '&quot;',
+  '&': '&amp;',
+  "'": '&#39;',
+  '<': '&lt;',
+  '>': '&gt;',
+};
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]!);
+
+/** The email the location's F&B Admins get when a return could not be covered in full. */
+export function owedReturnEmail(input: {
+  batches: OwedBatch[];
+  grnNumber: string;
+  locationName: string;
+  transactionNumber: string;
+}) {
+  const number = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 });
+  const owed = number.format(round(sum(input.batches.map((b) => b.owed))));
+  const cell =
+    'padding:6px 10px;border-bottom:1px solid #e4e7ec;text-align:left;vertical-align:top';
+  const rows = input.batches
+    .map((b) => {
+      const item = b.itemName
+        ? `${escapeHtml(b.itemName)} (${escapeHtml(b.itemCode)})`
+        : escapeHtml(b.itemCode);
+      const holders = b.holders.length
+        ? b.holders.map((h) => `${escapeHtml(h.name)}: ${number.format(h.qty)}`).join('<br>')
+        : 'Not found in any restaurant or counter';
+
+      return `<tr><td style="${cell}">${item}</td><td style="${cell}">${escapeHtml(b.batch)}</td><td style="${cell}">${number.format(b.owed)}</td><td style="${cell}">${holders}</td></tr>`;
+    })
+    .join('');
+
+  return {
+    html: `<div style="font-family:Segoe UI,Arial,sans-serif;color:#101828;max-width:640px">
+<p style="font-size:15px">The ERP sent a GRN reverse (return to vendor) for <b>${escapeHtml(input.locationName)}</b>. The Main Store did not hold all of it: what it held went back, and the rest is still owed to the vendor.</p>
+<p style="font-size:14px">GRN <b>${escapeHtml(input.grnNumber)}</b> · Transaction ${escapeHtml(input.transactionNumber)}</p>
+<table style="border-collapse:collapse;font-size:14px;margin:12px 0">
+<thead><tr><th style="${cell}">Item</th><th style="${cell}">Batch</th><th style="${cell}">Owed</th><th style="${cell}">Held at</th></tr></thead>
+<tbody>${rows}</tbody></table>
+<p style="font-size:14px">AAHAR takes what is owed by itself as soon as the batch reaches the Main Store again, for example when a restaurant sends it back. If it was sold or lost, close the GRN with a reason on Inventory → ERP GRNs.</p>
+<p style="font-size:13px;color:#667085">Max Healthcare · AAHAR</p>
+</div>`,
+    subject: `GRN reverse ${input.grnNumber} at ${input.locationName}: ${owed} still owed to the vendor`,
   };
 }

@@ -13,9 +13,12 @@ vi.mock('@/components/auth-provider', () => import('@/test/auth'));
 vi.mock('@/components/location-context', () => import('@/test/location'));
 // The API calls the screen makes, each a typed stand-in.
 type OrganizationApi = typeof ApiModule.organizationApi;
+type GrnEntriesApi = typeof ApiModule.grnEntriesApi;
+const grnEntriesApi = vi.hoisted(() => ({
+  listGrnEntries: vi.fn<GrnEntriesApi['listGrnEntries']>(),
+}));
 const organizationApi = vi.hoisted(() => ({
   listEmployees: vi.fn<OrganizationApi['listEmployees']>(),
-  listGrns: vi.fn<OrganizationApi['listGrns']>(),
   listItems: vi.fn<OrganizationApi['listItems']>(),
   listKitchenProductions: vi.fn<OrganizationApi['listKitchenProductions']>(),
   listKitchens: vi.fn<OrganizationApi['listKitchens']>(),
@@ -26,6 +29,7 @@ const organizationApi = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
+  grnEntriesApi,
   organizationApi,
 }));
 
@@ -49,7 +53,9 @@ beforeEach(() => {
   atLocation(ppg);
   signedIn(['TRANSFER_VIEW', 'TRANSFER_CREATE', 'ITEM_VIEW']);
   // Every list empty unless a test says otherwise.
-  for (const list of Object.values(organizationApi)) (list as Mock).mockReturnValue(page([]));
+  for (const list of [...Object.values(organizationApi), grnEntriesApi.listGrnEntries]) {
+    (list as Mock).mockReturnValue(page([]));
+  }
 });
 
 describe('the command palette', () => {
@@ -124,11 +130,40 @@ describe('the command palette', () => {
     });
     // Bills, GRNs and employees are not this user's to see, so they are not asked for.
     expect(organizationApi.listPosBills).not.toHaveBeenCalled();
-    expect(organizationApi.listGrns).not.toHaveBeenCalled();
+    expect(grnEntriesApi.listGrnEntries).not.toHaveBeenCalled();
     expect(organizationApi.listEmployees).not.toHaveBeenCalled();
 
     await user.click(results.getByRole('option', { name: /TRF0042/ }));
     expect(router.push).toHaveBeenCalledWith('/inventory/transfers?id=t-42');
+  });
+
+  it('finds a GRN the ERP sent and opens it on ERP GRNs', async () => {
+    signedIn(['GRN_VIEW']);
+    grnEntriesApi.listGrnEntries.mockReturnValue(
+      page([{ grn_No: 'ERP-7', status: 'PENDING', store_name: 'Main Store' }]) as never,
+    );
+    const { user } = renderScreen(<CommandPalette pages={pages} />);
+    openPalette();
+
+    await user.keyboard('ERP-7');
+
+    const results = within(await screen.findByRole('group', { name: 'Results' }));
+    expect(grnEntriesApi.listGrnEntries).toHaveBeenCalledWith({
+      hospitalId: 'h-ppg',
+      limit: 3,
+      search: 'ERP-7',
+    });
+    await user.click(results.getByRole('option', { name: /ERP-7/ }));
+    expect(router.push).toHaveBeenCalledWith('/inventory/erp-grns?grn=ERP-7');
+  });
+
+  it('opens ERP GRNs with N then G, where deliveries used to be received', async () => {
+    signedIn(['GRN_VIEW']);
+    const { user } = renderScreen(<CommandPalette pages={pages} />);
+
+    await user.keyboard('ng');
+
+    expect(router.push).toHaveBeenCalledWith('/inventory/erp-grns');
   });
 
   it('says so when nothing matches', async () => {

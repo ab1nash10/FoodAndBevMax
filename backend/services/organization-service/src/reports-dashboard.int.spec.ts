@@ -2,8 +2,8 @@
 // location (with its default store and kitchen), a restaurant, a counter and two menu items, then
 // bills known activity through the real POS endpoints (cash, card, UPI, online UPI, staff
 // discount, room, complimentary, cancelled, and an unbilled kiosk order) and known stock activity
-// (GRNs, transfers, productions). Every report and dashboard figure is asserted for that location
-// only, so other suites writing to the same database at the same time cannot move them.
+// (an ERP GRN, transfers, productions). Every report and dashboard figure is asserted for that
+// location only, so other suites writing to the same database at the same time cannot move them.
 //
 // Runs only with DATABASE_URL_TEST: a migrated and seeded database it may write to.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -12,6 +12,7 @@ import {
   databaseUrl,
   day,
   firstOf,
+  receiveStock,
   run,
   shape,
   startHarness,
@@ -60,11 +61,11 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
   };
   /** The bills made in beforeAll, by name, as POST /pos/orders returned them. */
   const bills: Record<string, Body> = {};
-  const docs = { draftGrn: '', grnNumber: '', postedGrn: '', transferNumber: '', vendorName: '' };
+  /** The ERP GRN sent in beforeAll (the vendor is the ERP's supplier code) and the first transfer. */
+  const docs = { grnNumber: `RD-GRN-${run}`, transferNumber: '', vendorName: `RDV${run}` };
   const tokens = { nobody: '', other: '', salesOnly: '' };
   /** The report range: the whole UTC day the bills were made in. */
   let range = '';
-  const vendor = `Vendor RD ${run}`;
 
   const report = (code: string, query = range, as?: string) =>
     h.api('GET', `/reports/${code}?hospitalId=${fx.hospitalId}&${query}`, undefined, as);
@@ -297,57 +298,22 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       JSON.stringify([{ menuId: fx.menuA, quantity: 2 }]),
     );
 
-    // Stock: one posted GRN, one draft GRN, an acknowledged and a pending transfer, a posted and
-    // a draft production.
-    const grnBody = (batchNumber: string) => ({
-      hospitalId: fx.hospitalId,
-      items: [
-        {
-          acceptedQty: 10,
-          batches: [
-            {
-              acceptedQty: 10,
-              batchNumber,
-              expiryDate: day(60),
-              receivedQty: 10,
-              rejectedQty: 0,
-            },
-          ],
-          itemId: fx.itemA,
-          receivedQty: 10,
-          rejectedQty: 0,
-        },
-      ],
-      receivedBy: 'Characterisation',
-      receivedDate: today,
+    // Stock: one ERP GRN, an acknowledged and a pending transfer, a posted and a draft production.
+    const batch = await receiveStock(h, {
+      batchNumber: `RDP-${run}`,
+      grnNumber: docs.grnNumber,
+      itemId: fx.itemA,
+      qty: 10,
       storeId: fx.storeId,
-      vendorName: vendor,
+      supplier: docs.vendorName,
     });
-    const posted = await ok('POST', '/grns', grnBody(`RDP-${run}`));
-    docs.postedGrn = idOf(posted);
-    docs.grnNumber = posted.grnNumber as string;
-    docs.vendorName = posted.vendorName as string;
-    await ok('PATCH', `/grns/${docs.postedGrn}/post-to-stock`);
-    docs.draftGrn = idOf(await ok('POST', '/grns', grnBody(`RDD-${run}`)));
-    const balance = firstOf(
-      items(
-        await ok('GET', `/stock-balances?itemId=${fx.itemA}&locationType=STORE&limit=100`),
-      ).filter((row) => row.batchNumber === `RDP-${run}`),
-    );
     const transfer = async () => {
       const draft = await ok('POST', '/transfers', {
         businessDate: today,
         destinationId: fx.restaurantId,
         destinationType: 'RESTAURANT',
         hospitalId: fx.hospitalId,
-        items: [
-          {
-            batchNumber: `RDP-${run}`,
-            expiryDate: String(balance.expiryDate).slice(0, 10),
-            itemId: fx.itemA,
-            sentQty: 2,
-          },
-        ],
+        items: [{ ...batch, itemId: fx.itemA, sentQty: 2 }],
         sourceId: fx.storeId,
         sourceType: 'STORE',
         transferDate: new Date().toISOString(),
@@ -968,7 +934,7 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     const records = (query: string, as?: string) =>
       h.api('GET', `/dashboard/records?${query}`, undefined, as);
 
-    it("records: the period's transfers, posted productions and posted GRNs at a location", async () => {
+    it("records: the period's transfers, posted productions and ERP GRNs at a location", async () => {
       const data = await h.ok(
         'GET',
         `/dashboard/records?fromDate=${today}&hospitalId=${fx.hospitalId}`,
@@ -978,6 +944,7 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
           "grns": {
             "items": [
               {
+                "grnNumber": "string",
                 "lines": [
                   {
                     "acceptedQty": "number",
@@ -1067,9 +1034,10 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       ]);
       expect(items(data.grns as Body)).toEqual([
         {
+          grnNumber: docs.grnNumber,
           lines: [{ acceptedQty: 10, rejectedQty: 0 }],
           receivedDate: matching(new RegExp(`^${today}`)),
-          status: 'POSTED_TO_STOCK',
+          status: 'VERIFIED',
           vendorName: docs.vendorName,
         },
       ]);
@@ -1099,9 +1067,10 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       `);
     });
 
-    it('nav-counts: transfers to acknowledge, draft GRNs and draft productions', async () => {
+    // The ERP GRN went into stock at once: no return of it waits.
+    it('nav-counts: transfers to acknowledge, ERP GRNs waiting and draft productions', async () => {
       expect(await h.ok('GET', `/dashboard/nav-counts?hospitalId=${fx.hospitalId}`)).toEqual({
-        grns: 1,
+        grns: 0,
         productions: 1,
         transfers: 1,
       });
@@ -1109,7 +1078,7 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
       expect(bad.status).toBe(400);
     });
 
-    it("setup: the location's master counts and its first GRN and transfer", async () => {
+    it("setup: the location's master counts and its first ERP GRN and transfer", async () => {
       const data = await h.ok('GET', `/dashboard/setup?hospitalId=${fx.hospitalId}`);
       const counts = data.counts as Body;
       expect(counts).toMatchObject({

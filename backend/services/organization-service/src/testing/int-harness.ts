@@ -5,6 +5,8 @@
 import { createHash, createHmac } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { formatErpTimestamp, sign, stringToSign } from '../erp-grns/erp-signature.js';
 import { superAdminForRun } from './super-admin-for-run.js';
 
 export type Body = Record<string, unknown>;
@@ -58,6 +60,91 @@ export async function listOnTill(
     createHash('sha256').update(tillKey).digest('hex'),
     userId,
   );
+}
+
+/**
+ * Puts `qty` of a batch into a store, as stock comes in. A location's Main Store gets it the way
+ * the ERP sends goods in: a signed POST /erp/grns (GRN `grnNumber`, from `supplier`). Any other
+ * store (the seeded "Main F&B Store" has no ERP feed) gets the balance and its GRN_IN ledger line
+ * written directly.
+ */
+export async function receiveStock(
+  h: Pick<Harness, 'app' | 'baseUrl' | 'rawQuery'>,
+  stock: {
+    batchNumber: string;
+    expiryDate?: string;
+    grnNumber?: string;
+    itemId: string;
+    qty: number;
+    storeId: string;
+    supplier?: string;
+  },
+): Promise<{ batchNumber: string; expiryDate: string }> {
+  const { batchNumber, expiryDate = day(60), itemId, qty, storeId } = stock;
+  const [target] = await h.rawQuery<{
+    hospital_code: string;
+    hospital_id: string;
+    item_code: string;
+    main: boolean;
+  }>(
+    `SELECT h.id AS hospital_id, h.hospital_code, i.item_code, lower(s.store_name) = 'main store' AS main
+       FROM stores s JOIN hospitals h ON h.id = s.hospital_id, items i
+      WHERE s.id = $1::uuid AND i.id = $2::uuid`,
+    storeId,
+    itemId,
+  );
+  if (!target) throw new Error(`receiveStock: no store ${storeId} or item ${itemId}`);
+
+  if (!target.main) {
+    const values = [target.hospital_id, storeId, itemId, batchNumber, expiryDate, qty];
+    await h.rawQuery(
+      `INSERT INTO stock_balances (stock_balance_id, hospital_id, location_type, location_id,
+         item_id, item_type, batch_number, expiry_date, available_qty, updated_at)
+       VALUES (gen_random_uuid(), $1::uuid, 'STORE', $2::uuid, $3::uuid, 'MRP', $4, $5::date, $6, now())`,
+      ...values,
+    );
+    await h.rawQuery(
+      `INSERT INTO stock_ledgers (stock_ledger_id, hospital_id, location_type, location_id, item_id,
+         item_type, batch_number, expiry_date, transaction_type, qty_in, balance_after,
+         business_date, transaction_datetime, updated_at)
+       VALUES (gen_random_uuid(), $1::uuid, 'STORE', $2::uuid, $3::uuid, 'MRP', $4, $5::date,
+         'GRN_IN', $6, $6, current_date, now(), now())`,
+      ...values,
+    );
+    return { batchNumber, expiryDate };
+  }
+
+  const config = h.app.get(ConfigService);
+  const key = config.getOrThrow<string>('ERP_API_KEY');
+  const timestamp = formatErpTimestamp(new Date());
+  const response = await fetch(`${h.baseUrl}/erp/grns`, {
+    body: JSON.stringify([
+      {
+        batch: batchNumber,
+        date: new Date().toISOString(),
+        expiry_date: expiryDate,
+        flag: 0,
+        grn_No: stock.grnNumber ?? `INT-${batchNumber}`,
+        location: target.hospital_code,
+        part_item_code: target.item_code,
+        supplier: stock.supplier,
+        transaction_qty: qty,
+      },
+    ]),
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'x-signature': sign(
+        stringToSign(key, timestamp, config.getOrThrow<string>('ERP_API_SECRET')),
+      ),
+      'x-timestamp': timestamp,
+    },
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error(`POST /erp/grns -> ${response.status} ${await response.text()}`);
+  }
+  return { batchNumber, expiryDate };
 }
 
 export interface Harness {

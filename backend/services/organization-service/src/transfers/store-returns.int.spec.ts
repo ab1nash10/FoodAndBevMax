@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   databaseUrl,
-  day,
   firstOf,
+  receiveStock,
   run,
   startHarness,
   type Body,
@@ -40,31 +40,14 @@ describe.skipIf(!databaseUrl)(
       return Number(rows[0]!.qty);
     };
 
-    /** A fresh batch of `qty` in the Main Store, through a posted Deliveries GRN. */
-    async function stockBatch(label: string, qty: number) {
-      const batchNumber = `${label}-${run}`;
-      const expiryDate = day(60);
-      const grn = await h.ok('POST', '/grns', {
-        hospitalId: fx.hospitalId,
-        items: [
-          {
-            acceptedQty: qty,
-            batches: [
-              { acceptedQty: qty, batchNumber, expiryDate, receivedQty: qty, rejectedQty: 0 },
-            ],
-            itemId: fx.itemId,
-            receivedQty: qty,
-            rejectedQty: 0,
-          },
-        ],
-        receivedBy: 'Returns test',
-        receivedDate: today,
+    /** A fresh batch of `qty` in the Main Store, as the ERP sends goods in. */
+    const stockBatch = (label: string, qty: number) =>
+      receiveStock(h, {
+        batchNumber: `${label}-${run}`,
+        itemId: fx.itemId,
+        qty,
         storeId: fx.storeId,
-        vendorName: `Vendor ${run}`,
       });
-      await h.ok('PATCH', `/grns/${idOf(grn)}/post-to-stock`);
-      return { batchNumber, expiryDate };
-    }
 
     type Batch = Awaited<ReturnType<typeof stockBatch>>;
 
@@ -394,32 +377,14 @@ describe.skipIf(!databaseUrl)(
       );
       expect([Number(reverse!.accepted), reverse!.status]).toEqual([2, 'PENDING']);
 
-      // Goods posted through Deliveries count too: the last 1 finishes it.
-      const more = await h.ok('POST', '/grns', {
-        hospitalId: fx.hospitalId,
-        items: [
-          {
-            acceptedQty: 1,
-            batches: [
-              {
-                acceptedQty: 1,
-                batchNumber: batch.batchNumber,
-                expiryDate: batch.expiryDate,
-                receivedQty: 1,
-                rejectedQty: 0,
-              },
-            ],
-            itemId: fx.itemId,
-            receivedQty: 1,
-            rejectedQty: 0,
-          },
-        ],
-        receivedBy: 'Returns test',
-        receivedDate: today,
+      // A later ERP delivery of the batch counts too: the last 1 finishes it.
+      await receiveStock(h, {
+        ...batch,
+        grnNumber: `WR-IN-${run}`,
+        itemId: fx.itemId,
+        qty: 1,
         storeId: fx.storeId,
-        vendorName: `Vendor ${run}`,
       });
-      await h.ok('PATCH', `/grns/${idOf(more)}/post-to-stock`);
       const [finished] = await h.rawQuery<{ accepted: string; status: string }>(
         `SELECT accepted_qty::text AS accepted, status::text FROM grn_entries WHERE grn_number = $1`,
         grnNumber,

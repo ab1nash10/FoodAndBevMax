@@ -43,6 +43,13 @@ const ledger = (patch: Partial<StockLedger>): StockLedger =>
   }) as StockLedger;
 
 const receipt = ledger({});
+// An ERP GRN's rows carry its number only in their remarks.
+const erpReceipt = ledger({
+  id: 'ledger-3',
+  referenceDocument: null,
+  referenceType: 'GRN_ENTRY',
+  remarks: 'ERP GRN ERP-9',
+});
 const discard = ledger({
   balanceAfter: 37.5,
   batchNumber: null,
@@ -74,7 +81,7 @@ beforeEach(() => {
             totalPages: 1,
           },
         })
-      : page([receipt, discard])) as never);
+      : page([receipt, erpReceipt, discard])) as never);
 });
 
 const listRequests = () =>
@@ -86,14 +93,16 @@ describe('stock ledgers', () => {
   it('shows each movement with its quantities in, out and the balance after', async () => {
     renderScreen(<StockLedgersPageClient />);
 
-    const inRow = (await screen.findByRole('link', { name: 'GRN000002' })).closest('tr')!;
+    const inRow = (await screen.findByText('GRN000002')).closest('tr')!;
     expect(within(inRow).getByText('GRN receipt')).toBeInTheDocument();
     expect(within(inRow).getAllByText('40.000')).toHaveLength(2);
     expect(within(inRow).getByText('0.000')).toBeInTheDocument();
-    // The document opens where it lives.
-    expect(within(inRow).getByRole('link', { name: 'GRN000002' })).toHaveAttribute(
+    // A delivery GRN's screen is gone: its number stays, without a link.
+    expect(within(inRow).queryByRole('link', { name: 'GRN000002' })).toBeNull();
+    // An ERP GRN opens on ERP GRNs.
+    expect(screen.getByRole('link', { name: 'ERP-9' })).toHaveAttribute(
       'href',
-      '/inventory/grns?id=grn-1',
+      '/inventory/erp-grns?grn=ERP-9',
     );
 
     const outRow = screen.getByText('Discarded').closest('tr')!;
@@ -105,8 +114,8 @@ describe('stock ledgers', () => {
     signedIn(['STOCK_VIEW']);
     renderScreen(<StockLedgersPageClient />);
 
-    expect(await screen.findByText('GRN000002')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'GRN000002' })).toBeNull();
+    expect(await screen.findByText('ERP-9')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'ERP-9' })).toBeNull();
   });
 
   it('counts the movements by document in the strip, and shows one kind when picked', async () => {
