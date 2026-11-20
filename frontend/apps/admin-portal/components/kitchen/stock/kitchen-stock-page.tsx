@@ -41,16 +41,12 @@ import {
   KitchenSelect,
   PaginationControls,
 } from '@/components/kitchen/shared/components';
-import {
-  formatDate,
-  listLimit,
-  useHospitals,
-  useKitchens,
-} from '@/components/kitchen/shared/utils';
+import { formatDate, useHospitals, useKitchens } from '@/components/kitchen/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { QueryState } from '@/components/location-empty-states';
 import { useIsPhone } from '@/lib/use-is-phone';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 const kitchenStockStatuses: StockBalanceStatus[] = ['AVAILABLE', 'LOW_STOCK', 'OUT_OF_STOCK'];
 
@@ -78,6 +74,7 @@ export function KitchenStockPageClient() {
   // Phones show three of the seven columns; a row that spans them all has to say so.
   const columns = useIsPhone() ? 3 : 7;
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
@@ -110,7 +107,7 @@ export function KitchenStockPageClient() {
         businessDate: businessDateFilter || undefined,
         hospitalId: hospitalFilter,
         itemType: 'READYMADE',
-        limit: listLimit,
+        limit,
         locationId: kitchenFilter,
         page,
         search,
@@ -130,6 +127,7 @@ export function KitchenStockPageClient() {
       statusFilter,
       sortBy,
       sortOrder,
+      limit,
     ),
   });
 
@@ -158,7 +156,7 @@ export function KitchenStockPageClient() {
   });
   const stats = statsQuery.data;
   const items = stockQuery.data?.items ?? [];
-  const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = stockQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
     searchInput ||
     hospitalFilter !== (scopedHospitalId ?? '') ||
@@ -436,6 +434,7 @@ export function KitchenStockPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           noun="stock line"
           onPageChange={setPage}

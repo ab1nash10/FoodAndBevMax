@@ -51,6 +51,8 @@ export function TransferDetails({
   const { status } = transfer;
   const outcome = transferOutcome(transfer);
   const isReceived = status === 'ACKNOWLEDGED';
+  // The named operator acknowledges it; without one, anyone at the destination may.
+  const receiver = transfer.receiverName ?? destinationName;
   const warnBefore = Date.now() + expiryWarningDays * 86_400_000;
   const steps: StepItem[] = [
     { detail: formatWhen(transfer.createdAt), label: 'Created', state: 'done' },
@@ -77,12 +79,12 @@ export function TransferDetails({
                 ? 'Stock returned to source'
                 : `Stock moved to ${destinationName}`
             }`,
-            label: `${longStatus(outcome)} by restaurant`,
+            label: `${longStatus(outcome)} by ${destinationName}`,
             state: outcome === 'REJECTED_FULL' ? 'stopped' : 'done',
           }
         : {
-            detail: status === 'PENDING_ACKNOWLEDGEMENT' ? 'Waiting on the restaurant' : undefined,
-            label: `Acknowledgement by ${destinationName}`,
+            detail: status === 'PENDING_ACKNOWLEDGEMENT' ? `Waiting on ${receiver}` : undefined,
+            label: `Acknowledgement by ${receiver}`,
             state: status === 'PENDING_ACKNOWLEDGEMENT' ? 'current' : 'todo',
           },
   ];
@@ -321,6 +323,7 @@ export function TransferDetails({
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-[13px]">
             {[
               ['Location', transfer.hospital.hospitalName],
+              ...(transfer.receiverId ? [['Operator', transfer.receiverName ?? '—']] : []),
               ['Transfer date', formatWhen(transfer.transferDate)],
               ['Business date', formatDateOnly(transfer.businessDate)],
               ['Remarks', transfer.remarks || '—'],

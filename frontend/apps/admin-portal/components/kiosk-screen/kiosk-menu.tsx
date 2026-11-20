@@ -1,14 +1,14 @@
 'use client';
 
-import type { KioskMenu, KioskMenuItem } from '@aahar/api-client';
+import type { KioskMenu, KioskMenuItem, QrGuest } from '@aahar/api-client';
 import { cn } from '@aahar/ui';
 import {
   ArrowDownUp,
   ArrowRight,
   ArrowUpDown,
-  BadgePercent,
   Check,
   CreditCard,
+  Delete,
   Leaf,
   Minus,
   Plus,
@@ -16,6 +16,7 @@ import {
   RotateCcw,
   ShoppingBag,
   Sparkles,
+  UserRound,
   X,
 } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
@@ -292,58 +293,100 @@ function ItemSheet({
   );
 }
 
-/** A staff member's discount, confirmed by an OTP to their registered mobile. */
-export interface StaffDiscount {
-  code: string;
-  percent: number;
-  token: string;
-}
+/**
+ * The guest at the kiosk, confirmed by an OTP to their mobile, for this order only: the kiosk
+ * forgets them once it is paid or given up. An employee's registered mobile brings their discount.
+ */
+export type KioskGuest = QrGuest & { discountPercent: number };
 
-function StaffDiscountRow({
-  onConfirmed,
-  onRemove,
-  restaurantId,
-  staff,
-  token,
-}: Readonly<{
-  onConfirmed: (staff: StaffDiscount) => void;
-  onRemove: () => void;
-  restaurantId: string;
-  staff: StaffDiscount | null;
-  token: string;
-}>) {
-  const [open, setOpen] = useState(false);
-  const [code, setCode] = useState('');
-  const [sentTo, setSentTo] = useState('');
-  const [otp, setOtp] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+export const mobilePattern = /^[6-9]\d{9}$/;
 
-  if (staff) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl bg-ds-status-ok-bg px-5 py-4 text-ds-status-ok-fg">
-        <BadgePercent aria-hidden="true" className="h-7 w-7 shrink-0" />
-        <p className="flex-1 text-[18px] font-bold">
-          {staff.percent}% staff discount applied
-          <span className="block text-[15px] font-medium">Employee ID {staff.code}</span>
-        </p>
-        <button className="text-[16px] font-bold underline" onClick={onRemove} type="button">
-          Remove
+const RESEND_SECONDS = 60;
+
+/** Big digits for the touch screen: the mobile number and the OTP. */
+function Keypad({ onPress }: Readonly<{ onPress: (key: string) => void }>) {
+  const key =
+    'h-16 rounded-xl bg-ds-surface text-[28px] font-black tabular-nums shadow-[0_1px_0_rgba(15,23,42,.08)] active:bg-ds-primary-soft';
+
+  return (
+    <div aria-label="Number pad" className="grid grid-cols-3 gap-2" role="group">
+      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+        <button className={key} key={digit} onClick={() => onPress(digit)} type="button">
+          {digit}
         </button>
-      </div>
-    );
-  }
-
-  if (!open) {
-    return (
+      ))}
       <button
-        className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-ds-primary-border px-5 py-4 text-left text-[18px] font-bold text-ds-link"
-        onClick={() => setOpen(true)}
+        className={cn(key, 'text-[18px] font-bold uppercase')}
+        onClick={() => onPress('clear')}
         type="button"
       >
-        <BadgePercent aria-hidden="true" className="h-7 w-7" />
-        Max staff? Get your staff discount
+        Clear
       </button>
+      <button className={key} onClick={() => onPress('0')} type="button">
+        0
+      </button>
+      <button
+        aria-label="Delete"
+        className={cn(key, 'grid place-items-center')}
+        onClick={() => onPress('del')}
+        type="button"
+      >
+        <Delete aria-hidden="true" className="h-8 w-8" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Required before paying: name and mobile, then the OTP sent to that mobile (the sixth digit
+ * confirms it). The confirmed name and number go on the bill.
+ */
+function KioskSignIn({
+  guest,
+  onGuest,
+  restaurantId,
+  token,
+}: Readonly<{
+  guest: KioskGuest | null;
+  onGuest: (guest: KioskGuest | null) => void;
+  restaurantId: string;
+  token: string;
+}>) {
+  const [name, setName] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [otp, setOtp] = useState('');
+  const [sentTo, setSentTo] = useState('');
+  const [field, setField] = useState<'mobile' | 'otp'>('mobile');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [wait, setWait] = useState(0);
+  const ready = name.trim().length > 0 && mobilePattern.test(mobile);
+
+  useEffect(() => {
+    if (wait <= 0) return undefined;
+    const timer = window.setTimeout(() => setWait((left) => left - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [wait]);
+
+  if (guest) {
+    return (
+      <div className="flex items-center gap-4 rounded-2xl bg-ds-status-ok-bg px-5 py-4 text-ds-status-ok-fg">
+        <UserRound aria-hidden="true" className="h-8 w-8 shrink-0" />
+        <p className="flex-1 text-[19px] font-bold">
+          {guest.name}
+          <span className="block text-[16px] font-medium">
+            Mobile ******{guest.mobile.slice(-4)} · confirmed
+            {guest.discountPercent ? ` · ${guest.discountPercent}% staff discount applied` : ''}
+          </span>
+        </p>
+        <button
+          className="text-[17px] font-bold underline"
+          onClick={() => onGuest(null)}
+          type="button"
+        >
+          Change
+        </button>
+      </div>
     );
   }
 
@@ -359,140 +402,147 @@ function StaffDiscountRow({
     }
   }
 
+  const send = () =>
+    run(async () => {
+      const { data } = await publicOrganizationApi.sendQrGuestOtp(restaurantId, token, {
+        mobile,
+        name: name.trim(),
+      });
+      setSentTo(data.sentTo);
+      setOtp('');
+      setField('otp');
+      setWait(RESEND_SECONDS);
+    });
+  const confirm = (code: string) =>
+    run(async () => {
+      const { data } = await publicOrganizationApi.verifyQrGuestOtp(restaurantId, token, {
+        mobile,
+        otp: code,
+      });
+      const discount = (
+        await publicOrganizationApi.getQrGuestDiscount(restaurantId, token, data.guestToken)
+      ).data;
+      onGuest({ ...data, discountPercent: discount.discountPercent });
+    });
+  const press = (key: string) => {
+    const next = (value: string, length: number) =>
+      key === 'del' ? value.slice(0, -1) : key === 'clear' ? '' : (value + key).slice(0, length);
+
+    setError('');
+    if (field === 'mobile') {
+      if (!sentTo) setMobile((value) => next(value, 10));
+      return;
+    }
+    const code = next(otp, 6);
+    setOtp(code);
+    // The sixth digit confirms it: one tap fewer.
+    if (code.length === 6 && !busy) void confirm(code);
+  };
+  // A keyboard works too (handy at a desk): digits and Backspace go to the pad.
+  const typed = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (/^\d$/.test(event.key)) press(event.key);
+    else if (event.key === 'Backspace') press('del');
+  };
   const input =
-    'h-14 min-w-0 flex-1 rounded-xl border-2 border-ds-border bg-ds-surface px-4 text-[22px] tabular-nums tracking-wider outline-hidden focus:border-ds-primary';
-  const button =
-    'h-14 shrink-0 rounded-xl bg-ds-primary px-6 text-[18px] font-bold text-white disabled:opacity-50';
+    'h-14 w-full min-w-0 rounded-xl border-2 border-ds-border bg-ds-surface px-4 text-[22px] outline-hidden focus:border-ds-primary';
 
   return (
-    <div className="grid gap-3 rounded-2xl bg-ds-subtle p-4">
-      <label className="text-[17px] font-bold" htmlFor="kiosk-staff-code">
-        Your Employee ID
-      </label>
-      <div className="flex gap-3">
-        <input
-          autoCapitalize="characters"
-          autoComplete="off"
-          className={cn(input, 'uppercase')}
-          id="kiosk-staff-code"
-          maxLength={50}
-          onChange={(event) => {
-            setCode(event.target.value);
-            setSentTo('');
-          }}
-          value={code}
-        />
-        <button
-          className={button}
-          disabled={!code.trim() || busy}
-          onClick={() =>
-            void run(async () => {
-              const { data } = await publicOrganizationApi.sendQrStaffOtp(
-                restaurantId,
-                token,
-                code.trim(),
-              );
-              setSentTo(data.sentTo);
-              setOtp('');
-            })
-          }
-          type="button"
-        >
-          {sentTo ? 'Resend' : 'Send OTP'}
-        </button>
+    <div className="grid gap-4 rounded-2xl bg-ds-subtle p-5">
+      <div>
+        <p className="text-[20px] font-black uppercase">Your name and mobile</p>
+        <p className="text-[16px] text-ds-text-3">
+          We send an OTP to confirm it. Your name and number go on the bill.
+        </p>
       </div>
-      {sentTo ? (
-        <>
-          <label className="text-[17px] font-bold" htmlFor="kiosk-staff-otp">
+      <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-guest-name">
+        Your name
+        <input
+          autoComplete="off"
+          className={input}
+          id="kiosk-guest-name"
+          maxLength={100}
+          onChange={(event) => setName(event.target.value)}
+          readOnly={Boolean(sentTo)}
+          value={name}
+        />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-guest-mobile">
+          Mobile number
+          <input
+            className={cn(
+              input,
+              'tabular-nums tracking-wider',
+              field === 'mobile' && !sentTo && 'border-ds-primary',
+            )}
+            id="kiosk-guest-mobile"
+            inputMode="none"
+            onFocus={() => setField('mobile')}
+            onKeyDown={typed}
+            placeholder="10 digits"
+            readOnly
+            value={mobile}
+          />
+        </label>
+        {sentTo ? (
+          <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-guest-otp">
             OTP sent to {sentTo}
-          </label>
-          <div className="flex gap-3">
             <input
               autoComplete="one-time-code"
-              className={cn(input, 'font-mono tracking-[.4em]')}
-              id="kiosk-staff-otp"
-              inputMode="numeric"
-              maxLength={6}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
+              className={cn(
+                input,
+                'font-mono tracking-[.4em]',
+                field === 'otp' && 'border-ds-primary',
+              )}
+              id="kiosk-guest-otp"
+              inputMode="none"
+              onFocus={() => setField('otp')}
+              onKeyDown={typed}
+              readOnly
               value={otp}
             />
-            <button
-              className={button}
-              disabled={otp.length !== 6 || busy}
-              onClick={() =>
-                void run(async () => {
-                  const { data } = await publicOrganizationApi.verifyQrStaffOtp(
-                    restaurantId,
-                    token,
-                    code.trim(),
-                    otp,
-                  );
-                  onConfirmed({
-                    code: code.trim().toUpperCase(),
-                    percent: data.discountPercent,
-                    token: data.staffToken,
-                  });
-                })
-              }
-              type="button"
-            >
-              Verify
-            </button>
-          </div>
-        </>
+          </label>
+        ) : (
+          <button
+            className="mt-auto h-14 rounded-xl bg-ds-primary text-[19px] font-bold text-white disabled:opacity-50"
+            disabled={!ready || busy}
+            onClick={() => void send()}
+            type="button"
+          >
+            {busy ? 'Sending…' : 'Send OTP'}
+          </button>
+        )}
+      </div>
+      <Keypad onPress={press} />
+      {sentTo ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            className="h-12 text-[17px] font-bold text-ds-link"
+            onClick={() => {
+              setSentTo('');
+              setOtp('');
+              setField('mobile');
+            }}
+            type="button"
+          >
+            Change number
+          </button>
+          <button
+            className="h-12 text-[17px] font-bold text-ds-link disabled:text-ds-text-3"
+            disabled={wait > 0 || busy}
+            onClick={() => void send()}
+            type="button"
+          >
+            {wait > 0 ? `Resend OTP in ${wait}s` : 'Resend OTP'}
+          </button>
+        </div>
       ) : null}
       {error ? (
         <p className="text-[16px] font-semibold text-ds-status-bad-fg" role="alert">
           {error}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-/** Who is paying, as the guest typed it (both optional); kept on the bill. */
-export interface Payer {
-  mobile: string;
-  name: string;
-}
-
-export const noPayer: Payer = { mobile: '', name: '' };
-export const mobilePattern = /^[6-9]\d{9}$/;
-
-function PayerRow({
-  onChange,
-  payer,
-}: Readonly<{ onChange: (payer: Payer) => void; payer: Payer }>) {
-  const input =
-    'h-14 min-w-0 rounded-xl border-2 border-ds-border bg-ds-surface px-4 text-[22px] outline-hidden focus:border-ds-primary';
-
-  return (
-    <div className="grid grid-cols-2 gap-3 rounded-2xl bg-ds-subtle p-4">
-      <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-payer-name">
-        Your name (optional)
-        <input
-          autoComplete="off"
-          className={input}
-          id="kiosk-payer-name"
-          maxLength={100}
-          onChange={(event) => onChange({ ...payer, name: event.target.value })}
-          value={payer.name}
-        />
-      </label>
-      <label className="grid gap-2 text-[17px] font-bold" htmlFor="kiosk-payer-mobile">
-        Mobile (optional)
-        <input
-          autoComplete="off"
-          className={cn(input, 'tabular-nums tracking-wider')}
-          id="kiosk-payer-mobile"
-          inputMode="numeric"
-          maxLength={10}
-          onChange={(event) =>
-            onChange({ ...payer, mobile: event.target.value.replace(/\D/g, '') })
-          }
-          value={payer.mobile}
-        />
-      </label>
+      <p className="text-[15px] text-ds-text-3">No phone with you? Please order at the counter.</p>
     </div>
   );
 }
@@ -501,34 +551,28 @@ function CartSheet({
   cart,
   error,
   isPlacing,
+  guest,
   onClose,
+  onGuest,
   onPay,
-  onPayer,
   onQuantity,
-  onStaff,
-  payer,
   payWith,
   restaurantId,
-  staff,
-  staffDiscountOffered,
   token,
 }: Readonly<{
   cart: KioskCartLine[];
   error: string;
+  guest: KioskGuest | null;
   isPlacing: boolean;
   onClose: () => void;
+  onGuest: (guest: KioskGuest | null) => void;
   onPay: (method: 'CARD' | 'UPI') => void;
-  onPayer: (payer: Payer) => void;
   onQuantity: (item: KioskMenuItem, quantity: number) => void;
-  onStaff: (staff: StaffDiscount | null) => void;
-  payer: Payer;
   payWith: Array<'CARD' | 'UPI'>;
   restaurantId: string;
-  staff: StaffDiscount | null;
-  staffDiscountOffered: boolean;
   token: string;
 }>) {
-  const totals = cartTotals(cart, staff?.percent ?? 0);
+  const totals = cartTotals(cart, guest?.discountPercent ?? 0);
 
   useEffect(() => {
     if (cart.length === 0) onClose();
@@ -590,16 +634,7 @@ function CartSheet({
         ))}
       </ul>
       <div className="mt-4 grid gap-4">
-        {staffDiscountOffered ? (
-          <StaffDiscountRow
-            onConfirmed={onStaff}
-            onRemove={() => onStaff(null)}
-            restaurantId={restaurantId}
-            staff={staff}
-            token={token}
-          />
-        ) : null}
-        <PayerRow onChange={onPayer} payer={payer} />
+        <KioskSignIn guest={guest} onGuest={onGuest} restaurantId={restaurantId} token={token} />
         <div className="grid gap-2 rounded-2xl bg-ds-subtle px-6 py-5 text-[18px] tabular-nums">
           {totals.discountTotal > 0 ? (
             <p className="flex justify-between text-ds-status-ok-fg">
@@ -636,30 +671,26 @@ function CartSheet({
 export function KioskMenuScreen({
   cart,
   error,
+  guest,
   isPlacing,
   menu,
+  onGuest,
   onPay,
-  onPayer,
   onQuantity,
-  onStaff,
   onStartOver,
-  payer,
   restaurantId,
-  staff,
   token,
 }: Readonly<{
   cart: KioskCartLine[];
   error: string;
+  guest: KioskGuest | null;
   isPlacing: boolean;
   menu: KioskMenu;
+  onGuest: (guest: KioskGuest | null) => void;
   onPay: (method: 'CARD' | 'UPI') => void;
-  onPayer: (payer: Payer) => void;
   onQuantity: (item: KioskMenuItem, quantity: number) => void;
-  onStaff: (staff: StaffDiscount | null) => void;
   onStartOver: () => void;
-  payer: Payer;
   restaurantId: string;
-  staff: StaffDiscount | null;
   token: string;
 }>) {
   const now = useClock();
@@ -672,7 +703,7 @@ export function KioskMenuScreen({
   const tones = categoryTones(categories.map((entry) => entry.id));
   const toneOf = (id: string | undefined) => tones.get(id ?? '') ?? categoryTone(id);
   const items = visibleItems(menu.items, { category, filter, sort });
-  const totals = cartTotals(cart, staff?.percent ?? 0);
+  const totals = cartTotals(cart, guest?.discountPercent ?? 0);
   const hero = menu.items.find((item) => item.isFeatured) ?? menu.items[0];
   const hasFeatured = menu.items.some((item) => item.isFeatured);
   const SortIcon = sort === 'high' ? ArrowDownUp : ArrowUpDown;
@@ -920,16 +951,13 @@ export function KioskMenuScreen({
             cart={cart}
             error={error}
             isPlacing={isPlacing}
+            guest={guest}
             onClose={() => setCartOpen(false)}
+            onGuest={onGuest}
             onPay={onPay}
-            onPayer={onPayer}
             onQuantity={onQuantity}
-            onStaff={onStaff}
-            payer={payer}
             payWith={menu.payWith}
             restaurantId={restaurantId}
-            staff={staff}
-            staffDiscountOffered={menu.staffDiscount}
             token={token}
           />
         ) : null}

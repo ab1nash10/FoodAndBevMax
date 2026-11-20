@@ -53,6 +53,14 @@ const rejectionReasons = [
   'Wrong item sent',
 ];
 
+// Why a restaurant's return counts short; the missing quantity goes back to the restaurant's stock.
+const returnShortReasons = [
+  'Short in the return',
+  'Wrong item or batch',
+  'Damaged',
+  'Expired or near expiry',
+];
+
 type AcknowledgementOutcome = 'ACCEPTED_FULL' | 'ACCEPTED_PARTIAL' | 'REJECTED_FULL';
 
 const outcomeCopy: Record<
@@ -91,7 +99,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission, roles } = useAuth();
   const locationName = useLocationNames(hasPermission);
   const locationLink = useLocationHrefs(hasPermission);
   const [accepted, setAccepted] = useState<Record<string, string>>({});
@@ -105,11 +113,22 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
     transferId,
     transfer?.transferNumber ?? (transferQuery.isError ? 'Not found' : undefined),
   );
-  // Restaurant staff accept another restaurant's leftovers; everything else needs TRANSFER_ACKNOWLEDGE.
-  const canAcknowledge =
-    hasPermission('TRANSFER_ACKNOWLEDGE') ||
-    (transfer?.sourceType === 'RESTAURANT' && hasPermission('RESTAURANT_TRANSFER_RECEIVE'));
-  const backHref = `/inventory/transfers?id=${transferId}`;
+  // A restaurant's return to the store: counted in, a return count against an actual count.
+  const isReturn = transfer?.destinationType === 'STORE';
+  // As the server: the store counts a return in with GRN_POST; restaurant staff accept another
+  // restaurant's leftovers; everything else needs TRANSFER_ACKNOWLEDGE.
+  const canAcknowledge = isReturn
+    ? hasPermission('GRN_POST')
+    : hasPermission('TRANSFER_ACKNOWLEDGE') ||
+      (transfer?.sourceType === 'RESTAURANT' && hasPermission('RESTAURANT_TRANSFER_RECEIVE'));
+  // Sent to a named operator: only they, or a Super Admin, may acknowledge it (as the server).
+  const isForSomeoneElse =
+    Boolean(transfer?.receiverId) &&
+    transfer?.receiverId !== currentUser?.id &&
+    !roles.includes('Super Admin');
+  const transferHref = `/inventory/transfers?id=${transferId}`;
+  // The store counts returns one after another, so a count goes back to the queue.
+  const backHref = isReturn ? '/inventory/returns' : transferHref;
 
   // Start from "everything arrived", once per transfer, so a refetch keeps what was typed.
   useEffect(() => {
@@ -138,7 +157,9 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
     onSuccess() {
       invalidateTransferQueries(queryClient);
       showToast({
-        action: transfer ? { href: backHref, label: `View ${transfer.transferNumber}` } : undefined,
+        action: transfer
+          ? { href: transferHref, label: `View ${transfer.transferNumber}` }
+          : undefined,
         description: transfer
           ? `${transfer.transferNumber} · ${outcomeCopy[outcome].title}`
           : undefined,
@@ -186,11 +207,15 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
     const rejectedQty = Number((line.sentQty - acceptedQty).toFixed(3));
     const reason = reasons[line.id] ?? '';
     const error = !isNumber
-      ? 'Enter the accepted quantity.'
+      ? isReturn
+        ? 'Enter the actual count.'
+        : 'Enter the accepted quantity.'
       : value < 0 || value > line.sentQty + 0.0005
-        ? `Accept between 0 and ${formatQuantity(line.sentQty)}.`
+        ? `${isReturn ? 'Count' : 'Accept'} between 0 and ${formatQuantity(line.sentQty)}.`
         : rejectedQty > 0 && !reason && hasTriedConfirm
-          ? 'Choose why the rest is rejected.'
+          ? isReturn
+            ? 'Choose why it is missing.'
+            : 'Choose why the rest is rejected.'
           : null;
 
     return {
@@ -220,7 +245,14 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         ? 'REJECTED_FULL'
         : 'ACCEPTED_PARTIAL';
   const copy = outcomeCopy[outcome];
+  const outcomeText =
+    !isReturn || outcome === 'ACCEPTED_FULL'
+      ? copy.text(sourceLabel, destinationLabel, rows.length)
+      : outcome === 'REJECTED_FULL'
+        ? `Nothing is counted in. All of it goes back to ${sourceLabel}’s stock.`
+        : `Counted quantities go into ${destinationLabel} stock. Missing quantities go back to ${sourceLabel}’s stock.`;
   const isPending = transfer.status === 'PENDING_ACKNOWLEDGEMENT';
+  const reasonChoices = isReturn ? returnShortReasons : rejectionReasons;
 
   function setAll(mode: 'accept' | 'reject') {
     if (!transfer) {
@@ -285,7 +317,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         href={backHref}
       >
         <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-        Transfers
+        {isReturn ? 'Count Returns' : 'Transfers'}
       </Link>
       {/* The record's header card, as on the transfer and GRN pages. */}
       <div className="relative isolate flex flex-col gap-1.5 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6">
@@ -303,9 +335,13 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
           />
         </div>
         <p className="text-[13.5px] text-ds-muted">
-          {isPending
-            ? `Check what arrived at ${destinationLabel}. Enter the quantity you accept for each line; anything not accepted goes back to the source.`
-            : 'This transfer is not waiting for acknowledgement, so there is nothing to confirm here.'}
+          {!isPending
+            ? 'This transfer is not waiting for acknowledgement, so there is nothing to confirm here.'
+            : isForSomeoneElse
+              ? `Waiting for ${transfer.receiverName ?? 'the operator it was sent to'} to acknowledge it.`
+              : isReturn
+                ? `Count what came back from ${sourceLabel}. Enter the actual count for each line; anything missing goes back to ${sourceLabel}’s stock.`
+                : `Check what arrived at ${destinationLabel}. Enter the quantity you accept for each line; anything not accepted goes back to the source.`}
         </p>
       </div>
 
@@ -339,7 +375,19 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         ))}
       </dl>
 
-      {isPending ? (
+      {isPending && isForSomeoneElse ? (
+        <Panel className="flex flex-col items-start gap-3 p-5">
+          <p className="text-[15px] font-semibold text-ds-text">
+            {`Sent to ${transfer.receiverName ?? 'another operator'}: only they can acknowledge it`}
+          </p>
+          <p className="text-[13px] text-ds-muted">
+            Ask them to acknowledge it. If they are away, a Super Admin can.
+          </p>
+          <Button asChild variant="outline">
+            <Link href={transferHref}>Open the transfer</Link>
+          </Button>
+        </Panel>
+      ) : isPending ? (
         <div className="flex flex-wrap items-start gap-5">
           <Panel
             aria-labelledby="ack-lines"
@@ -348,7 +396,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
           >
             <div className="flex flex-wrap items-center justify-between gap-2.5 px-[18px] py-3.5">
               <h2 className="text-[15px] font-semibold text-ds-text" id="ack-lines">
-                Received lines · {transfer.lines.length}
+                {isReturn ? 'Returned lines' : 'Received lines'} · {transfer.lines.length}
               </h2>
               <div className="flex gap-2">
                 <Button
@@ -376,9 +424,15 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                 <thead className="border-y border-ds-divider bg-ds-subtle text-left text-[12px] text-ds-muted">
                   <tr>
                     <th className="py-2.5 pl-[18px] font-medium">Item · batch</th>
-                    <th className="w-[76px] px-2 py-2.5 text-right font-medium">Sent</th>
-                    <th className="w-[160px] px-2 py-2.5 font-medium">Accepted</th>
-                    <th className="w-[84px] px-2 py-2.5 text-right font-medium">Rejected</th>
+                    <th className="w-[76px] px-2 py-2.5 text-right font-medium">
+                      {isReturn ? 'Return count' : 'Sent'}
+                    </th>
+                    <th className="w-[160px] px-2 py-2.5 font-medium">
+                      {isReturn ? 'Actual count' : 'Accepted'}
+                    </th>
+                    <th className="w-[84px] px-2 py-2.5 text-right font-medium">
+                      {isReturn ? 'Missing' : 'Rejected'}
+                    </th>
                     <th className="w-[30%] py-2.5 pl-2 pr-[18px] font-medium">Reason</th>
                   </tr>
                 </thead>
@@ -432,7 +486,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                             <QuantityStepper
                               compact
                               id={`ack-accepted-${row.line.id}`}
-                              label={`accepted quantity of ${row.line.item.itemName}`}
+                              label={`${isReturn ? 'actual count' : 'accepted quantity'} of ${row.line.item.itemName}`}
                               max={row.line.sentQty}
                               onChange={(value) =>
                                 setAccepted((current) => ({ ...current, [row.line.id]: value }))
@@ -454,7 +508,11 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                             {row.rejectedQty > 0 ? (
                               <select
                                 aria-invalid={hasTriedConfirm && !row.reason ? true : undefined}
-                                aria-label={`Rejection reason for ${row.line.item.itemName}`}
+                                aria-label={
+                                  isReturn
+                                    ? `Why ${row.line.item.itemName} is missing`
+                                    : `Rejection reason for ${row.line.item.itemName}`
+                                }
                                 className={cn(
                                   'h-[38px] w-full rounded-control border-[1.5px] bg-ds-surface px-2 text-[12.5px] font-semibold text-ds-text outline-hidden focus:ring-2 focus:ring-ds-primary/15',
                                   hasTriedConfirm && !row.reason
@@ -470,7 +528,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
                                 value={row.reason}
                               >
                                 <option value="">Choose a reason</option>
-                                {rejectionReasons.map((reason) => (
+                                {reasonChoices.map((reason) => (
                                   <option key={reason} value={reason}>
                                     {reason}
                                   </option>
@@ -505,7 +563,8 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
               </table>
             </div>
             <p className="bg-ds-subtle px-[18px] py-3 text-xs text-ds-muted">
-              Tip: press Tab to move between quantities. Rejected quantity is worked out for you.
+              Tip: press Tab to move between quantities. {isReturn ? 'Missing' : 'Rejected'}{' '}
+              quantity is worked out for you.
             </p>
           </Panel>
 
@@ -519,9 +578,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
               className={cn('flex flex-col gap-1.5 rounded-xl p-3.5', copy.box)}
             >
               <span className="text-[15px] font-semibold">{copy.title}</span>
-              <span className="text-[12.5px] text-ds-text-2">
-                {copy.text(sourceLabel, destinationLabel, rows.length)}
-              </span>
+              <span className="text-[12.5px] text-ds-text-2">{outcomeText}</span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               {[
@@ -543,7 +600,7 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
               ))}
             </div>
             <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-ds-text-2">
-              Remarks for the store
+              {isReturn ? 'Remarks for the restaurant' : 'Remarks for the store'}
               <Textarea
                 maxLength={500}
                 onChange={(event) => setRemarks(event.target.value)}
@@ -566,7 +623,9 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
             <span className="text-xs text-ds-muted">
               {canAcknowledge
                 ? 'Stock moves as soon as you confirm. You can’t edit an acknowledgement afterwards.'
-                : 'Your role can view this transfer but not acknowledge it.'}
+                : isReturn
+                  ? 'Only store staff who may post stock (Post GRN) can count a return in.'
+                  : 'Your role can view this transfer but not acknowledge it.'}
             </span>
           </aside>
         </div>

@@ -11,6 +11,8 @@ export interface TransferHeaderFormValues {
   destinationType: 'COUNTER' | 'RESTAURANT';
   hospitalId: string;
   remarks: string;
+  /** The operator who must acknowledge stock sent from a store to a restaurant. */
+  receiverId: string;
   /** The receiving restaurant, or the counter when destinationType is COUNTER. */
   restaurantId: string;
   sourceId: string;
@@ -26,16 +28,34 @@ export interface TransferLineDraft {
   stockBalanceId: string;
 }
 
-export const transferHeaderSchema = z.object({
-  businessDate: z.string().trim(),
-  destinationType: z.enum(['RESTAURANT', 'COUNTER']),
-  hospitalId: z.string().uuid('Select a hospital.'),
-  remarks: z.string().trim().max(500, 'Remarks can be at most 500 characters.'),
-  restaurantId: z.string().uuid('Select where the stock goes.'),
-  sourceId: z.string().uuid('Select where the stock comes from.'),
-  sourceType: z.enum(['STORE', 'KITCHEN', 'RESTAURANT']),
-  transferDate: z.string().trim().min(1, 'Transfer date is required.'),
-});
+export const transferHeaderSchema = z
+  .object({
+    businessDate: z.string().trim(),
+    destinationType: z.enum(['RESTAURANT', 'COUNTER']),
+    hospitalId: z.string().uuid('Select a hospital.'),
+    receiverId: z.string(),
+    remarks: z.string().trim().max(500, 'Remarks can be at most 500 characters.'),
+    restaurantId: z.string().uuid('Select where the stock goes.'),
+    sourceId: z.string().uuid('Select where the stock comes from.'),
+    sourceType: z.enum(['STORE', 'KITCHEN', 'RESTAURANT']),
+    transferDate: z.string().trim().min(1, 'Transfer date is required.'),
+  })
+  .superRefine((header, context) => {
+    if (needsOperator(header) && !header.receiverId) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Choose the operator who acknowledges it.',
+        path: ['receiverId'],
+      });
+    }
+  });
+
+/** Store stock sent to a restaurant names the operator who must acknowledge it. */
+export function needsOperator(
+  header: Pick<TransferHeaderFormValues, 'destinationType' | 'sourceType'>,
+): boolean {
+  return header.sourceType === 'STORE' && header.destinationType === 'RESTAURANT';
+}
 
 export function defaultTransferDate(): string {
   return defaultReceivedDate();

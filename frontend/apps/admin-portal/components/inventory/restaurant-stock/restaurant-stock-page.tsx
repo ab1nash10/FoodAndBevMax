@@ -7,7 +7,7 @@ import {
 } from '@/components/inventory/discard-stock-dialog';
 import { Button } from '@aahar/ui';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, PackageMinus } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type {
@@ -30,7 +30,8 @@ import { Panel, Select } from '@/components/ui';
 import { IfCanOpen, RecordLink } from '@/components/record-link';
 import { Chip, levelChip } from '@/components/inventory/stock-levels/parts';
 import { sendFromStoreHref } from '@/components/inventory/transfers/transfer-prefill';
-import { locationHref, recordHref } from '@/lib/navigation';
+import { useAuth } from '@/components/auth-provider';
+import { canOpenPath, locationHref, recordHref } from '@/lib/navigation';
 import { organizationApi } from '@/lib/api';
 import {
   useOnScopeChange,
@@ -49,7 +50,6 @@ import type { ItemTypeFilter } from '@/components/inventory/shared/types';
 import {
   formatDateOnly,
   formatEnum,
-  listLimit,
   plural,
   stockStatuses,
   useHospitals,
@@ -58,6 +58,7 @@ import {
 import { queryKeys } from '@/lib/query-keys';
 import { useIsPhone } from '@/lib/use-is-phone';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 function RestaurantSelect({
   disabled,
@@ -85,9 +86,11 @@ function RestaurantSelect({
 export function RestaurantStockPageClient() {
   const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
+  const { hasPermission } = useAuth();
   // Phones show three of the seven columns; a row that spans them all has to say so.
   const columns = useIsPhone() ? 3 : 7;
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
@@ -123,7 +126,7 @@ export function RestaurantStockPageClient() {
       const response = await organizationApi.listRestaurantStock({
         hospitalId: hospitalFilter,
         itemType: effectiveItemType || undefined,
-        limit: listLimit,
+        limit,
         locationId: restaurantFilter,
         page,
         search,
@@ -144,6 +147,7 @@ export function RestaurantStockPageClient() {
       statusFilter,
       sortBy,
       sortOrder,
+      limit,
     ),
   });
 
@@ -196,7 +200,7 @@ export function RestaurantStockPageClient() {
       .values(),
   ];
   const items = stockQuery.data?.items ?? [];
-  const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = stockQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
     searchInput ||
     hospitalFilter !== (scopedHospitalId ?? '') ||
@@ -226,6 +230,18 @@ export function RestaurantStockPageClient() {
     <section className="space-y-4">
       <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
       <PageHeader
+        action={
+          canOpenPath('/inventory/returns/new', hasPermission) ? (
+            <Button asChild variant="outline">
+              <Link
+                href={`/inventory/returns/new${restaurantFilter ? `?restaurant=${restaurantFilter}` : ''}`}
+              >
+                <PackageMinus aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                Return to store
+              </Link>
+            </Button>
+          ) : undefined
+        }
         count={stats?.all}
         subtitle="Current restaurant stock received from acknowledged transfers."
         title="Restaurant Stock"
@@ -539,6 +555,7 @@ export function RestaurantStockPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

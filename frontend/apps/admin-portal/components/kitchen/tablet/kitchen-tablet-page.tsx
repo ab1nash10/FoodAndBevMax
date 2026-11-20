@@ -148,10 +148,13 @@ export function KitchenTabletPageClient() {
         })
       ).data.items;
 
-      // An item mapped under several categories is still one thing the kitchen makes.
+      // An item mapped under several categories is still one thing the kitchen makes. Live items
+      // are made to order, not posted as production (the server refuses them).
       return mappings
         .filter(
-          (mapping, index) => mappings.findIndex((m) => m.itemId === mapping.itemId) === index,
+          (mapping, index) =>
+            mapping.item.itemType === 'READYMADE' &&
+            mappings.findIndex((m) => m.itemId === mapping.itemId) === index,
         )
         .map((mapping) => mapping.item)
         .sort((a, b) => a.itemName.localeCompare(b.itemName));

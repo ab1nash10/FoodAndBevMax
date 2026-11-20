@@ -7,19 +7,13 @@ import Image from 'next/image';
 import QRCode from 'qrcode';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getApiErrorMessage, publicOrganizationApi } from '@/lib/api';
+import { withBasePath } from '@/lib/base-path';
 import { newClientId as newClientOrderId } from '@/lib/client-id';
 import { reconcile, setQuantity, type KioskCartLine } from '@/lib/kiosk';
 import { useBoardTheme, useWakeLock } from '@/lib/order-board/live';
+import { fetchQrOrigin } from '@/lib/qr-order';
 import { queryKeys } from '@/lib/query-keys';
-import {
-  FoodPic,
-  formatRupees,
-  KioskMenuScreen,
-  mobilePattern,
-  noPayer,
-  type Payer,
-  type StaffDiscount,
-} from './kiosk-menu';
+import { FoodPic, formatRupees, KioskMenuScreen, type KioskGuest } from './kiosk-menu';
 
 type Screen = 'done' | 'menu' | 'paying' | 'welcome';
 type PayMethod = 'CARD' | 'UPI';
@@ -28,8 +22,8 @@ type PayMethod = 'CARD' | 'UPI';
 const IDLE_MS = 60_000;
 /** …and starts over after this much more, so the next guest never sees someone else's order. */
 const WARNING_MS = 15_000;
-/** The order number stays up this long for the guest to read, then the kiosk is ready again. */
-const DONE_MS = 30_000;
+/** The order number (and its take-away QR) stays up this long, then the kiosk is ready again. */
+const DONE_MS = 45_000;
 /** A payment left this long is given up: the QR (or card machine) is cancelled. */
 const PAY_MS = 4 * 60_000;
 
@@ -269,13 +263,37 @@ function Done({
   method,
   onNext,
   order,
+  restaurantId,
+  token,
 }: Readonly<{
   lines: KioskCartLine[];
   method: PayMethod;
   onNext: () => void;
   order: QrOrderView;
+  restaurantId: string;
+  token: string;
 }>) {
   const [left, setLeft] = useState(DONE_MS / 1000);
+  const [takeAway, setTakeAway] = useState<string | null>(null);
+
+  // The order on the guest's own phone: its status, and proof at the counter that it is theirs.
+  useEffect(() => {
+    let live = true;
+    void fetchQrOrigin()
+      .then((origin) =>
+        QRCode.toDataURL(
+          `${origin}${withBasePath(`/order/${restaurantId}?${new URLSearchParams({ key: order.key, order: order.id, token })}`)}`,
+          { margin: 1, width: 360 },
+        ),
+      )
+      .then((image) => {
+        if (live) setTakeAway(image);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [order.id, order.key, restaurantId, token]);
 
   useEffect(() => {
     const started = Date.now();
@@ -316,14 +334,38 @@ function Done({
           <p className="mt-2 text-[19px] text-[#4a576c]">
             Collect it from the counter when your number shows on the board.
           </p>
+          {takeAway ? (
+            <div className="mt-5 flex items-center gap-5 rounded-2xl bg-[#eef5ff] p-4">
+              <Image
+                alt="QR code to take your order with you"
+                className="h-[168px] w-[168px] shrink-0 rounded-lg bg-white p-1"
+                height={360}
+                src={takeAway}
+                unoptimized
+                width={360}
+              />
+              <p className="text-[18px] leading-snug text-[#0e1a2b]">
+                <b className="block text-[20px] uppercase">Scan to take your order with you</b>
+                Follow it on your phone, and show it at the counter: it is your bill.
+              </p>
+            </div>
+          ) : null}
           <ul className="mt-5 flex flex-col gap-1 border-t border-[#eef1f5] pt-4 text-[19px]">
-            {lines.map(({ item, quantity }) => (
-              <li className="flex justify-between gap-4" key={item.id}>
+            {/* As billed (a staff discount included); the cart only until the bill is in. */}
+            {(order.lines.length
+              ? order.lines
+              : lines.map(({ item, quantity }) => ({
+                  amount: item.price * quantity,
+                  itemName: item.itemName,
+                  quantity,
+                }))
+            ).map((line, index) => (
+              <li className="flex justify-between gap-4" key={`${line.itemName}-${index}`}>
                 <span className="min-w-0">
-                  {quantity} × {item.itemName}
+                  {line.quantity} × {line.itemName}
                 </span>
                 <span className="shrink-0 tabular-nums text-[#5b6880]">
-                  {formatRupees(item.price * quantity)}
+                  {formatRupees(line.amount)}
                 </span>
               </li>
             ))}
@@ -375,8 +417,8 @@ export function KioskScreen({
 
   const [screen, setScreen] = useState<Screen>('welcome');
   const [pickedCart, setPickedCart] = useState<KioskCartLine[]>([]);
-  const [staff, setStaff] = useState<StaffDiscount | null>(null);
-  const [payer, setPayer] = useState<Payer>(noPayer);
+  // Signed in for this order only: never kept, and gone when the kiosk starts over.
+  const [guest, setGuest] = useState<KioskGuest | null>(null);
   const [payment, setPayment] = useState<{ method: PayMethod; order: QrOrderView } | null>(null);
   const [paidLines, setPaidLines] = useState<KioskCartLine[]>([]);
   const [notBilled, setNotBilled] = useState<QrOrderView | null>(null);
@@ -401,9 +443,8 @@ export function KioskScreen({
 
   const reset = useCallback(() => {
     setPickedCart([]);
-    setStaff(null);
-    // The next guest never sees the last one's name or number.
-    setPayer(noPayer);
+    // The next guest never sees the last one's name or number, nor orders as them.
+    setGuest(null);
     setPayment(null);
     setPaidLines([]);
     setNotBilled(null);
@@ -425,11 +466,9 @@ export function KioskScreen({
       order: (
         await publicOrganizationApi.createKioskPaidOrder(restaurantId, token!, {
           clientOrderId,
-          customerMobile: payer.mobile || undefined,
-          customerName: payer.name.trim() || undefined,
+          guestToken: guest!.guestToken,
           lines: cart.map(({ item, quantity }) => ({ menuId: item.id, quantity })),
           method,
-          staffToken: staff?.token,
         })
       ).data,
     }),
@@ -483,7 +522,16 @@ export function KioskScreen({
   } else if (notBilled) {
     body = <NotBilled onNext={reset} order={notBilled} />;
   } else if (screen === 'done' && payment) {
-    body = <Done lines={paidLines} method={payment.method} onNext={reset} order={payment.order} />;
+    body = (
+      <Done
+        lines={paidLines}
+        method={payment.method}
+        onNext={reset}
+        order={payment.order}
+        restaurantId={restaurantId}
+        token={token}
+      />
+    );
   } else if (screen === 'paying' && payment) {
     body = (
       <Paying
@@ -516,23 +564,21 @@ export function KioskScreen({
         error={error}
         isPlacing={place.isPending}
         menu={menu}
+        guest={guest}
+        onGuest={(next) => {
+          setError('');
+          setGuest(next);
+        }}
         onPay={(method) => {
-          if (payer.mobile && !mobilePattern.test(payer.mobile)) {
-            setError('Enter a 10-digit mobile number, or leave it empty.');
+          if (!guest) {
+            setError('Confirm your mobile number with the OTP to pay.');
             return;
           }
           place.mutate(method);
         }}
-        onPayer={(next) => {
-          setError('');
-          setPayer(next);
-        }}
         onQuantity={changeQuantity}
-        payer={payer}
-        onStaff={setStaff}
         onStartOver={reset}
         restaurantId={restaurantId}
-        staff={staff}
         token={token}
       />
     );

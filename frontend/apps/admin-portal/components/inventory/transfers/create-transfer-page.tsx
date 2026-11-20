@@ -49,6 +49,7 @@ import {
 } from '@/components/inventory/transfers/fefo-allocation';
 import {
   defaultTransferDate,
+  needsOperator,
   transferHeaderSchema,
   type SourceType,
   type TransferHeaderFormValues,
@@ -69,6 +70,7 @@ function emptyHeader(hospitalId: string): TransferHeaderFormValues {
     businessDate: '',
     destinationType: 'RESTAURANT',
     hospitalId,
+    receiverId: '',
     remarks: '',
     restaurantId: '',
     sourceId: '',
@@ -166,6 +168,15 @@ export function CreateTransferPageClient() {
     : (restaurantsQuery.data ?? [])
         .filter((restaurant) => restaurant.id !== selectedSourceId)
         .map((restaurant) => ({ id: restaurant.id, name: restaurant.restaurantName }));
+  // Asked for only once a restaurant is chosen: the location's operators who may acknowledge it.
+  const isToOperator = needsOperator(header);
+  const receiversQuery = useQuery({
+    enabled: isToOperator && Boolean(selectedHospitalId && selectedRestaurantId),
+    queryFn: async () => (await organizationApi.listTransferReceivers(selectedHospitalId)).data,
+    queryKey: queryKeys.transfers('receivers', selectedHospitalId),
+  });
+  const receiverName =
+    receiversQuery.data?.find((receiver) => receiver.id === header.receiverId)?.name ?? null;
   const stockQuery = useSourceStock(selectedSourceType, selectedSourceId, selectedBusinessDate);
   const stockOptions = useMemo(() => stockQuery.data ?? [], [stockQuery.data]);
   const stockMap = useMemo(
@@ -225,6 +236,7 @@ export function CreateTransferPageClient() {
       form.setValue('hospitalId', scopedHospitalId, { shouldValidate: true });
       form.setValue('sourceId', '', { shouldValidate: true });
       form.setValue('restaurantId', '', { shouldValidate: true });
+      form.setValue('receiverId', '');
       setLines([]);
     }
   }, [form, scopedHospitalId]);
@@ -243,7 +255,9 @@ export function CreateTransferPageClient() {
       onRestore: (saved) => {
         if (prefill && !prefillApplied.current) return false;
         // Drafts kept before counters could receive stock have no destination type.
+        // Drafts kept before operators were named have no receiverId: the empty header fills it.
         form.reset({
+          ...emptyHeader(''),
           ...saved.header,
           destinationType: saved.header.destinationType === 'COUNTER' ? 'COUNTER' : 'RESTAURANT',
         });
@@ -445,7 +459,10 @@ export function CreateTransferPageClient() {
     0,
   );
   const canSubmit =
-    lines.length > 0 && invalidLineCount === 0 && Boolean(selectedSourceId && selectedRestaurantId);
+    lines.length > 0 &&
+    invalidLineCount === 0 &&
+    Boolean(selectedSourceId && selectedRestaurantId) &&
+    (!isToOperator || Boolean(header.receiverId));
 
   const normalizedItemQuery = itemQuery.trim().toLowerCase();
   const itemMatches = stockGroups
@@ -620,6 +637,7 @@ export function CreateTransferPageClient() {
         remarks: line.remarks,
         sentQty: line.sentQty,
       })),
+      ...(needsOperator(parsed) ? { receiverId: parsed.receiverId } : {}),
       remarks: optionalValue(parsed.remarks),
       sourceId: parsed.sourceId,
       sourceType: parsed.sourceType,
@@ -749,9 +767,11 @@ export function CreateTransferPageClient() {
       ? 'Choose where it comes from'
       : !selectedRestaurantId
         ? `Choose the ${destinationNoun} it goes to`
-        : lines.length === 0
-          ? 'Add at least one item'
-          : `Fix ${plural(invalidLineCount, 'line')} first`;
+        : isToOperator && !header.receiverId
+          ? 'Choose the operator'
+          : lines.length === 0
+            ? 'Add at least one item'
+            : `Fix ${plural(invalidLineCount, 'line')} first`;
   const changeLinkClass =
     'rounded-sm text-[12.5px] font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary';
   const route = (
@@ -838,6 +858,7 @@ export function CreateTransferPageClient() {
                       });
                       form.setValue('sourceId', '');
                       form.setValue('restaurantId', '');
+                      form.setValue('receiverId', '');
                       resetLines();
                     }}
                     value={selectedHospitalId}
@@ -972,6 +993,53 @@ export function CreateTransferPageClient() {
                       <FieldError>{errors.restaurantId.message}</FieldError>
                     ) : null}
                   </label>
+                  {isToOperator ? (
+                    <label className={fieldLabel}>
+                      <span>
+                        Operator
+                        <RequiredMark />
+                      </span>
+                      <select
+                        aria-required="true"
+                        className={selectClass}
+                        disabled={!selectedRestaurantId || isBusy}
+                        onChange={(event) =>
+                          form.setValue('receiverId', event.target.value, {
+                            shouldValidate: hasTriedSubmit,
+                          })
+                        }
+                        value={header.receiverId}
+                      >
+                        <option value="">
+                          {!selectedRestaurantId
+                            ? 'Choose the restaurant first'
+                            : receiversQuery.isLoading
+                              ? 'Loading operators…'
+                              : 'Select operator'}
+                        </option>
+                        {(receiversQuery.data ?? []).map((receiver) => (
+                          <option key={receiver.id} value={receiver.id}>
+                            {receiver.name} · {receiver.employeeCode}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-[11.5px] font-medium text-ds-muted">
+                        Only they, or a Super Admin, can acknowledge it.
+                      </span>
+                      {receiversQuery.isError ? (
+                        <FieldError>
+                          Operators could not be loaded: {getApiErrorMessage(receiversQuery.error)}
+                        </FieldError>
+                      ) : errors.receiverId ? (
+                        <FieldError>{errors.receiverId.message}</FieldError>
+                      ) : null}
+                    </label>
+                  ) : null}
+                  {isToOperator && receiversQuery.data?.length === 0 ? (
+                    <SetupNotice href="/operators" linkLabel="Open Operators">
+                      No operator at this location may acknowledge transfers yet.
+                    </SetupNotice>
+                  ) : null}
                   {selectedHospitalId &&
                   (isToCounter ? countersQuery.data : restaurantsQuery.data) &&
                   destinationOptions.length === 0 ? (
@@ -1449,6 +1517,12 @@ export function CreateTransferPageClient() {
                     <span className="truncate">{restaurantName ?? '—'}</span>
                   </dd>
                 </div>
+                {isToOperator ? (
+                  <div className="flex flex-col gap-1">
+                    <dt className="text-xs font-semibold text-ds-muted">Operator</dt>
+                    <dd className="font-semibold text-ds-text">{receiverName ?? '—'}</dd>
+                  </div>
+                ) : null}
                 {isAllLocations ? (
                   <div className="flex flex-col gap-1">
                     <dt className="text-xs font-semibold text-ds-muted">Location</dt>
@@ -1610,7 +1684,8 @@ export function CreateTransferPageClient() {
               <span className="font-extrabold text-ds-text">When you submit</span>
               <span>
                 Stock is reserved at {sourceName ?? 'the source'}, and{' '}
-                {restaurantName ?? `the ${destinationNoun}`} is asked to acknowledge each line.
+                {receiverName ?? restaurantName ?? `the ${destinationNoun}`} is asked to acknowledge
+                each line.
               </span>
             </div>
           ) : null}

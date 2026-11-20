@@ -51,7 +51,6 @@ import {
   activeFilterToBoolean,
   applyValidationErrors,
   emptyMappingFormValues,
-  listLimit,
   mappingSchema,
   useEntityList,
   useHospitalOptions,
@@ -60,6 +59,7 @@ import {
 } from '@/components/mapping-foundation/shared/utils';
 import { useItemCategoryOptions } from '@/components/master-data/items/shared';
 import { queryKeys } from '@/lib/query-keys';
+import { useListLimit } from '@/lib/list-limit';
 import { SetupNotice } from '@/components/location-empty-states';
 
 /** Mapping to a kitchen makes an item Readymade (made ahead) or Live (made to order). */
@@ -113,6 +113,7 @@ export function KitchenItemsPageClient({
 }: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [view, setView] = useListView('list');
@@ -177,7 +178,7 @@ export function KitchenItemsPageClient({
       hospitalId: hospitalFilter,
       itemType: typeFilter,
       kitchenId: kitchenFilter,
-      limit: listLimit,
+      limit,
       page,
       search,
       sortBy,
@@ -253,7 +254,7 @@ export function KitchenItemsPageClient({
     })) ?? [];
   const mappings = mappingsQuery.data?.items ?? [];
   const meta = mappingsQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -489,10 +490,12 @@ export function KitchenItemsPageClient({
       <Panel className="overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ds-divider px-4 pt-3">
           {listTabs ?? <span />}
-          <Button className="mb-2" onClick={() => setIsCreating(true)} type="button">
-            <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-            Map item
-          </Button>
+          {hasPermission('KITCHEN_ITEM_CREATE') ? (
+            <Button className="mb-2" onClick={() => setIsCreating(true)} type="button">
+              <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+              Map item
+            </Button>
+          ) : null}
         </div>
         <ListToolbar>
           <SearchInput
@@ -604,7 +607,7 @@ export function KitchenItemsPageClient({
                   <RowSwitch
                     ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
                     checked={mapping.isActive}
-                    disabled={toggleMappingStatusMutation.isPending}
+                    disabled={toggleMappingStatusMutation.isPending || !canEdit}
                     offLabel="Inactive"
                     onChange={() => void toggleMappingStatus(mapping)}
                     onLabel="Active"
@@ -650,12 +653,7 @@ export function KitchenItemsPageClient({
               <tbody>
                 {mappings.length > 0 ? (
                   mappings.map((mapping) => (
-                    <tr
-                      className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                      data-record-id={mapping.id}
-                      key={mapping.id}
-                      onClick={canEdit ? () => startEditingMapping(mapping) : undefined}
-                    >
+                    <tr className={tableStyles.row} data-record-id={mapping.id} key={mapping.id}>
                       <td className={tableStyles.td} onClick={keepLinkClicks}>
                         <span className="flex min-w-0 items-center gap-3">
                           <RecordAvatar foodType={mapping.item.type} name={mapping.item.itemName} />
@@ -707,12 +705,11 @@ export function KitchenItemsPageClient({
                       <td className={tableStyles.td}>
                         <DateTimeCell value={mapping.updatedAt} />
                       </td>
-                      {/* Its own click: switching the status does not open the mapping. */}
-                      <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                      <td className={tableStyles.td}>
                         <RowSwitch
                           ariaLabel={`${mapping.item.itemName} in ${mapping.kitchen.kitchenName} active`}
                           checked={mapping.isActive}
-                          disabled={toggleMappingStatusMutation.isPending}
+                          disabled={toggleMappingStatusMutation.isPending || !canEdit}
                           offLabel="Inactive"
                           onChange={() => void toggleMappingStatus(mapping)}
                           onLabel="Active"
@@ -748,6 +745,7 @@ export function KitchenItemsPageClient({
           </div>
         )}
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

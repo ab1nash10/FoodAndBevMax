@@ -34,7 +34,9 @@ import { FieldError, Input, Panel, RequiredMark, Skeleton } from '@/components/u
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
 import { HistoryButton } from '@/components/audit/history-drawer';
+import { IfCanOpen } from '@/components/record-link';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { WASTAGE_LIMIT } from '@/lib/dashboard-stats';
 import { recordHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { invalidateKitchenProductionQueries } from '@/lib/query-invalidation';
@@ -190,9 +192,6 @@ function useMappedKitchenItems(kitchenId?: string) {
     queryKey: queryKeys.kitchenProductionItems(kitchenId),
   });
 }
-
-/** Lines wasting more than this share of what was produced are highlighted. */
-const WASTAGE_ALERT_PERCENT = 5;
 
 /** How many mapped items are offered as one-tap chips before the rest go in a select. */
 const productionChipCount = 6;
@@ -463,7 +462,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
     return {
       accepted: Math.max(produced - wasted, 0),
       error,
-      isHigh: percent > WASTAGE_ALERT_PERCENT,
+      isHigh: percent > WASTAGE_LIMIT,
       line,
       mapping: itemMap.get(line.itemId),
       percent,
@@ -625,7 +624,8 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
             tone: 'bad' as const,
           }
         : { text: `Ready to post ${plural(lines.length, 'item')}.`, tone: 'ok' as const };
-  const canPostHere = canPost && (isExisting || hasPermission('KITCHEN_PRODUCTION_CREATE'));
+  // Posting saves the production first, so it needs leave to save it as well.
+  const canPostHere = canPost && canSave;
   const wastageTotals = (
     <dl className="grid gap-px bg-ds-divider grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
       {[
@@ -633,13 +633,11 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
         {
           label: 'Overall wastage',
           tone:
-            overallPercent > WASTAGE_ALERT_PERCENT
-              ? 'text-ds-status-pending-fg'
-              : 'text-ds-status-ok-fg',
+            overallPercent > WASTAGE_LIMIT ? 'text-ds-status-pending-fg' : 'text-ds-status-ok-fg',
           value: `${overallPercent.toFixed(1)}%`,
         },
         {
-          label: `Above ${WASTAGE_ALERT_PERCENT}% limit`,
+          label: `Above ${WASTAGE_LIMIT}% limit`,
           tone: flagged ? 'text-ds-status-pending-fg' : 'text-ds-status-ok-fg',
           value: String(flagged),
         },
@@ -661,7 +659,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
           ? 'bg-ds-status-pending-bg text-ds-status-pending-fg'
           : 'bg-ds-status-neutral-bg text-ds-status-neutral-fg',
       )}
-      title={row.isHigh ? `Above the ${WASTAGE_ALERT_PERCENT}% limit` : undefined}
+      title={row.isHigh ? `Above the ${WASTAGE_LIMIT}% limit` : undefined}
     >
       {row.percent.toFixed(1)}%
     </span>
@@ -794,9 +792,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
             <dd
               className={cn(
                 'mt-1.5 text-2xl font-semibold tracking-[-0.02em] tabular-nums',
-                overallPercent > WASTAGE_ALERT_PERCENT
-                  ? 'text-ds-status-pending-fg'
-                  : 'text-ds-text',
+                overallPercent > WASTAGE_LIMIT ? 'text-ds-status-pending-fg' : 'text-ds-text',
               )}
             >
               {formatTotal(totalWasted)}
@@ -809,7 +805,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
               {lines.length}
             </dd>
             <p className="mt-1 text-xs text-ds-muted">
-              {flagged} above the {WASTAGE_ALERT_PERCENT}% limit
+              {flagged} above the {WASTAGE_LIMIT}% limit
             </p>
           </div>
           <div className={cardClass}>
@@ -1309,7 +1305,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
                 <span
                   className={cn(
                     'font-mono',
-                    overallPercent > WASTAGE_ALERT_PERCENT && 'text-ds-status-pending-fg',
+                    overallPercent > WASTAGE_LIMIT && 'text-ds-status-pending-fg',
                   )}
                 >
                   {formatTotal(totalWasted)}
@@ -1407,13 +1403,15 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
           <h2 className="text-sm font-extrabold text-ds-text" id="production-today">
             Today · {shortDateFormatter.format(new Date())}
           </h2>
-          <Link
-            aria-label="New production"
-            className="grid h-[30px] w-[30px] place-items-center rounded-lg border border-ds-border text-ds-link transition hover:bg-ds-primary-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-            href="/kitchen/productions/new"
-          >
-            <Plus aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.2} />
-          </Link>
+          <IfCanOpen href="/kitchen/productions/new">
+            <Link
+              aria-label="New production"
+              className="grid h-[30px] w-[30px] place-items-center rounded-lg border border-ds-border text-ds-link transition hover:bg-ds-primary-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+              href="/kitchen/productions/new"
+            >
+              <Plus aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.2} />
+            </Link>
+          </IfCanOpen>
         </div>
         {todayQuery.isLoading ? (
           <div className="space-y-2 px-4 pb-4">

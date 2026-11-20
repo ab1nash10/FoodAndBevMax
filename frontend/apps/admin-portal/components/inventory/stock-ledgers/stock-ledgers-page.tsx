@@ -34,7 +34,6 @@ import {
 import {
   formatDateOnly,
   formatEnum,
-  listLimit,
   useHospitals,
   useKitchens,
   useRestaurants,
@@ -42,6 +41,7 @@ import {
 } from '@/components/inventory/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 const stockLedgerLocationTypes: InventoryLocationType[] = [
   'STORE',
@@ -73,6 +73,8 @@ const stockTransactionTypes: StockTransactionType[] = [
   'SALE_CANCEL_IN',
   'DISCARD_OUT',
   'RESTAURANT_TRANSFER_OUT',
+  'RESTAURANT_RETURN_OUT',
+  'STORE_RETURN_IN',
 ];
 
 // The filter's names, which have to tell every type apart.
@@ -85,9 +87,11 @@ const transactionLabels: Partial<Record<StockTransactionType, string>> = {
   KITCHEN_TRANSFER_OUT: 'Kitchen transfer out',
   RESTAURANT_RECEIVE_IN: 'Restaurant receipt',
   RESTAURANT_TRANSFER_IN: 'Restaurant transfer in',
+  RESTAURANT_RETURN_OUT: 'Returned to store',
   RESTAURANT_TRANSFER_OUT: 'Restaurant transfer out',
   SALE_CANCEL_IN: 'Sale cancelled',
   SALE_OUT: 'Sale',
+  STORE_RETURN_IN: 'Return counted in',
   STORE_TO_RESTAURANT_OUT: 'Store transfer out',
   TRANSFER_REJECTED_RETURN_IN: 'Rejected transfer return',
 };
@@ -101,7 +105,9 @@ const shortTransactionLabels: Partial<Record<StockTransactionType, string>> = {
   KITCHEN_TRANSFER_OUT: 'Transfer out',
   RESTAURANT_RECEIVE_IN: 'Received',
   RESTAURANT_TRANSFER_IN: 'Transfer in',
+  RESTAURANT_RETURN_OUT: 'Returned to store',
   RESTAURANT_TRANSFER_OUT: 'Transfer out',
+  STORE_RETURN_IN: 'Return counted in',
   STORE_TO_RESTAURANT_OUT: 'Transfer out',
   TRANSFER_REJECTED_RETURN_IN: 'Returned',
 };
@@ -141,6 +147,7 @@ function referenceHref(ledger: StockLedger): string | null {
 export function StockLedgersPageClient() {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [hospitalFilter, setHospitalFilter] = useState(scopedHospitalId ?? '');
@@ -195,7 +202,7 @@ export function StockLedgersPageClient() {
         businessDate: businessDateFilter || undefined,
         fromDate: fromDateFilter || undefined,
         hospitalId: hospitalFilter,
-        limit: listLimit,
+        limit,
         locationId: locationFilter,
         locationType: locationTypeFilter || undefined,
         page,
@@ -222,6 +229,7 @@ export function StockLedgersPageClient() {
       toDateFilter,
       sortBy,
       sortOrder,
+      limit,
     ),
   });
 
@@ -249,7 +257,7 @@ export function StockLedgersPageClient() {
   });
   const stats = statsQuery.data;
   const ledgers = ledgersQuery.data?.items ?? [];
-  const meta = ledgersQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = ledgersQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
     searchInput ||
     hospitalFilter !== (scopedHospitalId ?? '') ||
@@ -600,7 +608,7 @@ export function StockLedgersPageClient() {
                 ))
               ) : (
                 <QueryState
-                  colSpan={10}
+                  colSpan={9}
                   error={ledgersQuery.error}
                   isError={ledgersQuery.isError}
                   isLoading={ledgersQuery.isLoading}
@@ -612,6 +620,7 @@ export function StockLedgersPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

@@ -407,7 +407,7 @@ export function ErpPostingPageClient() {
         {query.data ? (
           <ListPager
             limit={limit}
-            noun="sends"
+            noun="send"
             onLimitChange={(value) => {
               setLimit(value);
               setPage(1);

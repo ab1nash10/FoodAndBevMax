@@ -53,6 +53,8 @@ type LocationSelectionValue = string;
 interface LocationContextValue {
   availableLocations: HospitalSummary[];
   canSelectAllLocations: boolean;
+  /** The signed-in user's employee code (the access token does not carry it). */
+  employeeCode: string | null;
   isAllLocations: boolean;
   isLocationSelectorLocked: boolean;
   isLoadingLocations: boolean;
@@ -143,6 +145,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
   }, [accessQuery.data, accessQuery.dataUpdatedAt, userId]);
   const canSelectAllLocations = accessQuery.data?.locationScope === 'ALL';
   const defaultLocationId = accessQuery.data?.defaultLocationId ?? null;
+  const employeeCode = accessQuery.data?.employeeCode ?? null;
 
   const availableLocations = useMemo(
     () => accessQuery.data?.locations ?? [],
@@ -243,6 +246,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
     () => ({
       availableLocations,
       canSelectAllLocations,
+      employeeCode,
       isAllLocations,
       isLocationSelectorLocked,
       isLoadingLocations: !isSelectionResolved,
@@ -262,6 +266,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
     [
       availableLocations,
       canSelectAllLocations,
+      employeeCode,
       isAllLocations,
       isLocationSelectorLocked,
       isSelectionResolved,
