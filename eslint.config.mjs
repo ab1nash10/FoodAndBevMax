@@ -53,6 +53,8 @@ const strictSetRules = Object.assign(
 export default [
   {
     ignores: [
+      // Agent skills are vendored as installed (skills-lock.json), not project code.
+      '.agents/**',
       '**/.next/**',
       '**/.turbo/**',
       '**/coverage/**',

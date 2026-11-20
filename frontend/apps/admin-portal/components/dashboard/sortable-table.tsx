@@ -96,6 +96,7 @@ export function SortableTable<Row>({
                           ? { dir: current.dir === 'asc' ? 'desc' : 'asc', key: column.key }
                           : {
                               dir:
+                                rows.length > 0 &&
                                 typeof column.sortValue(rows[0] as Row) === 'string'
                                   ? 'asc'
                                   : 'desc',

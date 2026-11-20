@@ -23,6 +23,8 @@ export interface CsvColumn<T> {
   required?: boolean;
   /** For people reading the export (a name beside a code); an import neither needs nor uses it. */
   readOnly?: boolean;
+  /** A file may leave the column out: every row is then read as leaving it blank. */
+  optional?: boolean;
   value: (row: T) => number | string | null | undefined;
 }
 
@@ -212,7 +214,7 @@ export function CsvImportExport<T>({
     const [header = [], ...rows] = table;
     const positions = new Map(header.map((name, index) => [name.trim().toLowerCase(), index]));
     const missing = columns
-      .filter((column) => !column.readOnly)
+      .filter((column) => !column.readOnly && !column.optional)
       .map((column) => column.header)
       .filter((name) => !positions.has(name.toLowerCase()));
 

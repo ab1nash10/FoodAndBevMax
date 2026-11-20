@@ -2,22 +2,8 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation } from '@tanstack/react-query';
-import type {
-  EmailPasswordLoginRequest,
-  ResetPasswordRequest,
-  SendOtpRequest,
-  VerifyOtpRequest,
-} from '@aahar/api-client';
-import {
-  ArrowRight,
-  ChefHat,
-  KeyRound,
-  Mail,
-  Package,
-  Receipt,
-  ShieldCheck,
-  Smartphone,
-} from 'lucide-react';
+import type { SendOtpRequest, VerifyOtpRequest } from '@aahar/api-client';
+import { ArrowRight, ChefHat, Mail, Package, Receipt, ShieldCheck, Smartphone } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -30,9 +16,7 @@ import { withBasePath } from '@/lib/base-path';
 import { cn } from '@/lib/utils';
 import {
   applyValidationErrors,
-  emailPasswordSchema,
   resendDelaySeconds,
-  resetPasswordSchema,
   sendEmailOtpSchema,
   sendOtpSchema,
   verifyEmailOtpSchema,
@@ -81,10 +65,6 @@ export default function LoginPage() {
   const { showToast } = useToast();
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [isOtpStep, setIsOtpStep] = useState(false);
-  // The Email tab signs in with the password, or by a code: errors follow the last one tried.
-  const [emailWay, setEmailWay] = useState<'code' | 'password'>('password');
-  // Forgot password: the emailed code then sets a new password instead of signing in.
-  const [isResetting, setIsResetting] = useState(false);
   const [hasShownSessionNotice, setHasShownSessionNotice] = useState(false);
   // Errors appear on the first submit, then follow the user's typing.
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
@@ -92,25 +72,16 @@ export default function LoginPage() {
   const [now, setNow] = useState(() => Date.now());
   const form = useForm<LoginFormValues>({
     defaultValues: {
-      confirmPassword: '',
       email: '',
       mobile: '',
-      newPassword: '',
       otp: '',
-      password: '',
     },
   });
   const errors = form.formState.errors;
-  // Mobile signs in by a one-time code; email by its password, or by a code sent to it.
+  // Both sign in by a one-time code: to the mobile by SMS, to the email by mail. No passwords.
   const sendSchema = loginMethod === 'email' ? sendEmailOtpSchema : sendOtpSchema;
   const verifySchema = loginMethod === 'email' ? verifyEmailOtpSchema : verifyOtpSchema;
-  const activeSchema = isOtpStep
-    ? isResetting
-      ? resetPasswordSchema
-      : verifySchema
-    : loginMethod === 'email' && emailWay === 'password'
-      ? emailPasswordSchema
-      : sendSchema;
+  const activeSchema = isOtpStep ? verifySchema : sendSchema;
   const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
   useEffect(() => {
@@ -205,103 +176,7 @@ export default function LoginPage() {
     },
   });
 
-  const passwordLoginMutation = useMutation({
-    mutationFn: (body: EmailPasswordLoginRequest) => authApi.loginWithPassword(body),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Login failed',
-        variant: 'error',
-      });
-    },
-    onSuccess(response) {
-      enterFullscreen();
-      signIn(response.data);
-      showToast({
-        title: 'Signed in',
-        variant: 'success',
-      });
-    },
-  });
-
-  const resetPasswordMutation = useMutation({
-    mutationFn: (body: ResetPasswordRequest) => authApi.resetPassword(body),
-    onError(error) {
-      showToast({
-        description: getApiErrorMessage(error),
-        title: 'Password not changed',
-        variant: 'error',
-      });
-    },
-    onSuccess() {
-      // Back to the password sign-in, the email kept, so the new password goes straight in.
-      setIsResetting(false);
-      setIsOtpStep(false);
-      setEmailWay('password');
-      setHasTriedSubmit(false);
-      ['confirmPassword', 'newPassword', 'otp', 'password'].forEach((name) =>
-        form.setValue(name as 'otp', ''),
-      );
-      // Last: until the next render the reset step's live check is still listening, and the
-      // emptied fields above would leave hidden errors that block the Sign in button.
-      form.clearErrors();
-      showToast({
-        description: 'Sign in with your new password.',
-        title: 'Password changed',
-        variant: 'success',
-      });
-    },
-  });
-
-  // Forgot password: a code goes to the email typed above, as for code sign-in.
-  const handleForgotPassword = form.handleSubmit((values) => {
-    setEmailWay('code');
-    setHasTriedSubmit(true);
-    const parsed = sendEmailOtpSchema.safeParse(values);
-
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
-
-    setIsResetting(true);
-    sendOtpMutation.mutate(parsed.data);
-  });
-
-  const handleResetPassword = form.handleSubmit((values) => {
-    setHasTriedSubmit(true);
-    const parsed = resetPasswordSchema.safeParse(values);
-
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
-
-    if (values.confirmPassword !== parsed.data.newPassword) {
-      form.setError('confirmPassword', { message: 'The two passwords do not match.' });
-      return;
-    }
-
-    resetPasswordMutation.mutate(parsed.data);
-  });
-
-  const handlePasswordLogin = form.handleSubmit((values) => {
-    setEmailWay('password');
-    setHasTriedSubmit(true);
-    const parsed = emailPasswordSchema.safeParse(values);
-
-    if (!parsed.success) {
-      applyValidationErrors(form, parsed.error);
-      return;
-    }
-
-    passwordLoginMutation.mutate(parsed.data);
-  });
-
   const handleSendOtp = form.handleSubmit((values) => {
-    setEmailWay('code');
-    setIsResetting(false);
-    form.clearErrors('password');
     setHasTriedSubmit(true);
     const parsed = sendSchema.safeParse(values);
 
@@ -328,25 +203,16 @@ export default function LoginPage() {
   const changeLoginMethod = (method: LoginMethod) => {
     setLoginMethod(method);
     setIsOtpStep(false);
-    setIsResetting(false);
     setHasTriedSubmit(false);
     form.clearErrors();
     form.setValue('otp', '');
-    form.setValue('password', '');
   };
 
-  const isBusy =
-    sendOtpMutation.isPending ||
-    verifyOtpMutation.isPending ||
-    passwordLoginMutation.isPending ||
-    resetPasswordMutation.isPending;
+  const isBusy = sendOtpMutation.isPending || verifyOtpMutation.isPending;
   const mobile = form.watch('mobile');
   const email = form.watch('email');
   const emailField = form.register('email');
   const mobileField = form.register('mobile');
-  const passwordField = form.register('password');
-  const newPasswordField = form.register('newPassword');
-  const confirmPasswordField = form.register('confirmPassword');
 
   return (
     // The brand panel on the left, the form on plain white beside it.
@@ -450,12 +316,11 @@ export default function LoginPage() {
           {isOtpStep ? (
             <div className="flex flex-col gap-2">
               <h2 className="text-[28px] font-semibold leading-[34px] tracking-[-0.015em]">
-                {isResetting ? 'Reset your password' : 'Enter the code'}
+                Enter the code
               </h2>
               <p className="text-ds-text-2">
-                {isResetting ? 'Enter the code we emailed to ' : 'Sent to '}
-                {loginMethod === 'email' ? email.trim().toLowerCase() : `+91 ${mobile}`}
-                {isResetting ? ' and choose a new password.' : '.'}{' '}
+                Sent to
+                {loginMethod === 'email' ? email.trim().toLowerCase() : `+91 ${mobile}`}.{' '}
                 <button
                   className="font-semibold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
                   disabled={isBusy}
@@ -464,7 +329,6 @@ export default function LoginPage() {
                     form.clearErrors();
                     setHasTriedSubmit(false);
                     setIsOtpStep(false);
-                    setIsResetting(false);
                   }}
                   type="button"
                 >
@@ -479,8 +343,7 @@ export default function LoginPage() {
                   Welcome back
                 </h2>
                 <p className="text-ds-text-2">
-                  Sign in with the email your admin registered and your password, or with a one-time
-                  code to your email or mobile.
+                  Sign in with a one-time code sent to the email or mobile your admin registered.
                 </p>
               </div>
               <SegmentedControl<LoginMethod>
@@ -492,7 +355,7 @@ export default function LoginPage() {
                     label: (
                       <>
                         <Mail aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                        Email
+                        Email code
                       </>
                     ),
                     value: 'email',
@@ -517,15 +380,7 @@ export default function LoginPage() {
             className="flex flex-col gap-[22px]"
             noValidate
             onSubmit={(event) => {
-              void (
-                isOtpStep
-                  ? isResetting
-                    ? handleResetPassword
-                    : handleVerifyOtp
-                  : loginMethod === 'email'
-                    ? handlePasswordLogin
-                    : handleSendOtp
-              )(event);
+              void (isOtpStep ? handleVerifyOtp : handleSendOtp)(event);
             }}
           >
             {isOtpStep ? (
@@ -538,76 +393,6 @@ export default function LoginPage() {
                   value={form.watch('otp')}
                 />
                 <ErrorText id="login-otp-error">{errors.otp?.message}</ErrorText>
-                {isResetting ? (
-                  <>
-                    <label className={cn(fieldLabel, 'mt-2.5')} htmlFor="reset-new-password">
-                      New password
-                    </label>
-                    <span
-                      className={cn(
-                        fieldShell,
-                        errors.newPassword ? 'border-ds-status-bad-fg' : 'border-ds-border',
-                      )}
-                    >
-                      <KeyRound
-                        aria-hidden="true"
-                        className="ml-3.5 h-[18px] w-[18px] shrink-0 text-ds-muted"
-                      />
-                      <input
-                        aria-describedby={
-                          errors.newPassword
-                            ? 'reset-new-password-error'
-                            : 'reset-new-password-hint'
-                        }
-                        aria-invalid={errors.newPassword ? true : undefined}
-                        autoComplete="new-password"
-                        className={bareInput}
-                        id="reset-new-password"
-                        suppressHydrationWarning
-                        type="password"
-                        {...newPasswordField}
-                      />
-                    </span>
-                    {errors.newPassword ? (
-                      <ErrorText id="reset-new-password-error">
-                        {errors.newPassword.message}
-                      </ErrorText>
-                    ) : (
-                      <span className="text-xs text-ds-muted" id="reset-new-password-hint">
-                        At least 8 characters, with a letter and a number.
-                      </span>
-                    )}
-                    <label className={cn(fieldLabel, 'mt-2.5')} htmlFor="reset-confirm-password">
-                      Confirm new password
-                    </label>
-                    <span
-                      className={cn(
-                        fieldShell,
-                        errors.confirmPassword ? 'border-ds-status-bad-fg' : 'border-ds-border',
-                      )}
-                    >
-                      <KeyRound
-                        aria-hidden="true"
-                        className="ml-3.5 h-[18px] w-[18px] shrink-0 text-ds-muted"
-                      />
-                      <input
-                        aria-describedby={
-                          errors.confirmPassword ? 'reset-confirm-password-error' : undefined
-                        }
-                        aria-invalid={errors.confirmPassword ? true : undefined}
-                        autoComplete="new-password"
-                        className={bareInput}
-                        id="reset-confirm-password"
-                        suppressHydrationWarning
-                        type="password"
-                        {...confirmPasswordField}
-                      />
-                    </span>
-                    <ErrorText id="reset-confirm-password-error">
-                      {errors.confirmPassword?.message}
-                    </ErrorText>
-                  </>
-                ) : null}
               </fieldset>
             ) : loginMethod === 'email' ? (
               <div className="flex flex-col gap-2">
@@ -641,46 +426,9 @@ export default function LoginPage() {
                   <ErrorText id="login-email-error">{errors.email.message}</ErrorText>
                 ) : (
                   <span className="text-xs text-ds-muted" id="login-email-hint">
-                    Use the address on your AAHAR profile.
+                    We’ll email a 6-digit code to the address on your AAHAR profile.
                   </span>
                 )}
-                <span className="mt-2.5 flex items-center justify-between gap-3">
-                  <label className={fieldLabel} htmlFor="login-password">
-                    Password
-                  </label>
-                  <button
-                    className="text-sm font-semibold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:text-ds-muted"
-                    disabled={isBusy}
-                    onClick={(event) => void handleForgotPassword(event)}
-                    type="button"
-                  >
-                    Forgot password?
-                  </button>
-                </span>
-                <span
-                  className={cn(
-                    fieldShell,
-                    errors.password ? 'border-ds-status-bad-fg' : 'border-ds-border',
-                  )}
-                >
-                  <KeyRound
-                    aria-hidden="true"
-                    className="ml-3.5 h-[18px] w-[18px] shrink-0 text-ds-muted"
-                  />
-                  <input
-                    aria-describedby={errors.password ? 'login-password-error' : undefined}
-                    aria-invalid={errors.password ? true : undefined}
-                    autoComplete="current-password"
-                    className={bareInput}
-                    id="login-password"
-                    placeholder="The password your admin set"
-                    // Autofill/temp-mail extensions inject attributes before hydration.
-                    suppressHydrationWarning
-                    type="password"
-                    {...passwordField}
-                  />
-                </span>
-                <ErrorText id="login-password-error">{errors.password?.message}</ErrorText>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -724,26 +472,9 @@ export default function LoginPage() {
               disabled={isBusy}
               type="submit"
             >
-              {isOtpStep
-                ? isResetting
-                  ? 'Reset password'
-                  : 'Verify & sign in'
-                : loginMethod === 'email'
-                  ? 'Sign in'
-                  : 'Send code'}
+              {isOtpStep ? 'Verify & sign in' : 'Send code'}
               {isOtpStep ? null : <ArrowRight aria-hidden="true" className="h-4 w-4" />}
             </Button>
-
-            {!isOtpStep && loginMethod === 'email' ? (
-              <button
-                className="-mt-2 self-center text-sm font-semibold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary disabled:text-ds-muted"
-                disabled={isBusy}
-                onClick={(event) => void handleSendOtp(event)}
-                type="button"
-              >
-                Email me a code instead
-              </button>
-            ) : null}
 
             {isOtpStep ? (
               <p className="text-[13px] text-ds-muted">

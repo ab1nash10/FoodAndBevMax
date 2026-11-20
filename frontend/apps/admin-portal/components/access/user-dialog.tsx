@@ -2,42 +2,38 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AccessRole, AccessUser, AccessUserInput } from '@aahar/api-client';
+import type { AccessRole, AccessUser, AccessUserInput, Employee } from '@aahar/api-client';
 import { Loader2, Lock, MapPin, X } from 'lucide-react';
 import { useState } from 'react';
 import { LocationPickerDialog } from '@/components/access/location-picker-dialog';
 import { useAuth } from '@/components/auth-provider';
+import { EmployeeSearch } from '@/components/master-data/employees/employee-search';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, RequiredMark, Select } from '@/components/ui';
-import { Modal, PasswordInput } from '@/components/ui-controls';
+import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi, userApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
 
 interface FormValues {
-  currentPassword: string;
   designation: string;
   email: string;
   employeeCode: string;
   isActive: boolean;
   mobile: string;
   name: string;
-  password: string;
   roleId: string;
 }
 
 function toFormValues(user: AccessUser | null): FormValues {
   return {
-    currentPassword: '',
     designation: user?.designation ?? '',
     email: user?.email ?? '',
     employeeCode: user?.employeeCode ?? '',
     isActive: user ? user.status === 'ACTIVE' : true,
     mobile: user?.mobile ?? '',
     name: user?.name ?? '',
-    password: '',
     roleId: user?.roles[0]?.id ?? '',
   };
 }
@@ -65,15 +61,23 @@ function Toggle({
 }
 
 export function UserDialog({
+  noun = 'user',
   onClose,
   roles,
   user,
-}: Readonly<{ onClose: () => void; roles: AccessRole[]; user: AccessUser | null }>) {
+}: Readonly<{
+  /** What the person is called in the title and messages: "admin", "operator". */
+  noun?: string;
+  onClose: () => void;
+  roles: AccessRole[];
+  user: AccessUser | null;
+}>) {
   const [values, setValues] = useState<FormValues>(() => toFormValues(user));
-  const { currentUser, roles: myRoles } = useAuth();
+  const { currentUser, hasPermission, roles: myRoles } = useAuth();
+  const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
   // The server refuses these changes while the user is signed in (8 hours from their last
   // activity, or until they sign out); the fields say so up front. A Super Admin may change
-  // them at any time, and so may the user on their own record.
+  // them at any time. Your own record is locked separately (isSelf, below).
   const [credentialsLockedUntil] = useState(() => {
     if (myRoles.includes('Super Admin') || currentUser?.id === user?.id) return null;
 
@@ -92,13 +96,9 @@ export function UserDialog({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
-  // Your own email, mobile or password: the server asks for your current password first.
-  const needsCurrentPassword =
-    Boolean(user) &&
-    currentUser?.id === user?.id &&
-    (Boolean(values.password) ||
-      values.email.trim().toLowerCase() !== (user?.email ?? '') ||
-      values.mobile !== user?.mobile);
+  // Your own email and mobile receive your sign-in codes: another administrator changes them.
+  const isSelf = Boolean(user) && currentUser?.id === user?.id;
+  const contactLocked = Boolean(credentialsLockedUntil) || isSelf;
 
   const selectedRole = roles.find((role) => role.id === values.roleId);
   const scope = selectedRole?.locationScope;
@@ -125,7 +125,7 @@ export function UserDialog({
     onError(error) {
       showToast({
         description: getApiErrorMessage(error),
-        title: user ? 'User was not updated' : 'User was not created',
+        title: user ? `${Noun} was not updated` : `${Noun} was not created`,
         variant: 'error',
       });
     },
@@ -133,7 +133,7 @@ export function UserDialog({
       void queryClient.invalidateQueries({ queryKey: queryKeys.accessUsers() });
       showToast({
         recordId: response.data.id,
-        title: user ? 'User updated' : 'User created',
+        title: user ? `${Noun} updated` : `${Noun} created`,
         variant: 'success',
       });
       onClose();
@@ -142,6 +142,23 @@ export function UserDialog({
 
   const update = <K extends keyof FormValues>(name: K, value: FormValues[K]) =>
     setValues((current) => ({ ...current, [name]: value }));
+
+  // Someone on the Employees list: their details fill the form, which stays editable.
+  const fillFrom = (employee: Employee) => {
+    setValues((current) => ({
+      ...current,
+      designation: employee.designation ?? current.designation,
+      email: employee.officialEmail ?? current.email,
+      employeeCode: employee.employeeCode,
+      mobile: employee.mobile?.replace(/\D/g, '').slice(-10) || current.mobile,
+      name: employee.employeeName,
+    }));
+
+    if (employee.hospitalId) {
+      setHomeId(employee.hospitalId);
+      setAccessIds([employee.hospitalId]);
+    }
+  };
 
   const chooseHome = (id: string) => {
     setHomeId(id);
@@ -184,7 +201,7 @@ export function UserDialog({
 
     if (isSingle && hospitalIds.length !== 1) {
       showToast({
-        description: `The ${selectedRole?.name} role works at one location, so select exactly one.`,
+        description: `The ${selectedRole?.name ?? ''} role works at one location, so select exactly one.`,
         title: 'Select a location',
         variant: 'error',
       });
@@ -192,24 +209,8 @@ export function UserDialog({
     }
     if (scope === 'MULTI' && hospitalIds.length === 0) {
       showToast({
-        description: `The ${selectedRole?.name} role needs at least one location.`,
+        description: `The ${selectedRole?.name ?? ''} role needs at least one location.`,
         title: 'Select a location',
-        variant: 'error',
-      });
-      return;
-    }
-    if ((!user || values.password) && !passwordPattern.test(values.password)) {
-      showToast({
-        description: 'Password must be at least 8 characters and include a letter and a number.',
-        title: 'Check the password',
-        variant: 'error',
-      });
-      return;
-    }
-    if (needsCurrentPassword && !values.currentPassword) {
-      showToast({
-        description: 'Enter your current password to change your email, mobile or password.',
-        title: 'Current password required',
         variant: 'error',
       });
       return;
@@ -218,7 +219,6 @@ export function UserDialog({
     // No avatarUrl: the field was removed from this dialog, and leaving it out means an edit
     // keeps whatever avatar a user already has.
     const payload: AccessUserInput = {
-      currentPassword: needsCurrentPassword ? values.currentPassword : undefined,
       // Blank on an edit clears it (null); on create it is simply left out.
       designation: values.designation.trim() || (user ? null : undefined),
       email: values.email.trim().toLowerCase(),
@@ -226,14 +226,13 @@ export function UserDialog({
       hospitalIds,
       mobile: values.mobile,
       name: values.name.trim(),
-      password: values.password,
       roleId: values.roleId,
       status: values.isActive ? 'ACTIVE' : 'DISABLED',
     };
 
     if (user) {
       const { employeeCode: _employeeCode, ...rest } = payload;
-      saveMutation.mutate(values.password ? rest : { ...rest, password: undefined });
+      saveMutation.mutate(rest);
       return;
     }
 
@@ -265,9 +264,13 @@ export function UserDialog({
         }}
         open
         side
-        title={user ? 'Edit user' : 'Add user'}
+        title={user ? `Edit ${noun}` : `Add ${noun}`}
       >
         <div className="space-y-4">
+          {!user && hasPermission('EMPLOYEE_VIEW') ? (
+            <EmployeeSearch id="employee-pick" label="Pick from Employees" onPick={fillFrom} />
+          ) : null}
+
           {credentialsLockedUntil ? (
             <p
               className="flex items-start gap-2 rounded-md border border-ds-border bg-ds-subtle px-3 py-2 text-sm text-ds-muted"
@@ -275,7 +278,7 @@ export function UserDialog({
             >
               <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
-                {user?.name} is signed in. Their email, mobile and password can be changed after{' '}
+                {user?.name} is signed in. Their email and mobile can be changed after{' '}
                 {credentialsLockedUntil.toLocaleString('en-IN', {
                   dateStyle: 'medium',
                   timeStyle: 'short',
@@ -296,7 +299,7 @@ export function UserDialog({
 
           <Field label="Email" name="email" required>
             <Input
-              disabled={Boolean(credentialsLockedUntil)}
+              disabled={contactLocked}
               id="email"
               onChange={(event) => update('email', event.target.value)}
               placeholder="Email"
@@ -322,7 +325,7 @@ export function UserDialog({
               </span>
               <Input
                 className="rounded-l-none"
-                disabled={Boolean(credentialsLockedUntil)}
+                disabled={contactLocked}
                 id="mobile"
                 inputMode="numeric"
                 maxLength={10}
@@ -331,6 +334,13 @@ export function UserDialog({
               />
             </div>
           </Field>
+
+          {isSelf ? (
+            <p className="text-xs text-ds-muted" role="note">
+              Your email and mobile receive your sign-in codes, so another administrator changes
+              them.
+            </p>
+          ) : null}
 
           <Field label="Designation" name="designation">
             <Input
@@ -359,42 +369,6 @@ export function UserDialog({
               ))}
             </Select>
           </Field>
-
-          <Field
-            label={user ? 'Password (leave blank to keep)' : 'Password'}
-            name="password"
-            required={!user}
-          >
-            {/*
-                Browsers autofill saved credentials into any password box, which on an edit would
-                silently replace that user's password. They skip read-only fields, so the field
-                opens read-only and unlocks on focus.
-              */}
-            <PasswordInput
-              autoComplete="new-password"
-              disabled={Boolean(credentialsLockedUntil)}
-              id="password"
-              onChange={(event) => update('password', event.target.value)}
-              onFocus={(event) => {
-                event.target.readOnly = false;
-              }}
-              placeholder="Min 8 chars, 1 letter and 1 number"
-              readOnly
-              value={values.password}
-            />
-          </Field>
-
-          {needsCurrentPassword ? (
-            <Field label="Your current password" name="currentPassword" required>
-              <PasswordInput
-                autoComplete="current-password"
-                id="currentPassword"
-                onChange={(event) => update('currentPassword', event.target.value)}
-                placeholder="Needed to change your own email, mobile or password"
-                value={values.currentPassword}
-              />
-            </Field>
-          ) : null}
 
           {/* Required for an all-locations role; otherwise the first assigned location is the default. */}
           <Field label="Default location" name="location" required={scope === 'ALL'}>

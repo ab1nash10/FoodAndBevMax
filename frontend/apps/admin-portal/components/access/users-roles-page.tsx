@@ -32,9 +32,8 @@ import {
 import { getApiErrorMessage, userApi } from '@/lib/api';
 import { LoadError } from '@/components/location-empty-states';
 import { queryKeys } from '@/lib/query-keys';
+import { useListLimit } from '@/lib/list-limit';
 import { cn } from '@/lib/utils';
-
-const userPageSize = 50;
 
 /** Mirrors the server guard: only a Super Admin may change Super Admin access. */
 const SUPER_ADMIN_ROLE = 'Super Admin';
@@ -172,8 +171,10 @@ function PermissionsDialog({ user, onClose }: Readonly<{ onClose: () => void; us
 }
 
 export function UsersRolesPageClient() {
-  const { roles: actorRoles } = useAuth();
+  const { hasPermission, roles: actorRoles } = useAuth();
   const isSuperAdmin = actorRoles.includes(SUPER_ADMIN_ROLE);
+  // The server refuses the save without these, so the screen does not offer it.
+  const canEdit = hasPermission('USER_UPDATE');
   const [editingUser, setEditingUser] = useState<AccessUser | null | undefined>(undefined);
   const [permissionUser, setPermissionUser] = useState<AccessUser | null>(null);
   // Search, status, role and page live in the URL; the search box updates at once and the
@@ -185,6 +186,8 @@ export function UsersRolesPageClient() {
   ]);
   const [roleFilter, setRoleFilter] = useUrlParam('role');
   const [page, setPage] = useUrlNumberParam('page');
+  // 50 users a page unless another size is picked under the list.
+  const [limit, setLimit] = useListLimit(setPage, 50);
   // The users working at the location chosen in the sidebar ("All Locations": everyone reachable).
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const hospitalScope = scopedHospitalId ?? 'all';
@@ -192,12 +195,21 @@ export function UsersRolesPageClient() {
   useOnScopeChange(scopedHospitalId, isLoadingLocations, () => setPage(1));
 
   const usersQuery = useQuery({
-    queryKey: queryKeys.accessUsers(search, hospitalScope, statusFilter, roleFilter, page),
+    queryKey: queryKeys.accessUsers(
+      'ADMINS',
+      search,
+      hospitalScope,
+      statusFilter,
+      roleFilter,
+      page,
+      limit,
+    ),
     queryFn: async () =>
       (
         await userApi.listUsers({
+          group: 'ADMINS',
           hospitalId: scopedHospitalId,
-          limit: userPageSize,
+          limit,
           page,
           roleId: roleFilter || undefined,
           search,
@@ -209,15 +221,23 @@ export function UsersRolesPageClient() {
     queryKey: queryKeys.accessRoles(),
     queryFn: async () => (await userApi.listRoles({ limit: 100, page: 1 })).data,
   });
-  const roles = rolesQuery.data?.items ?? [];
+  // Operator roles have their own screen (/operators).
+  const roles = (rolesQuery.data?.items ?? []).filter((role) => !role.isOperator);
   const superAdminRoleId = roles.find((role) => role.name === SUPER_ADMIN_ROLE)?.id;
   // Totals at the chosen location; Super Admins once the roles say which role that is.
   const statsQuery = useQuery({
     enabled: !rolesQuery.isLoading,
     queryFn: async () => {
       const count = async (query: { roleId?: string; status?: UserStatus }) =>
-        (await userApi.listUsers({ ...query, hospitalId: scopedHospitalId, limit: 1, page: 1 }))
-          .data.meta.total;
+        (
+          await userApi.listUsers({
+            ...query,
+            group: 'ADMINS',
+            hospitalId: scopedHospitalId,
+            limit: 1,
+            page: 1,
+          })
+        ).data.meta.total;
       const [all, active, disabled, superAdmins] = await Promise.all([
         count({}),
         count({ status: 'ACTIVE' }),
@@ -227,12 +247,12 @@ export function UsersRolesPageClient() {
 
       return { active, all, disabled, superAdmins };
     },
-    queryKey: queryKeys.accessUsers('stats', hospitalScope, superAdminRoleId ?? 'none'),
+    queryKey: queryKeys.accessUsers('ADMINS', 'stats', hospitalScope, superAdminRoleId ?? 'none'),
   });
   const stats = statsQuery.data;
   const users = usersQuery.data?.items ?? [];
   const meta = usersQuery.data?.meta ?? {
-    limit: userPageSize,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -278,14 +298,16 @@ export function UsersRolesPageClient() {
     <section className="space-y-4">
       <AppPageHeader
         action={
-          <Button onClick={() => setEditingUser(null)} type="button">
-            <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-            New user
-          </Button>
+          hasPermission('USER_CREATE') ? (
+            <Button onClick={() => setEditingUser(null)} type="button">
+              <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+              New admin
+            </Button>
+          ) : undefined
         }
         count={stats?.all}
-        description="Create users, assign roles, and manage individual permission overrides."
-        title="Users / Roles"
+        description="Super Admins, Admins and every role that is not an operator: create them, assign roles, and manage permission overrides."
+        title="Admins"
       />
       <StatStrip
         label="Users at a glance"
@@ -375,19 +397,21 @@ export function UsersRolesPageClient() {
             <thead className={tableStyles.head}>
               <tr>
                 <th className={cn(tableStyles.th, 'w-10 pr-0')}>
-                  <input
-                    aria-label="Select all users"
-                    checked={allSelected}
-                    disabled={selectableUsers.length === 0}
-                    onChange={(event) =>
-                      setSelectedIds(
-                        event.target.checked
-                          ? new Set(selectableUsers.map((user) => user.id))
-                          : new Set(),
-                      )
-                    }
-                    type="checkbox"
-                  />
+                  {canEdit ? (
+                    <input
+                      aria-label="Select all users"
+                      checked={allSelected}
+                      disabled={selectableUsers.length === 0}
+                      onChange={(event) =>
+                        setSelectedIds(
+                          event.target.checked
+                            ? new Set(selectableUsers.map((user) => user.id))
+                            : new Set(),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                  ) : null}
                 </th>
                 <th className={tableStyles.th}>User</th>
                 <th className={tableStyles.th}>Employee code</th>
@@ -414,25 +438,22 @@ export function UsersRolesPageClient() {
 
                 return (
                   <tr
-                    className={cn(tableStyles.row, locked && 'cursor-default')}
+                    className={tableStyles.row}
                     data-record-id={user.id}
                     key={user.id}
-                    onClick={locked ? undefined : () => setEditingUser(user)}
                     title={locked ? lockedReason : undefined}
                   >
-                    {/* Its own click: ticking a user does not open them. */}
-                    <td
-                      className={cn(tableStyles.td, 'pr-0')}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <input
-                        aria-label={`Select ${user.name}`}
-                        checked={selectedIds.has(user.id)}
-                        disabled={locked}
-                        onChange={() => toggleOne(user.id)}
-                        title={locked ? lockedReason : undefined}
-                        type="checkbox"
-                      />
+                    <td className={cn(tableStyles.td, 'pr-0')}>
+                      {canEdit ? (
+                        <input
+                          aria-label={`Select ${user.name}`}
+                          checked={selectedIds.has(user.id)}
+                          disabled={locked}
+                          onChange={() => toggleOne(user.id)}
+                          title={locked ? lockedReason : undefined}
+                          type="checkbox"
+                        />
+                      ) : null}
                     </td>
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
@@ -483,28 +504,30 @@ export function UsersRolesPageClient() {
                       </Badge>
                     </td>
                     <td className={cn(tableStyles.td, 'pr-3')}>
-                      <span className="flex justify-end gap-0.5">
-                        <RowAction
-                          disabled={locked}
-                          icon={Pencil}
-                          label={`Edit ${user.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setEditingUser(user);
-                          }}
-                          title={locked ? lockedReason : 'Edit'}
-                        />
-                        <RowAction
-                          disabled={locked}
-                          icon={ShieldCheck}
-                          label={`Permissions for ${user.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPermissionUser(user);
-                          }}
-                          title={locked ? lockedReason : 'Permissions'}
-                        />
-                      </span>
+                      {canEdit ? (
+                        <span className="flex justify-end gap-0.5">
+                          <RowAction
+                            disabled={locked}
+                            icon={Pencil}
+                            label={`Edit ${user.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setEditingUser(user);
+                            }}
+                            title={locked ? lockedReason : 'Edit'}
+                          />
+                          <RowAction
+                            disabled={locked}
+                            icon={ShieldCheck}
+                            label={`Permissions for ${user.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setPermissionUser(user);
+                            }}
+                            title={locked ? lockedReason : 'Permissions'}
+                          />
+                        </span>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -540,6 +563,7 @@ export function UsersRolesPageClient() {
           </table>
         </div>
         <ListPager
+          onLimitChange={setLimit}
           limit={meta.limit}
           noun="user"
           onPageChange={setPage}
@@ -550,6 +574,7 @@ export function UsersRolesPageClient() {
       </Panel>
       {editingUser !== undefined ? (
         <UserDialog
+          noun="admin"
           onClose={() => setEditingUser(undefined)}
           roles={roles.filter((role) => isSuperAdmin || role.name !== SUPER_ADMIN_ROLE)}
           user={editingUser}

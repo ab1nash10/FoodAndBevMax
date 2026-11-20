@@ -71,8 +71,8 @@ function initialsOf(name: string) {
 
 /**
  * A record as a card: a pastel top with the food mark, a badge and the name's initials, then
- * the name, a code line, any details, and a footer of switches. The card opens the record,
- * as a row does; the footer's own clicks (switches, edit) do not.
+ * the name, a code line, any details, and a footer of switches. Clicking the card does
+ * nothing (as with rows); its pencil edits the record.
  */
 export function RecordCard({
   badge,
@@ -102,10 +102,9 @@ export function RecordCard({
     <li
       className={cn(
         'group flex flex-col overflow-hidden rounded-[20px] border border-ds-border bg-ds-surface shadow-card transition-shadow duration-150',
-        onOpen && 'cursor-pointer hover:shadow-card-hover',
+        onOpen && 'hover:shadow-card-hover',
       )}
       data-record-id={id}
-      onClick={onOpen}
     >
       <div
         className={cn(
@@ -136,7 +135,6 @@ export function RecordCard({
         {children}
         <div
           className="mt-auto flex flex-wrap items-center gap-2"
-          onClick={(event) => event.stopPropagation()}
         >
           {footer}
           <span className="ml-auto flex min-w-0 items-center gap-2">

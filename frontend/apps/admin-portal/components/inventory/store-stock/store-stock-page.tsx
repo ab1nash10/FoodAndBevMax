@@ -56,7 +56,6 @@ import {
   formatDateOnly,
   formatEnum,
   formatQuantity,
-  listLimit,
   stockStatuses,
   useHospitals,
   useStores,
@@ -64,6 +63,7 @@ import {
 import { queryKeys } from '@/lib/query-keys';
 import { useIsPhone } from '@/lib/use-is-phone';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 const stockItemTypes: ItemType[] = ['MRP', 'READYMADE', 'LIVE'];
 
@@ -99,6 +99,7 @@ export function StoreStockPageClient() {
   // Phones show four of the nine columns; a row that spans them all has to say so.
   const columns = useIsPhone() ? 4 : 9;
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [discarding, setDiscarding] = useState<DiscardableBatch | null>(null);
@@ -132,7 +133,7 @@ export function StoreStockPageClient() {
       const response = await organizationApi.listStoreStockSummaries({
         hospitalId: hospitalFilter,
         itemType: itemTypeFilter || undefined,
-        limit: listLimit,
+        limit,
         locationId: storeFilter,
         locationType: 'STORE',
         page,
@@ -153,6 +154,7 @@ export function StoreStockPageClient() {
       statusFilter,
       sortBy,
       sortOrder,
+      limit,
     ),
   });
 
@@ -181,7 +183,7 @@ export function StoreStockPageClient() {
   });
   const stats = statsQuery.data;
   const items = stockQuery.data?.items ?? [];
-  const meta = stockQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = stockQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
     searchInput ||
     hospitalFilter !== (scopedHospitalId ?? '') ||
@@ -387,15 +389,10 @@ export function StoreStockPageClient() {
 
                   return (
                     <Fragment key={rowKey}>
-                      {/* The whole row shows its batches; the store and item links go to those. */}
+                      {/* Its arrow shows the batches; the store and item links go to those. */}
                       <tr
                         className={cn(tableStyles.row, isExpanded && 'bg-ds-subtle')}
                         data-record-id={rowKey}
-                        onClick={(event) => {
-                          if (!(event.target as HTMLElement).closest('a, button')) {
-                            toggleSummary(summary);
-                          }
-                        }}
                       >
                         <td className={cn(tableStyles.td, 'pr-0')}>
                           <RowAction
@@ -590,6 +587,7 @@ export function StoreStockPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

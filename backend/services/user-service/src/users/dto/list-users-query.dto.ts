@@ -1,9 +1,17 @@
 import { UserStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 export class ListUsersQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    description: 'OPERATORS: holding an operator role; ADMINS: everyone else',
+    enum: ['ADMINS', 'OPERATORS'],
+  })
+  @IsIn(['ADMINS', 'OPERATORS'])
+  @IsOptional()
+  group?: 'ADMINS' | 'OPERATORS';
+
   @ApiPropertyOptional({ enum: UserStatus })
   @IsEnum(UserStatus)
   @IsOptional()

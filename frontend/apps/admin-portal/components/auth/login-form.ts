@@ -70,28 +70,10 @@ export const sendEmailOtpSchema = objectSchema({
 
 export const verifyEmailOtpSchema = sendEmailOtpSchema.extend({ otp: otpField });
 
-// Email can also sign in with the password an admin set; the password goes as typed (any
-// character, spaces too), so it is only required, never cleaned.
-export const emailPasswordSchema = sendEmailOtpSchema.extend({
-  password: { message: 'Enter your password.', pattern: /./s },
-});
-
-// A forgotten password: the code emailed to the address, and a new password by the rule the
-// server applies to every password (admin-set, Preferences, reset).
-export const resetPasswordSchema = verifyEmailOtpSchema.extend({
-  newPassword: {
-    message: 'Password must be at least 8 characters and include a letter and number.',
-    pattern: /(?=.*[A-Za-z])(?=.*\d).{8,}/,
-  },
-});
-
 export type LoginFormValues = {
-  confirmPassword: string;
   email: string;
   mobile: string;
-  newPassword: string;
   otp: string;
-  password: string;
 };
 
 export type LoginMethod = 'email' | 'mobile';

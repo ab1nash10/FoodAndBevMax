@@ -1,5 +1,6 @@
 import { Panel, Skeleton } from '@/components/ui';
 import { withBasePath } from '@/lib/base-path';
+import { pageSizes as standardPageSizes } from '@/lib/list-limit';
 import { statusPresentation, type StatusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import type { FoodType, InventoryLocationType } from '@aahar/api-client';
@@ -378,8 +379,8 @@ export const tableStyles = {
   num: 'font-mono tabular-nums',
   /** A secondary column left out on phones, so the ones that matter fit without scrolling. */
   phoneHidden: 'hidden sm:table-cell',
-  /** A row the whole of which opens the record. */
-  row: 'row-accent group cursor-pointer border-t border-ds-divider transition-colors duration-150 hover:bg-ds-subtle',
+  /** A record row. Clicking it does nothing: its own buttons and links act (the user's rule). */
+  row: 'row-accent group border-t border-ds-divider transition-colors duration-150 hover:bg-ds-subtle',
   table: 'w-full text-[13.5px]',
   td: 'px-4 py-3.5 align-middle first:pl-6',
   th: 'px-4 py-2.5 font-medium first:pl-6',
@@ -457,7 +458,7 @@ export function ListPager({
   onLimitChange,
   onPageChange,
   page,
-  pageSizes = [10, 25, 50, 100],
+  pageSizes = standardPageSizes,
   total,
   totalPages,
 }: ListPagerProps) {
@@ -681,8 +682,7 @@ export function InlineProgress({
 }
 
 /**
- * A row's "Open ›": shows when the row is hovered or it has focus (always on touch screens, which
- * have no hover), so a list reads clean but its next step is one obvious click.
+ * A row's "Open ›": always shown, as the row itself opens nothing.
  */
 export function RowOpen({
   className,
@@ -705,7 +705,7 @@ export function RowOpen({
         'inline-flex h-8 items-center gap-0.5 rounded-full px-2.5 text-[12.5px] font-semibold whitespace-nowrap transition-[opacity,background-color] duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
         nextStep
           ? 'bg-ds-primary-soft text-ds-link hover:bg-ds-primary hover:text-white'
-          : 'text-ds-link opacity-0 group-hover:opacity-100 hover:bg-ds-primary-soft focus-visible:opacity-100 pointer-coarse:opacity-100',
+          : 'text-ds-link hover:bg-ds-primary-soft',
         className,
       )}
       type="button"

@@ -4,13 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  credentialsLockedUntil,
-  hashPassword,
-  uniqueViolationTarget,
-  verifyPassword,
-  type JwtRequestUser,
-} from '@aahar/auth';
+import { credentialsLockedUntil, uniqueViolationTarget, type JwtRequestUser } from '@aahar/auth';
 import { LocationScope, Prisma, RecordStatus, Role, UserStatus } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -33,6 +27,7 @@ import {
   userReachWhere,
   usersWorkingAt,
 } from '../common/actor-scope';
+import { OPERATOR_ROLES, isOperatorRole } from '../common/operator-roles';
 import { diffPermissionOverrides } from '../common/permission-overrides';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { AssignUserLocationsDto } from './dto/assign-user-locations.dto';
@@ -69,6 +64,13 @@ interface ActorContext {
   ipAddress?: string;
 }
 
+/** Operators hold an operator role; Admins are everyone else (no role included). */
+function inGroup(group: 'ADMINS' | 'OPERATORS'): Prisma.UserWhereInput {
+  const operatorRole = { deletedAt: null, role: { name: { in: OPERATOR_ROLES } } };
+
+  return { roles: group === 'OPERATORS' ? { some: operatorRole } : { none: operatorRole } };
+}
+
 function toUserResponse(user: UserWithRoles) {
   return {
     avatarUrl: user.avatarUrl,
@@ -79,6 +81,7 @@ function toUserResponse(user: UserWithRoles) {
     email: user.email,
     employeeCode: user.employeeCode,
     id: user.id,
+    lastLoginAt: user.lastLoginAt,
     mobile: user.mobile,
     name: user.name,
     hospitals: user.assignedHospitals.map(({ hospital }) => ({
@@ -89,13 +92,14 @@ function toUserResponse(user: UserWithRoles) {
     roles: user.roles.map((userRole) => ({
       description: userRole.role.description,
       id: userRole.role.id,
+      isOperator: isOperatorRole(userRole.role.name),
       locationScope: userRole.role.locationScope,
       name: userRole.role.name,
       status: userRole.role.status,
     })),
     status: user.status,
     updatedAt: user.updatedAt,
-    /** While set, an admin cannot change this user's password, email or mobile. */
+    /** While set, an admin cannot change this user's email or mobile. */
     credentialsLockedUntil: credentialsLockedUntil(user.lastActiveAt),
   };
 }
@@ -108,42 +112,31 @@ function toUserSnapshot(user: UserWithRoles) {
 }
 
 /**
- * A signed-in user's password, email and mobile cannot be changed by an admin until 8 hours
+ * A signed-in user's email and mobile cannot be changed by an admin until 8 hours
  * after their last activity, or until they sign out: the change would end their session
- * mid-work. Their own change (Preferences, or their own record) is never blocked, and a Super
- * Admin may change anyone's credentials at any time.
+ * mid-work. A Super Admin may change anyone's at any time. Nobody changes their own
+ * (assertNotOwnContact).
  */
 function changesCredentials(existing: UserWithRoles, dto: UpdateUserDto): boolean {
   return (
-    dto.password !== undefined ||
     (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
     (dto.mobile !== undefined && dto.mobile !== existing.mobile)
   );
 }
 
 /**
- * Your own password, email or mobile needs your current password, as in Preferences: a stolen
- * session alone must not be enough to take over the account. 400, never 401: the portal treats
+ * Your own email and mobile are where your sign-in codes go, so another administrator changes
+ * them: a stolen session alone must not be able to move them. 400, never 401: the portal treats
  * every 401 as an expired session and signs the user out.
  */
-export async function assertOwnCurrentPassword(
+export function assertNotOwnContact(
   existing: UserWithRoles,
   dto: UpdateUserDto,
   context: ActorContext,
-): Promise<void> {
-  if (context.actorId !== existing.id || !changesCredentials(existing, dto)) {
-    return;
-  }
-
-  if (!existing.passwordHash) {
+): void {
+  if (context.actorId === existing.id && changesCredentials(existing, dto)) {
     throw new BadRequestException(
-      'Your account has no password yet. Ask another administrator to change these details.',
-    );
-  }
-
-  if (!(await verifyPassword(dto.currentPassword ?? '', existing.passwordHash))) {
-    throw new BadRequestException(
-      'Enter your current password to change your password, email or mobile',
+      'Your own email and mobile receive your sign-in codes, so another administrator changes them.',
     );
   }
 }
@@ -171,7 +164,7 @@ export function assertCredentialsUnlocked(
   });
 
   throw new ConflictException(
-    `${existing.name} is signed in. Their password, email and mobile can be changed after ${until}, or once they sign out.`,
+    `${existing.name} is signed in. Their email and mobile can be changed after ${until}, or once they sign out.`,
   );
 }
 
@@ -200,6 +193,7 @@ export class UsersService {
       AND: [
         userReachWhere(context.actor),
         ...(query.hospitalId ? [usersWorkingAt([query.hospitalId])] : []),
+        ...(query.group ? [inGroup(query.group)] : []),
       ],
       deletedAt: null,
       ...(query.roleId
@@ -267,7 +261,6 @@ export class UsersService {
             employeeCode: dto.employeeCode,
             mobile: dto.mobile,
             name: dto.name,
-            passwordHash: await hashPassword(dto.password),
             status: dto.status ?? UserStatus.ACTIVE,
             updatedBy: context.actorId,
           },
@@ -329,7 +322,6 @@ export class UsersService {
         }
 
         const detailsChanged =
-          dto.password !== undefined ||
           (dto.avatarUrl !== undefined && dto.avatarUrl !== existing.avatarUrl) ||
           (dto.designation !== undefined && dto.designation !== existing.designation) ||
           (dto.email !== undefined && dto.email.toLowerCase() !== existing.email) ||
@@ -338,7 +330,7 @@ export class UsersService {
 
         assertCredentialsUnlocked(existing, dto, context);
 
-        await assertOwnCurrentPassword(existing, dto, context);
+        assertNotOwnContact(existing, dto, context);
 
         if (changesCredentials(existing, dto) && context.actorId !== id) {
           await this.assertHoldsAccessOf(existing, tx, context);
@@ -368,10 +360,6 @@ export class UsersService {
 
         if (dto.name !== undefined) {
           data.name = dto.name;
-        }
-
-        if (dto.password !== undefined) {
-          data.passwordHash = await hashPassword(dto.password);
         }
 
         if (dto.status !== undefined) {

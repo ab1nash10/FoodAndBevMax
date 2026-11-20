@@ -33,7 +33,6 @@ import { RecordLink } from '@/components/record-link';
 import { canOpenPath, locationHref } from '@/lib/navigation';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import {
-  openRowLink,
   setUrlParams,
   useHrefWith,
   useOnScopeChange,
@@ -56,11 +55,11 @@ import {
 import {
   formatEnum,
   formatWhen,
-  listLimit,
   useHospitals,
   useStores,
 } from '@/components/inventory/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { useListLimit } from '@/lib/list-limit';
 
 const grnStatuses: GrnStatus[] = [
   'DRAFT',
@@ -83,6 +82,7 @@ export function GrnsPageClient() {
   // ?id= opens that GRN for verification.
   const selectedGrnId = searchParams.get('id');
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const hrefWith = useHrefWith();
@@ -106,7 +106,7 @@ export function GrnsPageClient() {
     queryFn: async () => {
       const response = await organizationApi.listGrns({
         hospitalId: hospitalFilter,
-        limit: listLimit,
+        limit,
         page,
         search,
         sortBy: 'createdAt',
@@ -117,7 +117,15 @@ export function GrnsPageClient() {
 
       return response.data;
     },
-    queryKey: queryKeys.grns(page, search, hospitalFilter, storeFilter, statusFilter, sortOrder),
+    queryKey: queryKeys.grns(
+      page,
+      search,
+      hospitalFilter,
+      storeFilter,
+      statusFilter,
+      sortOrder,
+      limit,
+    ),
   });
 
   // The strip's numbers: every GRN at the location, then each status a GRN actually reaches.
@@ -156,7 +164,7 @@ export function GrnsPageClient() {
   const confirm = useConfirm();
 
   const grns = grnsQuery.data?.items ?? [];
-  const meta = grnsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = grnsQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(
     searchInput || hospitalFilter !== (scopedHospitalId ?? '') || storeFilter || statusFilter,
   );
@@ -350,20 +358,13 @@ export function GrnsPageClient() {
                       : grn.lines.reduce((sum, line) => sum + line.acceptedQty, 0) / received;
 
                   return (
-                    // The whole row opens the GRN (its number is the link it follows).
-                    <tr
-                      className={tableStyles.row}
-                      data-record-id={grn.id}
-                      key={grn.id}
-                      onClick={openRowLink}
-                    >
+                    <tr className={tableStyles.row} data-record-id={grn.id} key={grn.id}>
                       <td className={tableStyles.td}>
                         <Link
                           className={cn(
                             tableStyles.num,
                             'rounded-sm text-[13px] font-semibold text-ds-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
                           )}
-                          data-row-link=""
                           href={hrefWith({ id: grn.id })}
                           prefetch={false}
                         >
@@ -452,7 +453,7 @@ export function GrnsPageClient() {
                             nextStep={isDraft}
                             text={isDraft ? 'Verify' : 'Open'}
                           />
-                          {isDraft ? (
+                          {isDraft && hasPermission('GRN_DELETE') ? (
                             <RowAction
                               className="hover:text-ds-status-bad-fg"
                               disabled={deleteMutation.isPending}
@@ -482,6 +483,7 @@ export function GrnsPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

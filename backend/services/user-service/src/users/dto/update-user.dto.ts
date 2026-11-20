@@ -37,24 +37,6 @@ export class UpdateUserDto {
   @Optional()
   email?: string;
 
-  @ApiPropertyOptional({ format: 'password', minLength: 8 })
-  @Optional()
-  @IsString()
-  @MaxLength(128)
-  @Matches(/(?=.*[A-Za-z])(?=.*\d).{8,}/, {
-    message: 'Password must be at least 8 characters and include a letter and number.',
-  })
-  password?: string;
-
-  @ApiPropertyOptional({
-    description: 'Required to change your own password, email or mobile.',
-    format: 'password',
-  })
-  @Optional()
-  @IsString()
-  @MaxLength(128)
-  currentPassword?: string;
-
   @ApiPropertyOptional({ enum: UserStatus })
   @IsEnum(UserStatus)
   @Optional()

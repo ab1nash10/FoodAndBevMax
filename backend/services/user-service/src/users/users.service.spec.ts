@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { verifyPassword, type JwtRequestUser } from '@aahar/auth';
+import type { JwtRequestUser } from '@aahar/auth';
 import { Prisma } from '@prisma/client';
 import { test, vi } from 'vitest';
 import type { AuditLogService } from '../common/audit/audit-log.service';
@@ -61,7 +61,6 @@ function userRow(id: string, name: string, userRole: RoleRow | null, hospitalIds
     lastActiveAt: null,
     mobile: `9${String(hospitalIds.length).padStart(9, '0')}`,
     name,
-    passwordHash: null,
     roles: userRole ? [{ role: userRole }] : [],
     sessionVersion: 0,
     status: 'ACTIVE',
@@ -109,7 +108,6 @@ const newUser = (roleId: string, hospitalIds?: string[]) => ({
   hospitalIds,
   mobile: '9876543210',
   name: 'Asha K',
-  password: 'Secret123',
   roleId,
 });
 
@@ -294,7 +292,6 @@ test('a non-Super Admin cannot edit, demote, delete or re-permission a Super Adm
   for (const dto of [
     { name: 'Sam S' },
     { designation: 'Owner' },
-    { password: 'Takeover1' },
     { email: 'mine@max.in' },
     { status: 'DISABLED' as const },
     { hospitalIds: ['h1'], roleId: 'role-kitchen' },
@@ -461,17 +458,18 @@ test('only a Super Admin may change their own role, locations, status, permissio
   assert.equal(saved?.name, 'Anil K');
 });
 
-test('a new user is saved with a lower-case email, a hashed password and active status', async () => {
+test('a new user is saved with a lower-case email and active status, and no password', async () => {
   const { record, service, wrote } = usersService();
 
   const created = await service.create(newUser('role-kitchen', ['h1']), admin);
 
   const { data } = wrote('user.create')[0] as {
-    data: { email: string; passwordHash: string; status: string };
+    data: { email: string; status: string };
   };
   assert.equal(data.email, 'asha.k@max.in');
   assert.equal(data.status, 'ACTIVE');
-  assert.equal(await verifyPassword('Secret123', data.passwordHash), true);
+  // Sign-in is by code to the email or mobile: there is no password to keep.
+  assert.equal('passwordHash' in data, false);
   assert.equal(created?.email, 'asha.k@max.in');
   assert.ok(created && !('passwordHash' in created), 'the hash never leaves the service');
   assert.equal(record.mock.calls[0]?.[0].action, 'USER_CREATE');
@@ -534,20 +532,16 @@ test('an admin cannot reset the sign-in of a user who holds access the admin lac
   const { service } = usersService();
 
   // Meera's role carries MENU_UPDATE, which the admin does not hold.
-  for (const dto of [
-    { password: 'Takeover1' },
-    { email: 'mine@max.in' },
-    { mobile: '9111111111' },
-  ]) {
+  for (const dto of [{ email: 'mine@max.in' }, { mobile: '9111111111' }]) {
     await assert.rejects(
       service.update('u-menu', dto, admin),
-      forbidden(/only they or a Super Admin can change/),
+      forbidden(/only a Super Admin can change their email or mobile/),
       JSON.stringify(dto),
     );
   }
   // The cook holds nothing the admin lacks.
-  await service.update('u-cook', { password: 'Newpass12' }, admin);
-  await service.update('u-menu', { password: 'Newpass12' }, superAdmin);
+  await service.update('u-cook', { email: 'cook9@max.in' }, admin);
+  await service.update('u-menu', { email: 'menu9@max.in' }, superAdmin);
 });
 
 test('an admin cannot disable, re-role, move, re-permission or delete a user holding access they lack', async () => {

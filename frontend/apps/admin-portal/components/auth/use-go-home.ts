@@ -7,6 +7,7 @@ import { useAuth } from '@/components/auth-provider';
 import { preferencesQueryKey } from '@/components/preferences/use-preferences';
 import { userApi } from '@/lib/api';
 import { homeHref } from '@/lib/navigation';
+import { isPosWindow } from '@/lib/pos-launch';
 
 /**
  * Once the user is signed in, opens their start page (homeHref): the one saved in Preferences,
@@ -43,7 +44,7 @@ export function useGoHomeWhenSignedIn() {
         // The role's screen it is.
       }
 
-      router.replace(homeHref(hasPermission, startPage));
+      router.replace(homeHref(hasPermission, startPage, isPosWindow()));
     })();
   }, [hasPermission, isAuthenticated, isReady, queryClient, router]);
 }

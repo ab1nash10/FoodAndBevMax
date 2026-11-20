@@ -8,7 +8,11 @@ import { LocationProvider } from '@/components/location-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ToastProvider } from '@/components/toast-provider';
 import { LiveChanges } from '@/lib/live-changes';
+import { rememberPosLaunch } from '@/lib/pos-launch';
 import { createQueryClient } from '@/lib/query-client';
+
+// On load, before sign-in can redirect the launcher's `?pc=` away.
+if (typeof window !== 'undefined') rememberPosLaunch();
 
 export function Providers({ children }: Readonly<{ children: ReactNode }>) {
   const [queryClient] = useState(createQueryClient);

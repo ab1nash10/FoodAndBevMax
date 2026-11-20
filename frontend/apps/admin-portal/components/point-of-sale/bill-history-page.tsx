@@ -3,10 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import type {
+  OrderChannel,
   OrderStatus,
   PaymentMode,
   PosBillListQuery,
-  PosChannel,
   SortOrder,
 } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
@@ -42,7 +42,6 @@ import { organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { statusPresentation } from '@/lib/status';
 import {
-  openRowLink,
   setUrlParams,
   useHrefWith,
   useOnScopeChange,
@@ -51,10 +50,10 @@ import {
   useUrlSearchParam,
 } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
-const listLimit = 10;
 const billStatuses: OrderStatus[] = ['PLACED', 'PREPARING', 'READY', 'COLLECTED', 'CANCELLED'];
-const channels: PosChannel[] = ['COUNTER', 'ROOM'];
+const channels: OrderChannel[] = ['COUNTER', 'ROOM', 'TABLE'];
 const paymentModes: PaymentMode[] = ['CARD', 'UPI', 'CASH', 'OTHER'];
 const sortFields = ['placedAt', 'billNumber', 'grandTotal'] as const;
 
@@ -78,12 +77,13 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
   const [billId] = useUrlParam('id');
   const hrefWith = useHrefWith();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [from, setFrom] = useUrlParam('from', today);
   const [to, setTo] = useUrlParam('to', today);
   const [counterFilter, setCounterFilter] = useUrlParam('counter');
-  const [channelFilter, setChannelFilter] = useUrlParam<'' | PosChannel>('channel', '', channels);
+  const [channelFilter, setChannelFilter] = useUrlParam<'' | OrderChannel>('channel', '', channels);
   const [paymentFilter, setPaymentFilter] = useUrlParam<'' | PaymentMode>(
     'payment',
     '',
@@ -131,14 +131,14 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
       (
         await organizationApi.listPosBills({
           ...baseQuery,
-          limit: listLimit,
+          limit,
           page,
           sortBy,
           sortOrder,
           status: statusFilter || undefined,
         })
       ).data,
-    queryKey: queryKeys.posBills(...filterKey, statusFilter, page, sortBy, sortOrder),
+    queryKey: queryKeys.posBills(...filterKey, statusFilter, page, sortBy, sortOrder, limit),
   });
 
   const statsQuery = useQuery({
@@ -167,7 +167,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
   const stats = statsQuery.data;
   const summary = singleCounterDay ? summaryQuery.data : undefined;
   const bills = billsQuery.data?.items ?? [];
-  const meta = billsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = billsQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const isRange = from !== to;
   const activeFilterCount = [isRange, counterFilter, channelFilter, payment, statusFilter].filter(
     Boolean,
@@ -304,7 +304,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
             <FilterField label="Channel">
               <Select
                 onChange={(event) => {
-                  setChannelFilter(event.target.value as '' | PosChannel);
+                  setChannelFilter(event.target.value as '' | OrderChannel);
                   setPage(1);
                 }}
                 value={channelFilter}
@@ -312,6 +312,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                 <option value="">All channels</option>
                 <option value="COUNTER">Counter</option>
                 <option value="ROOM">Room</option>
+                <option value="TABLE">Table</option>
               </Select>
             </FilterField>
             {complimentary ? null : (
@@ -396,7 +397,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
         </div>
         <div className="overflow-x-auto">
           {/* What a reviewer scans for; the rest (instructions, subtotal, GST, lines) is in the
-              bill's panel, which the row opens. Complimentary bills have no payment mode, so
+              bill's panel, which its number opens. Complimentary bills have no payment mode, so
               their page shows the reason in that place. */}
           <table className={cn(tableStyles.table, 'phone-cards min-w-208 table-fixed')}>
             <thead className={tableStyles.head}>
@@ -424,12 +425,10 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                     .join(', ');
 
                   return (
-                    // The whole row opens the bill (its number is the link it follows).
                     <tr
                       className={tableStyles.row}
                       data-record-id={bill.id}
                       key={bill.id}
-                      onClick={openRowLink}
                     >
                       <td className={tableStyles.td}>
                         <Link
@@ -437,7 +436,6 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                             tableStyles.num,
                             'block truncate rounded-sm text-[13px] font-semibold text-ds-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
                           )}
-                          data-row-link=""
                           href={hrefWith({ id: bill.id })}
                           prefetch={false}
                         >
@@ -447,6 +445,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                           {[
                             bill.orderNumber,
                             bill.roomNumber ? `Room ${bill.roomNumber}` : null,
+                            bill.tableName ? `Table ${bill.tableName}` : null,
                             bill.customerName,
                             bill.customerMobile,
                           ]
@@ -544,6 +543,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
           </table>
         </div>
         <ListPager
+          onLimitChange={setLimit}
           limit={meta.limit}
           noun="bill"
           onPageChange={setPage}

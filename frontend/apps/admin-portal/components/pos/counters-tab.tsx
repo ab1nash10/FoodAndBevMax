@@ -590,7 +590,6 @@ export function CountersTab() {
                     className={tableStyles.row}
                     data-record-id={counter.id}
                     key={counter.id}
-                    onClick={() => openEditForm(counter)}
                   >
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
@@ -617,16 +616,14 @@ export function CountersTab() {
                             ?.name ?? 'Linked')
                         : 'Not set'}
                     </td>
-                    {/* Its button has its own click: it does not open the counter. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <CounterShiftCell
                         canEnd={canEndShifts}
                         counter={counter}
                         onEnd={() => setEndingShiftAt(counter)}
                       />
                     </td>
-                    {/* The switch has its own click: it does not open the counter. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <StatusToggleCell
                         disabled={!canEdit || statusMutation.isPending}
                         isActive={counter.isActive}

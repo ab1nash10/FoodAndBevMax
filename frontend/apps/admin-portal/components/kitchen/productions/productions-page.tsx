@@ -5,8 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Clock, Plus, Trash2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import type { MouseEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { KitchenProduction, KitchenProductionStatus, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { useConfirm } from '@/components/confirm-provider';
@@ -48,13 +47,9 @@ import {
   KitchenSelect,
   PaginationControls,
 } from '@/components/kitchen/shared/components';
-import {
-  formatDate,
-  listLimit,
-  useHospitals,
-  useKitchens,
-} from '@/components/kitchen/shared/utils';
+import { formatDate, useHospitals, useKitchens } from '@/components/kitchen/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { useListLimit } from '@/lib/list-limit';
 
 // The entry form (and zod with it) loads only when a production is opened from the list. Until
 // then it shows the same skeleton the form shows while it fetches the production.
@@ -98,10 +93,13 @@ const productionColumns: Array<{
   { dot: 'bg-ds-stage-queued', label: 'Cancelled', status: 'CANCELLED', tone: 'bad' },
 ];
 
-/** A click on a card's own link or button does that, not open the production. */
-function isInnerControl(event: MouseEvent): boolean {
-  return event.target instanceof Element && Boolean(event.target.closest('a, button'));
-}
+// What a draft's card offers, each only to those the server lets do it.
+const draftActions = [
+  'KITCHEN_PRODUCTION_POST',
+  'KITCHEN_PRODUCTION_UPDATE',
+  'KITCHEN_PRODUCTION_DELETE',
+];
+
 
 function personInitials(name: string): string {
   return name
@@ -118,10 +116,10 @@ export function KitchenProductionsPageClient() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
-  const router = useRouter();
   // ?id= opens that production (from the dashboard, the palette or the board).
   const selectedProductionId = searchParams.get('id');
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const hrefWith = useHrefWith();
@@ -150,7 +148,7 @@ export function KitchenProductionsPageClient() {
       const response = await organizationApi.listKitchenProductions({
         hospitalId: hospitalFilter,
         kitchenId: kitchenFilter,
-        limit: listLimit,
+        limit,
         page,
         search,
         sortBy: 'createdAt',
@@ -167,6 +165,7 @@ export function KitchenProductionsPageClient() {
       kitchenFilter,
       statusFilter,
       sortOrder,
+      limit,
     ),
   });
 
@@ -247,7 +246,7 @@ export function KitchenProductionsPageClient() {
   const confirm = useConfirm();
 
   const productions = productionsQuery.data?.items ?? [];
-  const meta = productionsQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = productionsQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const hasFilters = Boolean(searchInput || hospitalParam || kitchenFilter || statusFilter);
 
   function clearFilters() {
@@ -433,16 +432,10 @@ export function KitchenProductionsPageClient() {
                       const [firstLine, ...otherLines] = production.lines;
 
                       return (
-                        // The whole card opens the production; its links and buttons do their own.
                         <article
-                          className="cursor-pointer rounded-2xl bg-ds-surface px-4 py-3.5 shadow-card ring-1 ring-ds-text/5 transition-shadow duration-150 hover:shadow-card-hover"
+                          className="rounded-2xl bg-ds-surface px-4 py-3.5 shadow-card ring-1 ring-ds-text/5 transition-shadow duration-150 hover:shadow-card-hover"
                           data-record-id={production.id}
                           key={production.id}
-                          onClick={(event) => {
-                            if (!isInnerControl(event)) {
-                              router.push(hrefWith({ id: production.id }));
-                            }
-                          }}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <Link
@@ -525,30 +518,37 @@ export function KitchenProductionsPageClient() {
                               <StatusChip status="CANCELLED" />
                             ) : null}
                           </div>
-                          {production.status === 'DRAFT' ? (
+                          {/* Each as the server allows it: post, cancel (an update), delete. */}
+                          {production.status === 'DRAFT' && hasPermission(draftActions) ? (
                             <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
-                              <Button
-                                disabled={postMutation.isPending}
-                                onClick={() => postMutation.mutate(production.id)}
-                                type="button"
-                              >
-                                Post
-                              </Button>
-                              <Button
-                                disabled={cancelMutation.isPending}
-                                onClick={() => void cancelProduction(production)}
-                                type="button"
-                                variant="outline"
-                              >
-                                Cancel
-                              </Button>
-                              <RowAction
-                                className="h-9 w-9 hover:text-ds-status-bad-fg"
-                                disabled={deleteMutation.isPending}
-                                icon={Trash2}
-                                label={`Delete ${production.productionNumber}`}
-                                onClick={() => void deleteProduction(production)}
-                              />
+                              {hasPermission('KITCHEN_PRODUCTION_POST') ? (
+                                <Button
+                                  disabled={postMutation.isPending}
+                                  onClick={() => postMutation.mutate(production.id)}
+                                  type="button"
+                                >
+                                  Post
+                                </Button>
+                              ) : null}
+                              {hasPermission('KITCHEN_PRODUCTION_UPDATE') ? (
+                                <Button
+                                  disabled={cancelMutation.isPending}
+                                  onClick={() => void cancelProduction(production)}
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  Cancel
+                                </Button>
+                              ) : null}
+                              {hasPermission('KITCHEN_PRODUCTION_DELETE') ? (
+                                <RowAction
+                                  className="col-start-3 h-9 w-9 hover:text-ds-status-bad-fg"
+                                  disabled={deleteMutation.isPending}
+                                  icon={Trash2}
+                                  label={`Delete ${production.productionNumber}`}
+                                  onClick={() => void deleteProduction(production)}
+                                />
+                              ) : null}
                             </div>
                           ) : null}
                         </article>
@@ -568,6 +568,7 @@ export function KitchenProductionsPageClient() {
 
       <Panel className="[&>div]:border-t-0">
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           noun="production"

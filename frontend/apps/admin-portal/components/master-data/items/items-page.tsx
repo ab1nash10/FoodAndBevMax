@@ -62,6 +62,7 @@ import {
   optionalValue,
 } from '@/components/master-data/shared/utils';
 import { queryKeys } from '@/lib/query-keys';
+import { pageSizes } from '@/lib/list-limit';
 import { sortChoices } from '@/lib/sort-choices';
 
 function itemToFormValues(item: Item): ItemFormValues {
@@ -76,7 +77,8 @@ function itemToFormValues(item: Item): ItemFormValues {
   };
 }
 
-const itemPageSizes = [25, 50, 100];
+// The usual sizes; Items opens at 25.
+const itemPageSizes = pageSizes;
 
 const itemSortFields = [
   { label: 'Created date', value: 'createdAt' },
@@ -292,7 +294,7 @@ export function ItemsPageClient() {
         <Toggle
           ariaLabel={`${item.itemName} active`}
           checked={item.isActive}
-          disabled={toggleItemStatusMutation.isPending}
+          disabled={toggleItemStatusMutation.isPending || !canEditItems}
           onChange={() => void toggleItemStatus(item)}
         />
         <span
@@ -442,7 +444,7 @@ export function ItemsPageClient() {
           </ListToolbar>
 
           {/* The catalogue as cards: a pastel top with the food mark and the item's initials,
-              then its name, code and status. A card opens the item, as a row did. */}
+              then its name, code and status. Its pencil edits the item. */}
           {itemsQuery.isLoading ? (
             <RecordCardGrid isLoading />
           ) : itemsQuery.isError ? (
@@ -485,10 +487,9 @@ export function ItemsPageClient() {
                 <tbody>
                   {items.map((item) => (
                     <tr
-                      className={cn(tableStyles.row, !canEditItems && 'cursor-default')}
+                      className={tableStyles.row}
                       data-record-id={item.id}
                       key={item.id}
-                      onClick={canEditItems ? () => editItem(item) : undefined}
                     >
                       <td className={tableStyles.td}>
                         <span className="flex min-w-0 items-center gap-3">

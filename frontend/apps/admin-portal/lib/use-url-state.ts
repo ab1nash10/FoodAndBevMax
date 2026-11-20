@@ -145,14 +145,6 @@ export function useOnScopeChange(
   }, [isLoading, scope]);
 }
 
-/** A table row click opens the row's record link (`data-row-link`), unless it hit a control. */
-export function openRowLink(event: MouseEvent<HTMLTableRowElement>) {
-  if ((event.target as HTMLElement).closest('a, button, input, label, select')) {
-    return;
-  }
-
-  event.currentTarget.querySelector<HTMLAnchorElement>('a[data-row-link]')?.click();
-}
 
 /** `value`, once it has stopped changing for `delayMs` (for search boxes that query per key). */
 export function useDebouncedValue<T>(value: T, delayMs = 180): T {

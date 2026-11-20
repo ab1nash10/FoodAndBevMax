@@ -30,6 +30,10 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
       orderId={first(query.order)}
       orderKey={first(query.key)}
       restaurantId={restaurantId}
+      room={first(query.room)}
+      roomId={first(query.roomId)}
+      table={first(query.table)}
+      tableId={first(query.tableId)}
       token={first(query.token)}
     />
   );

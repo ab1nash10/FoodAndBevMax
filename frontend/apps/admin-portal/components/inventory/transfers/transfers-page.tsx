@@ -49,7 +49,6 @@ import { RecordLink } from '@/components/record-link';
 import { canOpenPath } from '@/lib/navigation';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import {
-  openRowLink,
   setUrlParams,
   useHrefWith,
   useOnScopeChange,
@@ -63,7 +62,6 @@ import { QueryState } from '@/components/inventory/shared/components';
 import {
   formatDate,
   formatWhen,
-  listLimit,
   useHospitals,
   useKitchens,
   useRestaurants,
@@ -73,6 +71,7 @@ import { longStatus } from '@/components/inventory/transfers/shared';
 import { TransferDetails } from '@/components/inventory/transfers/transfer-details';
 import { queryKeys } from '@/lib/query-keys';
 import { prefetchOnIntent, transferDetailQuery } from '@/lib/detail-queries';
+import { useListLimit } from '@/lib/list-limit';
 
 const transferStatuses: TransferStatus[] = [
   'DRAFT',
@@ -155,7 +154,10 @@ function transferSubtext(transfer: Transfer): { className: string; text: string 
   }
 
   if (transfer.status === 'PENDING_ACKNOWLEDGEMENT') {
-    return { className: 'text-ds-muted', text: 'Waiting on restaurant' };
+    return {
+      className: 'text-ds-muted',
+      text: `Waiting on ${transfer.receiverName ?? 'restaurant'}`,
+    };
   }
 
   if (transfer.status === 'DRAFT') {
@@ -175,6 +177,7 @@ export function TransfersPageClient() {
   const confirm = useConfirm();
   // Filters, view, page and the open record live in the URL so refresh, links and back work.
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   // The page's Location filter (shown on All locations) lives in the URL, so a dashboard link
@@ -262,7 +265,7 @@ export function TransfersPageClient() {
     queryFn: async () => {
       const response = await organizationApi.listTransfers({
         ...listFilters,
-        limit: listLimit,
+        limit,
         page,
         sortBy: 'createdAt',
         sortOrder,
@@ -271,7 +274,7 @@ export function TransfersPageClient() {
 
       return response.data;
     },
-    queryKey: queryKeys.transfers(page, ...filterKey, statusFilter, sortOrder),
+    queryKey: queryKeys.transfers(page, ...filterKey, statusFilter, sortOrder, limit),
   });
 
   // One count per saved view, under the same filters: one request answers every tab.
@@ -290,7 +293,7 @@ export function TransfersPageClient() {
   });
 
   const transfers = transfersQuery.data?.items ?? [];
-  const meta = transfersQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = transfersQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const listedTransfer = transfers.find((transfer) => transfer.id === selectedTransferId);
   // A linked transfer that is not on this page (another page, other filters) is fetched alone.
   const linkedTransferQuery = useQuery({
@@ -736,7 +739,7 @@ export function TransfersPageClient() {
                 return (
                   <li
                     className={cn(
-                      'flex cursor-pointer gap-3 px-4 py-3 transition-colors',
+                      'flex gap-3 px-4 py-3 transition-colors',
                       isSelected
                         ? 'bg-ds-selected'
                         : isChecked
@@ -745,10 +748,6 @@ export function TransfersPageClient() {
                     )}
                     data-record-id={transfer.id}
                     key={transfer.id}
-                    // openRowLink only reads the target and the link inside; it is typed for table rows.
-                    onClick={(event) =>
-                      openRowLink(event as unknown as Parameters<typeof openRowLink>[0])
-                    }
                   >
                     <input
                       aria-label={`Select ${transfer.transferNumber}`}
@@ -763,7 +762,6 @@ export function TransfersPageClient() {
                           <Link
                             aria-current={isSelected ? 'true' : undefined}
                             className="rounded-sm font-mono text-[13px] font-semibold text-ds-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
-                            data-row-link=""
                             href={hrefWith({ id: transfer.id })}
                             id={`transfer-card-${transfer.id}`}
                             prefetch={false}
@@ -868,11 +866,9 @@ export function TransfersPageClient() {
                         )}
                         data-record-id={transfer.id}
                         key={transfer.id}
-                        onClick={openRowLink}
                       >
                         <td
                           className={cn(tableStyles.td, 'pr-0')}
-                          onClick={(event) => event.stopPropagation()}
                         >
                           <input
                             aria-label={`Select ${transfer.transferNumber}`}
@@ -889,7 +885,6 @@ export function TransfersPageClient() {
                               tableStyles.num,
                               'rounded-sm text-[13px] font-semibold text-ds-text hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
                             )}
-                            data-row-link=""
                             href={hrefWith({ id: transfer.id })}
                             id={`transfer-open-${transfer.id}`}
                             prefetch={false}
@@ -969,6 +964,7 @@ export function TransfersPageClient() {
             </table>
           </div>
           <ListPager
+            onLimitChange={setLimit}
             limit={meta.limit}
             noun="transfer"
             onPageChange={setPage}
