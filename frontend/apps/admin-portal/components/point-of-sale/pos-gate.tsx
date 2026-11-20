@@ -3,11 +3,12 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, MonitorSmartphone } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocationContext } from '@/components/location-context';
 import { AppPageHeader } from '@/components/design-system';
 import { Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { launchedComputerName } from '@/lib/pos-launch';
 import { queryKeys } from '@/lib/query-keys';
 import { saveTillKey, usePosTill } from './shared';
 
@@ -53,9 +54,9 @@ export function PosClosed({
  */
 function TillSetup({ again = false }: Readonly<{ again?: boolean }>) {
   const queryClient = useQueryClient();
-  // A browser cannot read the computer's name: the user types it, and the server finds the
-  // POS device that lists them with it.
-  const [computerName, setComputerName] = useState('');
+  // A browser cannot read the computer's name: the user types it, or the till launcher passed it
+  // (lib/pos-launch), and the server finds the POS device that lists them with it.
+  const [computerName, setComputerName] = useState(launchedComputerName);
   const enroll = useMutation({
     mutationFn: async () => (await organizationApi.enrollTill(computerName.trim())).data.tillKey,
     onSuccess: async (tillKey) => {
@@ -66,6 +67,15 @@ function TillSetup({ again = false }: Readonly<{ again?: boolean }>) {
       ]);
     },
   });
+  // The launcher's name opens the POS without a click - once, and not for a till being moved,
+  // where the same name would only be refused again.
+  const autoOpened = useRef(false);
+
+  useEffect(() => {
+    if (autoOpened.current) return;
+    autoOpened.current = true;
+    if (!again && computerName.trim()) enroll.mutate();
+  }, [again, computerName, enroll]);
 
   return (
     <form

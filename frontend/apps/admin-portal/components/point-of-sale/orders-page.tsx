@@ -10,18 +10,19 @@ import { getApiErrorMessage } from '@/lib/api';
 import { useUrlParam } from '@/lib/use-url-state';
 import { CounterPicker, NoCounter, usePosCounter } from './shared';
 
-type OrderView = 'all' | 'counter' | 'online' | 'room';
+type OrderView = 'all' | 'counter' | 'online' | 'room' | 'table';
 
-const views: OrderView[] = ['all', 'counter', 'room', 'online'];
+const views: OrderView[] = ['all', 'counter', 'room', 'table', 'online'];
 
 function viewOf(order: RestaurantOrder): Exclude<OrderView, 'all'> {
   if (order.channel === 'ROOM') return 'room';
+  if (order.channel === 'TABLE') return 'table';
   return order.source === 'COUNTER' ? 'counter' : 'online';
 }
 
 /**
  * The live orders of the counter's restaurant, as the kitchen works them: billed at a counter,
- * for a room, or sent in by kiosks, QR and other apps.
+ * for a room, at a dine-in table, or sent in by kiosks, QR and other apps.
  */
 export function PosOrdersPageClient() {
   const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
@@ -36,7 +37,8 @@ export function PosOrdersPageClient() {
       (!term ||
         order.orderNumber.toLowerCase().includes(term) ||
         (order.billNumber ?? '').toLowerCase().includes(term) ||
-        (order.roomNumber ?? '').toLowerCase().includes(term)),
+        (order.roomNumber ?? '').toLowerCase().includes(term) ||
+        (order.tableName ?? '').toLowerCase().includes(term)),
   );
   const count = (which: Exclude<OrderView, 'all'>) =>
     orders.filter((order) => viewOf(order) === which).length;
@@ -66,6 +68,7 @@ export function PosOrdersPageClient() {
             { count: orders.length, label: 'All', value: 'all' },
             { count: count('counter'), label: 'Counter', value: 'counter' },
             { count: count('room'), label: 'Room', value: 'room' },
+            { count: count('table'), label: 'Table', value: 'table' },
             { count: count('online'), label: 'Online & kiosk', value: 'online' },
           ]}
           value={view}
@@ -74,7 +77,7 @@ export function PosOrdersPageClient() {
           <FilterSearch
             label="Search orders"
             onChange={setSearch}
-            placeholder="Order no., bill no. or room"
+            placeholder="Order no., bill no., room or table"
             value={search}
           />
         </div>

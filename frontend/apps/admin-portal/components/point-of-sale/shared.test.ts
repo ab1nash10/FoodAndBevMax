@@ -210,6 +210,15 @@ test('complimentary and cancelled bills: no QR, no payment, and they say so', as
   assert.ok(!body.includes('Watch the board'));
 });
 
+test('a dine-in table order names its table on the invoice and on the order slip', async () => {
+  const atTable = bill({ channel: 'TABLE', tableName: 'Window 2' });
+
+  await printBill(atTable);
+  assert.ok(printed().body.includes('<td>Table:</td><td>Window 2</td>'));
+  printKot(atTable);
+  assert.ok(printed().body.includes('<p class="service">TABLE Window 2</p>'));
+});
+
 test('the order slip has the order number, room and bed, lines with notes, and instructions', () => {
   printKot(bill({ bedNumber: '4', instructions: 'Less spicy', roomNumber: '512' }));
   const { body, title } = printed();

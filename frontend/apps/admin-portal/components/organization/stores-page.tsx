@@ -43,7 +43,7 @@ import {
   SearchInput,
   StatusToggleCell,
 } from '@/components/organization/shared/list-controls';
-import { activeFilterToBoolean, listLimit } from '@/components/organization/shared/utils';
+import { activeFilterToBoolean } from '@/components/organization/shared/utils';
 import {
   formatLocationOption,
   freezeServicesMessage,
@@ -60,6 +60,7 @@ import {
 } from '@/components/organization/import-export';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 export function StoresPageClient() {
   const queryClient = useQueryClient();
@@ -70,6 +71,7 @@ export function StoresPageClient() {
   const confirm = useConfirm();
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   // Queries and the URL wait for a pause in typing; the box updates at once.
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
@@ -95,7 +97,7 @@ export function StoresPageClient() {
       const response = await organizationApi.listStores({
         hospitalId: hospitalFilter || undefined,
         isActive: activeFilterToBoolean(activeFilter),
-        limit: listLimit,
+        limit,
         page,
         search,
         sortBy,
@@ -104,7 +106,15 @@ export function StoresPageClient() {
 
       return response.data;
     },
-    queryKey: queryKeys.stores({ activeFilter, hospitalFilter, page, search, sortBy, sortOrder }),
+    queryKey: queryKeys.stores({
+      limit,
+      activeFilter,
+      hospitalFilter,
+      page,
+      search,
+      sortBy,
+      sortOrder,
+    }),
   });
 
   // Under the list's own key, so whatever refreshes the list refreshes these counts too.
@@ -170,7 +180,7 @@ export function StoresPageClient() {
 
   const items = storesQuery.data?.items ?? [];
   const meta = storesQuery.data?.meta ?? {
-    limit: listLimit,
+    limit,
     page,
     total: 0,
     totalPages: 1,
@@ -371,12 +381,7 @@ export function StoresPageClient() {
             <tbody>
               {items.length > 0 ? (
                 items.map((store) => (
-                  <tr
-                    className={cn(tableStyles.row, !canEdit && 'cursor-default')}
-                    data-record-id={store.id}
-                    key={store.id}
-                    onClick={canEdit ? () => setEditingStore(store) : undefined}
-                  >
+                  <tr className={tableStyles.row} data-record-id={store.id} key={store.id}>
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
                         <RecordAvatar name={store.storeName} />
@@ -393,10 +398,11 @@ export function StoresPageClient() {
                     <td className={cn(tableStyles.td, 'text-ds-text-2')}>
                       {getLocationDisplayName(store.hospital)}
                     </td>
-                    {/* Its own click: switching the status does not open the store. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <StatusToggleCell
-                        disabled={statusMutation.isPending && statusUpdatingId === store.id}
+                        disabled={
+                          !canEdit || (statusMutation.isPending && statusUpdatingId === store.id)
+                        }
                         isActive={store.isActive}
                         onToggle={() => void toggleStoreStatus(store)}
                         showFrozenMessage={!store.hospital.isActive}
@@ -434,6 +440,7 @@ export function StoresPageClient() {
           </table>
         </div>
         <PaginationControls
+          onLimitChange={setLimit}
           limit={meta.limit}
           onPageChange={setPage}
           page={meta.page}

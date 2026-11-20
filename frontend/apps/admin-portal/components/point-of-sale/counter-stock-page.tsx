@@ -23,7 +23,6 @@ import {
   formatDateOnly,
   formatEnum,
   formatQuantity,
-  listLimit,
   plural,
   stockStatuses,
 } from '@/components/inventory/shared/utils';
@@ -45,6 +44,7 @@ import { organizationApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 type StockTab = 'movements' | 'stock' | 'summary';
 
@@ -67,6 +67,7 @@ export function CounterStockPageClient() {
   const [tab, setTab] = useUrlParam<StockTab>('tab', 'summary', ['movements', 'stock', 'summary']);
   const [date, setDate] = useUrlParam('date', today);
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   const [searchInput, setSearch, search] = useUrlSearchParam('q');
   const [statusFilter, setStatusFilter] = useUrlParam<'' | StockBalanceStatus>(
     'status',
@@ -80,21 +81,21 @@ export function CounterStockPageClient() {
     queryFn: async () =>
       (
         await organizationApi.listCounterStock({
-          limit: listLimit,
+          limit,
           locationId: counterId,
           page,
           search,
           status: statusFilter || undefined,
         })
       ).data,
-    queryKey: queryKeys.counterStock(counterId, page, search, statusFilter),
+    queryKey: queryKeys.counterStock(counterId, page, search, statusFilter, limit),
   });
   const ledgerQuery = useQuery({
     enabled: Boolean(counterId) && tab === 'movements',
     queryFn: async () =>
       (
         await organizationApi.listCounterStockLedgers({
-          limit: listLimit,
+          limit,
           locationId: counterId,
           page,
           search,
@@ -102,7 +103,7 @@ export function CounterStockPageClient() {
           sortOrder: 'desc',
         })
       ).data,
-    queryKey: queryKeys.counterStock('ledger', counterId, page, search),
+    queryKey: queryKeys.counterStock('ledger', counterId, page, search, limit),
   });
   const summaryQuery = useQuery({
     enabled: Boolean(counterId) && tab === 'summary',
@@ -121,7 +122,7 @@ export function CounterStockPageClient() {
   const lowByItem = new Map(lowLevels.map((level) => [level.itemId, level]));
   const active = tab === 'summary' ? summaryQuery : tab === 'stock' ? stockQuery : ledgerQuery;
   const listData = tab === 'stock' ? stockQuery.data : ledgerQuery.data;
-  const meta = listData?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = listData?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const summaryItems = summaryQuery.data?.items ?? [];
   const needle = search.trim().toLowerCase();
   const summaryRows = needle
@@ -513,6 +514,7 @@ export function CounterStockPageClient() {
           </div>
           {tab === 'summary' ? null : (
             <ListPager
+              onLimitChange={setLimit}
               limit={meta.limit}
               noun={tab === 'stock' ? 'stock line' : 'movement'}
               onPageChange={setPage}

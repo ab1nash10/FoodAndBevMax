@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PaymentMachine, PaymentMachineInput, PrimaryUpiProvider } from '@aahar/api-client';
+import { useAuth } from '@/components/auth-provider';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
@@ -268,6 +269,8 @@ function PaymentMachineForm({
           <Select
             disabled={hospitalsQuery.isLoading || !isAllLocations}
             id="payment-location"
+            // Controlled, so the saved pick shows once the options arrive.
+            value={selectedHospitalId}
             {...form.register('hospitalId')}
           >
             <option value="">Select location</option>
@@ -287,6 +290,7 @@ function PaymentMachineForm({
           <Select
             disabled={!selectedHospitalId || posDevicesQuery.isLoading}
             id="payment-pos-device"
+            value={form.watch('posDeviceId')}
             {...form.register('posDeviceId')}
           >
             <option value="">Select POS device</option>
@@ -399,6 +403,9 @@ function PaymentMachineForm({
 }
 
 export function PaymentMachinesTab() {
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission('PAYMENT_MACHINE_CREATE');
+  const canEdit = hasPermission('PAYMENT_MACHINE_UPDATE');
   const { scopedHospitalId } = useLocationContext();
   const [activeFilter, setActiveFilter] = useUrlParam<ActiveFilter>('status', '', [
     'active',
@@ -479,6 +486,7 @@ export function PaymentMachinesTab() {
   };
 
   const openEditForm = (machine: PaymentMachine) => {
+    if (!canEdit) return;
     setEditingMachine(machine);
     setIsFormOpen(true);
   };
@@ -491,12 +499,14 @@ export function PaymentMachinesTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button onClick={openCreateForm} type="button">
-          <Plus className="h-4 w-4" />
-          New payment machine
-        </Button>
-      </div>
+      {canCreate ? (
+        <div className="flex justify-end">
+          <Button onClick={openCreateForm} type="button">
+            <Plus className="h-4 w-4" />
+            New payment machine
+          </Button>
+        </div>
+      ) : null}
       <PaymentMachineForm editingMachine={editingMachine} onClose={closeForm} open={isFormOpen} />
       <Panel>
         <FilterBar
@@ -539,12 +549,7 @@ export function PaymentMachinesTab() {
             <tbody>
               {items.length > 0 ? (
                 items.map((machine) => (
-                  <tr
-                    className={tableStyles.row}
-                    data-record-id={machine.id}
-                    key={machine.id}
-                    onClick={() => openEditForm(machine)}
-                  >
+                  <tr className={tableStyles.row} data-record-id={machine.id} key={machine.id}>
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
                         <RecordAvatar name={machine.name} />
@@ -552,18 +557,18 @@ export function PaymentMachinesTab() {
                       </span>
                     </td>
                     {/* The switches have their own clicks: they do not open the machine. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <StatusToggleCell
-                        disabled={flagMutation.isPending}
+                        disabled={!canEdit || flagMutation.isPending}
                         isActive={machine.isActive}
                         onToggle={() => void toggleMachineStatus(machine)}
                       />
                     </td>
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <Toggle
                         ariaLabel={`Primary machine: ${machine.name}`}
                         checked={machine.isDefault}
-                        disabled={flagMutation.isPending}
+                        disabled={!canEdit || flagMutation.isPending}
                         onChange={(checked) =>
                           flagMutation.mutate({ body: { isDefault: checked }, id: machine.id })
                         }
@@ -581,14 +586,16 @@ export function PaymentMachinesTab() {
                     </td>
                     <td className={cn(tableStyles.td, 'pr-3')}>
                       <span className="flex justify-end">
-                        <RowAction
-                          icon={Pencil}
-                          label={`Edit ${machine.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openEditForm(machine);
-                          }}
-                        />
+                        {canEdit ? (
+                          <RowAction
+                            icon={Pencil}
+                            label={`Edit ${machine.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openEditForm(machine);
+                            }}
+                          />
+                        ) : null}
                       </span>
                     </td>
                   </tr>

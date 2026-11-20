@@ -3,13 +3,15 @@
 import type { PosDaySummary, PosShift } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, LockKeyhole } from 'lucide-react';
+import { Loader2, LockKeyhole, PackageMinus } from 'lucide-react';
+import Link from 'next/link';
 import { useAuth } from '@/components/auth-provider';
 import { useConfirm } from '@/components/confirm-provider';
 import { tableStyles } from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
 import { Panel } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { canOpenPath } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 import { cashDifference, timeOf } from './shift-controls';
@@ -56,33 +58,44 @@ export function DayShiftsPanel({
     <Panel className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ds-divider px-4 py-3">
         <h2 className="text-sm font-semibold text-ds-text">Shifts</h2>
-        {summary.dayClose ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-ds-subtle px-3 py-1 text-xs font-semibold text-ds-text-2">
-            <LockKeyhole className="h-3.5 w-3.5" />
-            Day closed by {summary.dayClose.closedByName ?? '—'} at{' '}
-            {timeOf(summary.dayClose.closedAt)}
-          </span>
-        ) : canClose ? (
-          <Button
-            disabled={Boolean(openShift) || closeMutation.isPending}
-            onClick={() =>
-              void confirm({
-                confirmLabel: 'Close day',
-                description:
-                  'Its bills become final and can no longer be cancelled. Bills made after this go on the next day.',
-                title: 'Close the day at this counter?',
-                tone: 'danger',
-              }).then((confirmed) => confirmed && closeMutation.mutate())
-            }
-            size="sm"
-            title={openShift ? 'End the open shift first' : undefined}
-            type="button"
-          >
-            {closeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            <LockKeyhole className="h-4 w-4" />
-            Close day
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Day end: the restaurant may send its MRP stock back to the store. */}
+          {canOpenPath('/inventory/returns/new', hasPermission) ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/inventory/returns/new?restaurant=${summary.counter.restaurantId}`}>
+                <PackageMinus className="h-4 w-4" />
+                Return stock to store
+              </Link>
+            </Button>
+          ) : null}
+          {summary.dayClose ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-ds-subtle px-3 py-1 text-xs font-semibold text-ds-text-2">
+              <LockKeyhole className="h-3.5 w-3.5" />
+              Day closed by {summary.dayClose.closedByName ?? '—'} at{' '}
+              {timeOf(summary.dayClose.closedAt)}
+            </span>
+          ) : canClose ? (
+            <Button
+              disabled={Boolean(openShift) || closeMutation.isPending}
+              onClick={() =>
+                void confirm({
+                  confirmLabel: 'Close day',
+                  description:
+                    'Its bills become final and can no longer be cancelled. Bills made after this go on the next day.',
+                  title: 'Close the day at this counter?',
+                  tone: 'danger',
+                }).then((confirmed) => confirmed && closeMutation.mutate())
+              }
+              size="sm"
+              title={openShift ? 'End the open shift first' : undefined}
+              type="button"
+            >
+              {closeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <LockKeyhole className="h-4 w-4" />
+              Close day
+            </Button>
+          ) : null}
+        </div>
       </div>
       {openShift && !summary.dayClose && canClose ? (
         <p className="border-b border-ds-divider px-4 py-2 text-xs text-ds-muted">

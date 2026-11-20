@@ -3,13 +3,23 @@
 import type { PosCounter, PosOwnShift, PosShift } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowRightLeft, Clock3, Loader2, LockKeyhole, PackageCheck, Wallet } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Clock3,
+  Loader2,
+  LockKeyhole,
+  PackageCheck,
+  PackageMinus,
+  Wallet,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/components/toast-provider';
 import { Input, Label, Panel } from '@/components/ui';
 import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { canOpenPath } from '@/lib/navigation';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 import { OpenShiftCard, whereToEndIt } from './open-shift-card';
@@ -234,6 +244,8 @@ export function ShiftChip({ counter }: Readonly<{ counter: PosCounter }>) {
     (shift.openedBy === currentUser?.id && hasPermission('POS_SHIFT_MANAGE')) ||
     hasPermission('POS_DAY_CLOSE');
   const difference = ended ? cashDifference(ended) : null;
+  // Once the shift is over the restaurant may send its MRP stock back to the store.
+  const returnHref = `/inventory/returns/new?restaurant=${counter.restaurantId}`;
   const close = () => {
     setIsOpen(false);
     setCash('');
@@ -264,7 +276,15 @@ export function ShiftChip({ counter }: Readonly<{ counter: PosCounter }>) {
         description={`Opened by ${shift.openedByName ?? '—'} at ${timeOf(shift.openedAt)} with ${formatMoney(shift.openingCash)}`}
         footer={
           ended ? (
-            <div className="flex justify-end">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {canOpenPath(returnHref, hasPermission) ? (
+                <Button asChild variant="outline">
+                  <Link href={returnHref} onClick={close}>
+                    <PackageMinus className="h-4 w-4" />
+                    Return stock to store
+                  </Link>
+                </Button>
+              ) : null}
               <Button onClick={close} type="button">
                 Done
               </Button>

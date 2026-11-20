@@ -115,6 +115,9 @@ export function StoreCreatePageClient() {
               disabled={hospitalOptionsQuery.isLoading || !isAllLocations}
               id="store-hospital"
               {...form.register('hospitalId')}
+              // Controlled: a scoped location is set before its option loads, which left the
+              // select showing "Select location".
+              value={hospitalId}
             >
               <option value="">Select location</option>
               {hospitalOptionsQuery.data?.map((hospital) => (

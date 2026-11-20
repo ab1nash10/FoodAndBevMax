@@ -11,7 +11,7 @@ import { queryKeys } from '@/lib/query-keys';
 // The spec caps a page at 20 records; the grid also offers the other sizes shown in the mockups.
 export const defaultPageLimit = 20;
 
-export const pageLimitOptions = [10, 20, 25, 50];
+export { pageSizes as pageLimitOptions } from '@/lib/list-limit';
 
 export const optionalText = (maxLength: number) =>
   z.string().trim().max(maxLength, `Use ${maxLength} characters or fewer.`);

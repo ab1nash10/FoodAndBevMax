@@ -51,7 +51,8 @@ export function OnlinePaymentDialog({
     queryKey: ['online-payment', payment?.id],
     refetchInterval: 2000,
   });
-  const current = statusQuery.data ?? payment;
+  // While pending, the latest check wins; once settled (a cancel found it paid), the payment does.
+  const current = payment?.status === 'PENDING' ? (statusQuery.data ?? payment) : payment;
   const { mutate: start, reset: resetStart } = startMutation;
 
   // A new bill starts a new payment; closed, the last one is forgotten.

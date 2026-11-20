@@ -5,7 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Loader2, Printer, Receipt } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useCallback, useEffect, useState } from 'react';
-import { ApiClientError, type PaymentMode, type PosBill, type PosCounter } from '@aahar/api-client';
+import {
+  ApiClientError,
+  type OrderChannel,
+  type PaymentMode,
+  type PosBill,
+  type PosCounter,
+} from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { TILL_KEY_STORAGE_KEY } from '@/lib/auth-storage';
 import { StatusChip } from '@/components/design-system';
@@ -18,6 +24,12 @@ import { escapeHtml, printHtml } from '@/lib/print';
 import { invalidatePosBillQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
+
+export const channelLabels: Record<OrderChannel, string> = {
+  COUNTER: 'Counter',
+  ROOM: 'Room',
+  TABLE: 'Table',
+};
 
 export const paymentModeLabels: Record<PaymentMode, string> = {
   CARD: 'Card',
@@ -347,6 +359,7 @@ ${facts([
   ['UID', bill.cashierCode],
   ['POS', bill.counter.counterName],
   ['KOT No', bill.kotNumber],
+  ['Table', bill.tableName],
   [
     'Room',
     bill.roomNumber
@@ -388,6 +401,7 @@ export function printKot(bill: PosBill) {
   const body = `
 <p class="c b">POS: ${escapeHtml(bill.counter.counterName)}</p>
 <div class="order-no"><span>Your Order No. is</span><strong>${escapeHtml(bill.orderNumber)}</strong></div>
+${bill.tableName ? `<p class="service">TABLE ${escapeHtml(bill.tableName)}</p>` : ''}
 ${bill.roomNumber ? `<p class="service">ROOM ${escapeHtml(bill.roomNumber)}${bill.bedNumber ? ` / BED ${escapeHtml(bill.bedNumber)}` : ''}</p>` : ''}
 ${facts([
   ['Time', siteTime.format(placed).toUpperCase()],
@@ -407,7 +421,8 @@ export function BillSummary({ bill }: Readonly<{ bill: PosBill }>) {
     ['Bill', bill.billNumber],
     ['Placed', formatDateTime(bill.placedAt)],
     ['Counter', `${bill.restaurant.restaurantName} · ${bill.counter.counterName}`],
-    ['Channel', bill.channel === 'ROOM' ? 'Room' : 'Counter'],
+    ['Channel', channelLabels[bill.channel]],
+    ['Table', bill.tableName],
     [
       'Room',
       bill.roomNumber

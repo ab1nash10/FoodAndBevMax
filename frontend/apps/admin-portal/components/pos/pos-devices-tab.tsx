@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { PosDevice, PosDeviceInput } from '@aahar/api-client';
+import { useAuth } from '@/components/auth-provider';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
@@ -439,6 +440,9 @@ function PosDeviceForm({
                   <div className="[&>*+*]:mt-1">
                     <Input
                       aria-label={`User ${index + 1}’s computer name`}
+                      // A computer's name, not a person's: kept as typed (the Input would Title Case
+                      // a field named …hostName inside the users list).
+                      autoCapitalize="none"
                       placeholder="Computer name"
                       {...form.register(`users.${index}.hostName`)}
                     />
@@ -496,6 +500,9 @@ function OnOffLabel({ on }: Readonly<{ on: boolean }>) {
 }
 
 export function PosDevicesTab() {
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission('POS_DEVICE_CREATE');
+  const canEdit = hasPermission('POS_DEVICE_UPDATE');
   const entityNamesQuery = useLegalEntityNames();
   const { scopedHospitalId } = useLocationContext();
   const [accessibilityDevice, setAccessibilityDevice] = useState<PosDevice | undefined>();
@@ -606,18 +613,21 @@ export function PosDevicesTab() {
   };
 
   const openEditForm = (device: PosDevice) => {
+    if (!canEdit) return;
     setEditingDevice(device);
     setIsFormOpen(true);
   };
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button onClick={openCreateForm} type="button">
-          <Plus className="h-4 w-4" />
-          New POS device
-        </Button>
-      </div>
+      {canCreate ? (
+        <div className="flex justify-end">
+          <Button onClick={openCreateForm} type="button">
+            <Plus className="h-4 w-4" />
+            New POS device
+          </Button>
+        </div>
+      ) : null}
       <PosDeviceForm editingDevice={editingDevice} onClose={closeForm} open={isFormOpen} />
       <RestaurantAccessibilityModal
         device={accessibilityDevice}
@@ -664,12 +674,7 @@ export function PosDevicesTab() {
             <tbody>
               {items.length > 0 ? (
                 items.map((device) => (
-                  <tr
-                    className={tableStyles.row}
-                    data-record-id={device.id}
-                    key={device.id}
-                    onClick={() => openEditForm(device)}
-                  >
+                  <tr className={tableStyles.row} data-record-id={device.id} key={device.id}>
                     {/* The code under the name, as the Locations list shows its codes. */}
                     <td className={tableStyles.td}>
                       <span className="flex min-w-0 items-center gap-3">
@@ -713,19 +718,19 @@ export function PosDevicesTab() {
                       </span>
                     </td>
                     {/* The switches have their own clicks: they do not open the device. */}
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <StatusToggleCell
-                        disabled={flagMutation.isPending}
+                        disabled={!canEdit || flagMutation.isPending}
                         isActive={device.isActive}
                         onToggle={() => void toggleDeviceStatus(device)}
                       />
                     </td>
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <div className="flex items-center gap-2">
                         <Toggle
                           ariaLabel={`KOT print for ${device.name}`}
                           checked={device.isKotPrintEnabled}
-                          disabled={flagMutation.isPending}
+                          disabled={!canEdit || flagMutation.isPending}
                           onChange={(checked) =>
                             flagMutation.mutate({
                               body: { isKotPrintEnabled: checked },
@@ -736,12 +741,12 @@ export function PosDevicesTab() {
                         <OnOffLabel on={device.isKotPrintEnabled} />
                       </div>
                     </td>
-                    <td className={tableStyles.td} onClick={(event) => event.stopPropagation()}>
+                    <td className={tableStyles.td}>
                       <div className="flex items-center gap-2">
                         <Toggle
                           ariaLabel={`Invoice print for ${device.name}`}
                           checked={device.isInvoicePrintEnabled}
-                          disabled={flagMutation.isPending}
+                          disabled={!canEdit || flagMutation.isPending}
                           onChange={(checked) =>
                             flagMutation.mutate({
                               body: { isInvoicePrintEnabled: checked },
@@ -753,36 +758,35 @@ export function PosDevicesTab() {
                       </div>
                     </td>
                     {/* The order key's confirm and pop-up must not open the device either. */}
-                    <td
-                      className={cn(tableStyles.td, 'pr-3')}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <span className="flex items-center justify-end gap-0.5">
-                        <RowAction
-                          icon={Utensils}
-                          label={`Map restaurants to ${device.name}`}
-                          onClick={() => setAccessibilityDevice(device)}
-                        />
-                        <RowAction
-                          icon={Pencil}
-                          label={`Edit ${device.name}`}
-                          onClick={() => openEditForm(device)}
-                        />
-                        {device.hasActiveTillKey ? (
+                    <td className={cn(tableStyles.td, 'pr-3')}>
+                      {canEdit ? (
+                        <span className="flex items-center justify-end gap-0.5">
                           <RowAction
-                            icon={KeyRound}
-                            label={`Revoke browser till access for ${device.name}`}
-                            onClick={() => void revokeTill(device)}
+                            icon={Utensils}
+                            label={`Map restaurants to ${device.name}`}
+                            onClick={() => setAccessibilityDevice(device)}
                           />
-                        ) : null}
-                        <OrderKeyButton
-                          issue={async () =>
-                            (await organizationApi.issuePosDeviceKey(device.id)).data.apiKey
-                          }
-                          name={device.name}
-                          usage="lets this POS send orders to the kitchen screen and TV board"
-                        />
-                      </span>
+                          <RowAction
+                            icon={Pencil}
+                            label={`Edit ${device.name}`}
+                            onClick={() => openEditForm(device)}
+                          />
+                          {device.hasActiveTillKey ? (
+                            <RowAction
+                              icon={KeyRound}
+                              label={`Revoke browser till access for ${device.name}`}
+                              onClick={() => void revokeTill(device)}
+                            />
+                          ) : null}
+                          <OrderKeyButton
+                            issue={async () =>
+                              (await organizationApi.issuePosDeviceKey(device.id)).data.apiKey
+                            }
+                            name={device.name}
+                            usage="lets this POS send orders to the kitchen screen and TV board"
+                          />
+                        </span>
+                      ) : null}
                     </td>
                   </tr>
                 ))

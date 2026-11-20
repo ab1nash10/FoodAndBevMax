@@ -88,7 +88,7 @@ export function ToggleField({
         <p className="text-sm font-medium text-ds-text-2">{label}</p>
         {description ? <p className="text-xs text-ds-muted">{description}</p> : null}
       </div>
-      <Toggle checked={value} onChange={onChange} />
+      <Toggle ariaLabel={label} checked={value} onChange={onChange} />
     </div>
   );
 }

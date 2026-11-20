@@ -7,12 +7,7 @@ import { useState } from 'react';
 import type { Transfer } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { AppPageHeader, ListPager, StatusChip, tableStyles } from '@/components/design-system';
-import {
-  formatDateOnly,
-  formatQuantity,
-  listLimit,
-  plural,
-} from '@/components/inventory/shared/utils';
+import { formatDateOnly, formatQuantity, plural } from '@/components/inventory/shared/utils';
 import { useLocationNames } from '@/components/inventory/use-locations';
 import { ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { QueryState } from '@/components/location-empty-states';
@@ -30,6 +25,7 @@ import { invalidateTransferQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
 import { useUrlNumberParam, useUrlParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
+import { useListLimit } from '@/lib/list-limit';
 
 type ReceiveView = 'ACKNOWLEDGED' | 'PENDING_ACKNOWLEDGEMENT';
 
@@ -43,6 +39,7 @@ export function ReceiveInventoryPageClient() {
     'PENDING_ACKNOWLEDGEMENT',
   ]);
   const [page, setPage] = useUrlNumberParam('page');
+  const [limit, setLimit] = useListLimit(setPage);
   const [receiving, setReceiving] = useState<Transfer | null>(null);
   const [viewing, setViewing] = useState<Transfer | null>(null);
   const canReceive = hasPermission(['COUNTER_STOCK_RECEIVE', 'TRANSFER_ACKNOWLEDGE']);
@@ -55,17 +52,17 @@ export function ReceiveInventoryPageClient() {
         await organizationApi.listTransfers({
           destinationId: counterId,
           destinationType: 'COUNTER',
-          limit: listLimit,
+          limit,
           page,
           sortBy: 'transferDate',
           sortOrder: view === 'PENDING_ACKNOWLEDGEMENT' ? 'asc' : 'desc',
           status: view,
         })
       ).data,
-    queryKey: queryKeys.transfers('counter', counterId, view, page),
+    queryKey: queryKeys.transfers('counter', counterId, view, page, limit),
   });
   const items = transfersQuery.data?.items ?? [];
-  const meta = transfersQuery.data?.meta ?? { limit: listLimit, page, total: 0, totalPages: 1 };
+  const meta = transfersQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
 
   return (
     <section className="space-y-4">
@@ -193,6 +190,7 @@ export function ReceiveInventoryPageClient() {
             </table>
           </div>
           <ListPager
+            onLimitChange={setLimit}
             limit={meta.limit}
             noun="transfer"
             onPageChange={setPage}

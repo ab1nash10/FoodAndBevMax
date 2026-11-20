@@ -2,9 +2,8 @@
 
 import type { ThemePreference, UserPreferences, UserPreferencesInput } from '@aahar/api-client';
 import { Button } from '@aahar/ui';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Monitor, Moon, Rows3, Rows4, Sun } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { Monitor, Moon, Rows3, Rows4, Sun } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { getStartPageOptions, homeHref } from '@/lib/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -13,8 +12,8 @@ import { formatGlobalLocationLabel, useLocationContext } from '@/components/loca
 import { useTheme } from '@/components/theme-provider';
 import { useToast } from '@/components/toast-provider';
 import { Field, Select } from '@/components/ui';
-import { Modal, PasswordInput } from '@/components/ui-controls';
-import { getApiErrorMessage, userApi } from '@/lib/api';
+import { Modal } from '@/components/ui-controls';
+import { getApiErrorMessage } from '@/lib/api';
 import { useDensity, type Density } from '@/lib/use-density';
 import { cn } from '@/lib/utils';
 import { preferencesQueryKey, usePreferences, useSavePreferences } from './use-preferences';
@@ -30,12 +29,10 @@ const densityOptions: Array<{ icon: typeof Sun; label: string; value: Density }>
   { icon: Rows4, label: 'Compact', value: 'compact' },
 ];
 
-const passwordPattern = /(?=.*[A-Za-z])(?=.*\d).{8,}/;
-
 /** Personal settings, opened from the profile menu. Mounted only while open, so it starts fresh. */
 export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>) {
   const { currentUser, hasPermission } = useAuth();
-  const { availableLocations } = useLocationContext();
+  const { availableLocations, canSelectAllLocations, employeeCode } = useLocationContext();
   const { setTheme, theme } = useTheme();
   const [density, setDensity] = useDensity();
   const { showToast } = useToast();
@@ -101,6 +98,33 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
         </FormSection>
       ) : (
         <div className="grid gap-4">
+          <FormSection
+            aria-label="My details"
+            description="To change any of these, ask an administrator."
+            title="My details"
+          >
+            {/* From the sign-in token and the header's access request: no extra request. */}
+            <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[8rem_1fr]">
+              {[
+                ['Name', currentUser?.name],
+                ['Employee code', employeeCode],
+                ['Email', currentUser?.email],
+                ['Mobile', currentUser?.mobile],
+                ['Roles', currentUser?.roles.join(', ')],
+                [
+                  'Locations',
+                  canSelectAllLocations
+                    ? 'All locations'
+                    : availableLocations.map(formatGlobalLocationLabel).join('; '),
+                ],
+              ].map(([label, value]) => (
+                <div className="contents" key={label}>
+                  <dt className="text-ds-muted">{label}</dt>
+                  <dd className="font-medium text-ds-text">{value || '-'}</dd>
+                </div>
+              ))}
+            </dl>
+          </FormSection>
           <p className="text-sm text-ds-muted">
             Saved to your account, so they follow you on every device you sign in to.
           </p>
@@ -210,122 +234,8 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
               </p>
             </div>
           </FormSection>
-
-          <FormSection description="The password for signing in with your email." title="Security">
-            {currentUser?.email ? (
-              <ChangePasswordForm email={currentUser.email} hasPassword={preferences.hasPassword} />
-            ) : (
-              <p className="text-sm text-ds-muted">
-                Your account signs in with a mobile OTP, so there is no password to change.
-              </p>
-            )}
-          </FormSection>
         </div>
       )}
     </Modal>
-  );
-}
-
-/** Changes the password, or, for an account that signed in only by OTP so far, sets the first one. */
-function ChangePasswordForm({
-  email,
-  hasPassword,
-}: Readonly<{ email: string; hasPassword: boolean }>) {
-  const { logout } = useAuth();
-  const router = useRouter();
-  const { showToast } = useToast();
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const changePassword = useMutation({
-    mutationFn: () =>
-      userApi.changeMyPassword({
-        currentPassword: hasPassword ? currentPassword : undefined,
-        newPassword,
-      }),
-    onError(mutationError) {
-      setError(getApiErrorMessage(mutationError));
-    },
-    // The server has ended every session of this user, so sign out here too, as the profile
-    // menu's sign-out does, and let them sign in again with the new password.
-    onSuccess() {
-      showToast({
-        description: 'Sign in again with your new password.',
-        title: hasPassword ? 'Password changed' : 'Password set',
-        variant: 'success',
-      });
-      void logout().then(() => router.replace('/auth/login'));
-    },
-  });
-
-  const submit = () => {
-    if (hasPassword && !currentPassword) {
-      setError('Enter your current password.');
-    } else if (!passwordPattern.test(newPassword)) {
-      setError('New password must be at least 8 characters and include a letter and a number.');
-    } else if (newPassword !== confirmPassword) {
-      setError('The new passwords do not match.');
-    } else {
-      setError(null);
-      changePassword.mutate();
-    }
-  };
-
-  return (
-    <form
-      className="grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <p className="text-sm text-ds-muted">
-        Signed in as <span className="font-medium text-ds-text-2">{email}</span>
-      </p>
-      {hasPassword ? (
-        <Field label="Current password" name="current-password" required>
-          <PasswordInput
-            autoComplete="current-password"
-            id="current-password"
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            value={currentPassword}
-          />
-        </Field>
-      ) : (
-        <p className="text-sm text-ds-muted">
-          You have no password yet. Set one to also sign in with your email and password.
-        </p>
-      )}
-      <Field label="New password" name="new-password" required>
-        <PasswordInput
-          autoComplete="new-password"
-          id="new-password"
-          onChange={(event) => setNewPassword(event.target.value)}
-          placeholder="Min 8 chars, 1 letter and 1 number"
-          value={newPassword}
-        />
-      </Field>
-      <Field
-        error={error ?? undefined}
-        label="Confirm new password"
-        name="confirm-password"
-        required
-      >
-        <PasswordInput
-          autoComplete="new-password"
-          id="confirm-password"
-          onChange={(event) => setConfirmPassword(event.target.value)}
-          value={confirmPassword}
-        />
-      </Field>
-      <div>
-        <Button disabled={changePassword.isPending} type="submit">
-          {changePassword.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {hasPassword ? 'Change password' : 'Set password'}
-        </Button>
-      </div>
-    </form>
   );
 }
