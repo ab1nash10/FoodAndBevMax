@@ -57,10 +57,7 @@ globalThis.fetch = async (input, init) => {
 interface ErpCall {
   body?: string;
   key?: string;
-  nonce?: string;
   secret?: string;
-  /** Sent in place of the signed body, to prove a changed body is caught. */
-  sentBody?: string;
   timestamp?: string;
 }
 
@@ -84,20 +81,13 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
   /** Calls /erp/* signed as the ERP would; any part can be overridden to test a refusal. */
   async function erp(method: string, path: string, call: ErpCall = {}) {
     const timestamp = call.timestamp ?? formatErpTimestamp(new Date());
-    const nonce = call.nonce ?? randomUUID();
-    const body = call.body ?? '';
-    const url = new URL(`${h.baseUrl}${path}`);
-    const signature = sign(
-      call.secret ?? secret,
-      stringToSign(method, url.pathname + url.search, timestamp, nonce, Buffer.from(body)),
-    );
-    const response = await fetch(url, {
-      body: method === 'GET' ? undefined : (call.sentBody ?? body),
+    const key = call.key ?? apiKey;
+    const response = await fetch(new URL(`${h.baseUrl}${path}`), {
+      body: method === 'GET' ? undefined : (call.body ?? ''),
       headers: {
         'content-type': 'application/json',
-        'x-api-key': call.key ?? apiKey,
-        'x-nonce': nonce,
-        'x-signature': signature,
+        'x-api-key': key,
+        'x-signature': sign(stringToSign(key, timestamp, call.secret ?? secret)),
         'x-timestamp': timestamp,
       },
       method,
@@ -264,10 +254,9 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       expect([result.status, result.body]).toEqual([401, failed([reason])]);
     };
 
-    it('refuses a wrong key, a wrong secret or a body changed after signing', async () => {
+    it('refuses a wrong key or a signature made with the wrong token', async () => {
       await refused({ key: 'someone-else' }, 'Unknown API key');
-      await refused({ secret: 'not-the-secret' }, 'Signature does not match');
-      await refused({ sentBody: body() }, 'Signature does not match');
+      await refused({ secret: 'not-the-token' }, 'Signature does not match');
     });
 
     it('refuses a timestamp in the wrong format or more than 5 minutes off', async () => {
@@ -285,11 +274,10 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       );
     });
 
-    it('refuses the same request sent twice (a replay)', async () => {
-      const nonce = randomUUID();
-      const first = await erp('POST', '/erp/grns', { body: body(), nonce });
-      expect(first.status).toBe(200);
-      await refused({ nonce }, 'This request was already received');
+    it('takes the same signed headers again within the minute (no one-time number)', async () => {
+      const timestamp = formatErpTimestamp(new Date());
+      expect((await erp('POST', '/erp/grns', { body: body(), timestamp })).status).toBe(200);
+      expect((await erp('POST', '/erp/grns', { body: body(), timestamp })).status).toBe(200);
     });
 
     it('refuses a call with a user token instead of a signature', async () => {

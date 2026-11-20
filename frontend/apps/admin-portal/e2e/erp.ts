@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { APIRequestContext } from '@playwright/test';
 
@@ -45,27 +45,18 @@ function erpTimestamp(): string {
   return `${two(ist.getUTCDate())}/${two(ist.getUTCMonth() + 1)}/${ist.getUTCFullYear()}/${two(ist.getUTCHours())}/${two(ist.getUTCMinutes())}`;
 }
 
-/** Sends rows to POST /erp/grns signed as the ERP does. */
+/** Sends rows to POST /erp/grns signed as the ERP does: SHA-512 of api_key|GRN|timestamp|token. */
 export async function sendAsErp(request: APIRequestContext, rows: object[]) {
-  const url = new URL(`${organizationApi}/erp/grns`);
-  const body = JSON.stringify(rows);
   const timestamp = erpTimestamp();
-  const nonce = randomUUID();
-  const text = [
-    'POST',
-    url.pathname,
-    timestamp,
-    nonce,
-    createHash('sha256').update(body).digest('hex'),
-  ].join('\n');
+  const key = env('ERP_API_KEY');
+  const text = [key, 'GRN', timestamp, env('ERP_API_SECRET')].join('|');
 
-  return request.post(url.toString(), {
-    data: body,
+  return request.post(`${organizationApi}/erp/grns`, {
+    data: JSON.stringify(rows),
     headers: {
       'content-type': 'application/json',
-      'x-api-key': env('ERP_API_KEY'),
-      'x-nonce': nonce,
-      'x-signature': createHmac('sha256', env('ERP_API_SECRET')).update(text).digest('hex'),
+      'x-api-key': key,
+      'x-signature': createHash('sha512').update(text).digest('hex'),
       'x-timestamp': timestamp,
     },
   });

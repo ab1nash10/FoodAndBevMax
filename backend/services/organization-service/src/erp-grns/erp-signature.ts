@@ -1,38 +1,37 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 /** How far the ERP's X-Timestamp may be from this server's clock, either way. */
 export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+
+/** The APIMethod part of the signed text: always GRN for this API. */
+export const ERP_API_METHOD = 'GRN';
 
 // India has no daylight saving, so IST is always UTC+05:30.
 const IST_OFFSET_MS = 330 * 60_000;
 
 /**
- * What the ERP signs: the method, the path with its query string as called (including the
- * /fandb/api/v1 prefix), X-Timestamp, X-Nonce and the SHA-256 of the exact body bytes, one per
- * line. The body goes in as a hash so the text stays short and can never contain a newline.
+ * What the ERP signs, in the EAM team's format: api_key|APIMethod|X-Timestamp|token. The key and
+ * token are fixed and only the minute changes; neither the body nor the path is part of it.
  */
-export function stringToSign(
-  method: string,
-  pathWithQuery: string,
-  timestamp: string,
-  nonce: string,
-  body: Buffer,
-): string {
-  const bodyHash = createHash('sha256').update(body).digest('hex');
-
-  return [method.toUpperCase(), pathWithQuery, timestamp, nonce, bodyHash].join('\n');
+export function stringToSign(apiKey: string, timestamp: string, token: string): string {
+  return [apiKey, ERP_API_METHOD, timestamp, token].join('|');
 }
 
-/** HMAC-SHA256 of the text with the shared secret, as lowercase hex. */
-export function sign(secret: string, text: string): string {
-  return createHmac('sha256', secret).update(text, 'utf8').digest('hex');
+/** SHA-512 of the text, as lowercase hex (128 characters). */
+export function sign(text: string): string {
+  return createHash('sha512').update(text, 'utf8').digest('hex');
 }
 
-/** Constant time, so how long it takes does not reveal how much of a guess was right. */
+/**
+ * Constant time, so how long it takes does not reveal how much of a guess was right. Hex in either
+ * case is taken, as ERPs differ in what they write.
+ */
 export function signatureMatches(expected: string, given: string): boolean {
+  const hex = given.toLowerCase();
+
   return (
-    /^[0-9a-f]{64}$/.test(given) &&
-    timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(given, 'hex'))
+    /^[0-9a-f]{128}$/.test(hex) &&
+    timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(hex, 'hex'))
   );
 }
 

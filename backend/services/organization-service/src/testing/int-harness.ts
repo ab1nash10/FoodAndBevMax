@@ -116,7 +116,7 @@ export async function startHarness(): Promise<Harness> {
   const { AppModule } = await import('../app.module.js');
   const { PrismaService } = await import('../common/prisma/prisma.service.js');
 
-  const app = await NestFactory.create(AppModule, { logger: false, rawBody: true });
+  const app = await NestFactory.create(AppModule, { logger: false });
   const config = app.get(ConfigService);
   configureSecurityBaseline(app, config, {
     serviceName: 'organization-service',

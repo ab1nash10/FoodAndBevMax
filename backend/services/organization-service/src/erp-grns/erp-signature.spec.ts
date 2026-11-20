@@ -7,47 +7,37 @@ import {
   stringToSign,
 } from './erp-signature';
 
-const body = '{"grnNumber":"12344"}';
-const nonce = '3f1c9a2e-7b4d-4e8a-9c1f-2a6b8d0e5f71';
-const text = stringToSign('POST', '/erp/grns', '28/10/2026/17/40', nonce, Buffer.from(body));
+// The EAM team's format: api_key|APIMethod|timestamp|token, APIMethod always GRN, as SHA-512 hex.
+const text = stringToSign('erp_test_key', '20/11/2026/15/20', 'test-token-only-for-this-example');
 
 describe('ERP request signing', () => {
   it('matches the worked example given to the ERP team', () => {
-    expect(text).toBe(
-      'POST\n/erp/grns\n28/10/2026/17/40\n' +
-        `${nonce}\n8049395a816a5fbf3fa0ffa3c67f3c3ae52d947716dfbf6f6cf1d41b42ef64ce`,
-    );
-    expect(sign('test-secret', text)).toBe(
-      'ee541f54cf3243b7fd852b0dec3a1a78dca2b1f2aa2f6e28f3f49ddfefb1d780',
+    expect(text).toBe('erp_test_key|GRN|20/11/2026/15/20|test-token-only-for-this-example');
+    expect(sign(text)).toBe(
+      'ef9cb5a31a4b9a181346ea66d910a9eb05f676db87ae3ec02bf22a1c9824dd0a' +
+        'ceef1f02ec6dabcf496f09b293e8d01130e2e8176c47af3e4b965d26df232de2',
     );
   });
 
-  it('signs an empty body as the hash of nothing, and the method in capitals', () => {
-    expect(stringToSign('get', '/erp/grns/1', 't', 'n', Buffer.alloc(0))).toBe(
-      'GET\n/erp/grns/1\nt\nn\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
-  });
-
-  it('gives a different signature when any part or the secret changes', () => {
-    const good = sign('test-secret', text);
+  it('gives a different signature when the key, the minute or the token changes', () => {
+    const good = sign(text);
     const changed = [
-      stringToSign('POST', '/erp/grns', '28/10/2026/17/40', nonce, Buffer.from(`${body} `)),
-      stringToSign('POST', '/erp/grns?x=1', '28/10/2026/17/40', nonce, Buffer.from(body)),
-      stringToSign('POST', '/erp/grns', '28/10/2026/17/41', nonce, Buffer.from(body)),
-      stringToSign('POST', '/erp/grns', '28/10/2026/17/40', `${nonce}0`, Buffer.from(body)),
+      stringToSign('other_key', '20/11/2026/15/20', 'test-token-only-for-this-example'),
+      stringToSign('erp_test_key', '20/11/2026/15/21', 'test-token-only-for-this-example'),
+      stringToSign('erp_test_key', '20/11/2026/15/20', 'other-token'),
     ];
-    for (const other of changed) expect(sign('test-secret', other)).not.toBe(good);
-    expect(sign('other-secret', text)).not.toBe(good);
+    for (const other of changed) expect(sign(other)).not.toBe(good);
   });
 
-  it('compares signatures exactly, refusing anything that is not 64 lowercase hex', () => {
-    const good = sign('test-secret', text);
+  it('compares signatures exactly, in either case, refusing anything but 128 hex', () => {
+    const good = sign(text);
     expect(signatureMatches(good, good)).toBe(true);
-    expect(signatureMatches(good, good.toUpperCase())).toBe(false);
-    expect(signatureMatches(good, good.slice(0, 63) + (good.endsWith('0') ? '1' : '0'))).toBe(
+    expect(signatureMatches(good, good.toUpperCase())).toBe(true);
+    expect(signatureMatches(good, good.slice(0, 127) + (good.endsWith('0') ? '1' : '0'))).toBe(
       false,
     );
-    expect(signatureMatches(good, good.slice(0, 10))).toBe(false);
+    expect(signatureMatches(good, good.slice(0, 64))).toBe(false);
+    expect(signatureMatches(good, `${good.slice(0, 127)}g`)).toBe(false);
     expect(signatureMatches(good, '')).toBe(false);
   });
 });

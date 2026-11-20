@@ -38,11 +38,8 @@ import { ErpSignatureGuard } from './erp-signature.guard';
 /** For the ERP only: no user sign-in, every request signed instead (see ErpSignatureGuard). */
 @ApiHeader({ name: 'X-Api-Key', required: true })
 @ApiHeader({ description: 'India time, dd/MM/yyyy/HH/mm', name: 'X-Timestamp', required: true })
-@ApiHeader({ description: 'A new UUID for every request', name: 'X-Nonce', required: true })
 @ApiHeader({
-  description:
-    'Lowercase hex HMAC-SHA256, with the shared secret, of METHOD, path with query, X-Timestamp, ' +
-    'X-Nonce and the SHA-256 hex of the body, joined by newlines',
+  description: 'SHA-512 hex of api_key|GRN|X-Timestamp|token (the token is the shared secret)',
   name: 'X-Signature',
   required: true,
 })

@@ -19,9 +19,7 @@ tls.setDefaultCACertificates([
 installProcessHandlers();
 
 async function bootstrap() {
-  // rawBody keeps the bytes as received: the ERP signs those, not the JSON re-built from them.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    rawBody: true,
     bufferLogs: true,
   });
   // A spreadsheet import sends up to 1,000 rows in one request, past Express's 100 KB default,
