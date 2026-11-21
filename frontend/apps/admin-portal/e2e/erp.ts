@@ -45,14 +45,32 @@ function erpTimestamp(): string {
   return `${two(ist.getUTCDate())}/${two(ist.getUTCMonth() + 1)}/${ist.getUTCFullYear()}/${two(ist.getUTCHours())}/${two(ist.getUTCMinutes())}`;
 }
 
-/** Sends rows to POST /erp/grns signed as the ERP does: SHA-512 of api_key|GRN|timestamp|token. */
+/** The ERP's sample values for the fields every row must carry that a test does not care about. */
+const sample = {
+  'Discount/Extra Charges': '0',
+  'HSN No': '998313',
+  MRP: '15',
+  'Tax Rate': 'IGST@18%',
+  'Total Value': '9.257',
+  UOM: 'No.',
+  'Unit Rate': '9.80',
+  issued_by: 'M030634',
+  purchase_order: '392851',
+  requisition: '918590',
+  supplier: 'CAGR0008',
+};
+
+/**
+ * Sends rows to POST /erp/grns signed as the ERP does: SHA-512 of api_key|GRN|timestamp|token.
+ * Every field is required; the sample fills in what a row leaves out.
+ */
 export async function sendAsErp(request: APIRequestContext, rows: object[]) {
   const timestamp = erpTimestamp();
   const key = env('ERP_API_KEY');
   const text = [key, 'GRN', timestamp, env('ERP_API_SECRET')].join('|');
 
   return request.post(`${organizationApi}/erp/grns`, {
-    data: JSON.stringify(rows),
+    data: JSON.stringify(rows.map((row) => ({ ...sample, ...row }))),
     headers: {
       'content-type': 'application/json',
       'x-api-key': key,

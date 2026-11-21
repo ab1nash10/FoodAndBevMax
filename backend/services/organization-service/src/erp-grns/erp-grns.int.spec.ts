@@ -102,7 +102,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
 
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   const received = (transactionNumber: unknown) => ({
-    message: 'We have successfully received the request',
+    message: 'Request Sent Successfully!!',
     success: true,
     transaction_number: transactionNumber,
   });
@@ -457,7 +457,7 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     });
   });
 
-  it('takes the sample as the ERP writes it: text numbers, India time, location by name; fills the rest from AAHAR', async () => {
+  it('takes the sample as the ERP writes it: text numbers, India time, location by name', async () => {
     const grnNumber = newGrnNumber();
     const [row] = grn(grnNumber, [{ batch: '*', qty: 5 }]);
     const sample: Body = {
@@ -473,10 +473,6 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       location: fx.hospitalName.toUpperCase(),
       transaction_qty: '5',
     };
-    // Left out: the Item master supplies the name and HSN code.
-    delete sample.item_name;
-    delete sample['HSN No'];
-
     const sent = await send([sample]);
     expect([sent.status, sent.body.success]).toEqual([200, true]);
 
@@ -484,14 +480,14 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
     expect(saved).toMatchObject({ location: fx.hospitalCode, store_name: 'Main Store' });
     expect(firstOf(saved.rows as Body[])).toMatchObject({
       'Discount/Extra Charges': 0,
-      'HSN No': '220110',
+      'HSN No': '998313',
       MRP: 15,
       'Total Value': 9.257,
       'Unit Rate': 9.8,
       batch: '*',
       date: '2026-10-26T10:20:00.000Z',
       expiry_date: '2027-10-26',
-      item_name: fx.itemName,
+      item_name: 'Kinley Water - 1000 Ml',
       location: fx.hospitalCode,
       transaction_number: sent.body.transaction_number,
       transaction_qty: 5,
@@ -548,12 +544,15 @@ describe.skipIf(!databaseUrl)('ERP GRN API (integration)', { timeout: 30_000 }, 
       false,
     ]);
 
-    // Every row says whether it is goods in (0) or a return (1): there is no default.
-    const noFlag = grn(grnNumber, [{ batch: 'Z', qty: 1 }]);
-    delete noFlag[0]!.flag;
-    const unflagged = await send(noFlag);
-    expect(unflagged.status).toBe(400);
-    expect(String(unflagged.body.errors)).toContain('flag');
+    // Every field is required: a row missing any one, or with it blank, is refused naming it.
+    const [full] = grn(grnNumber, [{ batch: 'Z', qty: 1 }]);
+    for (const field of Object.keys(full!)) {
+      const { [field]: _left, ...rest } = full!;
+      const without = await send([rest]);
+      expect([field, without.status]).toEqual([field, 400]);
+      expect(String(without.body.errors)).toContain(field);
+    }
+    expect((await send([{ ...full, supplier: '' }])).status).toBe(400);
     expect((await send(grn(grnNumber, [{ batch: 'Z', qty: 1 }], { flag: 2 }))).status).toBe(400);
 
     // The transaction number is AAHAR's to give: the ERP does not send one.

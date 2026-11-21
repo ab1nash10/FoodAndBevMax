@@ -49,6 +49,7 @@ test('a restaurant returns stock to the store and the store counts it in', async
       expiry_date: expiryDate,
       flag: 0,
       grn_No: batch,
+      item_name: mapped.item.itemName,
       location: hospital.hospitalCode,
       part_item_code: mapped.item.itemCode,
       transaction_qty: '3',

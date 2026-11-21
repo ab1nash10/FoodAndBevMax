@@ -25,6 +25,7 @@ test('an expired batch sent as goods in is refused and listed on ERP GRN errors'
       expiry_date: '2020-01-01',
       flag: 0,
       grn_No: batch,
+      item_name: mapped.item.itemName,
       location: hospital.hospitalCode,
       part_item_code: mapped.item.itemCode,
       transaction_qty: '2',

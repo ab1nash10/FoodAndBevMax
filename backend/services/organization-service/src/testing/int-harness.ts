@@ -84,10 +84,13 @@ export async function receiveStock(
   const [target] = await h.rawQuery<{
     hospital_code: string;
     hospital_id: string;
+    hsn_code: string | null;
     item_code: string;
+    item_name: string;
     main: boolean;
   }>(
-    `SELECT h.id AS hospital_id, h.hospital_code, i.item_code, lower(s.store_name) = 'main store' AS main
+    `SELECT h.id AS hospital_id, h.hospital_code, i.item_code, i.item_name, i.hsn_code,
+            lower(s.store_name) = 'main store' AS main
        FROM stores s JOIN hospitals h ON h.id = s.hospital_id, items i
       WHERE s.id = $1::uuid AND i.id = $2::uuid`,
     storeId,
@@ -120,14 +123,26 @@ export async function receiveStock(
   const response = await fetch(`${h.baseUrl}/erp/grns`, {
     body: JSON.stringify([
       {
+        // Every field is required: the item's own name and HSN, the ERP's sample for the rest.
+        'Discount/Extra Charges': 0,
+        'HSN No': target.hsn_code ?? '998313',
+        MRP: 15,
+        'Tax Rate': 'IGST@18%',
+        'Total Value': Math.round(qty * 980) / 100,
+        UOM: 'No.',
+        'Unit Rate': 9.8,
         batch: batchNumber,
         date: new Date().toISOString(),
         expiry_date: expiryDate,
         flag: 0,
         grn_No: stock.grnNumber ?? `INT-${batchNumber}`,
+        issued_by: 'M030634',
+        item_name: target.item_name,
         location: target.hospital_code,
         part_item_code: target.item_code,
-        supplier: stock.supplier,
+        purchase_order: '392851',
+        requisition: '918590',
+        supplier: stock.supplier ?? 'CAGR0008',
         transaction_qty: qty,
       },
     ]),

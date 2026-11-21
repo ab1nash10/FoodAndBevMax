@@ -52,14 +52,11 @@ export class ErpGrnRowDto {
   @MaxLength(64)
   part_item_code!: string;
 
-  @ApiPropertyOptional({
-    description: 'Left out, the Item master name is used.',
-    example: 'Kinley Water - 1000 Ml',
-  })
-  @IsOptional()
+  @ApiProperty({ example: 'Kinley Water - 1000 Ml' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(200)
-  item_name?: string;
+  item_name!: string;
 
   @ApiProperty({ description: 'Quantity sent, in the item’s unit.', example: '5' })
   @AsNumber()
@@ -67,21 +64,18 @@ export class ErpGrnRowDto {
   @IsPositive()
   transaction_qty!: number;
 
-  @ApiPropertyOptional({ example: 'No.' })
-  @IsOptional()
+  @ApiProperty({ example: 'No.' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(20)
-  UOM?: string;
+  UOM!: string;
 
-  @ApiPropertyOptional({
-    description: 'Left out, the Item master HSN code is used.',
-    example: '998313',
-  })
+  @ApiProperty({ example: '998313' })
   @AsText()
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(20)
-  'HSN No'?: string;
+  'HSN No'!: string;
 
   @ApiProperty({
     description: 'When the goods moved. With no time zone it is India time.',
@@ -90,59 +84,55 @@ export class ErpGrnRowDto {
   @IsDateString()
   date!: string;
 
-  @ApiPropertyOptional({ example: '9.80' })
+  @ApiProperty({ example: '9.80' })
   @AsNumber()
-  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  'Unit Rate'?: number;
+  'Unit Rate'!: number;
 
-  @ApiPropertyOptional({ example: '15' })
+  @ApiProperty({ example: '15' })
   @AsNumber()
-  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  MRP?: number;
+  MRP!: number;
 
-  @ApiPropertyOptional({ example: 'IGST@18%' })
-  @IsOptional()
+  @ApiProperty({ example: 'IGST@18%' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(30)
-  'Tax Rate'?: string;
+  'Tax Rate'!: string;
 
-  @ApiPropertyOptional({ example: '0' })
+  @ApiProperty({ example: '0' })
   @AsNumber()
-  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
-  'Discount/Extra Charges'?: number;
+  'Discount/Extra Charges'!: number;
 
-  @ApiPropertyOptional({ example: '9.257' })
+  @ApiProperty({ example: '9.257' })
   @AsNumber()
-  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 3 })
   @Min(0)
-  'Total Value'?: number;
+  'Total Value'!: number;
 
-  @ApiPropertyOptional({ example: 'M030634' })
+  @ApiProperty({ example: 'M030634' })
   @AsText()
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(64)
-  issued_by?: string;
+  issued_by!: string;
 
-  @ApiPropertyOptional({ example: '392851' })
+  @ApiProperty({ example: '392851' })
   @AsText()
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(64)
-  purchase_order?: string;
+  purchase_order!: string;
 
-  @ApiPropertyOptional({ example: '918590' })
+  @ApiProperty({ example: '918590' })
   @AsText()
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(64)
-  requisition?: string;
+  requisition!: string;
 
   @ApiProperty({
     description: 'The ERP’s GRN number. Sent again, its rows are added to that GRN.',
@@ -154,12 +144,12 @@ export class ErpGrnRowDto {
   @MaxLength(64)
   grn_No!: string;
 
-  @ApiPropertyOptional({ description: 'The vendor code.', example: 'CAGR0008' })
+  @ApiProperty({ description: 'The vendor code.', example: 'CAGR0008' })
   @AsText()
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(64)
-  supplier?: string;
+  supplier!: string;
 
   @ApiProperty({ example: '*' })
   @AsText()

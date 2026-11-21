@@ -33,7 +33,8 @@ test('a GRN from the ERP goes into stock on arrival and shows every field', asyn
       flag: 0,
       grn_No: grnNo,
       issued_by: 'M030634',
-      // By name, as the ERP may send it; item name and HSN are left to the Item master.
+      item_name: mapped.item.itemName,
+      // By name, as the ERP may send it.
       location: hospital.hospitalName,
       part_item_code: mapped.item.itemCode,
       purchase_order: '392851',
@@ -46,7 +47,7 @@ test('a GRN from the ERP goes into stock on arrival and shows every field', asyn
   // AAHAR answers with its own number for the request.
   const receipt = (await sent.json()) as Record<string, unknown>;
   expect(receipt).toEqual({
-    message: 'We have successfully received the request',
+    message: 'Request Sent Successfully!!',
     success: true,
     transaction_number: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
   });
@@ -103,6 +104,7 @@ test('a GRN reverse takes the batch back out of the store', async ({ page, reque
     expiry_date: '2030-10-26',
     flag,
     grn_No: grnNo,
+    item_name: mapped.item.itemName,
     location: hospital.hospitalCode,
     part_item_code: mapped.item.itemCode,
     transaction_qty: '2',
@@ -149,6 +151,7 @@ test('a GRN sent while the page is open appears without a reload', async ({ page
       expiry_date: '2030-10-26',
       flag: 0,
       grn_No: grnNo,
+      item_name: mapped.item.itemName,
       location: hospital.hospitalCode,
       part_item_code: mapped.item.itemCode,
       transaction_qty: '1',
