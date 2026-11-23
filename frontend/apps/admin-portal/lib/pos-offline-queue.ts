@@ -1,10 +1,17 @@
 import { ApiClientError, type PosBillInput } from '@aahar/api-client';
+import { UNSENT_BILLS_KEY_PREFIX } from './auth-storage';
 
 /**
  * A bill the till could not send, kept on this device until the server takes it. The server
  * gives it its bill number then, as for any bill: the device never makes one up.
  */
 export interface QueuedBill {
+  /**
+   * Who took it. A bill lands in the shift of whoever's session sends it, so only they send it
+   * (or discard it). Bills queued before this was kept have none: whoever is signed in sends them.
+   */
+  cashierId?: string;
+  cashierName?: string;
   /** Set when the cashier gave it up. Kept a week so the loss stays on record. */
   discardedAt?: string;
   /** Why the server refused it. Set, the bill waits for the cashier instead of a retry. */
@@ -21,7 +28,12 @@ export interface QueuedBill {
 const keepDiscardedMs = 7 * 24 * 60 * 60 * 1000;
 
 function keyFor(counterId: string) {
-  return `aahar.pos.unsent-bills.${counterId}`;
+  return `${UNSENT_BILLS_KEY_PREFIX}${counterId}`;
+}
+
+/** The signed-in cashier's to send: theirs, or queued before cashiers were kept. */
+export function isMine(bill: { cashierId?: string }, userId: string | undefined): boolean {
+  return !bill.cashierId || bill.cashierId === userId;
 }
 
 export function readQueue(counterId: string): QueuedBill[] {
@@ -93,19 +105,20 @@ function isRefusal(error: unknown): error is ApiClientError {
 }
 
 /**
- * Sends the waiting bills oldest first; `all` also retries the ones the server refused. Stops at
- * the first that gets no answer (or a 5xx, a lapsed session): the rest go on the next try.
- * Returns how many went through.
+ * Sends the signed-in cashier's waiting bills oldest first; `all` also retries the ones the
+ * server refused. Stops at the first that gets no answer (or a 5xx, a lapsed session): the rest
+ * go on the next try. Returns how many went through.
  */
 export async function sendQueued(
   counterId: string,
+  userId: string | undefined,
   send: (payload: PosBillInput) => Promise<unknown>,
   all = false,
 ): Promise<number> {
   let sent = 0;
 
   for (const bill of readQueue(counterId)) {
-    if (bill.discardedAt || (bill.error && !all)) continue;
+    if (bill.discardedAt || (bill.error && !all) || !isMine(bill, userId)) continue;
     const id = bill.payload.clientOrderId;
 
     try {

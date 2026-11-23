@@ -80,11 +80,11 @@ assert.equal(
       [id]: 'PRD000123',
     }),
   ),
-  '[Kitchen Operations] › Kitchen Production(/kitchen/productions) › PRD000123',
+  '[Kitchen] › Kitchen production(/kitchen/productions) › PRD000123',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/items', params(`id=${id}`), all, { [id]: 'Masala chai' })),
-  '[Item & Menu Setup] › Items(/masters/items) › Masala chai',
+  '[Item & menu] › Items(/masters/items) › Masala chai',
 );
 assert.equal(
   show(
@@ -127,7 +127,7 @@ assert.equal(
 // A trailing slash is the same page.
 assert.equal(
   show(getBreadcrumbTrail('/kitchen/productions/', null, all)),
-  '[Kitchen Operations] › Kitchen Production',
+  '[Kitchen] › Kitchen production',
 );
 
 // Without permission a page crumb is plain text, and so is a named record on it.
@@ -140,7 +140,7 @@ assert.equal(
 const onlyProductions = (permission) => [permission].flat().includes('KITCHEN_PRODUCTION_VIEW');
 assert.equal(
   show(getBreadcrumbTrail('/kitchen/productions/new', null, onlyProductions)),
-  '[Kitchen Operations] › Kitchen Production(/kitchen/productions) › New production',
+  '[Kitchen] › Kitchen production(/kitchen/productions) › New production',
 );
 assert.equal(
   show(getBreadcrumbTrail('/masters/stores/abc/def', null, none)),
@@ -172,7 +172,7 @@ const redirects = new Set([
   // Now tabs of /masters/item-mapping.
   '/masters/kitchen-items',
   '/masters/store-items',
-  // Now Logs → Activity Logs.
+  // Now Logs → Activity logs.
   '/reports/audit',
 ]);
 const known = new Set([

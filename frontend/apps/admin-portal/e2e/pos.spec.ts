@@ -2,19 +2,19 @@ import { expect, test } from '@playwright/test';
 import { newSession } from './sign-in';
 
 /**
- * The Point of Sale screens open for a signed-in admin, and a bill made at the till reaches the
+ * The POS screens open for a signed-in admin, and a bill made at the till reaches the
  * kitchen board and the bill history. The bill is real: it needs a local counter with at least
  * one item it can sell now, and it stays in the database like any other bill.
  */
 const screens: Array<[string, string]> = [
   ['pos/billing', 'Billing'],
   ['pos/orders', 'Orders'],
-  ['pos/history', 'Bill History'],
+  ['pos/history', 'Bill history'],
   ['pos/complimentary', 'Complimentary'],
-  ['pos/day', 'Day Summary'],
-  ['pos/menu', 'Counter Menu'],
-  ['pos/stock', 'Counter Stock'],
-  ['pos/receive', 'Receive Inventory'],
+  ['pos/day', 'Day summary'],
+  ['pos/menu', 'Counter menu'],
+  ['pos/stock', 'Counter stock'],
+  ['pos/receive', 'Receive inventory'],
 ];
 
 // The POS opens only for a user an admin listed on a POS device with this computer's name, once
@@ -49,7 +49,7 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
   }, session);
   const title = page.getByRole('heading', { level: 1 });
 
-  // The computer this test plays: the device's own Host Name, or a made-up one.
+  // The computer this test plays: the device's own Host name, or a made-up one.
   let hostName = '';
 
   await test.step('an admin adds this user, with this computer’s name, to the POS device', async () => {
@@ -69,7 +69,7 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
 
     await page.goto(`masters/pos?q=${encodeURIComponent(tillDevice)}`);
     await page.getByRole('button', { name: `Edit ${tillDevice}` }).click();
-    const form = page.getByRole('dialog', { name: 'Edit Pos Device' });
+    const form = page.getByRole('dialog', { name: 'Edit POS device' });
     const users = form.getByRole('group', { name: 'Users' });
     await expect(users).toBeVisible();
     const pickers = users.getByRole('combobox', { name: /^User \d+$/ });
@@ -94,7 +94,7 @@ test('point of sale: every screen opens, and a bill goes from the till to the ki
         .getByRole('textbox', { name: `User ${row}’s computer name` })
         .inputValue();
     }
-    await form.getByRole('button', { name: 'Submit' }).click();
+    await form.getByRole('button', { name: 'Save changes' }).click();
     // Saved: the form closes, and the list counts the device's users.
     await expect(form).toHaveCount(0);
     await expect(page.getByRole('cell', { name: /\d+ users?$/ })).toBeVisible();

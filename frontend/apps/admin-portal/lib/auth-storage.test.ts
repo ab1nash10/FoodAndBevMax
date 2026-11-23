@@ -100,6 +100,28 @@ test('sign-out keeps the till key: the computer stays a till for the next cashie
   assert.deepEqual([...local.store.keys()], ['aahar.pos.tillKey']);
 });
 
+test('sign-out keeps the till’s unsent bills: collected money must not vanish with a session', () => {
+  local.setItem('aahar.pos.unsent-bills.counter-1', '[]');
+  local.setItem('aahar.pos.unsent-bills.counter-2', '[]');
+  local.setItem('aahar.admin.auth', 'x');
+
+  clearAaharClientStorage();
+
+  assert.deepEqual(
+    [...local.store.keys()],
+    ['aahar.pos.unsent-bills.counter-1', 'aahar.pos.unsent-bills.counter-2'],
+  );
+});
+
+test('sign-out keeps the till’s held online payments: the guest has paid, so no new payment', () => {
+  local.setItem('aahar.pos.held-payment.counter-1', '[]');
+  local.setItem('aahar.admin.auth', 'x');
+
+  clearAaharClientStorage();
+
+  assert.deepEqual([...local.store.keys()], ['aahar.pos.held-payment.counter-1']);
+});
+
 test('on the server there is nothing stored and saving still returns the tokens', () => {
   vi.stubGlobal('window', undefined);
   assert.equal(readStoredAuth(), null);

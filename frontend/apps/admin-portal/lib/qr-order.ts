@@ -98,11 +98,11 @@ export function readyLabel(minutes: { max: number; min: number }): string {
 
 /**
  * This page's address with only its link secret (and, from a room's QR, the room and the way
- * back to its restaurants): the server adds the order and its key.
+ * back to its restaurants; from a table's QR, the table): the server adds the order and its key.
  */
 export function returnUrlFor(href: string): string {
   const url = new URL(href);
-  const kept = ['token', 'room', 'roomId'].flatMap((name) => {
+  const kept = ['token', 'room', 'roomId', 'table', 'tableId'].flatMap((name) => {
     const value = url.searchParams.get(name);
     return value ? [[name, value] as const] : [];
   });

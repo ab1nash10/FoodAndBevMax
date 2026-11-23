@@ -32,7 +32,7 @@ test('still offline: nothing is sent and nothing is lost', async () => {
   queueBill(bill('b'));
   const send = vi.fn().mockRejectedValue(offline);
 
-  await expect(sendQueued('c1', send)).resolves.toBe(0);
+  await expect(sendQueued('c1', 'u1', send)).resolves.toBe(0);
   expect(send).toHaveBeenCalledTimes(1);
   expect(ids()).toEqual(['a', 'b']);
 });
@@ -44,17 +44,17 @@ test('sent bills leave the queue; a refused one stays with the reason until retr
     payload.clientOrderId === 'a' ? Promise.reject(outOfStock) : Promise.resolve({}),
   );
 
-  await expect(sendQueued('c1', send)).resolves.toBe(1);
+  await expect(sendQueued('c1', 'u1', send)).resolves.toBe(1);
   expect(readQueue('c1')).toMatchObject([
     { error: 'Tea is out of stock.', payload: { clientOrderId: 'a' } },
   ]);
 
   // Automatic tries leave it for the cashier; "Retry now" sends it again.
   send.mockClear();
-  await sendQueued('c1', send);
+  await sendQueued('c1', 'u1', send);
   expect(send).not.toHaveBeenCalled();
   send.mockResolvedValue({});
-  await expect(sendQueued('c1', send, true)).resolves.toBe(1);
+  await expect(sendQueued('c1', 'u1', send, true)).resolves.toBe(1);
   expect(ids()).toEqual([]);
 });
 
@@ -63,9 +63,24 @@ test('a discarded bill is kept on record and never sent', async () => {
   discardBill('c1', 'a');
   const send = vi.fn().mockResolvedValue({});
 
-  await sendQueued('c1', send, true);
+  await sendQueued('c1', 'u1', send, true);
   expect(send).not.toHaveBeenCalled();
   expect(readQueue('c1')[0]?.discardedAt).toBeTruthy();
+});
+
+// A bill lands in the shift of whoever's session sends it, so each cashier sends only their own.
+test('only the signed-in cashier’s bills are sent; one queued before cashiers were kept counts as theirs', async () => {
+  queueBill({ ...bill('mine'), cashierId: 'u1', cashierName: 'Asha' });
+  queueBill({ ...bill('theirs'), cashierId: 'u2', cashierName: 'Ravi' });
+  queueBill(bill('older'));
+  const send = vi.fn().mockResolvedValue({});
+
+  await expect(sendQueued('c1', 'u1', send, true)).resolves.toBe(2);
+  expect(send.mock.calls.map(([payload]) => (payload as PosBillInput).clientOrderId)).toEqual([
+    'mine',
+    'older',
+  ]);
+  expect(ids()).toEqual(['theirs']);
 });
 
 test('storage that refuses writes reports it, so the till keeps the bill on screen', () => {

@@ -48,7 +48,7 @@ test('rooms import from a hospital room list, and a room QR orders to that room'
   );
 
   await page.goto('masters/rooms');
-  await expect(page.getByRole('heading', { name: 'Rooms & Tables' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Rooms & tables' })).toBeVisible();
   await page.getByRole('button', { exact: true, name: 'Import' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Choose file' }).click();
@@ -97,7 +97,7 @@ test('rooms import from a hospital room list, and a room QR orders to that room'
   const link = await page.getByLabel('Ordering link').inputValue();
   expect(link).toMatch(/\/order\/room\/[0-9a-f-]{36}$/);
 
-  // Room service: only restaurants with In Room Dining switched on are offered to a bed.
+  // Room service: only restaurants with In room Dining switched on are offered to a bed.
   const roomId = link.split('/').pop()!;
   const { data } = (await (await request.get(`${organizationApi}/qr/rooms/${roomId}`)).json()) as {
     data: { restaurants: Array<{ id: string; open: boolean; restaurantName: string }> };

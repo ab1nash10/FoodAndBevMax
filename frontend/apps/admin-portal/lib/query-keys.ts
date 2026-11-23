@@ -102,6 +102,8 @@ export const queryKeys = {
   // Every active store, kitchen, restaurant and counter's name (components/inventory/use-locations.ts).
   locationNames: key('location-names'),
   dashboardQueue: key('dashboard', 'queue'),
+  // A day's sales, counters and kitchen queue (GET /dashboard/service).
+  dashboardService: key('dashboard', 'service'),
   dashboardSetup: key('dashboard', 'setup'),
   dashboardStats: key('dashboard', 'stats'),
   globalLocationContextActiveLocations: key('global-location-context', 'active-locations'),

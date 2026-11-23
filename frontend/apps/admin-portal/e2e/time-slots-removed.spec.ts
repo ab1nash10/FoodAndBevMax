@@ -12,8 +12,8 @@ test('time slots are gone; menu items keep their own on-sale hours', async ({ pa
   await expect(page.getByRole('link', { name: 'Time Slots' })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'New menu item' }).click();
-  await expect(page.getByLabel('Available From')).toBeVisible();
-  await expect(page.getByLabel('Available To')).toBeVisible();
+  await expect(page.getByLabel('Available from')).toBeVisible();
+  await expect(page.getByLabel('Available to')).toBeVisible();
   await expect(page.getByLabel('Time slot')).toHaveCount(0);
 
   const response = await page.goto('masters/time-slots');

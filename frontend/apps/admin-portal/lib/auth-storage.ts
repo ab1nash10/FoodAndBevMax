@@ -9,6 +9,14 @@ export const TILL_KEY_STORAGE_KEY = 'aahar.pos.tillKey';
 export const POS_COMPUTER_NAME_KEY = 'aahar.pos.computerName';
 export const POS_WINDOW_KEY = 'aahar.pos.window';
 const KEPT_ON_SIGN_OUT = [TILL_KEY_STORAGE_KEY, POS_COMPUTER_NAME_KEY, POS_WINDOW_KEY];
+/**
+ * The till's unsent bills, one key per counter (lib/pos-offline-queue): money already taken, so
+ * a sign-out, or a sign-in elsewhere, keeps them for their cashier to send.
+ */
+export const UNSENT_BILLS_KEY_PREFIX = 'aahar.pos.unsent-bills.';
+/** Guests' paid online payments no bill has taken yet, per counter (lib/pos-held-payments). */
+export const HELD_PAYMENTS_KEY_PREFIX = 'aahar.pos.held-payment.';
+const KEPT_PREFIXES_ON_SIGN_OUT = [UNSENT_BILLS_KEY_PREFIX, HELD_PAYMENTS_KEY_PREFIX];
 
 export interface StoredAuth extends AuthTokens {
   savedAt: string;
@@ -83,6 +91,7 @@ export function clearAaharClientStorage(): void {
       if (
         key &&
         !KEPT_ON_SIGN_OUT.includes(key) &&
+        !KEPT_PREFIXES_ON_SIGN_OUT.some((prefix) => key.startsWith(prefix)) &&
         AAHAR_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
       ) {
         keysToRemove.push(key);

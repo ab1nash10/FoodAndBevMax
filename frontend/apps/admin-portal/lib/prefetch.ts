@@ -12,7 +12,7 @@ import { queryKeys } from '@/lib/query-keys';
 // The first page each busy list opens on: the same key and request as the page's own useQuery
 // with no filters in the URL, so a prefetch fills exactly the entry the page reads. Keep each
 // in step with its page. Only the cheap first page: never stats, rows or records.
-// Skipped: the dashboard and Stock Levels load a whole period or location rather than a page,
+// Skipped: the dashboard and Stock levels load a whole period or location rather than a page,
 // and POS Orders depends on the counter picked on this device.
 const listLimit = 10;
 
@@ -126,7 +126,7 @@ const firstViews: Record<string, FirstView> = {
       sortOrder: 'desc',
     }),
   }),
-  // Today's bills, as Bill History opens.
+  // Today's bills, as Bill history opens.
   '/pos/history': (scopedHospitalId) => {
     const today = todayInIndia();
 

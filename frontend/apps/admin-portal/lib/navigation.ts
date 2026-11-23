@@ -55,12 +55,12 @@ export type NavBadge = 'grns' | 'productions' | 'transfers';
 export type NavGroupLabel =
   | 'Access'
   | 'Inventory'
-  | 'Item & Menu Setup'
-  | 'Kitchen Operations'
+  | 'Item & menu'
+  | 'Kitchen'
   | 'Logs'
   | 'Organization'
-  | 'Overview'
-  | 'Point of Sale'
+  | 'Dashboard'
+  | 'POS'
   | 'Reports';
 
 export interface NavPage {
@@ -107,7 +107,7 @@ export const navigationGroups: NavGroup[] = [
   {
     icon: LayoutGrid,
     items: [{ href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' }],
-    label: 'Overview',
+    label: 'Dashboard',
   },
   {
     icon: Building2,
@@ -150,7 +150,7 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/masters/rooms',
         icon: BedDouble,
-        label: 'Rooms & Tables',
+        label: 'Rooms & tables',
         permissions: ['ROOM_VIEW'],
       },
       {
@@ -162,19 +162,19 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/masters/employee-discounts',
         icon: BadgePercent,
-        label: 'Employee Discounts',
+        label: 'Employee discounts',
         permissions: ['EMPLOYEE_DISCOUNT_VIEW'],
       },
       {
         href: '/masters/pos',
         icon: CreditCard,
-        label: 'POS & Payment Machines',
+        label: 'POS & payment machines',
         permissions: ['POS_DEVICE_VIEW', 'PAYMENT_MACHINE_VIEW', 'COUNTER_VIEW'],
       },
       {
         href: '/masters/orders',
         icon: Receipt,
-        label: 'Orders & Reports',
+        label: 'Orders & reports',
         permissions: ['ORDER_REPORT_VIEW'],
       },
     ],
@@ -187,7 +187,7 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/masters/item-categories',
         icon: Tags,
-        label: 'Item Categories',
+        label: 'Item categories',
         permissions: ['ITEM_CATEGORY_VIEW'],
       },
       {
@@ -201,17 +201,17 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/masters/item-mapping',
         icon: Link2,
-        label: 'Item Locations',
+        label: 'Item locations',
         permissions: ['STORE_ITEM_VIEW', 'KITCHEN_ITEM_VIEW'],
       },
       {
         href: '/masters/restaurant-menus',
         icon: Utensils,
-        label: 'Restaurant Menus',
+        label: 'Restaurant menus',
         permissions: ['RESTAURANT_MENU_VIEW'],
       },
     ],
-    label: 'Item & Menu Setup',
+    label: 'Item & menu',
     section: 'Setup',
   },
   {
@@ -232,7 +232,7 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/pos/history',
         icon: History,
-        label: 'Bill History',
+        label: 'Bill history',
         permissions: ['POS_ORDER_VIEW'],
         record: 'id',
       },
@@ -246,29 +246,29 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/pos/day',
         icon: Wallet,
-        label: 'Day Summary',
+        label: 'Day summary',
         permissions: ['POS_ORDER_VIEW'],
       },
       {
         href: '/pos/menu',
         icon: BookOpenText,
-        label: 'Counter Menu',
+        label: 'Counter menu',
         permissions: ['POS_ORDER_VIEW'],
       },
       {
         href: '/pos/stock',
         icon: Boxes,
-        label: 'Counter Stock',
+        label: 'Counter stock',
         permissions: ['COUNTER_STOCK_VIEW'],
       },
       {
         href: '/pos/receive',
         icon: PackageCheck,
-        label: 'Receive Inventory',
+        label: 'Receive inventory',
         permissions: ['COUNTER_STOCK_RECEIVE'],
       },
     ],
-    label: 'Point of Sale',
+    label: 'POS',
     section: 'Operations',
   },
   {
@@ -277,7 +277,7 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/inventory/today',
         icon: Sun,
-        label: 'Store Today',
+        label: 'Store today',
         permissions: ['STOCK_VIEW'],
       },
       {
@@ -290,19 +290,19 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/inventory/store-stock',
         icon: Boxes,
-        label: 'Store Stock',
+        label: 'Store stock',
         permissions: ['STOCK_VIEW'],
       },
       {
         href: '/inventory/stock-levels',
         icon: Gauge,
-        label: 'Stock Levels',
+        label: 'Stock levels',
         permissions: ['STOCK_VIEW'],
       },
       {
         href: '/inventory/stock-ledgers',
         icon: ListChecks,
-        label: 'Stock Ledgers',
+        label: 'Stock ledgers',
         permissions: ['STOCK_VIEW'],
       },
       {
@@ -321,21 +321,21 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/inventory/restaurant-stock',
         icon: Utensils,
-        label: 'Restaurant Stock',
+        label: 'Restaurant stock',
         permissions: ['RESTAURANT_STOCK_VIEW'],
       },
       {
         // A restaurant sends MRP stock back; the transfer API lets either permission send it.
         href: '/inventory/returns/new',
         icon: PackageMinus,
-        label: 'Return to Store',
+        label: 'Return to store',
         permissions: ['RESTAURANT_TRANSFER_SEND', 'TRANSFER_CREATE'],
       },
       {
         // The store counts a return in, which the API allows to those who post GRNs.
         href: '/inventory/returns',
         icon: PackagePlus,
-        label: 'Count Returns',
+        label: 'Count returns',
         permissions: ['GRN_POST'],
       },
     ],
@@ -348,32 +348,32 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/kitchen/tablet',
         icon: Tablet,
-        label: 'Kitchen Tablet',
+        label: 'Kitchen tablet',
         permissions: ['KITCHEN_PRODUCTION_CREATE'],
       },
       {
         badge: 'productions',
         href: '/kitchen/productions',
         icon: CookingPot,
-        label: 'Kitchen Production',
+        label: 'Kitchen production',
         permissions: ['KITCHEN_PRODUCTION_VIEW'],
         record: 'id',
       },
       {
         href: '/kitchen/stock',
         icon: ChefHat,
-        label: 'Kitchen Stock',
+        label: 'Kitchen stock',
         permissions: ['KITCHEN_STOCK_VIEW'],
       },
       {
         // A steward's room orders, marked delivered at the bed.
         href: '/deliveries',
         icon: BedDouble,
-        label: 'My Deliveries',
+        label: 'My deliveries',
         permissions: ['ORDER_DELIVER'],
       },
     ],
-    label: 'Kitchen Operations',
+    label: 'Kitchen',
     section: 'Operations',
   },
   {
@@ -403,7 +403,7 @@ export const navigationGroups: NavGroup[] = [
   {
     icon: ScrollText,
     items: [
-      { href: '/logs/erp', icon: Send, label: 'ERP Posting', permissions: ['REPORT_ERP'] },
+      { href: '/logs/erp', icon: Send, label: 'ERP posting', permissions: ['REPORT_ERP'] },
       // The Inventory page under its log name; the sidebar highlights the Inventory entry.
       {
         href: '/logs/erp-grns',
@@ -421,7 +421,7 @@ export const navigationGroups: NavGroup[] = [
       {
         href: '/logs/activity',
         icon: History,
-        label: 'Activity Logs',
+        label: 'Activity logs',
         permissions: ['AUDIT_LOG_VIEW'],
       },
     ],
@@ -619,8 +619,8 @@ const dashboardDataPermissions = [
 
 /**
  * Where the portal opens for this user: their saved start page if they may still open it,
- * else the screen their permissions point to - Billing for counter staff, My Deliveries for
- * stewards and Store Today for
+ * else the screen their permissions point to - Billing for counter staff, My deliveries for
+ * stewards and Store today for
  * store staff when the dashboard would be empty for them, otherwise the dashboard. The installed
  * POS app (app/pos-app.webmanifest) always opens Billing for anyone who may bill.
  */
@@ -840,7 +840,7 @@ export function getBreadcrumbTrail(
 
   if (segments.length === 0) {
     return [
-      { group: 'Overview', label: 'Overview' },
+      { group: 'Dashboard', label: 'Dashboard' },
       { current: true, label: dashboard?.label ?? 'Dashboard' },
     ];
   }
@@ -867,7 +867,7 @@ export function getBreadcrumbTrail(
   }
 
   return [
-    { group: 'Overview', label: 'Overview' },
+    { group: 'Dashboard', label: 'Dashboard' },
     dashboard ? pageCrumb(dashboard, hasPermission) : { href: '/dashboard', label: 'Dashboard' },
     current,
   ];

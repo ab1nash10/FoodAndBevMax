@@ -43,6 +43,10 @@ exports[`every prefix stays as it is 1`] = `
     "dashboard",
     "queue",
   ],
+  "dashboardService": [
+    "dashboard",
+    "service",
+  ],
   "dashboardSetup": [
     "dashboard",
     "setup",

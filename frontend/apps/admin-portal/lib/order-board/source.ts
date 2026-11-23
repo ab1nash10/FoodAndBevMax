@@ -19,7 +19,10 @@ function isInvalidLink(error: unknown): boolean {
 
 export interface BoardFeedState {
   feed: BoardFeed | undefined;
-  /** The board link is wrong or was replaced: stop polling and say so. */
+  /**
+   * The board link was refused (wrong, replaced, or the restaurant is off): say so, and keep
+   * asking slowly, so a link that works again brings the board back without a restart.
+   */
   invalidLink: boolean;
   /** The last refresh failed; the last data stays on screen. */
   reconnecting: boolean;
@@ -28,8 +31,8 @@ export interface BoardFeedState {
 }
 
 /**
- * The board's feed, refreshed every REFRESH_MS. On network errors the last data stays and the
- * refresh backs off (6 s, 12 s, ... up to 30 s) until it reconnects.
+ * The board's feed, refreshed every REFRESH_MS. On errors (a refused link too) the last data
+ * stays and the refresh slows down until it works again.
  */
 export function useBoardFeed(
   restaurantId: string,
@@ -45,9 +48,10 @@ export function useBoardFeed(
         : (await publicOrganizationApi.getBoardFeed(restaurantId, token ?? '')).data,
     queryKey: queryKeys.orderBoard(restaurantId, source),
     refetchInterval: (current) => {
-      if (isInvalidLink(current.state.error)) return false;
       if (current.state.status !== 'error') return REFRESH_MS;
 
+      // ponytail: with retry off, fetchFailureCount is 1 after every failed fetch, so this
+      // stays at 6 s; count failures since the last success if a longer backoff is wanted.
       return Math.min(MAX_BACKOFF_MS, REFRESH_MS * 2 ** current.state.fetchFailureCount);
     },
     refetchIntervalInBackground: true,

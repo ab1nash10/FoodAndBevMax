@@ -170,7 +170,7 @@ export function getApiErrorMessage(error: unknown): string {
 
   if (error instanceof Error) {
     if (error.message.toLowerCase().includes('failed to fetch')) {
-      return 'Unable to connect to AAHAR services. Please check your network and try again.';
+      return 'Unable to connect to F&B services. Please check your network and try again.';
     }
 
     return error.message;

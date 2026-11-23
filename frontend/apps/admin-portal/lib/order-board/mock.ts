@@ -83,7 +83,7 @@ export function createBoardSimulation(start = Date.now(), random: () => number =
         isOpen: true,
         locationName: 'Main Cafeteria · Max Saket',
         orders: orders.map(({ collectAt: _collectAt, ...order }) => ({ ...order })),
-        restaurantName: 'AAHAR Café',
+        restaurantName: 'F&B Café',
         serverTime: new Date(now).toISOString(),
         slotEndsAt: new Date(start + 2 * 60 * MINUTE).toISOString(),
         slotName: 'Lunch',

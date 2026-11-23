@@ -19,7 +19,7 @@ async function held(request: APIRequestContext, type: string, id: string, batch:
   return rows.reduce((total, row) => total + Number(row.availableQty), 0);
 }
 
-// A restaurant sends a batch back on Return to Store; the store counts it on Count Returns and
+// A restaurant sends a batch back on Return to store; the store counts it on Count returns and
 // finds one short, so the counted stock goes into the store and the missing one back to the
 // restaurant.
 test('a restaurant returns stock to the store and the store counts it in', async ({
@@ -78,7 +78,7 @@ test('a restaurant returns stock to the store and the store counts it in', async
   });
   expect(await held(request, 'RESTAURANT', restaurant.id, batch)).toBe(3);
 
-  // Return to Store: no more than the restaurant holds, then all 3 go back.
+  // Return to store: no more than the restaurant holds, then all 3 go back.
   await page.addInitScript(
     (id) => window.localStorage.setItem('aahar.location-context', id),
     hospital.id,
@@ -92,7 +92,7 @@ test('a restaurant returns stock to the store and the store counts it in', async
   await expect(page.getByText('Returned to the store')).toBeVisible();
   expect(await held(request, 'RESTAURANT', restaurant.id, batch)).toBe(0);
 
-  // Count Returns: the store counts 2 of the 3.
+  // Count returns: the store counts 2 of the 3.
   const returns = await list<Transfer>(
     request,
     `/transfers?destinationType=STORE&status=PENDING_ACKNOWLEDGEMENT&hospitalId=${hospital.id}&limit=100`,

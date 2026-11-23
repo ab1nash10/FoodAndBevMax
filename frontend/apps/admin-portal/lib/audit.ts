@@ -199,7 +199,7 @@ export function auditCsvToReport(csv: string, generatedAt = new Date()): ReportR
     rows: body.map((cells) =>
       Object.fromEntries(header.map((key, index) => [key, cells[index] ?? ''])),
     ),
-    title: 'Activity Logs',
+    title: 'Activity logs',
     to: at,
     totals: null,
   };

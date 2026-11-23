@@ -100,6 +100,13 @@ describe('QR order progress', () => {
       ),
     ).toBe('https://h.in/order/r1?token=abc&room=PG-ECO-06+%28EWS%29&roomId=b1');
   });
+
+  // Dropping the table would turn a dine-in order into counter pickup after paying.
+  it("keeps the table a table's QR filled in", () => {
+    expect(returnUrlFor('https://h.in/order/r1?token=abc&table=T5&tableId=t1&order=o1&key=k')).toBe(
+      'https://h.in/order/r1?token=abc&table=T5&tableId=t1',
+    );
+  });
 });
 
 describe('times on the phone', () => {

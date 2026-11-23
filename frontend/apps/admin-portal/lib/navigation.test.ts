@@ -92,11 +92,11 @@ test('Access has an Admins screen and an Operators screen, both for whoever may 
 });
 
 test('a restaurant returns stock to the store, and the store team counts it in', () => {
-  expect(findPage('/inventory/returns/new')?.label).toBe('Return to Store');
+  expect(findPage('/inventory/returns/new')?.label).toBe('Return to store');
   expect(canOpenPath('/inventory/returns/new', holding('RESTAURANT_TRANSFER_SEND'))).toBe(true);
   expect(canOpenPath('/inventory/returns/new', holding('TRANSFER_CREATE'))).toBe(true);
   expect(canOpenPath('/inventory/returns/new', holding('RESTAURANT_STOCK_VIEW'))).toBe(false);
-  expect(findPage('/inventory/returns')?.label).toBe('Count Returns');
+  expect(findPage('/inventory/returns')?.label).toBe('Count returns');
   expect(canOpenPath('/inventory/returns', holding('GRN_POST'))).toBe(true);
   expect(canOpenPath('/inventory/returns', holding('TRANSFER_VIEW'))).toBe(false);
   // Counting one in opens the acknowledge page, with GRN_POST alone.
@@ -107,10 +107,10 @@ test('Logs lists the ERP GRN log (the ERP GRNs page) for whoever may view GRNs',
   const logs = navigationGroups.find((group) => group.label === 'Logs');
 
   expect(logs?.items.map((item) => item.label)).toEqual([
-    'ERP Posting',
+    'ERP posting',
     'ERP GRN log',
     'ERP GRN errors',
-    'Activity Logs',
+    'Activity logs',
   ]);
   // The same screen as Inventory's ERP GRNs, at an address of its own so its crumbs say Logs.
   expect(logs?.items[1]).toMatchObject({ href: '/logs/erp-grns', permissions: ['GRN_VIEW'] });
