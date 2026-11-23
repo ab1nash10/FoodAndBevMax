@@ -75,7 +75,7 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
     });
   };
 
-  // Every user starts at one of their own locations; "All Locations" stays a choice in the header.
+  // Every user starts at one of their own locations; "All locations" stays a choice in the header.
   const locationChoices = availableLocations.map((location) => ({
     label: formatGlobalLocationLabel(location),
     value: location.id,
@@ -196,7 +196,7 @@ export function PreferencesDialog({ onClose }: Readonly<{ onClose: () => void }>
                 >
                   {startPages.map((page) => (
                     <option key={page.href} value={page.href}>
-                      {page.group === 'Overview' ? page.label : `${page.group} - ${page.label}`}
+                      {page.group === 'Dashboard' ? page.label : `${page.group} - ${page.label}`}
                       {page.href === defaultStartPage ? ' (default)' : ''}
                     </option>
                   ))}

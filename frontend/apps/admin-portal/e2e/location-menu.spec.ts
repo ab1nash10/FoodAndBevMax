@@ -10,7 +10,7 @@ for (const width of [400, 900, 1100, 1280, 1440, 1920]) {
     await page.setViewportSize({ height: 800, width });
     await page.goto('dashboard');
     await page
-      .getByRole('button', { name: /^Select Location/ })
+      .getByRole('button', { name: /^Select a location/ })
       .filter({ visible: true })
       .click();
 

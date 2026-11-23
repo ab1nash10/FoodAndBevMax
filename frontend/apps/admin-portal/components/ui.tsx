@@ -65,7 +65,7 @@ export const Input = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<'inpu
     return (
       <input
         className={cn(
-          'h-control w-full rounded-control border border-ds-input bg-ds-surface px-3.5 shadow-xs hover:border-ds-primary/40 text-sm text-ds-text outline-hidden transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-4 focus:ring-ds-primary/12 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
+          'h-control w-full rounded-control border border-ds-input bg-ds-surface px-3.5 hover:border-ds-primary/40 text-[14px] text-ds-text outline-hidden transition placeholder:text-ds-muted focus:border-ds-primary focus:ring-4 focus:ring-ds-primary/12 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
           className,
         )}
         onBlur={
@@ -111,7 +111,7 @@ export const Select = forwardRef<HTMLSelectElement, ComponentPropsWithoutRef<'se
     <span className="relative block w-full">
       <select
         className={cn(
-          'h-control w-full appearance-none rounded-control border border-ds-input bg-ds-surface px-3.5 shadow-xs hover:border-ds-primary/40 pr-8 text-sm text-ds-text outline-hidden transition focus:border-ds-primary focus:ring-4 focus:ring-ds-primary/12 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
+          'h-control w-full appearance-none rounded-control border border-ds-input bg-ds-surface px-3.5 hover:border-ds-primary/40 pr-8 text-[14px] text-ds-text outline-hidden transition focus:border-ds-primary focus:ring-4 focus:ring-ds-primary/12 disabled:cursor-not-allowed disabled:bg-ds-subtle disabled:text-ds-muted dark:focus:border-ds-link dark:focus:ring-ds-link/20',
           className,
         )}
         disabled={disabled}
@@ -212,13 +212,35 @@ export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>
   return <div className={cn('skeleton rounded-control', className)} {...props} />;
 }
 
+/**
+ * The shape most pages share (title, figures, a list), shown the moment a page is asked for and
+ * until it arrives: by the route's loading.tsx, and by the shell while a menu link is pending.
+ */
+export function PageSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading" className="space-y-6" role="status">
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-64 max-w-full" />
+        <Skeleton className="h-4 w-96 max-w-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((key) => (
+          <Skeleton className="h-28 rounded-card" key={key} />
+        ))}
+      </div>
+      <Panel className="space-y-3 p-5">
+        {[0, 1, 2, 3, 4, 5].map((key) => (
+          <Skeleton className="h-10" key={key} />
+        ))}
+      </Panel>
+    </div>
+  );
+}
+
 export function Panel({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        'reveal rounded-card border border-ds-border bg-ds-surface shadow-card',
-        className,
-      )}
+      className={cn('rounded-card border border-ds-border bg-ds-surface shadow-card', className)}
       {...props}
     />
   );

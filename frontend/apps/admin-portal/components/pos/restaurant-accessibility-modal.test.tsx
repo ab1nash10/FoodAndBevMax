@@ -55,7 +55,7 @@ describe("a POS device's restaurant accessibility", () => {
 
     await user.click(await screen.findByRole('checkbox', { name: 'Food Court' }));
     await user.click(screen.getByRole('checkbox', { name: 'Cafe Max' }));
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
       expect(api.updatePosDevice).toHaveBeenCalledWith('pd-1', { restaurantIds: ['r2'] }),
@@ -77,7 +77,7 @@ describe("a POS device's restaurant accessibility", () => {
     const { user } = renderScreen(<RestaurantAccessibilityModal device={till} onClose={vi.fn()} />);
 
     await screen.findByRole('checkbox', { name: 'Cafe Max' });
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Restaurant is at another location');
   });

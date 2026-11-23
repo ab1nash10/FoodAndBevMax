@@ -6,7 +6,7 @@ import { Fragment, useState } from 'react';
 import type { FoodType, PosChannel, PosMenuItem } from '@aahar/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { useConfirm } from '@/components/confirm-provider';
-import { AppPageHeader, RecordAvatar, StatStrip, tableStyles } from '@/components/design-system';
+import { AppPageHeader, RecordAvatar, tableStyles } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { QueryState } from '@/components/location-empty-states';
@@ -135,8 +135,6 @@ export function CounterMenuPageClient() {
         item.itemCode.toLowerCase().includes(needle) ||
         item.menuItemCode.toLowerCase().includes(needle)),
   );
-  const count = (match: (item: PosMenuItem) => boolean) =>
-    menuQuery.data ? items.filter(match).length : '–';
   // Visible items under their category, by name, with the uncategorised last as "Other".
   const groups = [
     ...categories.map((category) => ({
@@ -245,46 +243,16 @@ export function CounterMenuPageClient() {
     );
   }
 
-  function showView(next: MenuView) {
-    setView((current) => (current === next ? '' : next));
-  }
-
   return (
     <section className="space-y-4">
       <AppPageHeader
         action={<CounterPicker counter={counter} counters={counters} onChange={setCounterId} />}
         count={menuQuery.data ? items.length : undefined}
         description="What this counter sells, at which price, and whether it is on sale right now."
-        title="Counter Menu"
+        title="Counter menu"
       />
       {counter ? (
         <>
-          <StatStrip
-            label="Counter menu at a glance"
-            stats={[
-              {
-                active: view === 'on-sale',
-                label: 'On sale now',
-                onSelect: () => showView('on-sale'),
-                tone: 'ok',
-                value: count(viewMatches['on-sale']),
-              },
-              {
-                active: view === 'sold-out',
-                label: 'Sold out',
-                onSelect: () => showView('sold-out'),
-                tone: 'pending',
-                value: count(viewMatches['sold-out']),
-              },
-              {
-                active: view === 'out-of-stock',
-                label: 'Out of stock',
-                onSelect: () => showView('out-of-stock'),
-                tone: 'bad',
-                value: count(viewMatches['out-of-stock']),
-              },
-            ]}
-          />
           <Panel aria-label="Counter menu" className="overflow-hidden" role="region">
             <ListToolbar>
               <SegmentedControl<PosChannel>
@@ -311,7 +279,9 @@ export function CounterMenuPageClient() {
                 placeholder="Item name, item code or menu code"
                 value={search}
               />
-              <FiltersMenu activeCount={[categoryFilter, foodTypeFilter].filter(Boolean).length}>
+              <FiltersMenu
+                activeCount={[categoryFilter, foodTypeFilter, view].filter(Boolean).length}
+              >
                 <FilterField label="Category">
                   <Select
                     onChange={(event) => setCategoryFilter(event.target.value)}
@@ -336,6 +306,17 @@ export function CounterMenuPageClient() {
                         {option.label}
                       </option>
                     ))}
+                  </Select>
+                </FilterField>
+                <FilterField label="Availability">
+                  <Select
+                    onChange={(event) => setView(event.target.value as MenuView)}
+                    value={view}
+                  >
+                    <option value="">All items</option>
+                    <option value="on-sale">On sale now</option>
+                    <option value="sold-out">Sold out</option>
+                    <option value="out-of-stock">Out of stock</option>
                   </Select>
                 </FilterField>
               </FiltersMenu>
@@ -405,7 +386,7 @@ export function CounterMenuPageClient() {
                       atLocation={false}
                       colSpan={7}
                       error={menuQuery.error}
-                      hint="Items reach a counter's menu from Item & Menu Setup, or nothing matches the filters."
+                      hint="Items reach a counter's menu from Item & menu, or nothing matches the filters."
                       isError={menuQuery.isError}
                       isLoading={menuQuery.isLoading}
                       label="menu items"

@@ -189,7 +189,7 @@ function CounterForm({
     onSuccess(response) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.counters() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.locationNames() });
-      // The Point of Sale's counter picker.
+      // The POS's counter picker.
       void queryClient.invalidateQueries({ queryKey: queryKeys.posCounters() });
       showToast({
         recordId: response.data.id,
@@ -232,12 +232,8 @@ function CounterForm({
             Cancel
           </Button>
           <Button disabled={mutation.isPending} form={counterFormId} type="submit">
-            {mutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Submit
+            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {editingCounter ? 'Save changes' : 'Add counter'}
           </Button>
         </div>
       }
@@ -347,7 +343,7 @@ function CounterForm({
         </Field>
         <Field
           error={form.formState.errors.paymentDeviceId?.message}
-          label="Payment Device Id"
+          label="Payment device ID"
           name="counter-payment-device"
         >
           <Input
@@ -358,7 +354,7 @@ function CounterForm({
         </Field>
         <Field
           error={form.formState.errors.pineLabsDeviceId?.message}
-          label="Pine Labs Device Id"
+          label="Pine Labs device ID"
           name="counter-pine-labs-device"
         >
           <Input

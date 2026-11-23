@@ -42,6 +42,6 @@ test('an open shift at another counter: where to end it, and never a till’s na
   );
   assert.equal(
     whereToEndIt({ ...elsewhere, hasTill: false }),
-    'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & Payment Machines → Counters.',
+    'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & payment machines → Counters.',
   );
 });

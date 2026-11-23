@@ -1,5 +1,5 @@
 import { ApiClientError, type OnlinePayment, type OnlinePaymentInput } from '@aahar/api-client';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderScreen, reply } from '@/test/harness';
 import { OnlinePaymentDialog } from './online-payment-dialog';
@@ -133,6 +133,49 @@ describe('taking a payment online', () => {
     expect(
       within(dialog()).queryByRole('button', { name: 'Cancel payment' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('stops checking once the payment is closed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.checkOnlinePayment.mockImplementation(() => reply(payment({ status: 'EXPIRED' })));
+      renderScreen(<OnlinePaymentDialog onClose={vi.fn()} onPaid={vi.fn()} request={request()} />);
+      await within(dialog()).findByText(/closed this payment unpaid/);
+
+      await act(() => vi.advanceTimersByTimeAsync(4500));
+
+      expect(api.checkOnlinePayment).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Left running, a guest paying it would be ignored, or taken for the next bill.
+  it('cancels a payment that finishes starting after the dialog was closed', async () => {
+    let started: (value: Awaited<ReturnType<Client['startOnlinePayment']>>) => void = () => {};
+    api.startOnlinePayment.mockReturnValue(
+      new Promise((resolve) => {
+        started = resolve;
+      }),
+    );
+    api.cancelOnlinePayment.mockImplementation(() => reply(payment({ status: 'CANCELLED' })));
+    const onClose = vi.fn();
+    const open = request();
+    const { rerender, user } = renderScreen(
+      <OnlinePaymentDialog onClose={onClose} onPaid={vi.fn()} request={open} />,
+    );
+
+    await user.click(within(dialog()).getAllByRole('button', { name: 'Close' })[0]!);
+    expect(onClose).toHaveBeenCalled();
+    rerender(<OnlinePaymentDialog onClose={onClose} onPaid={vi.fn()} request={null} />);
+    await act(async () => {
+      started({ data: payment(), message: 'Success', success: true });
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(api.cancelOnlinePayment).toHaveBeenCalledWith('pay-1'));
+    expect(api.checkOnlinePayment).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('shows why the payment could not start, and tries again', async () => {

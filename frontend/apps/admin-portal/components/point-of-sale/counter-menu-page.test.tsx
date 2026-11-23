@@ -124,14 +124,16 @@ describe('the counter menu', () => {
     expect(rowOf('Veg Sandwich')).toHaveTextContent('32 on hold for return');
   });
 
-  it('counts what is on sale, sold out and out of stock', async () => {
-    renderScreen(<CounterMenuPageClient />);
+  it('shows only what is sold out, picked in Filters', async () => {
+    const { user } = renderScreen(<CounterMenuPageClient />);
     await screen.findByText('Veg Sandwich');
 
-    const stats = within(screen.getByRole('group', { name: 'Counter menu at a glance' }));
-    expect(stats.getByRole('button', { name: /On sale now/ })).toHaveTextContent('1');
-    expect(stats.getByRole('button', { name: /Sold out/ })).toHaveTextContent('1');
-    expect(stats.getByRole('button', { name: /Out of stock/ })).toHaveTextContent('1');
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Availability' }), 'sold-out');
+
+    expect(await screen.findByText('Thali')).toBeInTheDocument();
+    expect(screen.queryByText('Veg Sandwich')).toBeNull();
+    expect(screen.queryByText('Poha')).toBeNull();
   });
 
   it('shows only the sold-out items from the link that asks for them', async () => {

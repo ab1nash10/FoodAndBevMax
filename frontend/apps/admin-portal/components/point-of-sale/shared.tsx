@@ -301,7 +301,7 @@ export function UpiQr({ link, size = 160 }: Readonly<{ link: string; size?: numb
 /**
  * The customer's tax invoice, laid out as the previous POS printed it: a UPI QR to pay by,
  * issuer, invoice and order numbers, items with HSN/SAC (marked * when staff discount does not
- * apply to them), staff discount, then CGST and SGST by rate. A reprint says "Duplicate Bill".
+ * apply to them), staff discount, then CGST and SGST by rate. A reprint says "Duplicate bill".
  */
 export async function printBill(
   bill: PosBill,
@@ -345,7 +345,7 @@ export async function printBill(
       : null;
   const body = `
 ${qr ? `<div class="qr"><img alt="" src="${qr}"><small>Scan to pay by UPI</small></div>` : ''}
-${duplicate ? '<p class="c" style="margin-bottom:5px"><span class="tag">Duplicate Bill</span></p>' : ''}
+${duplicate ? '<p class="c" style="margin-bottom:5px"><span class="tag">Duplicate bill</span></p>' : ''}
 <h1 class="title">${bill.isComplimentary ? 'COMPLIMENTARY BILL' : 'TAX INVOICE'}</h1>
 ${bill.status === 'CANCELLED' ? '<p class="c" style="margin-top:4px"><span class="tag">*** CANCELLED ***</span></p>' : ''}
 <p class="issuer">${escapeHtml(issuer.name)}${issuer.address ? `, ${escapeHtml(issuer.address)}` : ''}

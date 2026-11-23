@@ -97,7 +97,7 @@ test('an employee saved without a code gets one, with every detail and a picked 
   await expect(page.locator('#employee-manager')).toHaveValue(
     `${manager!.employeeName} (${manager!.employeeCode})`,
   );
-  await page.getByRole('button', { name: 'Create Employee' }).click();
+  await page.getByRole('button', { name: 'Create employee' }).click();
   // Saved, the page goes to the new employee in the list (the toast may be gone by then).
   await expect(page).toHaveURL(/masters\/employees($|\?)/);
 

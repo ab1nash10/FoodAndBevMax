@@ -38,7 +38,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 
 const catalog = [
-  { code: 'sales', description: 'Bills and their payment modes.', title: 'Sales Report' },
+  { code: 'sales', description: 'Bills and their payment modes.', title: 'Sales report' },
   { code: 'item-wise', description: 'What sold, item by item.', title: 'Item-wise Report' },
 ];
 const result: ReportResult = {
@@ -54,7 +54,7 @@ const result: ReportResult = {
   plain: false,
   restaurants: ['Cafe Max'],
   rows: [{ amount: 1234.5, bills: 12, restaurant: 'Cafe Max' }],
-  title: 'Sales Report',
+  title: 'Sales report',
   to: '2026-11-18T12:00:00.000Z',
   totals: { amount: 1234.5, bills: 12, restaurant: 'Total' },
 };
@@ -77,7 +77,7 @@ describe('Reports', () => {
     renderScreen(<ReportsPageClient />);
 
     const reports = within(await screen.findByRole('group', { name: 'Report' }));
-    expect(reports.getByRole('button', { name: 'Sales Report' })).toHaveAttribute(
+    expect(reports.getByRole('button', { name: 'Sales report' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -141,7 +141,7 @@ describe('Reports', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show report' }));
 
-    const report = within(await screen.findByRole('region', { name: 'Sales Report' }));
+    const report = within(await screen.findByRole('region', { name: 'Sales report' }));
     expect(report.getByText('PPG - Patparganj, Delhi')).toBeInTheDocument();
     expect(report.getByRole('columnheader', { name: 'POS Orders' })).toHaveAttribute(
       'colspan',

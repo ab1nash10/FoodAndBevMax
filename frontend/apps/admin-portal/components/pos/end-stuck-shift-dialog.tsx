@@ -126,7 +126,7 @@ export function EndStuckShiftDialog({
             </div>
           </dl>
           <p className="text-sm text-ds-text-2">
-            {who} can open a shift at another counter now. The cash check is in Day Summary.
+            {who} can open a shift at another counter now. The cash check is in Day summary.
           </p>
         </div>
       ) : (
@@ -162,7 +162,7 @@ export function EndStuckShiftDialog({
               placeholder="e.g. The till was removed with the shift open"
               value={reason}
             />
-            <p className="text-xs text-ds-muted">Shown in Day Summary and Activity Logs.</p>
+            <p className="text-xs text-ds-muted">Shown in Day summary and Activity logs.</p>
           </div>
         </div>
       )}

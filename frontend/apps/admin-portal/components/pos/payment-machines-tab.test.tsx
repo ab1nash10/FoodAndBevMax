@@ -83,7 +83,7 @@ beforeEach(() => {
   api.listPosDevices.mockImplementation(() => page([till]));
 });
 
-describe('the Payment Machines tab', () => {
+describe('the Payment machines tab', () => {
   it('lists machines with their numbers, POS device and UPI provider', async () => {
     api.listPaymentMachines.mockImplementation(() => page([machine()]));
     renderScreen(<PaymentMachinesTab />);
@@ -145,8 +145,8 @@ describe('the Payment Machines tab', () => {
 
     await user.click(await screen.findByRole('button', { name: /New payment machine/ }));
     const dialog = screen.getByRole('dialog', { name: 'New Payment Machine' });
-    await user.type(within(dialog).getByLabelText('Serial Number'), '70-01');
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.type(within(dialog).getByLabelText('Serial number'), '70-01');
+    await user.click(within(dialog).getByRole('button', { name: 'Add payment machine' }));
 
     expect(await within(dialog).findByText('Name is required.')).toBeInTheDocument();
     expect(within(dialog).getByText('Select a POS device.')).toBeInTheDocument();
@@ -164,10 +164,10 @@ describe('the Payment Machines tab', () => {
     await within(dialog).findByRole('option', { name: 'Front Till (POS-01)' });
     await user.selectOptions(within(dialog).getByLabelText(/POS Device/), till.id);
     await user.type(within(dialog).getByLabelText(/Name/), 'Pine Labs 2');
-    await user.type(within(dialog).getByLabelText('Serial Number'), '7000456');
+    await user.type(within(dialog).getByLabelText('Serial number'), '7000456');
     await user.selectOptions(within(dialog).getByLabelText('Primary UPI'), 'GOOGLE_PAY');
     await user.click(within(dialog).getByRole('switch', { name: 'Default' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add payment machine' }));
 
     await waitFor(() =>
       expect(api.createPaymentMachine).toHaveBeenCalledWith({
@@ -196,9 +196,9 @@ describe('the Payment Machines tab', () => {
     // Once its options arrive, the POS device box shows the saved one.
     await within(dialog).findByRole('option', { name: 'Front Till (POS-01)' });
     expect(within(dialog).getByLabelText(/POS Device/)).toHaveValue(till.id);
-    await user.clear(within(dialog).getByLabelText('Pinelab Merchant Id'));
+    await user.clear(within(dialog).getByLabelText('Pine Labs merchant ID'));
     await user.selectOptions(within(dialog).getByLabelText('Primary UPI'), '');
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
       expect(api.updatePaymentMachine).toHaveBeenCalledWith(

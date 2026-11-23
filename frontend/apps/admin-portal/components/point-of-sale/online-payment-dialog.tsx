@@ -33,10 +33,16 @@ export function OnlinePaymentDialog({
 }>) {
   const [payment, setPayment] = useState<OnlinePayment | null>(null);
   const handedBack = useRef<string | null>(null);
+  // The request the dialog is open for. A payment that finishes starting after the dialog was
+  // closed is cancelled: left live, a guest paying it would be ignored or taken for the next bill.
+  const openFor = useRef<OnlinePaymentInput | null>(null);
   const startMutation = useMutation({
     mutationFn: async (body: OnlinePaymentInput) =>
       (await organizationApi.startOnlinePayment(body)).data,
-    onSuccess: setPayment,
+    onSuccess(started, body) {
+      if (body === openFor.current) setPayment(started);
+      else void organizationApi.cancelOnlinePayment(started.id).catch(() => undefined);
+    },
   });
   const cancelMutation = useMutation({
     mutationFn: async (id: string) => (await organizationApi.cancelOnlinePayment(id)).data,
@@ -49,7 +55,9 @@ export function OnlinePaymentDialog({
     enabled: payment?.status === 'PENDING',
     queryFn: async () => (await organizationApi.checkOnlinePayment(payment!.id)).data,
     queryKey: ['online-payment', payment?.id],
-    refetchInterval: 2000,
+    // Paid, expired or cancelled is final: nothing more to check.
+    refetchInterval: (query) =>
+      (query.state.data?.status ?? 'PENDING') === 'PENDING' ? 2000 : false,
   });
   // While pending, the latest check wins; once settled (a cancel found it paid), the payment does.
   const current = payment?.status === 'PENDING' ? (statusQuery.data ?? payment) : payment;
@@ -57,12 +65,16 @@ export function OnlinePaymentDialog({
 
   // A new bill starts a new payment; closed, the last one is forgotten.
   useEffect(() => {
+    openFor.current = request;
     if (request) {
       start(request);
     } else {
       setPayment(null);
       resetStart();
     }
+    return () => {
+      openFor.current = null;
+    };
   }, [request, resetStart, start]);
 
   useEffect(() => {

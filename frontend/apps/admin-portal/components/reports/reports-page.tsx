@@ -204,7 +204,7 @@ export function ReportsPageClient() {
       {catalog.length > 1 ? (
         <div
           aria-label="Report"
-          className="hidden w-fit max-w-full flex-wrap gap-0.5 rounded-[26px] bg-ds-border/70 p-1 sm:flex"
+          className="hidden w-fit max-w-full flex-wrap gap-0.5 rounded-card bg-ds-border/70 p-1 sm:flex"
           role="group"
         >
           {catalog.map((entry) => (

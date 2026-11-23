@@ -240,12 +240,8 @@ function PaymentMachineForm({
             Cancel
           </Button>
           <Button disabled={mutation.isPending} form={paymentMachineFormId} type="submit">
-            {mutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Submit
+            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {editingMachine ? 'Save changes' : 'Add payment machine'}
           </Button>
         </div>
       }
@@ -321,7 +317,7 @@ function PaymentMachineForm({
         </Field>
         <Field
           error={form.formState.errors.serialNumber?.message}
-          label="Serial Number"
+          label="Serial number"
           name="payment-serial"
         >
           <Input
@@ -333,7 +329,7 @@ function PaymentMachineForm({
         </Field>
         <Field
           error={form.formState.errors.pinelabMerchantId?.message}
-          label="Pinelab Merchant Id"
+          label="Pine Labs merchant ID"
           name="payment-merchant"
         >
           <Input
@@ -345,7 +341,7 @@ function PaymentMachineForm({
         </Field>
         <Field
           error={form.formState.errors.pinelabSecurityToken?.message}
-          label="Pinelab Security Token"
+          label="Pine Labs security token"
           name="payment-token"
         >
           <PasswordInput

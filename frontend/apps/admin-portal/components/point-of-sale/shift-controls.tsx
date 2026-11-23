@@ -232,9 +232,20 @@ export function ShiftChip({ counter }: Readonly<{ counter: PosCounter }>) {
       });
     },
     // The till refreshes on Done: refreshing now would swap it for the shift screen and take the
-    // cash check away before the cashier has read it.
+    // cash check away before the cashier has read it. Cancel pressed while it was ending stops
+    // nothing on the server, so then the till refreshes at once rather than bill a closed shift.
+    // (`isOpen` is current here: React Query hands a pending mutation each render's options.)
     onSuccess(response) {
-      setEnded(response.data);
+      if (isOpen) {
+        setEnded(response.data);
+        return;
+      }
+      showToast({
+        description: 'Cancel could not stop it: the request had already gone.',
+        title: response.data.status === 'HANDED_OVER' ? 'Shift handed over' : 'Shift closed',
+        variant: 'info',
+      });
+      refresh();
     },
   });
 

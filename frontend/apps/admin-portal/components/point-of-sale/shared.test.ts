@@ -206,7 +206,7 @@ test('complimentary and cancelled bills: no QR, no payment, and they say so', as
   await printBill(bill({ status: 'CANCELLED' }), { duplicate: true });
   ({ body } = printed());
   assert.ok(body.includes('*** CANCELLED ***'));
-  assert.ok(body.includes('Duplicate Bill'));
+  assert.ok(body.includes('Duplicate bill'));
   assert.ok(!body.includes('Watch the board'));
 });
 

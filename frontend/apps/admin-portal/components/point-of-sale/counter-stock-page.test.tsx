@@ -91,17 +91,6 @@ describe('counter stock', () => {
     expect(screen.getByText('Masala Chai').closest('tr')).toHaveTextContent('Not tracked');
   });
 
-  it('counts the items in stock and out of stock', async () => {
-    renderScreen(<CounterStockPageClient />);
-    await screen.findByText('Samosa');
-
-    const stats = screen.getByRole('group', { name: 'Counter stock at a glance' });
-    expect(within(stats).getByText('Items').parentElement).toHaveTextContent('3');
-    expect(within(stats).getByText('In stock').parentElement).toHaveTextContent('1');
-    // An untracked item is not out of stock.
-    expect(within(stats).getByText('Out of stock').parentElement).toHaveTextContent('1');
-  });
-
   it('finds an item by name or code', async () => {
     const { user } = renderScreen(<CounterStockPageClient />);
     await screen.findByText('Samosa');

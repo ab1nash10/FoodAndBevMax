@@ -47,7 +47,7 @@ export function RecordCardGrid({
       className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4"
     >
       {Array.from({ length: 8 }, (_, index) => (
-        <Skeleton className="h-[188px] rounded-[20px]" key={index} />
+        <Skeleton className="h-[188px] rounded-card" key={index} />
       ))}
     </div>
   ) : (
@@ -101,7 +101,7 @@ export function RecordCard({
   return (
     <li
       className={cn(
-        'group flex flex-col overflow-hidden rounded-[20px] border border-ds-border bg-ds-surface shadow-card transition-shadow duration-150',
+        'group flex flex-col overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-card transition-shadow duration-150',
         onOpen && 'hover:shadow-card-hover',
       )}
       data-record-id={id}

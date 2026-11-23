@@ -48,7 +48,7 @@ test('Map item asks Readymade or Live, and picks the Main or the counter kitchen
   await tab.click();
   await expect(tab).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', { name: 'Map item' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Map Item to Kitchen' });
+  const dialog = page.getByRole('dialog', { name: 'Map item to kitchen' });
 
   const readymade = dialog.getByRole('radio', { name: /^Readymade/ });
   const live = dialog.getByRole('radio', { name: /^Live/ });

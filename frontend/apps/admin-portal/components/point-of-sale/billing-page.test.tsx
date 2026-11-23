@@ -1,5 +1,6 @@
 import {
   ApiClientError,
+  type OnlinePayment,
   type PosBill,
   type PosCounter,
   type PosMenuItem,
@@ -177,6 +178,32 @@ async function addTwoSandwiches(user: User) {
 
 const totalRow = (label: string | RegExp) => screen.getByText(label).parentElement;
 const complete = (user: User) => user.click(screen.getByRole('button', { name: 'Complete order' }));
+
+const paidOnline: OnlinePayment = {
+  amount: 210,
+  id: 'pay-1',
+  paidReference: 'pay_123',
+  paymentUrl: 'https://rzp.io/l/abc',
+  provider: 'RAZORPAY',
+  status: 'PAID',
+};
+
+/** Two sandwiches by UPI through Razorpay; the guest pays at once and the bill is sent. */
+async function payOnline(user: User) {
+  api.listOnlinePaymentProviders.mockImplementation(() => reply(['RAZORPAY']));
+  api.startOnlinePayment.mockImplementation(() => reply({ ...paidOnline, status: 'PENDING' }));
+  api.checkOnlinePayment.mockImplementation(() => reply(paidOnline));
+  await addTwoSandwiches(user);
+  await user.click(screen.getByRole('button', { name: 'UPI' }));
+  await vi.waitFor(() => expect(api.listOnlinePaymentProviders).toHaveBeenCalled());
+  await act(() => new Promise((done) => setTimeout(done, 20)));
+  await complete(user);
+}
+
+const priceChanged = new ApiClientError(
+  409,
+  '₹210.00 was paid, but the bill now comes to ₹220.00. Put the bill back as it was, or take the difference another way.',
+);
 
 describe('the till before billing', () => {
   it('says so when the user has no access to the till’s counter', async () => {
@@ -418,6 +445,95 @@ describe('the bill', () => {
     expect(await screen.findByText('Bill saved, not sent')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '1 waiting to send' })).toBeInTheDocument();
     expect(screen.getByText('No items yet. Tap ADD on the menu.')).toBeInTheDocument();
+    // Whose it is: only they send it, so it lands in their shift.
+    expect(
+      JSON.parse(window.localStorage.getItem('aahar.pos.unsent-bills.counter-1') ?? '[]'),
+    ).toMatchObject([{ cashierId: 'user-1', cashierName: 'Test Admin' }]);
+  });
+
+  it('keeps the guest’s online payment when the bill is refused, and bills it on the next Complete', async () => {
+    api.createPosBill.mockRejectedValueOnce(priceChanged);
+    const { user } = renderScreen(<BillingPageClient />);
+    await payOnline(user);
+
+    expect(await screen.findByText(/was paid, but the bill now comes to/)).toBeInTheDocument();
+    expect(screen.getByText(/already received/)).toHaveTextContent(
+      '₹210.00 already received through Razorpay (pay_123). Complete order bills it; the guest does not pay again.',
+    );
+    await complete(user);
+
+    expect(await screen.findByRole('dialog', { name: 'Bill completed' })).toBeInTheDocument();
+    expect(api.startOnlinePayment).toHaveBeenCalledTimes(1);
+    expect(api.createPosBill).toHaveBeenCalledTimes(2);
+    expect(api.createPosBill).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        onlinePaymentId: 'pay-1',
+        paymentMode: 'UPI',
+        paymentReference: 'pay_123',
+      }),
+    );
+    expect(screen.queryByText(/already received/)).not.toBeInTheDocument();
+  });
+
+  it('gives up a kept online payment only after a check, and leaves a note to refund it', async () => {
+    api.createPosBill.mockRejectedValue(priceChanged);
+    const { user } = renderScreen(<BillingPageClient />);
+    await payOnline(user);
+
+    await user.click(await screen.findByRole('button', { name: 'Abandon payment' }));
+    const check = screen.getByRole('dialog', { name: 'Abandon the ₹210.00 payment?' });
+    await user.click(within(check).getByRole('button', { name: 'Abandon payment' }));
+
+    expect(screen.queryByText(/already received/)).not.toBeInTheDocument();
+    const note = screen.getByText(/refund the guest/);
+    expect(note).toHaveTextContent(
+      '₹210.00 paid through Razorpay (pay_123) was not billed: refund the guest.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Refunded' }));
+    expect(screen.queryByText(/refund the guest/)).not.toBeInTheDocument();
+  });
+
+  // A reload (or a sign-out and back) must not forget the guest has paid.
+  it('brings a kept online payment back after the till reloads, and bills it', async () => {
+    api.createPosBill.mockRejectedValueOnce(priceChanged);
+    const first = renderScreen(<BillingPageClient />);
+    await payOnline(first.user);
+    await screen.findByText(/already received/);
+    first.unmount();
+
+    const { user } = renderScreen(<BillingPageClient />);
+    expect(await screen.findByText(/already received/)).toHaveTextContent(
+      '₹210.00 already received through Razorpay (pay_123).',
+    );
+    await addTwoSandwiches(user);
+    await complete(user);
+
+    expect(await screen.findByRole('dialog', { name: 'Bill completed' })).toBeInTheDocument();
+    expect(api.startOnlinePayment).toHaveBeenCalledTimes(1);
+    expect(api.createPosBill).toHaveBeenLastCalledWith(
+      expect.objectContaining({ onlinePaymentId: 'pay-1' }),
+    );
+    expect(window.localStorage.getItem('aahar.pos.held-payment.counter-1')).toBeNull();
+  });
+
+  it('leaves another cashier’s kept payment for them, never on this cashier’s bill', async () => {
+    window.localStorage.setItem(
+      'aahar.pos.held-payment.counter-1',
+      JSON.stringify([{ cashierId: 'user-2', cashierName: 'Ravi', payment: paidOnline }]),
+    );
+    const { user } = renderScreen(<BillingPageClient />);
+
+    expect(await screen.findByText(/waits for Ravi/)).toHaveTextContent(
+      '₹210.00 received through Razorpay (pay_123) waits for Ravi to sign in on this till and bill it.',
+    );
+    expect(screen.queryByRole('button', { name: 'Abandon payment' })).not.toBeInTheDocument();
+    await addTwoSandwiches(user);
+    await complete(user);
+
+    await vi.waitFor(() => expect(api.createPosBill).toHaveBeenCalled());
+    const sent = api.createPosBill.mock.calls[0]![0];
+    expect(sent.paymentMode).toBe('CASH');
+    expect(sent).not.toHaveProperty('onlinePaymentId');
   });
 
   it('applies the staff discount of the employee whose ID is typed', async () => {

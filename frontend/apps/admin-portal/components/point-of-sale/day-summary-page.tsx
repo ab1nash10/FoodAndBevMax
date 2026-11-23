@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ListOrdered, Printer } from 'lucide-react';
 import Link from 'next/link';
 import type { PaymentMode, PosDaySummary } from '@aahar/api-client';
-import { AppPageHeader, StatStrip, tableStyles } from '@/components/design-system';
+import { AppPageHeader, tableStyles } from '@/components/design-system';
 import {
   CounterPicker,
   NoCounter,
@@ -85,7 +85,7 @@ export function DaySummaryPageClient() {
           </>
         }
         description="A counter's takings for the day by payment mode, with complimentary and cancelled bills kept out of sales."
-        title="Day Summary"
+        title="Day summary"
       />
       {!counter ? (
         <NoCounter isLoading={countersQuery.isLoading} />
@@ -95,17 +95,6 @@ export function DaySummaryPageClient() {
         </Panel>
       ) : (
         <>
-          <StatStrip
-            label="The day at a glance"
-            stats={[
-              {
-                label: 'Sales',
-                tone: 'ok',
-                value: summary ? formatMoney(summary.sales) : '–',
-              },
-              { label: 'Paid bills', value: summary?.bills ?? '–' },
-            ]}
-          />
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel className="overflow-hidden">
               <h2 className="border-b border-ds-divider px-4 py-3 text-sm font-semibold text-ds-text">

@@ -164,7 +164,7 @@ describe('the Counters tab', () => {
 
     await user.click(await screen.findByRole('button', { name: /New counter/ }));
     const dialog = screen.getByRole('dialog', { name: 'New Counter' });
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add counter' }));
 
     expect(await within(dialog).findByText('Name is required.')).toBeInTheDocument();
     expect(within(dialog).getByText('Code is required.')).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe('the Counters tab', () => {
     await within(dialog).findByRole('option', { name: 'Front Till (POS-01)' });
     await user.selectOptions(within(dialog).getByLabelText('POS Device'), 'pd-1');
     await user.click(within(dialog).getByRole('switch', { name: 'Active' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add counter' }));
 
     await waitFor(() =>
       expect(api.createCounter).toHaveBeenCalledWith({
@@ -212,10 +212,10 @@ describe('the Counters tab', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Edit Billing 1' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit Counter' });
-    const payment = within(dialog).getByLabelText('Payment Device Id');
+    const payment = within(dialog).getByLabelText('Payment device ID');
     expect(payment).toHaveValue('PAY-9');
     await user.clear(payment);
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
       expect(api.updateCounter).toHaveBeenCalledWith(

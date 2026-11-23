@@ -262,7 +262,7 @@ function ToastCard({
     <div
       aria-hidden={isHidden || undefined}
       className={cn(
-        'toast-enter absolute inset-x-0 top-0 origin-top touch-pan-y overflow-hidden rounded-2xl border border-ds-border bg-ds-surface/95 shadow-[0_16px_36px_-14px_rgb(14_26_43/0.32)] backdrop-blur-md select-none',
+        'toast-enter absolute inset-x-0 top-0 origin-top touch-pan-y overflow-hidden rounded-card border border-ds-border bg-ds-surface/95 shadow-[0_16px_36px_-14px_rgb(14_26_43/0.32)] backdrop-blur-md select-none',
         // Dragging follows the finger; otherwise every move eases.
         dragX ? 'transition-none' : 'transition-[transform,opacity,height] duration-200 ease-out',
         toast.leaving && 'toast-leave',

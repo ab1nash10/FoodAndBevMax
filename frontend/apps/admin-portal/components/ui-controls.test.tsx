@@ -115,7 +115,7 @@ describe('a form panel', () => {
   it('goes back to its list when closed', async () => {
     const user = userEvent.setup();
     render(
-      <FormPanel backHref="/masters/items" subtitle="A new item." title="Create Item">
+      <FormPanel backHref="/masters/items" subtitle="A new item." title="Create item">
         form
       </FormPanel>,
     );

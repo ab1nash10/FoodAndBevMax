@@ -272,18 +272,14 @@ function PosDeviceForm({
             Cancel
           </Button>
           <Button disabled={mutation.isPending} form={posDeviceFormId} type="submit">
-            {mutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Submit
+            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {editingDevice ? 'Save changes' : 'Add POS device'}
           </Button>
         </div>
       }
       onClose={onClose}
       open={open}
-      title={editingDevice ? 'Edit Pos Device' : 'New Pos Device'}
+      title={editingDevice ? 'Edit POS device' : 'New POS device'}
     >
       <form
         className="grid gap-4"
@@ -387,7 +383,7 @@ function PosDeviceForm({
             {...form.register('legalEntityId')}
           />
         </Field>
-        <Field error={form.formState.errors.hostName?.message} label="Host Name" name="pos-host">
+        <Field error={form.formState.errors.hostName?.message} label="Host name" name="pos-host">
           <Input
             id="pos-host"
             placeholder="Optional, for reference"
@@ -481,7 +477,7 @@ function PosDeviceForm({
           value={isKotPrintEnabled}
         />
         <ToggleField
-          label="Invoice Print"
+          label="Invoice print"
           onChange={(checked) => form.setValue('isInvoicePrintEnabled', checked)}
           value={isInvoicePrintEnabled}
         />

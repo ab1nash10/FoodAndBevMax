@@ -6,6 +6,8 @@ import { renderScreen, reply } from '@/test/harness';
 import { UnsentBillsButton, UnsentBillsDialog, useUnsentBills } from './unsent-bills';
 import type * as ApiModule from '@/lib/api';
 
+// Signed in as user-1, Test Admin.
+vi.mock('@/components/auth-provider', () => import('@/test/auth'));
 type Client = typeof ApiModule.organizationApi;
 
 // The API calls the screen makes, each a typed stand-in.
@@ -109,5 +111,40 @@ describe('bills kept on the till', () => {
 
     expect(screen.getByRole('button', { name: '1 discarded' })).toBeInTheDocument();
     expect(within(dialog).getByText(/Discarded at/)).toBeInTheDocument();
+  });
+
+  // Sent under this session, a bill would land in this cashier's shift, not the one who took it.
+  it('leaves another cashier’s bills for them: listed by name, never sent or discarded here', async () => {
+    kept(
+      queued('mine', { cashierId: 'user-1', cashierName: 'Test Admin' }),
+      queued('theirs', { cashierId: 'user-2', cashierName: 'Ravi', summary: '1 × Masala Chai' }),
+      queued('refused', {
+        cashierId: 'user-2',
+        cashierName: 'Ravi',
+        error: 'Item out of stock',
+        summary: '3 × Samosa',
+      }),
+    );
+    api.createPosBill.mockImplementation(() => reply({} as never));
+    const { user } = renderScreen(<Till />);
+
+    await user.click(
+      screen.getByRole('button', { name: '1 waiting to send · 2 waiting for another cashier' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Unsent bills' });
+    const theirs = within(dialog).getByText('1 × Masala Chai').closest('li')!;
+    expect(theirs).toHaveTextContent('Waiting for Ravi to sign in on this till and send it');
+    const refused = within(dialog).getByText('3 × Samosa').closest('li')!;
+    expect(within(refused).queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Retry now' }));
+
+    expect(await screen.findByText('1 saved bill sent')).toBeInTheDocument();
+    expect(api.createPosBill).toHaveBeenCalledTimes(1);
+    expect(api.createPosBill).toHaveBeenCalledWith(
+      expect.objectContaining({ clientOrderId: 'mine' }),
+    );
+    expect(
+      screen.getByRole('button', { name: '2 waiting for another cashier' }),
+    ).toBeInTheDocument();
   });
 });

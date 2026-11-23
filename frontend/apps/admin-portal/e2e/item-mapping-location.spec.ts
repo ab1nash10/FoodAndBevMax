@@ -6,7 +6,7 @@ import signIn from './sign-in';
 test.beforeAll(() => signIn());
 
 /**
- * Map item (Item Locations) asks for the location first, filled in from the header's location:
+ * Map item (Item locations) asks for the location first, filled in from the header's location:
  * the stores or kitchens offered are only that location's. With "All locations" in the header
  * the user picks the location, and nothing can be picked before. Read-only: no mapping is saved.
  */
@@ -48,7 +48,9 @@ async function openMapItem(page: Page, parent: Parent) {
   await tab.click();
   await expect(tab).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', { name: 'Map item' }).click();
-  await expect(page.getByRole('dialog', { name: `Map Item to ${parent.label}` })).toBeVisible();
+  await expect(
+    page.getByRole('dialog', { name: `Map item to ${parent.label.toLowerCase()}` }),
+  ).toBeVisible();
 }
 
 for (const parent of parents) {

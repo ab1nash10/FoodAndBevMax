@@ -4,8 +4,9 @@ import {
   type PosDaySummary,
   type PosShift,
 } from '@aahar/api-client';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { queryKeys } from '@/lib/query-keys';
 import { signedIn } from '@/test/auth';
 import { renderScreen, reply } from '@/test/harness';
 import { DayShiftsPanel } from './day-shifts-panel';
@@ -239,6 +240,32 @@ describe('ending a shift', () => {
 
     await screen.findByRole('dialog', { name: 'Shift closed' });
     expect(screen.queryByRole('link', { name: 'Return stock to store' })).toBeNull();
+  });
+
+  // The request still ends the shift: left as it was, the till would bill against a closed one.
+  it('leaves the shift on the till once it ends, even after Cancel was pressed meanwhile', async () => {
+    let ended: (value: Awaited<ReturnType<Client['endPosShift']>>) => void = () => {};
+    api.endPosShift.mockReturnValue(
+      new Promise((resolve) => {
+        ended = resolve;
+      }),
+    );
+    const { queryClient, user } = renderScreen(<ShiftChip counter={counter({ open: shift() })} />);
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await user.click(screen.getByRole('button', { name: /End shift/ }));
+    await user.type(screen.getByLabelText(/Cash counted in the till/), '500');
+    await user.click(screen.getByRole('button', { name: /Close sales/ }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => {
+      ended({ data: shift({ status: 'CLOSED' }), message: 'Success', success: true });
+      await Promise.resolve();
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.posCounters() });
+    expect(await screen.findByText('Shift closed')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('does not let another cashier end someone else’s shift', () => {

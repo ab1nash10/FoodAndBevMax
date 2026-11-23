@@ -147,7 +147,7 @@ export function PosGate({ children }: Readonly<{ children: ReactNode }>) {
   if (problem) {
     return (
       <section className="space-y-4">
-        <AppPageHeader title="Point of Sale" />
+        <AppPageHeader title="POS" />
         {/* A till another location's (or a restaurant's this user is not at) can be set up again:
             an admin moved this user to another POS device for this computer (2026-11-16). */}
         <PosClosed problem={problem}>

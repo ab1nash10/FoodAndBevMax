@@ -4,11 +4,11 @@ import signIn from './sign-in';
 // A fresh session: another spec's sign-in ends the one saved at the start.
 test.beforeAll(() => signIn());
 
-// The Employee Discounts list carries the columns of the agreed layout; only its Edit button opens
+// The Employee discounts list carries the columns of the agreed layout; only its Edit button opens
 // a rule, a click on the row does not.
 test('the employee discounts list shows every agreed column', async ({ page }) => {
   await page.setViewportSize({ height: 900, width: 1440 });
-  // All Locations, so the rows are there whatever the test user's own location holds.
+  // All locations, so the rows are there whatever the test user's own location holds.
   await page.addInitScript(() => window.localStorage.setItem('aahar.location-context', 'all'));
   await page.goto('masters/employee-discounts');
 

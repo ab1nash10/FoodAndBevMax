@@ -85,7 +85,7 @@ test('the header location menu uses the names on the Locations list', async ({ p
   }
   test.skip(names.length === 0, 'no active location on the first page of the list');
 
-  await page.getByRole('button', { name: /^Select Location\./ }).click();
+  await page.getByRole('button', { name: /^Select a location\./ }).click();
   for (const name of names) {
     await expect(
       page.getByRole('button').filter({ has: page.getByText(name, { exact: true }) }),

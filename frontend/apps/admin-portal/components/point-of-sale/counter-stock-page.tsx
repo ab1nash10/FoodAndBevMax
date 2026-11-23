@@ -15,7 +15,6 @@ import {
   AppPageHeader,
   ListPager,
   RecordAvatar,
-  StatStrip,
   StatusChip,
   tableStyles,
 } from '@/components/design-system';
@@ -132,12 +131,6 @@ export function CounterStockPageClient() {
           item.itemCode.toLowerCase().includes(needle),
       )
     : summaryItems;
-  const summaryCount = (match: (item: (typeof summaryItems)[number]) => boolean) =>
-    summaryQuery.data ? summaryItems.filter(match).length : '–';
-  const summaryShare = (match: (item: (typeof summaryItems)[number]) => boolean) =>
-    summaryQuery.data && summaryItems.length
-      ? summaryItems.filter(match).length / summaryItems.length
-      : undefined;
 
   return (
     <section className="space-y-4">
@@ -155,28 +148,8 @@ export function CounterStockPageClient() {
         }
         count={tab === 'summary' ? summaryQuery.data?.items.length : listData?.meta.total}
         description="Stock received at this counter from transfers, less what it has sold."
-        title="Counter Stock"
+        title="Counter stock"
       />
-      {counter && tab === 'summary' ? (
-        <StatStrip
-          label="Counter stock at a glance"
-          stats={[
-            { label: 'Items', share: summaryShare(() => true), value: summaryCount(() => true) },
-            {
-              label: 'In stock',
-              share: summaryShare((item) => item.available > 0),
-              tone: 'ok',
-              value: summaryCount((item) => item.available > 0),
-            },
-            {
-              label: 'Out of stock',
-              share: summaryShare((item) => item.isTracked && item.available === 0),
-              tone: 'bad',
-              value: summaryCount((item) => item.isTracked && item.available === 0),
-            },
-          ]}
-        />
-      ) : null}
       {counter ? (
         <Panel aria-label="Counter stock" className="overflow-hidden" role="region">
           <ListToolbar>
@@ -349,7 +322,7 @@ export function CounterStockPageClient() {
                       atLocation={false}
                       colSpan={4}
                       error={summaryQuery.error}
-                      hint="Items reach a counter from Item & Menu Setup, or nothing matches the search."
+                      hint="Items reach a counter from Item & menu, or nothing matches the search."
                       isError={summaryQuery.isError}
                       isLoading={summaryQuery.isLoading}
                       label="counter stock"

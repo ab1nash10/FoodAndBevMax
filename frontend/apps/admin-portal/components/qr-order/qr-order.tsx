@@ -500,7 +500,7 @@ function MenuStep({
   const [seen, setSeen] = useState('');
   const tabBar = useRef<HTMLElement>(null);
   const needle = search.trim().toLowerCase();
-  // Items come in category order (Item Categories), so each category's first item places it.
+  // Items come in category order (Item categories), so each category's first item places it.
   const groups = new Map<string, { items: MenuItem[]; name: string }>();
   for (const item of items) {
     if (only.length && !only.includes(item.foodType)) continue;

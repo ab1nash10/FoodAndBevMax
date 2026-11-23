@@ -164,8 +164,8 @@ describe('the POS Devices tab', () => {
     const { user } = renderScreen(<PosDevicesTab />);
 
     await user.click(await screen.findByRole('button', { name: /New POS device/ }));
-    const dialog = screen.getByRole('dialog', { name: 'New Pos Device' });
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    const dialog = screen.getByRole('dialog', { name: 'New POS device' });
+    await user.click(within(dialog).getByRole('button', { name: 'Add POS device' }));
 
     expect(await within(dialog).findByText('Name is required.')).toBeInTheDocument();
     expect(within(dialog).getByText('Code is required.')).toBeInTheDocument();
@@ -177,8 +177,8 @@ describe('the POS Devices tab', () => {
     const { user } = renderScreen(<PosDevicesTab />);
 
     await user.click(await screen.findByRole('button', { name: /New POS device/ }));
-    const dialog = screen.getByRole('dialog', { name: 'New Pos Device' });
-    await user.type(within(dialog).getByLabelText('Host Name'), 'max_pos 01');
+    const dialog = screen.getByRole('dialog', { name: 'New POS device' });
+    await user.type(within(dialog).getByLabelText('Host name'), 'max_pos 01');
     // Leaving the field (a click elsewhere: the dialog keeps Tab to itself, and jsdom has no
     // layout for it to find the next field by).
     await user.click(within(dialog).getByLabelText(/Code/));
@@ -192,7 +192,7 @@ describe('the POS Devices tab', () => {
     const { user } = renderScreen(<PosDevicesTab />);
 
     await user.click(await screen.findByRole('button', { name: /New POS device/ }));
-    const dialog = screen.getByRole('dialog', { name: 'New Pos Device' });
+    const dialog = screen.getByRole('dialog', { name: 'New POS device' });
     await user.type(within(dialog).getByLabelText(/Name/, { selector: '#pos-name' }), 'Back Till');
     await user.type(within(dialog).getByLabelText(/Code/), 'POS-02');
     await user.click(await within(dialog).findByRole('checkbox', { name: 'Cafe Max' }));
@@ -204,7 +204,7 @@ describe('the POS Devices tab', () => {
       'PPG-DESK-7',
     );
     await user.click(within(dialog).getByRole('switch', { name: 'KOT Print' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Add POS device' }));
 
     await waitFor(() =>
       expect(api.createPosDevice).toHaveBeenCalledWith({
@@ -228,9 +228,9 @@ describe('the POS Devices tab', () => {
     const { user } = renderScreen(<PosDevicesTab />);
 
     await user.click(await screen.findByRole('button', { name: 'Edit Front Till' }));
-    const dialog = screen.getByRole('dialog', { name: 'Edit Pos Device' });
+    const dialog = screen.getByRole('dialog', { name: 'Edit POS device' });
     expect(within(dialog).getByRole('combobox', { name: 'User 1' })).toHaveValue(asha.id);
-    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(api.updatePosDevice).toHaveBeenCalled());
     const [id, body] = api.updatePosDevice.mock.calls[0]!;

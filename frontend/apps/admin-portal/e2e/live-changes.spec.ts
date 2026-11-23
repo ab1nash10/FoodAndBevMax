@@ -53,7 +53,7 @@ test('a location renamed elsewhere is renamed in an open screen within seconds',
   const renamed = `${target!.name} Live`;
 
   await page.goto('masters/locations');
-  await page.getByRole('button', { name: /^Select Location\./ }).click();
+  await page.getByRole('button', { name: /^Select a location\./ }).click();
   await expect(page.getByText(target!.name, { exact: true }).first()).toBeVisible();
 
   try {

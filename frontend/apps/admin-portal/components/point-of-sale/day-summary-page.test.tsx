@@ -71,8 +71,6 @@ describe('the day summary', () => {
     expect(rowOf('UPI')).toHaveTextContent('3₹450.50');
     expect(rowOf('Card')).toHaveTextContent('0₹0.00');
     expect(rowOf('Sales')).toHaveTextContent('9₹1,650.50');
-    const stats = screen.getByRole('group', { name: 'The day at a glance' });
-    expect(stats).toHaveTextContent('₹1,650.50');
   });
 
   it('keeps complimentary and cancelled bills out of sales', async () => {

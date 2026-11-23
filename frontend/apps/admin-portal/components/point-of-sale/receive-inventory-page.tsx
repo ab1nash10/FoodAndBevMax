@@ -79,7 +79,7 @@ export function ReceiveInventoryPageClient() {
         }
         count={transfersQuery.data?.meta.total}
         description="Check in stock sent to this counter. Accepted quantities become counter stock; the rest goes back."
-        title="Receive Inventory"
+        title="Receive inventory"
       />
       {counter ? (
         <Panel aria-label="Transfers to this counter" className="overflow-hidden" role="region">

@@ -21,10 +21,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   EmploymentType,
   FoodType,
+  OnlinePayment,
   OnlinePaymentInput,
   OnlinePaymentProvider,
   PaymentMode,
@@ -35,12 +36,14 @@ import type {
 } from '@aahar/api-client';
 import { AppPageHeader, FoodTypeMarker } from '@/components/design-system';
 import { useAuth } from '@/components/auth-provider';
+import { useConfirm } from '@/components/confirm-provider';
 import { useToast } from '@/components/toast-provider';
 import { Input, Label, Panel, Skeleton } from '@/components/ui';
 import { Modal, Toggle } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { newClientId as newClientOrderId } from '@/lib/client-id';
-import { isNetworkError } from '@/lib/pos-offline-queue';
+import { changeHeldPayments, readHeldPayments, type HeldPayment } from '@/lib/pos-held-payments';
+import { isMine, isNetworkError } from '@/lib/pos-offline-queue';
 import { previewBill } from '@/lib/pos-pricing';
 import { invalidatePosBillQueries } from '@/lib/query-invalidation';
 import { queryKeys } from '@/lib/query-keys';
@@ -187,7 +190,7 @@ const cashNotes = [1, 2, 5, 10, 20, 50, 100, 200, 500];
  */
 export function BillingPageClient() {
   const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   // Operator access: without these the till bills counter orders only, never complimentary.
   const canBillRooms = hasPermission('POS_ROOM_ORDER');
   const canApproveComplimentary = hasPermission('POS_COMPLIMENTARY_APPROVE');
@@ -225,6 +228,31 @@ export function BillingPageClient() {
     summary: string;
     total: number;
   } | null>(null);
+  // Guests' paid online payments until a bill takes them, kept on this device per counter so a
+  // reload or a sign-out cannot lead to charging the guest twice (lib/pos-held-payments).
+  const counterId = counter?.id;
+  const [held, setHeld] = useState<HeldPayment[]>([]);
+  const refreshHeld = useCallback(
+    () => setHeld(counterId ? readHeldPayments(counterId) : []),
+    [counterId],
+  );
+  useEffect(refreshHeld, [refreshHeld]);
+  const changeHeld = (change: (list: HeldPayment[]) => HeldPayment[]) => {
+    if (counterId) setHeld(changeHeldPayments(counterId, change));
+  };
+  const release = (paymentId: string | undefined) => {
+    if (paymentId) changeHeld((list) => list.filter((entry) => entry.payment.id !== paymentId));
+  };
+  // This cashier's: the next Complete bills it instead of starting a new payment. Another
+  // cashier's waits for them, as a bill lands in the shift of whoever sends it.
+  const paidOnline =
+    held.find((entry) => !entry.abandonedAt && isMine(entry, currentUser?.id))?.payment ?? null;
+  const heldForOthers = held.filter(
+    (entry) => !entry.abandonedAt && !isMine(entry, currentUser?.id),
+  );
+  // Given up by the cashier: each must be refunded by hand.
+  const toRefund = held.filter((entry) => entry.abandonedAt);
+  const confirm = useConfirm();
   const upiQrRef = useRef<HTMLDivElement>(null);
 
   // The QR sits in the scrolling bill, above the pinned payment buttons: bring it into view
@@ -303,7 +331,7 @@ export function BillingPageClient() {
       counts.set(id, entry);
     }
 
-    // In the order set on Item Categories, so the till matches the kiosk and the menus.
+    // In the order set on Item categories, so the till matches the kiosk and the menus.
     return [...counts.values()].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
   }, [menu]);
 
@@ -481,6 +509,8 @@ export function BillingPageClient() {
       // No answer at all: keep the bill on this till and send it when the connection is back.
       // Its clientOrderId makes the resend safe even if this one did reach the server.
       if (isNetworkError(error) && unsent.queue(queued)) {
+        // The queued bill carries the paid payment now.
+        release(queued.payload.onlinePaymentId);
         resetBill();
         showToast({
           description:
@@ -499,9 +529,10 @@ export function BillingPageClient() {
       });
       void menuQuery.refetch();
     },
-    onSuccess: (saved) => {
+    onSuccess: (saved, order) => {
       invalidatePosBillQueries(queryClient);
       setCompleted(saved);
+      release(order.payload.onlinePaymentId);
       resetBill();
     },
   });
@@ -535,6 +566,22 @@ export function BillingPageClient() {
       total: totals.grandTotal,
     };
 
+    if (paidOnline) {
+      // The guest has already paid: this bill takes that payment, in its mode, never a new one.
+      bill.mutate({
+        ...order,
+        payload: {
+          ...order.payload,
+          complimentaryReason: undefined,
+          isComplimentary: false,
+          onlinePaymentId: paidOnline.id,
+          paymentMode: paidOnline.provider === 'PINELABS' ? 'CARD' : 'UPI',
+          paymentReference: paidOnline.paidReference ?? undefined,
+        },
+      });
+      return;
+    }
+
     if (onlineVia) {
       // The bill is made once the guest has paid, with the provider's payment on it.
       const { channel: billChannel, counterId, employeeCode: code, lines } = order.payload;
@@ -555,6 +602,25 @@ export function BillingPageClient() {
     }
 
     bill.mutate(order);
+  }
+
+  /** Gives up a paid payment no bill could take, leaving a note on the till to refund it. */
+  async function abandonPayment(payment: OnlinePayment) {
+    const confirmed = await confirm({
+      confirmLabel: 'Abandon payment',
+      description: `The guest has paid. No bill will take this payment: refund it through ${providerLabels[payment.provider]}.`,
+      title: `Abandon the ${formatMoney(payment.amount)} payment?`,
+      tone: 'danger',
+    });
+
+    if (!confirmed) return;
+    changeHeld((list) =>
+      list.map((entry) =>
+        entry.payment.id === payment.id
+          ? { ...entry, abandonedAt: new Date().toISOString() }
+          : entry,
+      ),
+    );
   }
 
   // Billing without the mouse. F2 and F9 work anywhere on the page; "/", "+", "-" and Delete
@@ -1287,6 +1353,45 @@ export function BillingPageClient() {
                 ))}
               </ul>
             ) : null}
+            {paidOnline ? (
+              <div className="flex items-start justify-between gap-3 rounded-control bg-ds-status-ok-bg px-3 py-2">
+                <p className="text-sm text-ds-text" role="status">
+                  {formatMoney(paidOnline.amount)} already received {paidThrough(paidOnline)}.
+                  Complete order bills it; the guest does not pay again.
+                </p>
+                <Button
+                  onClick={() => void abandonPayment(paidOnline)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Abandon payment
+                </Button>
+              </div>
+            ) : null}
+            {heldForOthers.map(({ cashierName, payment }) => (
+              <p
+                className="rounded-control bg-ds-status-pending-bg px-3 py-2 text-sm text-ds-status-pending-fg"
+                key={payment.id}
+              >
+                {formatMoney(payment.amount)} received {paidThrough(payment)} waits for{' '}
+                {cashierName ?? 'another cashier'} to sign in on this till and bill it.
+              </p>
+            ))}
+            {toRefund.map(({ payment }) => (
+              <div
+                className="flex items-start justify-between gap-3 rounded-control bg-ds-status-bad-bg px-3 py-2"
+                key={payment.id}
+              >
+                <p className="text-sm text-ds-status-bad-fg">
+                  {formatMoney(payment.amount)} paid {paidThrough(payment)} was not billed: refund
+                  the guest.
+                </p>
+                <Button onClick={() => release(payment.id)} size="sm" type="button" variant="ghost">
+                  Refunded
+                </Button>
+              </div>
+            ))}
             <p className="flex items-baseline gap-2 text-ds-text">
               <span
                 className="pop inline-block font-mono text-xl font-bold"
@@ -1301,7 +1406,8 @@ export function BillingPageClient() {
             <div className="grid grid-cols-[auto_1fr] gap-2">
               <Button
                 className="h-12 px-5 text-ds-status-bad-fg hover:border-ds-status-bad-fg/40 hover:bg-ds-status-bad-bg hover:text-ds-status-bad-fg"
-                disabled={bill.isPending || cart.length === 0}
+                // A paid bill is not cleared away: it is completed, or its payment abandoned.
+                disabled={bill.isPending || cart.length === 0 || paidOnline !== null}
                 onClick={resetBill}
                 type="button"
                 variant="outline"
@@ -1388,6 +1494,15 @@ export function BillingPageClient() {
         onClose={() => setOnlinePayment(null)}
         onPaid={(paid) => {
           if (!onlinePayment) return;
+          // Kept until a bill takes it: if this one is refused, Complete bills the same payment.
+          changeHeld((list) => [
+            ...list.filter((entry) => entry.payment.id !== paid.id),
+            {
+              cashierId: currentUser?.id,
+              cashierName: currentUser?.name ?? undefined,
+              payment: paid,
+            },
+          ]);
           bill.mutate({
             ...onlinePayment,
             payload: {
@@ -1402,6 +1517,13 @@ export function BillingPageClient() {
       />
     </section>
   );
+}
+
+/** "through Razorpay (pay_123)": where to find a paid online payment, to bill or refund it. */
+function paidThrough(payment: OnlinePayment) {
+  const reference = payment.paidReference ? ` (${payment.paidReference})` : '';
+
+  return `through ${providerLabels[payment.provider]}${reference}`;
 }
 
 /** How the picked payment mode is collected: one chip per way, the chosen one ticked. */

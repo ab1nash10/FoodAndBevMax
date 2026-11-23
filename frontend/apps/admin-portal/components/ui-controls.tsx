@@ -2,6 +2,7 @@
 
 // Interactive primitives live apart from ui.tsx so server-rendered pages can keep importing the
 // static pieces (Panel, Field, Badge...) without being pulled into the client bundle.
+import { SlideIndicator, useSlidingIndicator } from '@/components/swiss-motion';
 import { Input } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { usePathname, useRouter } from 'next/navigation';
@@ -72,7 +73,7 @@ export function Toggle({ ariaLabel, checked, disabled = false, id, label, onChan
       aria-checked={checked}
       aria-label={label ? undefined : ariaLabel}
       className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-surface disabled:cursor-not-allowed disabled:opacity-60',
+        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-surface disabled:cursor-not-allowed disabled:opacity-60',
         checked ? 'border-ds-primary bg-ds-primary' : 'border-ds-input bg-ds-divider',
       )}
       disabled={disabled}
@@ -83,8 +84,8 @@ export function Toggle({ ariaLabel, checked, disabled = false, id, label, onChan
     >
       <span
         className={cn(
-          'inline-block h-4 w-4 rounded-full bg-white shadow-xs transition-transform',
-          checked ? 'translate-x-6' : 'translate-x-1',
+          'inline-block h-3.5 w-3.5 rounded-full bg-white shadow-xs transition-transform',
+          checked ? 'translate-x-[18px]' : 'translate-x-[2px]',
         )}
       />
     </button>
@@ -566,7 +567,7 @@ export function Modal({
         // floats as a rounded sheet inset from the edges; on phones it is a bottom sheet, as tall
         // as its content up to 92% of the screen.
         side
-          ? 'side-overlay items-end justify-end bg-ds-text/20 sm:items-stretch sm:p-3'
+          ? 'side-overlay items-end justify-end bg-ds-text/30 sm:items-stretch sm:p-4'
           : 'items-start justify-center overflow-y-auto bg-ds-overlay p-4 backdrop-blur-xs sm:p-6',
       )}
     >
@@ -583,8 +584,8 @@ export function Modal({
         className={cn(
           'relative z-10 w-full border-ds-border bg-ds-surface shadow-2xl shadow-ds-text/20 outline-hidden',
           side
-            ? 'flex max-h-[92dvh] max-w-2xl flex-col overflow-hidden rounded-t-[24px] border-t sm:h-full sm:max-h-none sm:rounded-[24px] sm:border'
-            : 'my-auto max-w-2xl rounded-[24px] border',
+            ? 'flex max-h-[92dvh] max-w-2xl flex-col overflow-hidden rounded-t-[26px] border-0 shadow-[0_30px_80px_-20px_rgb(14_26_43/0.45)] sm:h-full sm:max-h-none sm:rounded-[26px]'
+            : 'my-auto max-w-2xl rounded-card border',
         )}
         data-side={side ? '' : undefined}
         ref={dialogRef}
@@ -595,33 +596,51 @@ export function Modal({
           // A bottom sheet's grab handle, on phones only (it is not a control).
           <span
             aria-hidden="true"
-            className="mx-auto mt-2 block h-1 w-10 shrink-0 rounded-full bg-ds-border sm:hidden"
+            className="absolute left-1/2 top-2 z-10 block h-1 w-10 -translate-x-1/2 rounded-full bg-white/50 sm:hidden"
           />
         ) : null}
         <div
           className={cn(
-            'flex items-start justify-between gap-4 border-b border-ds-divider',
-            side ? 'px-6 pt-3 pb-4 sm:pt-6' : 'px-5 py-3.5',
+            'flex justify-between gap-4',
+            // Care Kitchen: the record's panel opens on a Max-blue band, its tile beside its name.
+            side
+              ? 'items-center bg-linear-to-r from-ds-primary to-[#1a66c2] px-6 pb-5 pt-6 text-white sm:pt-5'
+              : 'items-start border-b border-ds-divider px-5 py-3.5',
           )}
         >
-          <div className="flex min-w-0 items-start gap-3.5">
-            {leading ? <span className="shrink-0">{leading}</span> : null}
+          <div className={cn('flex min-w-0 gap-4', side ? 'items-center' : 'items-start')}>
+            {leading ? (
+              <span className={cn('shrink-0', side && '[&>*]:ring-2 [&>*]:ring-white/40')}>
+                {leading}
+              </span>
+            ) : null}
             <div className="min-w-0">
               <h2
                 className={cn(
-                  'font-semibold text-ds-text',
-                  side ? 'text-[21px] leading-7 tracking-[-0.02em]' : 'text-base',
+                  'font-semibold',
+                  side
+                    ? 'text-[21px] font-bold leading-7 tracking-[-0.02em] text-white'
+                    : 'text-base text-ds-text',
                 )}
               >
                 {title}
               </h2>
-              {description ? <p className="mt-1 text-sm text-ds-muted">{description}</p> : null}
+              {description ? (
+                <p className={cn('mt-0.5 text-[13px]', side ? 'text-white/80' : 'text-ds-muted')}>
+                  {description}
+                </p>
+              ) : null}
               {meta ? <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div> : null}
             </div>
           </div>
           <button
             aria-label="Close"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-ds-border text-ds-text-3 transition hover:bg-ds-subtle hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+            className={cn(
+              'grid shrink-0 place-items-center border transition focus-visible:outline-hidden focus-visible:ring-2',
+              side
+                ? 'h-10 w-10 rounded-full border-white/35 text-white hover:bg-white/15 focus-visible:ring-white'
+                : 'h-control w-control rounded-control border-ds-border text-ds-text-3 hover:bg-ds-subtle hover:text-ds-text focus-visible:ring-ds-primary',
+            )}
             onClick={onClose}
             type="button"
           >
@@ -633,7 +652,7 @@ export function Modal({
             'overflow-y-auto',
             // min-h-0: in the sheet, which sizes to its content, the body shrinks and scrolls.
             side
-              ? 'min-h-0 flex-1 px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]'
+              ? 'min-h-0 flex-1 px-6 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]'
               : 'max-h-[70vh] px-5 py-4',
           )}
         >
@@ -670,9 +689,17 @@ interface SegmentedOption<TValue extends string> {
 export function FormPanel({
   backHref,
   children,
+  onClose,
   subtitle,
   title,
-}: Readonly<{ backHref: string; children: ReactNode; subtitle?: string; title: string }>) {
+}: Readonly<{
+  backHref: string;
+  children: ReactNode;
+  /** Given when the list opened it in place (no URL of its own): closing calls it instead. */
+  onClose?: () => void;
+  subtitle?: string;
+  title: string;
+}>) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -681,7 +708,7 @@ export function FormPanel({
     // or the control named like this panel (Edit …).
     <Modal
       description={subtitle}
-      onClose={() => router.push(backHref)}
+      onClose={onClose ?? (() => router.push(backHref))}
       open
       returnFocusTo={{ href: pathname, label: title }}
       side
@@ -708,16 +735,26 @@ export function SegmentedControl<TValue extends string>({
   size?: 'lg' | 'md';
   value: TValue;
 }>) {
+  // The white thumb slides to the option pressed (Swiss motion).
+  const { box, rowRef, slides } = useSlidingIndicator<HTMLDivElement>(
+    '[aria-pressed="true"]',
+    value,
+  );
+  // The chosen option: a white tab lifted off the grey track.
+  const thumb = 'bg-ds-surface shadow-[0_1px_3px_rgb(16_24_40/0.14)]';
+
   return (
     <div
       aria-label={label}
       className={cn(
-        'inline-flex gap-0.5 rounded-control border border-ds-border bg-ds-subtle p-[3px]',
+        'relative inline-flex gap-0.5 rounded-control bg-ds-status-neutral-bg p-1',
         size === 'lg' && 'grid grid-flow-col auto-cols-fr gap-1 rounded-xl p-1',
         className,
       )}
+      ref={rowRef}
       role="group"
     >
+      <SlideIndicator box={box} className={cn(thumb, 'rounded-[9px]')} slides={slides} />
       {options.map((option) => {
         const isActive = option.value === value;
 
@@ -725,12 +762,10 @@ export function SegmentedControl<TValue extends string>({
           <button
             aria-pressed={isActive}
             className={cn(
-              'h-8 flex-1 whitespace-nowrap rounded-[7px] px-3 text-[12.5px] font-bold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+              'relative h-[34px] flex-1 whitespace-nowrap rounded-[9px] px-3.5 text-[13px] font-semibold transition-colors duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
               size === 'lg' &&
                 'inline-flex h-10 items-center justify-center gap-2 rounded-[9px] text-[13.5px]',
-              isActive
-                ? 'bg-ds-surface text-ds-text shadow-card ring-1 ring-ds-border'
-                : 'text-ds-text-3 hover:text-ds-text',
+              isActive ? cn('text-ds-text', !box && thumb) : 'text-ds-text-3 hover:text-ds-text',
               option.disabled && 'cursor-not-allowed opacity-50 hover:text-ds-text-3',
             )}
             disabled={option.disabled}
@@ -802,12 +837,20 @@ export function SavedViewTabs<TValue extends string>({
     }
   }
 
+  // The underline slides to the view picked (Swiss motion).
+  const { box, rowRef, slides } = useSlidingIndicator<HTMLDivElement>(
+    '[aria-selected="true"]',
+    value,
+  );
+
   return (
     <div
       aria-label={label}
-      className="flex gap-1 overflow-x-auto border-b border-ds-border px-3"
+      className="relative flex gap-1 overflow-x-auto border-b border-ds-border px-3"
+      ref={rowRef}
       role="tablist"
     >
+      <SlideIndicator box={box} className="bg-ds-primary" slides={slides} underline />
       {views.map((view, index) => {
         const isActive = view.value === value;
 
@@ -815,10 +858,10 @@ export function SavedViewTabs<TValue extends string>({
           <button
             aria-selected={isActive}
             className={cn(
-              'flex h-[46px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 text-[13px] transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary',
+              'flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 text-[12.5px] transition-colors duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-primary',
               isActive
-                ? 'border-ds-primary font-extrabold text-ds-text'
-                : 'border-transparent font-semibold text-ds-text-3 hover:text-ds-text',
+                ? cn('font-semibold text-ds-text', box ? 'border-transparent' : 'border-ds-primary')
+                : 'border-transparent font-medium text-ds-text-3 hover:text-ds-text',
             )}
             key={view.value}
             onClick={() => onChange(view.value)}
@@ -901,12 +944,12 @@ export function FilterSearch({
   }, [shortcut]);
 
   return (
-    <label className="flex h-10 min-w-[160px] flex-1 items-center gap-2 rounded-full border border-ds-input bg-ds-surface px-3.5 text-ds-muted transition focus-within:border-ds-primary focus-within:ring-4 focus-within:ring-ds-primary/10">
+    <label className="flex h-11 min-w-[160px] flex-1 items-center gap-2.5 rounded-control border border-ds-border bg-ds-surface px-3.5 text-ds-muted transition focus-within:border-ds-primary focus-within:ring-4 focus-within:ring-ds-primary/10">
       <Search aria-hidden="true" className="h-4 w-4 shrink-0" />
       <input
         aria-keyshortcuts={shortcut ? '/' : undefined}
         aria-label={label}
-        className="peer min-w-0 flex-1 bg-transparent text-[13.5px] text-ds-text outline-hidden placeholder:text-ds-muted"
+        className="peer min-w-0 flex-1 bg-transparent text-[14px] text-ds-text outline-hidden placeholder:text-ds-muted"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Escape') event.currentTarget.blur();
@@ -945,7 +988,7 @@ export function FilterSelect({
   return (
     <label
       className={cn(
-        'flex h-10 items-center gap-1.5 rounded-full border border-ds-input bg-ds-surface pl-3.5 pr-2 text-[12.5px] text-ds-muted transition focus-within:border-ds-primary focus-within:ring-4 focus-within:ring-ds-primary/10',
+        'flex h-control items-center gap-1.5 rounded-control border border-ds-input bg-ds-surface pl-3 pr-2 text-[12.5px] text-ds-muted transition focus-within:border-ds-primary focus-within:ring-3 focus-within:ring-ds-primary/10',
         disabled && 'opacity-60',
       )}
     >
@@ -971,15 +1014,15 @@ export function BulkActionBar({
   return (
     <div
       aria-label="Bulk actions"
-      className="flex flex-wrap items-center gap-2 border-b border-ds-divider bg-ds-primary-soft px-3 py-2.5"
+      className="bulk-float fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-[18px] bg-[#0b1730] py-2 pl-4 pr-2 text-white shadow-[0_24px_48px_-16px_rgb(11_23_48/0.6)] ring-1 ring-white/10 nav:bottom-6 [&_button]:border-0 [&_button]:bg-white/10 [&_button]:text-white [&_button]:shadow-none [&_button:hover]:bg-white/20"
       role="region"
     >
-      <span aria-live="polite" className="px-1.5 text-[13px] font-extrabold text-ds-link">
+      <span aria-live="polite" className="mr-2 text-[14px] font-semibold text-white">
         {count} selected
       </span>
       {children}
       <button
-        className="ml-auto h-[34px] rounded-control px-2.5 text-[12.5px] font-bold text-ds-link hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
+        className="h-9 rounded-[11px] px-3 text-[13px] font-semibold focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
         onClick={onClear}
         type="button"
       >

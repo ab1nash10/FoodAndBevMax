@@ -14,7 +14,7 @@ const dayAndTime = new Intl.DateTimeFormat('en-IN', {
 export function whereToEndIt(shift: PosOwnShift) {
   return shift.hasTill
     ? 'End it on that counter’s till, then come back here.'
-    : 'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & Payment Machines → Counters.';
+    : 'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & payment machines → Counters.';
 }
 
 /** "28 Oct, 1:10 pm · 6 days" */

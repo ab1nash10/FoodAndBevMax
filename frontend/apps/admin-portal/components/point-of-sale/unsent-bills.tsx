@@ -4,12 +4,14 @@ import { Button } from '@aahar/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { CloudOff, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/components/auth-provider';
 import { useConfirm } from '@/components/confirm-provider';
 import { Modal } from '@/components/ui-controls';
 import { useToast } from '@/components/toast-provider';
 import { organizationApi } from '@/lib/api';
 import {
   discardBill,
+  isMine,
   queueBill,
   readQueue,
   sendQueued,
@@ -24,10 +26,13 @@ const isWaiting = (bill: QueuedBill) => !bill.error && !bill.discardedAt;
 
 /**
  * Bills this till kept while the server was out of reach, sent on their own when the connection
- * is back (the browser says it is online, the tab is looked at again, or every 30 s).
+ * is back (the browser says it is online, the tab is looked at again, or every 30 s). Each
+ * cashier sends only their own; another cashier's wait for them to sign in here again.
  */
 export function useUnsentBills(counterId = '') {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
+  const userId = currentUser?.id;
   const { showToast } = useToast();
   const [bills, setBills] = useState<QueuedBill[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -47,6 +52,7 @@ export function useUnsentBills(counterId = '') {
       try {
         const sent = await sendQueued(
           counterId,
+          userId,
           (payload) => organizationApi.createPosBill(payload),
           all,
         );
@@ -61,19 +67,19 @@ export function useUnsentBills(counterId = '') {
           });
         }
 
-        return readQueue(counterId).some(isWaiting);
+        return readQueue(counterId).some((bill) => isWaiting(bill) && isMine(bill, userId));
       } finally {
         sendingRef.current = false;
         setIsSending(false);
         refresh();
       }
     },
-    [counterId, queryClient, refresh, showToast],
+    [counterId, queryClient, refresh, showToast, userId],
   );
 
   useEffect(refresh, [refresh]);
 
-  const waiting = bills.filter(isWaiting).length;
+  const { waiting } = counts(bills, userId);
 
   useEffect(() => {
     if (waiting === 0) return undefined;
@@ -103,26 +109,34 @@ export function useUnsentBills(counterId = '') {
     isSending,
     /** False when the device would not keep it. */
     queue(bill: Omit<QueuedBill, 'queuedAt'>) {
-      const kept = queueBill(bill);
+      const kept = queueBill({
+        ...bill,
+        cashierId: userId,
+        cashierName: currentUser?.name ?? undefined,
+      });
       refresh();
       return kept;
     },
     send,
     setOpen,
+    userId,
   };
 }
 
 type UnsentBills = ReturnType<typeof useUnsentBills>;
 
-function counts(bills: QueuedBill[]) {
-  const waiting = bills.filter(isWaiting).length;
-  const attention = bills.filter((bill) => bill.error && !bill.discardedAt).length;
-  return { attention, waiting };
+/** The signed-in cashier's bills waiting or refused, and other cashiers' left for them. */
+function counts(bills: QueuedBill[], userId: string | undefined) {
+  const mine = bills.filter((bill) => isMine(bill, userId));
+  const waiting = mine.filter(isWaiting).length;
+  const attention = mine.filter((bill) => bill.error && !bill.discardedAt).length;
+  const others = bills.filter((bill) => !bill.discardedAt && !isMine(bill, userId)).length;
+  return { attention, others, waiting };
 }
 
 /** The count of unsent bills in the page header; opens the list to retry or discard them. */
 export function UnsentBillsButton({ unsent }: Readonly<{ unsent: UnsentBills }>) {
-  const { attention, waiting } = counts(unsent.bills);
+  const { attention, others, waiting } = counts(unsent.bills, unsent.userId);
 
   if (unsent.bills.length === 0) return null;
 
@@ -138,7 +152,8 @@ export function UnsentBillsButton({ unsent }: Readonly<{ unsent: UnsentBills }>)
       {[
         waiting > 0 && `${waiting} waiting to send`,
         attention > 0 && `${attention} need${attention === 1 ? 's' : ''} attention`,
-        waiting + attention === 0 && `${unsent.bills.length} discarded`,
+        others > 0 && `${others} waiting for another cashier`,
+        waiting + attention + others === 0 && `${unsent.bills.length} discarded`,
       ]
         .filter(Boolean)
         .join(' · ')}
@@ -151,7 +166,7 @@ export function UnsentBillsDialog({ unsent }: Readonly<{ unsent: UnsentBills }>)
   const { showToast } = useToast();
   const confirm = useConfirm();
   const { bills } = unsent;
-  const { attention, waiting } = counts(bills);
+  const { attention, waiting } = counts(bills, unsent.userId);
 
   async function retryNow() {
     if (await unsent.send(true)) {
@@ -207,30 +222,35 @@ export function UnsentBillsDialog({ unsent }: Readonly<{ unsent: UnsentBills }>)
               {' · '}
               {bill.discardedAt
                 ? `Discarded at ${time.format(new Date(bill.discardedAt))}`
-                : 'Not yet sent: no bill number'}
+                : isMine(bill, unsent.userId)
+                  ? 'Not yet sent: no bill number'
+                  : `Waiting for ${bill.cashierName ?? 'another cashier'} to sign in on this till and send it`}
             </p>
             {bill.error && !bill.discardedAt ? (
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-ds-status-bad-fg" role="alert">
                   {bill.error}
                 </p>
-                <Button
-                  onClick={() =>
-                    void confirm({
-                      confirmLabel: 'Discard',
-                      description: 'It will never be sent; settle it with the customer.',
-                      title: `Discard this ${formatMoney(bill.total)} bill?`,
-                      tone: 'danger',
-                    }).then((confirmed) => {
-                      if (confirmed) unsent.discard(bill.payload.clientOrderId);
-                    })
-                  }
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Discard
-                </Button>
+                {/* Another cashier's bill is theirs to settle, not this cashier's to give up. */}
+                {isMine(bill, unsent.userId) ? (
+                  <Button
+                    onClick={() =>
+                      void confirm({
+                        confirmLabel: 'Discard',
+                        description: 'It will never be sent; settle it with the customer.',
+                        title: `Discard this ${formatMoney(bill.total)} bill?`,
+                        tone: 'danger',
+                      }).then((confirmed) => {
+                        if (confirmed) unsent.discard(bill.payload.clientOrderId);
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Discard
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </li>
