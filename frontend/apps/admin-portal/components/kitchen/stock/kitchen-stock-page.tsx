@@ -20,7 +20,6 @@ import {
   AppPageHeader,
   DateTimeCell,
   RecordAvatar,
-  StatStrip,
   StatusChip,
   tableStyles,
 } from '@/components/design-system';
@@ -140,17 +139,9 @@ export function KitchenStockPageClient() {
           itemType: 'READYMADE',
           limit: 0,
           locationId: kitchenFilter,
-          statusCounts: true,
         })
       ).data;
-      const count = (status: StockBalanceStatus) => meta.statusCounts?.[status] ?? 0;
-
-      return {
-        all: meta.total,
-        AVAILABLE: count('AVAILABLE'),
-        LOW_STOCK: count('LOW_STOCK'),
-        OUT_OF_STOCK: count('OUT_OF_STOCK'),
-      };
+      return { all: meta.total };
     },
     queryKey: queryKeys.kitchenStock('stats', hospitalFilter, kitchenFilter),
   });
@@ -174,54 +165,13 @@ export function KitchenStockPageClient() {
     setPage(1);
   }
 
-  function showStatus(status: '' | StockBalanceStatus) {
-    setStatusFilter(status);
-    setPage(1);
-  }
-
   return (
     <section className="space-y-4">
       <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
       <AppPageHeader
         count={stats?.all}
         description="Current READYMADE stock posted from kitchen production entries."
-        title="Kitchen Stock"
-      />
-      <StatStrip
-        label="Kitchen stock at a glance"
-        stats={[
-          {
-            active: !statusFilter,
-            label: 'All stock lines',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: statusFilter === 'AVAILABLE',
-            label: 'Available',
-            onSelect: () => showStatus('AVAILABLE'),
-            share: stats?.all ? stats.AVAILABLE / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.AVAILABLE ?? '–',
-          },
-          {
-            active: statusFilter === 'LOW_STOCK',
-            label: 'Low stock',
-            onSelect: () => showStatus('LOW_STOCK'),
-            share: stats?.all ? stats.LOW_STOCK / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.LOW_STOCK ?? '–',
-          },
-          {
-            active: statusFilter === 'OUT_OF_STOCK',
-            label: 'Out of stock',
-            onSelect: () => showStatus('OUT_OF_STOCK'),
-            share: stats?.all ? stats.OUT_OF_STOCK / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.OUT_OF_STOCK ?? '–',
-          },
-        ]}
+        title="Kitchen stock"
       />
       <Panel className="overflow-hidden">
         <ListToolbar>

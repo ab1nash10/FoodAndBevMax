@@ -239,7 +239,7 @@ export function RestaurantMenuFormFields({
       </Field>
       <Field
         error={errors.itemId?.message ?? errors.categoryId?.message ?? errors.kitchenId?.message}
-        label="Food Item"
+        label="Food item"
         name="menu-item-id"
         required
       >
@@ -332,7 +332,7 @@ export function RestaurantMenuFormFields({
             }
           />
         </Field>
-        <Field label="Food Category" name="category-id">
+        <Field label="Food category" name="category-id">
           <Input
             disabled
             id="category-id"
@@ -390,17 +390,17 @@ export function RestaurantMenuFormFields({
 
       <SectionDivider>Availability</SectionDivider>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={errors.availableFrom?.message} label="Available From" name="available-from">
+        <Field error={errors.availableFrom?.message} label="Available from" name="available-from">
           <Input id="available-from" type="time" {...form.register('availableFrom')} />
         </Field>
-        <Field error={errors.availableTo?.message} label="Available To" name="available-to">
+        <Field error={errors.availableTo?.message} label="Available to" name="available-to">
           <Input id="available-to" type="time" {...form.register('availableTo')} />
         </Field>
       </div>
       <p className="-mt-2 text-xs text-ds-muted">
         Leave both empty to sell it all day. A "to" time earlier than "from" runs past midnight.
       </p>
-      <Field error={errors.daysOfWeek?.message} label="Days Of Week" name="days-of-week">
+      <Field error={errors.daysOfWeek?.message} label="Days of week" name="days-of-week">
         <MultiSelectDropdown
           id="days-of-week"
           onChange={(daysOfWeek) => set('daysOfWeek', daysOfWeek)}
@@ -411,7 +411,7 @@ export function RestaurantMenuFormFields({
       </Field>
       {/* A new menu item always goes last; only an edit can move it. */}
       {isEditing ? (
-        <Field error={errors.positionType?.message} label="Position In Menu" name="position-type">
+        <Field error={errors.positionType?.message} label="Position in menu" name="position-type">
           <Select
             id="position-type"
             onChange={(event) => {
@@ -437,7 +437,7 @@ export function RestaurantMenuFormFields({
       {isEditing && shouldShowReferenceMenu ? (
         <Field
           error={errors.referenceMenuId?.message}
-          label="Reference Item"
+          label="Reference item"
           name="reference-menu-id"
           required
         >
@@ -464,7 +464,7 @@ export function RestaurantMenuFormFields({
       </Field>
       {switchLine('GST Inclusive?', 'isGstInclusive')}
       <fieldset className="grid gap-2">
-        <legend className="mb-2 text-[13px] font-semibold text-ds-text-2">Serve At</legend>
+        <legend className="mb-2 text-[13px] font-semibold text-ds-text-2">Serve at</legend>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {serveAtOptions.map((option) => (
             <label

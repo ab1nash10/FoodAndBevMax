@@ -113,7 +113,7 @@ beforeEach(() => {
   organizationApi.createStoreItem.mockImplementation(() => reply(mapping));
 });
 
-describe('Store Items', () => {
+describe('Store items', () => {
   it('lists the stores’ packaged items at the location', async () => {
     renderScreen(<StoreItemsPageClient />);
 
@@ -128,8 +128,8 @@ describe('Store Items', () => {
     const { user } = renderScreen(<StoreItemsPageClient />);
 
     await user.click(await screen.findByRole('button', { name: 'Map item' }));
-    const dialog = within(screen.getByRole('dialog', { name: /Map Item to Store/i }));
-    // With All Locations in the header, the location is picked here first.
+    const dialog = within(screen.getByRole('dialog', { name: 'Map item to store' }));
+    // With All locations in the header, the location is picked here first.
     expect(dialog.getByRole('combobox', { name: /^Store/ })).toBeDisabled();
     await user.selectOptions(await dialog.findByRole('combobox', { name: /^Location/ }), 'h-skt');
     await user.selectOptions(
@@ -143,7 +143,7 @@ describe('Store Items', () => {
     ).toBeDisabled();
     await user.selectOptions(dialog.getByRole('combobox', { name: /^Item/ }), chips.id);
     await user.selectOptions(dialog.getByRole('combobox', { name: /^Category/ }), packaged.id);
-    await user.click(dialog.getByRole('button', { name: /^Create Store Item/i }));
+    await user.click(dialog.getByRole('button', { name: /^Create store item/i }));
 
     await waitFor(() =>
       expect(organizationApi.createStoreItem).toHaveBeenCalledWith({

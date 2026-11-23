@@ -50,8 +50,8 @@ beforeEach(() => {
   atLocation(ppg);
   signedIn(['KITCHEN_STOCK_VIEW']);
   api.listKitchens.mockReturnValue(page([{ id: 'k-1', kitchenName: 'Main Kitchen' }]) as never);
-  api.listKitchenStock.mockImplementation(((query: { statusCounts?: boolean }) =>
-    query.statusCounts
+  api.listKitchenStock.mockImplementation(((query: { limit?: number }) =>
+    query.limit === 0
       ? reply({
           items: [],
           meta: {
@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 
 const listRequests = () =>
-  api.listKitchenStock.mock.calls.map(([query]) => query).filter((query) => !query?.statusCounts);
+  api.listKitchenStock.mock.calls.map(([query]) => query).filter((query) => query?.limit !== 0);
 
 describe('kitchen stock', () => {
   it('shows each ready-made line with its kitchen, quantities and status', async () => {
@@ -83,20 +83,13 @@ describe('kitchen stock', () => {
     expect(listRequests()[0]).toMatchObject({ hospitalId: ppg.id, itemType: 'READYMADE' });
   });
 
-  it('counts the stock lines by status in the strip', async () => {
-    renderScreen(<KitchenStockPageClient />);
-    const strip = within(screen.getByRole('group', { name: 'Kitchen stock at a glance' }));
-
-    expect(await strip.findByText('6')).toBeInTheDocument();
-    expect(strip.getByRole('button', { name: /Low stock/ })).toHaveTextContent('2');
-  });
-
   it('searches, and filters by status, kitchen and business date', async () => {
     const { user } = renderScreen(<KitchenStockPageClient />);
     await screen.findByText('Dal');
 
     await user.type(screen.getByRole('searchbox', { name: 'Search kitchen stock' }), 'dal');
-    await user.click(screen.getByRole('button', { name: /^Low stock/ }));
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'LOW_STOCK');
     await user.click(screen.getByRole('button', { name: /^Filters/ }));
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Kitchen' }),

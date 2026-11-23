@@ -50,11 +50,11 @@ beforeEach(() => {
 describe('the new employee form', () => {
   it('says what is missing until the name and employment type are given', async () => {
     const { user } = renderScreen(<EmployeeCreatePageClient />);
-    const submit = screen.getByRole('button', { name: 'Create Employee' });
+    const submit = screen.getByRole('button', { name: 'Create employee' });
 
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription('Employee name is required.');
-    await user.type(screen.getByLabelText(/^Employee Name/), 'Meena Das');
+    await user.type(screen.getByLabelText(/^Employee name/), 'Meena Das');
     expect(submit).toHaveAccessibleDescription('Choose on-role or off-role.');
     await user.click(screen.getByRole('radio', { name: 'On-Role' }));
     expect(submit).toBeEnabled();
@@ -62,12 +62,12 @@ describe('the new employee form', () => {
 
   it('picks a reporting manager by search and sends their id', async () => {
     const { user } = renderScreen(<EmployeeCreatePageClient />);
-    await user.type(screen.getByLabelText(/^Employee Name/), 'Meena Das');
+    await user.type(screen.getByLabelText(/^Employee name/), 'Meena Das');
     await user.click(screen.getByRole('radio', { name: 'On-Role' }));
 
-    await user.type(screen.getByLabelText('Reporting Manager'), 'anil');
+    await user.type(screen.getByLabelText('Reporting manager'), 'anil');
     await user.click(await screen.findByRole('button', { name: /Dr Anil Mehta/ }));
-    expect(screen.getByLabelText('Reporting Manager')).toHaveValue('Dr Anil Mehta (EMP0009)');
+    expect(screen.getByLabelText('Reporting manager')).toHaveValue('Dr Anil Mehta (EMP0009)');
     expect(organizationApi.listEmployees).toHaveBeenCalledWith({
       hospitalId: 'h-ppg',
       isActive: true,
@@ -75,7 +75,7 @@ describe('the new employee form', () => {
       search: 'anil',
     });
 
-    await user.click(screen.getByRole('button', { name: 'Create Employee' }));
+    await user.click(screen.getByRole('button', { name: 'Create employee' }));
 
     await waitFor(() =>
       expect(organizationApi.createEmployee).toHaveBeenCalledWith(
@@ -94,11 +94,11 @@ describe('the new employee form', () => {
 
   it('rejects an email that is not one', async () => {
     const { user } = renderScreen(<EmployeeCreatePageClient />);
-    await user.type(screen.getByLabelText(/^Employee Name/), 'Meena Das');
+    await user.type(screen.getByLabelText(/^Employee name/), 'Meena Das');
     await user.click(screen.getByRole('radio', { name: 'On-Role' }));
-    await user.type(screen.getByLabelText('Official Email'), 'meena@');
+    await user.type(screen.getByLabelText('Official email'), 'meena@');
 
-    await user.click(screen.getByRole('button', { name: 'Create Employee' }));
+    await user.click(screen.getByRole('button', { name: 'Create employee' }));
 
     expect(organizationApi.createEmployee).not.toHaveBeenCalled();
   });

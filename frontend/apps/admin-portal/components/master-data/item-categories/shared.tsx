@@ -26,7 +26,7 @@ export function CategoryFormFields({
     <>
       <Field
         error={form.formState.errors.categoryName?.message}
-        label="Category Name"
+        label="Category name"
         name="category-name"
         required
       >

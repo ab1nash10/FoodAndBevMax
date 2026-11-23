@@ -105,14 +105,14 @@ describe('the header location', () => {
     expect(context.isAllLocations).toBe(false);
   });
 
-  it('lets an all-locations user pick All Locations and remembers it', async () => {
+  it('lets an all-locations user pick All locations and remembers it', async () => {
     access({ locationScope: 'ALL' });
     renderProvider();
     await screen.findByText(/^PPG - Patparganj/);
 
     act(() => context.setSelectedLocation(null));
 
-    expect(screen.getByText('All Locations')).toBeInTheDocument();
+    expect(screen.getByText('All locations')).toBeInTheDocument();
     expect(context.scopedHospitalId).toBeUndefined();
     expect(localStorage.getItem('aahar.location-context')).toBe('all');
   });

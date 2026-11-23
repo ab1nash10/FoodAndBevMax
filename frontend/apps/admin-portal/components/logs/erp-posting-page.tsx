@@ -145,7 +145,7 @@ export function ErpPostingPageClient() {
       <AppPageHeader
         description="Each restaurant's day sent to the ERP: what was sent, what the ERP answered, and the files to check it."
         eyebrow="Logs"
-        title="ERP Posting"
+        title="ERP posting"
       />
 
       {!enabled ? (

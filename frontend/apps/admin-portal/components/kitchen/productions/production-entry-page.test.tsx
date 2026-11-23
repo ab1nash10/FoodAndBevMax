@@ -184,6 +184,25 @@ describe('recording a production', () => {
     expect(screen.getByText('Production was not saved')).toBeInTheDocument();
   });
 
+  // Created, then the post failed: a second create would leave the first as a stray draft.
+  it('posts the same draft when a failed post is retried', async () => {
+    api.postKitchenProduction.mockRejectedValueOnce(new Error('Kitchen stock is busy'));
+    const { user } = renderScreen(<ProductionEntryPageClient />);
+    await recordDal(user, '10', '1');
+    await user.click(screen.getByRole('button', { name: 'Continue to check' }));
+
+    await user.click(screen.getByRole('button', { name: 'Post to kitchen stock' }));
+    expect(await screen.findByText('Kitchen stock is busy')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Post to kitchen stock' }));
+
+    expect(await screen.findByText('Posted to kitchen stock')).toBeInTheDocument();
+    expect(api.createKitchenProduction).toHaveBeenCalledTimes(1);
+    // Nothing changed since it was created, so it is posted as it is.
+    expect(api.updateKitchenProduction).not.toHaveBeenCalled();
+    expect(api.postKitchenProduction).toHaveBeenCalledTimes(2);
+    expect(api.postKitchenProduction).toHaveBeenLastCalledWith('kp-1');
+  });
+
   it('can be saved as a draft but not posted without permission to post', async () => {
     signedIn(['KITCHEN_PRODUCTION_VIEW', 'KITCHEN_PRODUCTION_CREATE']);
     const { user } = renderScreen(<ProductionEntryPageClient />);

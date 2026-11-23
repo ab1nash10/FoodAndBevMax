@@ -23,8 +23,8 @@ export const gstSlabs = [0, 5, 12, 18] as const;
 
 export const serveAtOptions: Array<{ label: string; value: MenuServeAt }> = [
   { label: 'Both', value: 'BOTH' },
-  { label: 'Room Only', value: 'ROOM' },
-  { label: 'Counter Only', value: 'COUNTER' },
+  { label: 'Room only', value: 'ROOM' },
+  { label: 'Counter only', value: 'COUNTER' },
 ];
 
 export interface RestaurantMenuFormValues {

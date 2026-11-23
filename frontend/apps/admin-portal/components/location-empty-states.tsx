@@ -9,7 +9,7 @@ import { IfCanOpen } from '@/components/record-link';
 import { TableSkeletonRows } from '@/components/design-system';
 import { getApiErrorMessage } from '@/lib/api';
 
-/** The location chosen in the header, by name; null for "All Locations". */
+/** The location chosen in the header, by name; null for "All locations". */
 export function useLocationName(): string | null {
   const { selectedLocation } = useLocationContext();
 

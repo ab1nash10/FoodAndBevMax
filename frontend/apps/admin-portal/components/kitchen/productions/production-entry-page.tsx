@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import type { KitchenProductionInput } from '@aahar/api-client';
+import type { KitchenProduction, KitchenProductionInput } from '@aahar/api-client';
 import { useConfirm } from '@/components/confirm-provider';
 import {
   FlowStepper,
@@ -256,6 +256,8 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
   const [hasTriedSave, setHasTriedSave] = useState(false);
   const [step, setStep] = useState<ProductionStep>(1);
   const initializedFor = useRef<string | null>(null);
+  // ponytail: kept while this screen stays open; a reload, then a retry, still creates another.
+  const createdDraft = useRef<{ body: string; saved: KitchenProduction } | null>(null);
   const form = useForm<ProductionHeaderFormValues>({
     defaultValues: emptyHeader(scopedHospitalId ?? ''),
   });
@@ -311,6 +313,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
       form.setValue('kitchenId', '', { shouldValidate: true });
       setLines([]);
       setStep(1);
+      createdDraft.current = null;
     }
   }, [form, isExisting, scopedHospitalId]);
 
@@ -361,11 +364,20 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
 
   const saveMutation = useMutation({
     mutationFn: async ({ body, post }: { body: KitchenProductionInput; post: boolean }) => {
-      const saved = (
-        isExisting && productionId
-          ? await organizationApi.updateKitchenProduction(productionId, body)
-          : await organizationApi.createKitchenProduction(body)
-      ).data;
+      // A new production saved before (its post failed) is saved over, or posted as it is when
+      // nothing changed, so a retry never leaves a second, stray draft.
+      const json = JSON.stringify(body);
+      const kept = createdDraft.current;
+      const id = productionId ?? kept?.saved.id;
+      const saved =
+        kept?.body === json
+          ? kept.saved
+          : (id
+              ? await organizationApi.updateKitchenProduction(id, body)
+              : await organizationApi.createKitchenProduction(body)
+            ).data;
+
+      if (!productionId) createdDraft.current = { body: json, saved };
 
       return post ? (await organizationApi.postKitchenProduction(saved.id)).data : saved;
     },
@@ -415,6 +427,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
     setFormError('');
     setHasTriedSave(false);
     setStep(1);
+    createdDraft.current = null;
   }
 
   function addItem(itemId: string) {
@@ -702,7 +715,7 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
       <div
         className={cn(
           production &&
-            'relative isolate space-y-6 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6',
+            'relative isolate space-y-6 overflow-hidden rounded-card border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6',
         )}
       >
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -712,8 +725,8 @@ export function ProductionEntryPageClient({ productionId }: Readonly<{ productio
                 className={cn(
                   'text-ds-text',
                   production
-                    ? 'font-mono text-[28px] font-semibold leading-tight tracking-[-0.02em]'
-                    : 'text-2xl font-extrabold tracking-[-0.01em]',
+                    ? 'font-mono text-xl font-semibold leading-7'
+                    : 'text-xl font-bold leading-7 tracking-[-0.01em]',
                 )}
               >
                 {production?.productionNumber ?? 'New production'}

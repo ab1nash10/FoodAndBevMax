@@ -144,19 +144,6 @@ describe('Employees', () => {
     });
   });
 
-  it('counts all, active, discount-eligible and inactive employees', async () => {
-    renderScreen(<EmployeesPageClient />);
-
-    const stats = within(screen.getByRole('group', { name: 'Employees at a glance' }));
-    expect(await stats.findByRole('button', { name: /All employees\s*2/ })).toBeInTheDocument();
-    expect(stats.getByRole('button', { name: /Inactive\s*1/ })).toBeInTheDocument();
-    expect(organizationApi.listEmployees).toHaveBeenCalledWith({
-      eligibleForDiscount: true,
-      hospitalId: 'h-ppg',
-      limit: 0,
-    });
-  });
-
   it('says there are none at the location', async () => {
     serve([]);
     renderScreen(<EmployeesPageClient />);
@@ -211,7 +198,7 @@ describe('Employees', () => {
       expect(dialog.getByRole('button', { name: 'Create employee' })).toBeDisabled();
       expect(dialog.getByText('Employee name is required.')).toBeInTheDocument();
 
-      await user.type(dialog.getByLabelText(/^Employee Name/), 'Meena Das');
+      await user.type(dialog.getByLabelText(/^Employee name/), 'Meena Das');
       await user.click(dialog.getByRole('button', { name: 'Create employee' }));
 
       expect(await dialog.findByText('Choose on-role or off-role.')).toBeInTheDocument();
@@ -223,7 +210,7 @@ describe('Employees', () => {
       await user.click(screen.getByRole('button', { name: 'New employee' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Create employee' }));
 
-      await user.type(dialog.getByLabelText(/^Employee Name/), 'Meena Das');
+      await user.type(dialog.getByLabelText(/^Employee name/), 'Meena Das');
       await user.click(dialog.getByRole('radio', { name: 'Off-Role' }));
       await user.type(dialog.getByLabelText('Mobile'), '9800000003');
       await user.click(dialog.getByRole('button', { name: 'Create employee' }));
@@ -260,7 +247,7 @@ describe('Employees', () => {
       await user.click(screen.getByRole('button', { name: 'New employee' }));
       const dialog = within(screen.getByRole('dialog', { name: 'Create employee' }));
 
-      await user.type(dialog.getByLabelText(/^Employee Name/), 'Meena Das');
+      await user.type(dialog.getByLabelText(/^Employee name/), 'Meena Das');
       await user.click(dialog.getByRole('radio', { name: 'On-Role' }));
       await user.click(dialog.getByRole('button', { name: 'Create employee' }));
 
@@ -274,7 +261,7 @@ describe('Employees', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Edit Ravi Kumar' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Edit employee' }));
-    expect(dialog.getByLabelText(/^Employee Name/)).toHaveValue('Ravi Kumar');
+    expect(dialog.getByLabelText(/^Employee name/)).toHaveValue('Ravi Kumar');
     await user.clear(dialog.getByLabelText('Department'));
     await user.type(dialog.getByLabelText('Department'), 'Dietetics');
     await user.click(dialog.getByRole('button', { name: 'Save changes' }));

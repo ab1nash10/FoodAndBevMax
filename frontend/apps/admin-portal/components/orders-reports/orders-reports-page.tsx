@@ -11,6 +11,7 @@ import { AppPageHeader, ListPager, tableStyles } from '@/components/design-syste
 import { ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { QueryState } from '@/components/location-empty-states';
+import { providerLabels } from '@/components/point-of-sale/online-payment-dialog';
 import { formatMoney, printBill, todayInIndia } from '@/components/point-of-sale/shared';
 import { useToast } from '@/components/toast-provider';
 import { Field, Input, Label, Panel, Select } from '@/components/ui';
@@ -38,9 +39,9 @@ import {
 type Tab = 'amendments' | 'complimentary' | 'orders';
 
 const tabs: Array<{ label: string; value: Tab }> = [
-  { label: 'Orders & Reports', value: 'orders' },
-  { label: 'Complimentary Orders', value: 'complimentary' },
-  { label: 'Order Amendments', value: 'amendments' },
+  { label: 'Orders & reports', value: 'orders' },
+  { label: 'Complimentary orders', value: 'complimentary' },
+  { label: 'Order amendments', value: 'amendments' },
 ];
 
 const orderedAt = new Intl.DateTimeFormat('en-GB', {
@@ -49,7 +50,7 @@ const orderedAt = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Kolkata',
 });
 
-/** Orders & Reports: every counter bill, the complimentary ones, and amendments to bills. */
+/** Orders & reports: every counter bill, the complimentary ones, and amendments to bills. */
 export function OrdersReportsPageClient() {
   const [tab, setTab] = useUrlParam<Tab>('tab', 'orders', [
     'amendments',
@@ -61,7 +62,7 @@ export function OrdersReportsPageClient() {
     <section className="space-y-4">
       <AppPageHeader
         description="Every bill raised at the counters: its steps, money and payment, the complimentary ones, and amendments made to bills."
-        title="Orders & Reports"
+        title="Orders & reports"
       />
       <PaidNotBilled />
       <Panel className="overflow-hidden">
@@ -139,7 +140,7 @@ function PaidNotBilled() {
                   {formatMoney(item.amount)}
                 </td>
                 <td className={cn(tableStyles.td, 'font-mono text-[12px]')}>
-                  {item.provider} · {item.paymentReference ?? '–'}
+                  {providerLabels[item.provider] ?? item.provider} · {item.paymentReference ?? '–'}
                 </td>
                 <td className={tableStyles.td}>{item.reason ?? '–'}</td>
               </tr>
@@ -200,16 +201,16 @@ const columns: Column[] = [
     cell: (row) => <span className="font-semibold">{row.billNumber}</span>,
     header: 'Bill/Invoice No',
   },
-  { cell: (row) => row.orderNumber, header: 'Order No' },
+  { cell: (row) => row.orderNumber, header: 'Order number' },
   {
     cell: (row) => <span className="font-semibold">{row.finalStatus}</span>,
-    header: 'Final Status',
+    header: 'Final status',
   },
   {
     cell: (row) => (
       <span className="whitespace-nowrap">{orderedAt.format(new Date(row.placedAt))}</span>
     ),
-    header: 'Ordered At',
+    header: 'Ordered at',
   },
   {
     cell: (row) => (
@@ -231,7 +232,7 @@ const columns: Column[] = [
     ),
     header: 'POS Code',
   },
-  { cell: (row) => <YesNo label="In room" yes={row.inRoom} />, header: 'In Room' },
+  { cell: (row) => <YesNo label="In room" yes={row.inRoom} />, header: 'In room' },
   {
     cell: (row) =>
       row.roomNumber ? `${row.roomNumber}${row.bedNumber ? ` / Bed ${row.bedNumber}` : ''}` : '',
@@ -252,7 +253,7 @@ const columns: Column[] = [
         ]}
       />
     ),
-    header: 'Order Time Taken',
+    header: 'Order time taken',
   },
   { cell: (row) => money(row.subtotal), className: 'text-right', header: 'Subtotal' },
   { cell: (row) => money(row.discountTotal), className: 'text-right', header: 'Discount' },
@@ -274,7 +275,7 @@ const columns: Column[] = [
         {row.stewardName ? <span className="text-[12px]">{row.stewardName}</span> : null}
       </span>
     ),
-    header: 'Steward Assigned',
+    header: 'Steward assigned',
   },
   { cell: (row) => <YesNo label="IHC" yes={row.ihc} />, header: 'IHC' },
   { cell: (row) => <YesNo label="Discounted" yes={row.discounted} />, header: 'Discounted' },
@@ -283,7 +284,7 @@ const columns: Column[] = [
   { cell: (row) => <YesNo label="Cancelled" yes={row.cancelled} />, header: 'Cancelled' },
   {
     cell: (row) => <span className="block min-w-32 text-[12px]">{row.cancelReason ?? ''}</span>,
-    header: 'Cancelled Remarks',
+    header: 'Cancelled remarks',
   },
   { cell: (row) => <YesNo label="Refunded" yes={row.refunded} />, header: 'Refunded' },
   {
@@ -291,7 +292,7 @@ const columns: Column[] = [
     header: 'Restaurant',
   },
   { cell: (row) => <YesNo label="Sent on ERP" yes={row.erpSent} />, header: 'Sent on ERP' },
-  { cell: (row) => <YesNo label="Room consent" yes={row.inRoom} />, header: 'Room Consent' },
+  { cell: (row) => <YesNo label="Room consent" yes={row.inRoom} />, header: 'Room consent' },
   {
     cell: (row) => <span className="whitespace-nowrap">{paymentLabel(row)}</span>,
     header: 'Mode of Payment',
@@ -482,7 +483,7 @@ function OrdersTab({ complimentary }: Readonly<{ complimentary: boolean }>) {
           </Select>
         </Field>
         {complimentary ? null : (
-          <Field label="Order Type" name="orders-type">
+          <Field label="Order type" name="orders-type">
             <Select
               id="orders-type"
               onChange={(event) =>
@@ -608,7 +609,7 @@ function AmendmentsTab() {
         {hasPermission('ORDER_AMEND') ? (
           <Button onClick={() => setIsOpen(true)} type="button">
             <Plus className="h-4 w-4" />
-            New Amendment
+            New amendment
           </Button>
         ) : null}
       </ListToolbar>
@@ -617,11 +618,11 @@ function AmendmentsTab() {
           <thead className={tableStyles.head}>
             <tr>
               <th className={cn(tableStyles.th, 'w-28')}>Order ID</th>
-              <th className={cn(tableStyles.th, 'w-44')}>Invoice Number</th>
+              <th className={cn(tableStyles.th, 'w-44')}>Invoice number</th>
               <th className={cn(tableStyles.th, 'w-32')}>Type</th>
               <th className={tableStyles.th}>Remarks</th>
-              <th className={cn(tableStyles.th, 'w-44')}>Amended By</th>
-              <th className={cn(tableStyles.th, 'w-44')}>Amended On</th>
+              <th className={cn(tableStyles.th, 'w-44')}>Amended by</th>
+              <th className={cn(tableStyles.th, 'w-44')}>Amended on</th>
             </tr>
           </thead>
           <tbody>
@@ -630,7 +631,7 @@ function AmendmentsTab() {
                 <tr className={tableStyles.row} key={row.id}>
                   <td className={cn(tableStyles.td, 'font-semibold')}>{row.orderNumber}</td>
                   <td className={cn(tableStyles.td, 'font-semibold')}>{row.billNumber}</td>
-                  <td className={tableStyles.td}>Payment Mode</td>
+                  <td className={tableStyles.td}>Payment mode</td>
                   <td className={tableStyles.td}>
                     <p className="font-semibold text-ds-text">{row.remarks}</p>
                     <p className="text-[12px] text-ds-muted">
@@ -649,7 +650,7 @@ function AmendmentsTab() {
               <QueryState
                 colSpan={6}
                 error={amendmentsQuery.error}
-                hint="An admin amends a bill's payment mode with New Amendment, within 48 hours of billing."
+                hint="An admin amends a bill's payment mode with New amendment, within 48 hours of billing."
                 isError={amendmentsQuery.isError}
                 isLoading={amendmentsQuery.isLoading}
                 label="amendments"
@@ -762,7 +763,7 @@ function NewAmendmentPanel({ onClose }: Readonly<{ onClose: () => void }>) {
       onClose={onClose}
       open
       side
-      title="New Amendment"
+      title="New amendment"
     >
       {chosen ? (
         <div className="space-y-4">

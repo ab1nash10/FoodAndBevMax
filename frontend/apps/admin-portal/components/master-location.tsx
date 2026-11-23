@@ -23,7 +23,7 @@ export function MasterLocationCell({ hospital }: Readonly<{ hospital: HospitalSu
 /**
  * A Super Admin may change any of these records; everyone else only their own locations' ones
  * (the server refuses the rest). New records start at the header's location, or shared for a
- * Super Admin looking at All Locations.
+ * Super Admin looking at All locations.
  */
 export function useMasterEditing() {
   const { availableLocations, canSelectAllLocations, scopedHospitalId } = useLocationContext();

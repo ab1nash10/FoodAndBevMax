@@ -130,26 +130,26 @@ const cellUnder = (header: string, tableRow: HTMLElement) => {
   return within(tableRow).getAllByRole('cell')[headers.indexOf(header)]!;
 };
 
-describe('Orders & Reports', () => {
+describe('Orders & reports', () => {
   it('lists each bill with its steps, money and payment', async () => {
     renderScreen(<OrdersReportsPageClient />);
 
     const bill = (await screen.findByText('PPG/2026/0042')).closest('tr')!;
-    expect(cellUnder('Final Status', bill)).toHaveTextContent('Paid');
+    expect(cellUnder('Final status', bill)).toHaveTextContent('Paid');
     expect(cellUnder('Order', bill)).toHaveTextContent('2 x Veg Sandwich, 1 x Masala Chai');
     expect(cellUnder('POS Code', bill)).toHaveTextContent('POS-01Counter 1');
     expect(cellUnder('Room', bill)).toHaveTextContent('412 / Bed B');
     expect(cellUnder('Table', bill)).toHaveTextContent('');
-    expect(cellUnder('Order Time Taken', bill)).toHaveTextContent(
+    expect(cellUnder('Order time taken', bill)).toHaveTextContent(
       'Order Taken : 3 MinKitchen Taken : 15 MinDelivery Taken : 10 MinTotal Order Time : 30 Min',
     );
-    expect(cellUnder('History', bill)).toHaveTextContent('Ordered At : 19 Nov, 10:30 AM');
+    expect(cellUnder('History', bill)).toHaveTextContent('Ordered at : 19 Nov, 10:30 AM');
     expect(cellUnder('Subtotal', bill)).toHaveTextContent('₹200.00');
     expect(cellUnder('Discount', bill)).toHaveTextContent('₹20.00');
     expect(cellUnder('Total', bill)).toHaveTextContent('₹189.00');
     expect(cellUnder('Mode of Payment', bill)).toHaveTextContent('UPI (Online)');
     expect(cellUnder('Transaction ID', bill)).toHaveTextContent('pay_123');
-    expect(cellUnder('Steward Assigned', bill)).toHaveTextContent('Ravi');
+    expect(cellUnder('Steward assigned', bill)).toHaveTextContent('Ravi');
     expect(within(bill).getByRole('checkbox', { name: 'Completed' })).toBeChecked();
     expect(within(bill).getByRole('img', { name: 'Paid: yes' })).toBeInTheDocument();
     expect(within(bill).getByRole('img', { name: 'Cancelled: no' })).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('Orders & Reports', () => {
     );
     expect(await screen.findByRole('option', { name: 'Till 1 (POS-01)' })).toBeInTheDocument();
     expect(screen.getByLabelText('Restaurant')).toHaveValue('r1');
-    expect(screen.getByLabelText('Order Type')).toHaveValue('non-discounted');
+    expect(screen.getByLabelText('Order type')).toHaveValue('non-discounted');
   });
 
   it('shows a cancelled bill as not completed, with why', async () => {
@@ -224,7 +224,7 @@ describe('Orders & Reports', () => {
 
     const bill = (await screen.findByText('PPG/2026/0042')).closest('tr')!;
     expect(within(bill).getByRole('checkbox', { name: 'Not completed' })).not.toBeChecked();
-    expect(cellUnder('Cancelled Remarks', bill)).toHaveTextContent('Wrong item');
+    expect(cellUnder('Cancelled remarks', bill)).toHaveTextContent('Wrong item');
   });
 
   it('lists only complimentary bills on their tab, without the order type filter', async () => {
@@ -239,7 +239,7 @@ describe('Orders & Reports', () => {
     expect(api.listOrderReports).toHaveBeenCalledWith(
       expect.objectContaining({ discounted: undefined, isComplimentary: true }),
     );
-    expect(screen.queryByLabelText('Order Type')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Order type')).not.toBeInTheDocument();
   });
 
   it('prints a duplicate invoice of a bill', async () => {
@@ -269,7 +269,7 @@ describe('Orders & Reports', () => {
     expect(api.getOrderReportBill).toHaveBeenCalledWith('o1');
     await vi.waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
     const slip = document.querySelector('iframe')!.contentDocument!.body;
-    expect(slip).toHaveTextContent('Duplicate Bill');
+    expect(slip).toHaveTextContent('Duplicate bill');
     expect(slip).toHaveTextContent('Invoice #PPG/2026/0042');
   });
 
@@ -324,7 +324,7 @@ describe('Orders & Reports', () => {
     const refund = screen.getByText('Paneer sold out').closest('tr')!;
     expect(refund).toHaveTextContent('412');
     expect(refund).toHaveTextContent('₹210.00');
-    expect(refund).toHaveTextContent('RAZORPAY · pay_9');
+    expect(refund).toHaveTextContent('Razorpay · pay_9');
     expect(api.listPaidNotBilled).toHaveBeenCalledWith(ppg.id);
   });
 });
@@ -354,10 +354,10 @@ describe('order amendments', () => {
     renderScreen(<OrdersReportsPageClient />);
 
     const line = (await screen.findByText('Guest paid by UPI')).closest('tr')!;
-    expect(line).toHaveTextContent('0042PPG/2026/0042Payment Mode');
+    expect(line).toHaveTextContent('0042PPG/2026/0042Payment mode');
     expect(line).toHaveTextContent('Cash → UPI · UTR9');
     expect(line).toHaveTextContent('Admin');
-    expect(screen.queryByRole('button', { name: 'New Amendment' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New amendment' })).not.toBeInTheDocument();
   });
 
   it('finds a bill of the last 48 hours and changes how it was paid', async () => {
@@ -366,8 +366,8 @@ describe('order amendments', () => {
     api.amendBill.mockImplementation(() => reply({ id: 'a2' }));
     const { user } = renderScreen(<OrdersReportsPageClient />);
 
-    await user.click(await screen.findByRole('button', { name: 'New Amendment' }));
-    const panel = screen.getByRole('dialog', { name: 'New Amendment' });
+    await user.click(await screen.findByRole('button', { name: 'New amendment' }));
+    const panel = screen.getByRole('dialog', { name: 'New amendment' });
     await user.type(within(panel).getByLabelText('Order Number / Bill Number'), ' 0042 ');
     await user.click(within(panel).getByRole('button', { name: 'Find Order' }));
     const found = within(await within(panel).findByRole('list', { name: 'Bills found' }));
@@ -396,7 +396,7 @@ describe('order amendments', () => {
     });
     expect(await screen.findByText('Bill amended')).toBeInTheDocument();
     expect(screen.getByText('PPG/2026/0042 is now paid by UPI.')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'New Amendment' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'New amendment' })).not.toBeInTheDocument();
   });
 
   it('sends no reference for a move to cash', async () => {
@@ -407,7 +407,7 @@ describe('order amendments', () => {
     api.amendBill.mockImplementation(() => reply({ id: 'a2' }));
     const { user } = renderScreen(<OrdersReportsPageClient />);
 
-    await user.click(await screen.findByRole('button', { name: 'New Amendment' }));
+    await user.click(await screen.findByRole('button', { name: 'New amendment' }));
     await user.type(screen.getByLabelText('Order Number / Bill Number'), '0042{Enter}');
     await user.click(await screen.findByRole('button', { name: 'Amend this bill' }));
     expect(screen.getByLabelText(/New payment mode/)).toHaveValue('CASH');
@@ -429,7 +429,7 @@ describe('order amendments', () => {
     );
     const { user } = renderScreen(<OrdersReportsPageClient />);
 
-    await user.click(await screen.findByRole('button', { name: 'New Amendment' }));
+    await user.click(await screen.findByRole('button', { name: 'New amendment' }));
     await user.type(screen.getByLabelText('Order Number / Bill Number'), '0042{Enter}');
 
     expect(await screen.findByText('Billed more than 48 hours ago.')).toBeInTheDocument();
@@ -441,7 +441,7 @@ describe('order amendments', () => {
     api.findAmendableBills.mockImplementation(() => reply({ items: [] }));
     const { user } = renderScreen(<OrdersReportsPageClient />);
 
-    await user.click(await screen.findByRole('button', { name: 'New Amendment' }));
+    await user.click(await screen.findByRole('button', { name: 'New amendment' }));
     await user.type(screen.getByLabelText('Order Number / Bill Number'), '9999{Enter}');
 
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -455,7 +455,7 @@ describe('order amendments', () => {
     api.amendBill.mockRejectedValue(new ApiClientError(409, 'The day is posted to the ERP.'));
     const { user } = renderScreen(<OrdersReportsPageClient />);
 
-    await user.click(await screen.findByRole('button', { name: 'New Amendment' }));
+    await user.click(await screen.findByRole('button', { name: 'New amendment' }));
     await user.type(screen.getByLabelText('Order Number / Bill Number'), '0042{Enter}');
     await user.click(await screen.findByRole('button', { name: 'Amend this bill' }));
     await user.type(screen.getByLabelText(/Transaction ID/), 'UTR9');
@@ -463,6 +463,6 @@ describe('order amendments', () => {
     await user.click(screen.getByRole('button', { name: 'Save amendment' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The day is posted to the ERP.');
-    expect(screen.getByRole('dialog', { name: 'New Amendment' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'New amendment' })).toBeInTheDocument();
   });
 });

@@ -44,7 +44,7 @@ export function OrderBoard({ demo, restaurantId, sound, theme, token }: Readonly
   if (!token && !demo) {
     body = (
       <BoardMessage
-        detail="Open this screen with the board link from AAHAR: Restaurants → Activity → Copy link."
+        detail="Open this screen with the board link from F&B: Restaurants → Activity → Copy link."
         icon={ScanLine}
         title="This screen needs its board link"
         tone="pending"
@@ -64,7 +64,7 @@ export function OrderBoard({ demo, restaurantId, sound, theme, token }: Readonly
       <BoardMessage
         detail="Orders will appear as soon as the connection is back."
         icon={WifiOff}
-        title="Connecting to AAHAR…"
+        title="Connecting to F&B…"
         tone="pending"
       />
     ) : (

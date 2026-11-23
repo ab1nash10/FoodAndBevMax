@@ -128,13 +128,13 @@ beforeEach(() => {
 
 async function openCreate(user: ReturnType<typeof renderScreen>['user']) {
   await user.click(screen.getByRole('button', { name: 'Map item' }));
-  const dialog = within(screen.getByRole('dialog', { name: 'Map Item to Kitchen' }));
+  const dialog = within(screen.getByRole('dialog', { name: 'Map item to kitchen' }));
   await dialog.findByRole('option', { name: 'Main Kitchen (KIT01)' });
   await dialog.findByRole('option', { name: /Masala Dosa/ });
   return dialog;
 }
 
-describe('Kitchen Items', () => {
+describe('Kitchen items', () => {
   it('lists the mappings at the location with type, kitchen and category', async () => {
     renderScreen(<KitchenItemsPageClient />);
 
@@ -199,7 +199,7 @@ describe('Kitchen Items', () => {
       await user.selectOptions(dialog.getByRole('combobox', { name: /^Item/ }), dosa.id);
       expect(dialog.getByText('First mapping: the item becomes Readymade.')).toBeInTheDocument();
       await user.selectOptions(dialog.getByRole('combobox', { name: /^Category/ }), snacks.id);
-      await user.click(dialog.getByRole('button', { name: 'Create Kitchen Item' }));
+      await user.click(dialog.getByRole('button', { name: 'Create kitchen item' }));
 
       await waitFor(() =>
         expect(organizationApi.createKitchenItem).toHaveBeenCalledWith({
@@ -248,7 +248,7 @@ describe('Kitchen Items', () => {
       const { user } = renderScreen(<KitchenItemsPageClient />);
       const dialog = await openCreate(user);
 
-      await user.click(dialog.getByRole('button', { name: 'Create Kitchen Item' }));
+      await user.click(dialog.getByRole('button', { name: 'Create kitchen item' }));
 
       expect(await dialog.findByText('Select an item.')).toBeInTheDocument();
       expect(dialog.getByText('Select a category.')).toBeInTheDocument();
@@ -264,7 +264,7 @@ describe('Kitchen Items', () => {
       await user.selectOptions(dialog.getByRole('combobox', { name: /^Item/ }), dosa.id);
       await user.selectOptions(dialog.getByRole('combobox', { name: /^Category/ }), snacks.id);
 
-      await user.click(dialog.getByRole('button', { name: 'Create Kitchen Item' }));
+      await user.click(dialog.getByRole('button', { name: 'Create kitchen item' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Kitchen item was not created');
       expect(screen.getByRole('alert')).toHaveTextContent('Already mapped');
@@ -284,7 +284,7 @@ describe('Kitchen Items', () => {
     const { user } = renderScreen(<KitchenItemsPageClient />);
 
     await user.click(await screen.findByRole('button', { name: 'Edit Veg Thali in Main Kitchen' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Edit Kitchen Item' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Edit kitchen item' }));
     await dialog.findByRole('option', { name: 'Snacks' });
     await user.selectOptions(dialog.getByRole('combobox', { name: /^Category/ }), snacks.id);
     await user.click(dialog.getByRole('button', { name: 'Save changes' }));

@@ -25,7 +25,7 @@ beforeEach(() => {
 describe('the new item form', () => {
   it('says what is missing until a name and food type are given', async () => {
     const { user } = renderScreen(<ItemCreatePageClient />);
-    const submit = screen.getByRole('button', { name: 'Create Item' });
+    const submit = screen.getByRole('button', { name: 'Create item' });
 
     expect(submit).toHaveAccessibleDescription('Item name is required.');
     await user.type(screen.getByLabelText(/^Item name/), 'masala dosa');
@@ -44,7 +44,7 @@ describe('the new item form', () => {
     await user.type(screen.getByLabelText(/^Item name/), 'masala dosa');
     await user.click(screen.getByRole('radio', { name: 'Veg' }));
     await user.type(screen.getByLabelText('Preparation time'), '12');
-    await user.click(screen.getByRole('button', { name: 'Create Item' }));
+    await user.click(screen.getByRole('button', { name: 'Create item' }));
 
     await waitFor(() =>
       expect(organizationApi.createItem).toHaveBeenCalledWith({
@@ -66,7 +66,7 @@ describe('the new item form', () => {
 
     await user.type(screen.getByLabelText(/^Item name/), 'masala dosa');
     await user.click(screen.getByRole('radio', { name: 'Veg' }));
-    await user.click(screen.getByRole('button', { name: 'Create Item' }));
+    await user.click(screen.getByRole('button', { name: 'Create item' }));
 
     expect(
       await screen.findByText('An item with this name already exists', {

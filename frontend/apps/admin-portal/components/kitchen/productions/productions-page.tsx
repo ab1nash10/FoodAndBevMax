@@ -16,16 +16,10 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import {
-  AppPageHeader,
-  RowAction,
-  StatStrip,
-  StatusChip,
-  tableStyles,
-} from '@/components/design-system';
+import { AppPageHeader, RowAction, StatusChip, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { useToast } from '@/components/toast-provider';
-import { Panel, Skeleton } from '@/components/ui';
+import { Panel, Select, Skeleton } from '@/components/ui';
 import { useAuth } from '@/components/auth-provider';
 import { FilterSearch } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
@@ -168,7 +162,7 @@ export function KitchenProductionsPageClient() {
     ),
   });
 
-  // Every status's total at the chosen location and kitchen, whatever the board shows now.
+  // The total at the chosen location and kitchen, whatever the board shows now.
   const statsQuery = useQuery({
     queryFn: async () => {
       const { meta } = (
@@ -176,17 +170,9 @@ export function KitchenProductionsPageClient() {
           hospitalId: hospitalFilter,
           kitchenId: kitchenFilter,
           limit: 0,
-          statusCounts: true,
         })
       ).data;
-      const count = (status: KitchenProductionStatus) => meta.statusCounts?.[status] ?? 0;
-
-      return {
-        all: meta.total,
-        CANCELLED: count('CANCELLED'),
-        DRAFT: count('DRAFT'),
-        POSTED: count('POSTED'),
-      };
+      return { all: meta.total };
     },
     queryKey: queryKeys.kitchenProductions('stats', hospitalFilter, kitchenFilter),
   });
@@ -287,11 +273,6 @@ export function KitchenProductionsPageClient() {
     (kitchen) => kitchen.id === kitchenFilter,
   );
 
-  function showStatus(status: '' | KitchenProductionStatus) {
-    setStatusFilter(status);
-    setPage(1);
-  }
-
   if (selectedProductionId) {
     return (
       <ProductionEntryPageClient key={selectedProductionId} productionId={selectedProductionId} />
@@ -317,27 +298,6 @@ export function KitchenProductionsPageClient() {
         title="Production board"
       />
 
-      <StatStrip
-        label="Productions at a glance"
-        stats={[
-          {
-            active: !statusFilter,
-            label: 'All productions',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          ...productionColumns.map((column) => ({
-            active: statusFilter === column.status,
-            label: column.label,
-            onSelect: () => showStatus(column.status),
-            share: stats?.all ? stats[column.status] / stats.all : undefined,
-            tone: column.tone,
-            value: stats?.[column.status] ?? '–',
-          })),
-        ]}
-      />
-
       <Panel>
         <ListToolbar>
           <FilterSearch
@@ -349,7 +309,9 @@ export function KitchenProductionsPageClient() {
             placeholder="Number, item or kitchen"
             value={searchInput}
           />
-          <FiltersMenu activeCount={[hospitalParam, kitchenFilter].filter(Boolean).length}>
+          <FiltersMenu
+            activeCount={[hospitalParam, kitchenFilter, statusFilter].filter(Boolean).length}
+          >
             <FilterField label="Location">
               <HospitalSelect
                 disabled={Boolean(scopedHospitalId)}
@@ -372,6 +334,22 @@ export function KitchenProductionsPageClient() {
                 }}
                 value={kitchenFilter}
               />
+            </FilterField>
+            <FilterField label="Status">
+              <Select
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as '' | KitchenProductionStatus);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">All statuses</option>
+                {productionColumns.map((column) => (
+                  <option key={column.status} value={column.status}>
+                    {column.label}
+                  </option>
+                ))}
+              </Select>
             </FilterField>
           </FiltersMenu>
           <SortControl
@@ -407,7 +385,7 @@ export function KitchenProductionsPageClient() {
             return (
               <section
                 aria-label={`${column.label} productions`}
-                className="flex w-75 shrink-0 flex-col self-start rounded-[20px] bg-ds-border/70 px-3 py-3.5 nav:w-auto nav:min-w-0"
+                className="flex w-75 shrink-0 flex-col self-start rounded-card bg-ds-border/70 px-3 py-3.5 nav:w-auto nav:min-w-0"
                 key={column.status}
               >
                 <header className="flex items-center gap-2 px-1 pb-3">
@@ -432,7 +410,7 @@ export function KitchenProductionsPageClient() {
 
                       return (
                         <article
-                          className="rounded-2xl bg-ds-surface px-4 py-3.5 shadow-card ring-1 ring-ds-text/5 transition-shadow duration-150 hover:shadow-card-hover"
+                          className="rounded-card bg-ds-surface px-4 py-3.5 shadow-card ring-1 ring-ds-text/5 transition-shadow duration-150 hover:shadow-card-hover"
                           data-record-id={production.id}
                           key={production.id}
                         >
@@ -554,7 +532,7 @@ export function KitchenProductionsPageClient() {
                       );
                     })
                   ) : (
-                    <p className="rounded-2xl border border-dashed border-ds-muted/35 px-4 py-8 text-center text-sm text-ds-muted">
+                    <p className="rounded-card border border-dashed border-ds-muted/35 px-4 py-8 text-center text-sm text-ds-muted">
                       No {column.label.toLowerCase()} productions
                     </p>
                   )}

@@ -253,7 +253,7 @@ export function LocationProvider({ children }: Readonly<{ children: ReactNode }>
       locationLabel: selectedLocation
         ? formatGlobalLocationLabel(selectedLocation)
         : !isSelectionResolved || canSelectAllLocations
-          ? 'All Locations'
+          ? 'All locations'
           : 'No location assigned',
       locationsFailed,
       retryLocations,

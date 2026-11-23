@@ -2,14 +2,14 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Power, PowerOff } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { Item, ItemInput, SortOrder } from '@aahar/api-client';
+import type { Item, ItemInput, ItemType, SortOrder } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
+import { useConfirm } from '@/components/confirm-provider';
 import { ImportButton } from '@/components/import/import-dialog';
 import { itemImport } from '@/components/import/import-definitions';
 import { CsvImportExport, fetchAllPages, type CsvColumn } from '@/components/csv-import-export';
@@ -20,16 +20,15 @@ import {
   FoodTypeMarker,
   ListPager,
   RecordAvatar,
-  RowAction,
-  StatStrip,
   tableStyles,
 } from '@/components/design-system';
 import { ListViewSwitch, RecordCard, RecordCardGrid, useListView } from '@/components/record-cards';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
-import { FilterSearch, Modal, SegmentedControl, Toggle } from '@/components/ui-controls';
+import { BulkActionBar, FilterSearch, Modal, SegmentedControl } from '@/components/ui-controls';
 import { useBreadcrumbLabel } from '@/components/breadcrumbs';
 import { useAuth } from '@/components/auth-provider';
+import { FoodArt } from '@/components/food-art';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { LoadError } from '@/components/location-empty-states';
 import { IfCanOpen } from '@/components/record-link';
@@ -96,6 +95,32 @@ const itemColumns: Array<CsvColumn<Item>> = [
   { header: 'Status', value: (item) => (item.isActive ? 'Active' : 'Inactive') },
 ];
 
+/** Where an item is made: the Item type filter's choices. */
+const madeViews: Record<ItemType, string> = {
+  LIVE: 'Live counter',
+  MRP: 'Store items',
+  READYMADE: 'Readymade',
+};
+const madeFilterValues = ['LIVE', 'READYMADE', 'MRP'] as const;
+type MadeFilter = '' | ItemType;
+
+/** An item's state in words, a dot before it: the table shows it, the bulk bar changes it. */
+function ItemStatus({ isActive }: Readonly<{ isActive: boolean }>) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
+        isActive
+          ? 'bg-ds-status-ok-bg text-ds-status-ok-fg'
+          : 'bg-ds-status-neutral-bg text-ds-status-neutral-fg',
+      )}
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+      {isActive ? 'Active' : 'Inactive'}
+    </span>
+  );
+}
+
 export function ItemsPageClient() {
   const searchParams = useSearchParams();
   const { hasPermission } = useAuth();
@@ -109,6 +134,8 @@ export function ItemsPageClient() {
     'active',
     'inactive',
   ]);
+  // Where the items are made (Live counter, Readymade, store), the list's views.
+  const [madeFilter, setMadeFilter] = useUrlParam<MadeFilter>('made', '', madeFilterValues);
   const [foodTypeFilter, setFoodTypeFilter] = useUrlParam<FoodTypeFilter>(
     'food',
     '',
@@ -124,6 +151,8 @@ export function ItemsPageClient() {
   // A list (the default) or cards; in the URL like the filters, so a reload keeps it.
   const [view, setView] = useListView('list');
   const [isEditing, setIsEditing] = useState(false);
+  // Rows ticked for a bulk action; only those on the page shown count.
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
   // The open item lives in the URL (?id=), so links from the palette open its pop-up.
   const selectedItemId = searchParams.get('id');
   const queryClient = useQueryClient();
@@ -137,6 +166,7 @@ export function ItemsPageClient() {
     queryFn: async () => {
       const response = await organizationApi.listItems({
         isActive: activeFilterToBoolean(activeFilter),
+        itemType: madeFilter || undefined,
         limit: pageSize,
         page,
         search,
@@ -150,6 +180,7 @@ export function ItemsPageClient() {
     queryKey: queryKeys.items({
       activeFilter,
       foodTypeFilter,
+      madeFilter,
       page,
       pageSize,
       search,
@@ -160,11 +191,9 @@ export function ItemsPageClient() {
 
   const statsQuery = useQuery({
     queryFn: async () => {
-      const count = async (query: { isActive?: boolean }) =>
+      const count = async (query: { isActive?: boolean; itemType?: ItemType }) =>
         (await organizationApi.listItems({ ...query, limit: 0 })).data.meta.total;
-      const [all, inactive] = await Promise.all([count({}), count({ isActive: false })]);
-
-      return { all, inactive };
+      return { all: await count({}) };
     },
     queryKey: queryKeys.items('stats'),
   });
@@ -209,21 +238,22 @@ export function ItemsPageClient() {
     },
   });
 
-  const toggleItemStatusMutation = useMutation({
-    mutationFn: ({ isActive, item }: { isActive: boolean; item: Item }) =>
-      organizationApi.updateItem(item.id, { isActive }),
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ isActive, picked }: { isActive: boolean; picked: Item[] }) =>
+      Promise.all(picked.map((each) => organizationApi.updateItem(each.id, { isActive }))),
     onError(error) {
+      invalidateItemQueries(queryClient);
       showToast({
         description: getApiErrorMessage(error),
-        title: 'Item status was not updated',
+        title: 'Some items were not updated',
         variant: 'error',
       });
     },
-    onSuccess(_response, variables) {
+    onSuccess(_response, { isActive, picked }) {
       invalidateItemQueries(queryClient);
+      setCheckedIds(new Set());
       showToast({
-        recordId: variables.item.id,
-        title: variables.isActive ? 'Item activated' : 'Item deactivated',
+        title: `${picked.length} ${picked.length === 1 ? 'item' : 'items'} ${isActive ? 'activated' : 'deactivated'}`,
         variant: 'success',
       });
     },
@@ -264,15 +294,41 @@ export function ItemsPageClient() {
 
   const canEditItems = hasPermission('ITEM_UPDATE');
 
-  async function toggleItemStatus(item: Item) {
-    const isActive = !item.isActive;
-    const confirmed = await confirmStatusChange(confirm, {
-      activate: isActive,
-      effect: 'It can’t be used in new operations. Existing records stay visible.',
-      name: item.itemName,
-    });
+  const checkedOnPage = items.filter((each) => checkedIds.has(each.id));
+  const allChecked = items.length > 0 && checkedOnPage.length === items.length;
 
-    if (confirmed) toggleItemStatusMutation.mutate({ isActive, item });
+  function toggleChecked(id: string) {
+    setCheckedIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+
+      return next;
+    });
+  }
+
+  async function setPickedStatus(isActive: boolean) {
+    const picked = checkedOnPage;
+    const noun = picked.length === 1 ? 'item' : 'items';
+    const confirmed = await confirm(
+      isActive
+        ? {
+            confirmLabel: 'Activate',
+            description: 'They become available again straight away.',
+            icon: Power,
+            title: `Activate ${picked.length} ${noun}?`,
+          }
+        : {
+            confirmLabel: 'Deactivate',
+            description: 'They can’t be used in new operations. Existing records stay visible.',
+            icon: PowerOff,
+            title: `Deactivate ${picked.length} ${noun}?`,
+            tone: 'danger',
+          },
+    );
+
+    if (confirmed) bulkStatusMutation.mutate({ isActive, picked });
   }
 
   function changeFilter(apply: () => void) {
@@ -283,52 +339,28 @@ export function ItemsPageClient() {
   function clearFilters() {
     setSearch('');
     setActiveFilter('');
+    setMadeFilter('');
     setFoodTypeFilter('');
     setPage(1);
   }
 
-  /** An item's active switch and its state in words; switching it does not open the item. */
-  function itemStatusControl(item: Item) {
-    return (
-      <span className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
-        <Toggle
-          ariaLabel={`${item.itemName} active`}
-          checked={item.isActive}
-          disabled={toggleItemStatusMutation.isPending || !canEditItems}
-          onChange={() => void toggleItemStatus(item)}
-        />
-        <span
-          className={cn(
-            'text-xs font-medium',
-            item.isActive ? 'text-ds-status-ok-fg' : 'text-ds-muted',
-          )}
-        >
-          {item.isActive ? 'Active' : 'Inactive'}
-        </span>
-      </span>
-    );
-  }
-
   function itemEditAction(item: Item) {
     return canEditItems ? (
-      <RowAction
-        icon={Pencil}
+      <Button
+        aria-label={`Edit ${item.itemName}`}
         id={`item-edit-${item.id}`}
-        label={`Edit ${item.itemName}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          editItem(item);
-        }}
-      />
+        onClick={() => editItem(item)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <Pencil aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
+        Edit
+      </Button>
     ) : null;
   }
 
-  const hasFilters = Boolean(searchInput || activeFilter || foodTypeFilter);
-
-  /** A stat's filter: every item, or the inactive ones. */
-  function showOnly(status: ActiveFilter) {
-    changeFilter(() => setActiveFilter(status));
-  }
+  const hasFilters = Boolean(searchInput || activeFilter || madeFilter || foodTypeFilter);
 
   return (
     <section className="space-y-4">
@@ -341,6 +373,7 @@ export function ItemsPageClient() {
                 fetchAllPages((exportPage) =>
                   organizationApi.listItems({
                     isActive: activeFilterToBoolean(activeFilter),
+                    itemType: madeFilter || undefined,
                     limit: 100,
                     page: exportPage,
                     search,
@@ -370,33 +403,38 @@ export function ItemsPageClient() {
         title="Items"
       />
 
-      <StatStrip
-        label="Items at a glance"
-        stats={[
-          {
-            active: activeFilter !== 'inactive',
-            label: 'All items',
-            onSelect: () => showOnly(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showOnly('inactive'),
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.inactive ?? '–',
-          },
-        ]}
-      />
-
       <div className="flex flex-wrap items-start gap-5">
         <Panel
           aria-label="Item list"
           className="min-w-0 flex-[1_1_560px] overflow-hidden"
           role="region"
         >
+          {checkedOnPage.length > 0 ? (
+            <BulkActionBar count={checkedOnPage.length} onClear={() => setCheckedIds(new Set())}>
+              {canEditItems ? (
+                <>
+                  <Button
+                    disabled={bulkStatusMutation.isPending}
+                    onClick={() => void setPickedStatus(true)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Activate
+                  </Button>
+                  <Button
+                    disabled={bulkStatusMutation.isPending}
+                    onClick={() => void setPickedStatus(false)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Deactivate
+                  </Button>
+                </>
+              ) : null}
+            </BulkActionBar>
+          ) : null}
           <ListToolbar>
             <FilterSearch
               label="Search items"
@@ -404,7 +442,9 @@ export function ItemsPageClient() {
               placeholder="Name, code or HSN"
               value={searchInput}
             />
-            <FiltersMenu activeCount={[activeFilter, foodTypeFilter].filter(Boolean).length}>
+            <FiltersMenu
+              activeCount={[activeFilter, madeFilter, foodTypeFilter].filter(Boolean).length}
+            >
               <FilterField label="Status">
                 <Select
                   onChange={(event) =>
@@ -415,6 +455,21 @@ export function ItemsPageClient() {
                   <option value="">All</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
+                </Select>
+              </FilterField>
+              <FilterField label="Item type">
+                <Select
+                  onChange={(event) =>
+                    changeFilter(() => setMadeFilter(event.target.value as MadeFilter))
+                  }
+                  value={madeFilter}
+                >
+                  <option value="">All</option>
+                  {madeFilterValues.map((made) => (
+                    <option key={made} value={made}>
+                      {madeViews[made]}
+                    </option>
+                  ))}
                 </Select>
               </FilterField>
               <FilterField group label="Food type">
@@ -471,42 +526,90 @@ export function ItemsPageClient() {
             </div>
           ) : view === 'list' ? (
             <div className="overflow-x-auto">
-              <table className={cn(tableStyles.table, 'min-w-200 table-fixed')}>
+              <table className={cn(tableStyles.table, 'min-w-[760px]')}>
                 <thead className={tableStyles.head}>
                   <tr>
-                    <th className={cn(tableStyles.th, 'w-[48%]')}>Item</th>
-                    <th className={cn(tableStyles.th, 'w-[10%]')}>HSN</th>
-                    <th className={cn(tableStyles.th, 'w-[10%]')}>Prep time</th>
-                    <th className={cn(tableStyles.th, 'w-[14%]')}>Status</th>
-                    <th className={cn(tableStyles.th, 'w-[12%]')}>Updated</th>
-                    <th className={cn(tableStyles.th, 'w-14')}>
+                    <th className={cn(tableStyles.th, 'w-12 pr-0')}>
+                      <input
+                        aria-label="Select all items on this page"
+                        checked={allChecked}
+                        className="h-4 w-4 accent-ds-primary"
+                        onChange={() =>
+                          setCheckedIds(
+                            allChecked ? new Set() : new Set(items.map((each) => each.id)),
+                          )
+                        }
+                        ref={(input) => {
+                          if (input) {
+                            input.indeterminate = checkedOnPage.length > 0 && !allChecked;
+                          }
+                        }}
+                        type="checkbox"
+                      />
+                    </th>
+                    <th className={cn(tableStyles.th, 'min-w-56')}>Item</th>
+                    <th className={cn(tableStyles.th, 'whitespace-nowrap')}>HSN</th>
+                    <th className={cn(tableStyles.th, 'whitespace-nowrap text-right')}>
+                      Prep time
+                    </th>
+                    <th className={cn(tableStyles.th, 'whitespace-nowrap')}>Status</th>
+                    <th className={cn(tableStyles.th, 'whitespace-nowrap')}>Updated</th>
+                    <th className={cn(tableStyles.th, 'w-px')}>
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item) => (
-                    <tr className={tableStyles.row} data-record-id={item.id} key={item.id}>
+                    <tr
+                      className={cn(tableStyles.row, checkedIds.has(item.id) && 'bg-ds-selected')}
+                      data-record-id={item.id}
+                      key={item.id}
+                    >
+                      <td className={cn(tableStyles.td, 'pr-0')}>
+                        <input
+                          aria-label={`Select ${item.itemName}`}
+                          checked={checkedIds.has(item.id)}
+                          className="h-4 w-4 accent-ds-primary"
+                          onChange={() => toggleChecked(item.id)}
+                          type="checkbox"
+                        />
+                      </td>
                       <td className={tableStyles.td}>
-                        <span className="flex min-w-0 items-center gap-3">
-                          {item.type ? <FoodTypeMarker type={item.type} /> : null}
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <FoodArt
+                            categoryId={item.itemName}
+                            className="h-11 w-11 shrink-0 rounded-[14px]"
+                            name={item.itemName}
+                          />
                           <span className="min-w-0">
-                            <p className={cn('truncate', tableStyles.title)}>{item.itemName}</p>
-                            <p className={cn('truncate', tableStyles.code)}>{item.itemCode}</p>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              {item.type ? <FoodTypeMarker type={item.type} /> : null}
+                              <span className="truncate text-[14.5px] font-semibold text-ds-text">
+                                {item.itemName}
+                              </span>
+                            </span>
+                            <p className={cn('mt-0.5 truncate', tableStyles.code)}>
+                              {item.itemCode}
+                            </p>
                           </span>
                         </span>
                       </td>
                       <td className={cn(tableStyles.td, tableStyles.code)}>
                         {item.hsnCode ?? '–'}
                       </td>
-                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                      <td className={cn(tableStyles.td, 'text-right text-ds-text-2 tabular-nums')}>
                         {item.preparationTimeMinutes ? `${item.preparationTimeMinutes} min` : '–'}
                       </td>
-                      <td className={tableStyles.td}>{itemStatusControl(item)}</td>
-                      <td className={cn(tableStyles.td, 'text-ds-text-2')}>
+                      <td className={tableStyles.td}>
+                        <ItemStatus isActive={item.isActive} />
+                      </td>
+                      <td className={cn(tableStyles.td, 'whitespace-nowrap text-ds-text-2')}>
                         {formatDateOnly(item.updatedAt)}
                       </td>
-                      <td className={tableStyles.td}>{itemEditAction(item)}</td>
+                      <td className={cn(tableStyles.td, 'pr-5 text-right')}>
+                        {itemEditAction(item)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -521,7 +624,7 @@ export function ItemsPageClient() {
                       ? { id: `item-edit-${item.id}`, label: `Edit ${item.itemName}` }
                       : undefined
                   }
-                  footer={itemStatusControl(item)}
+                  footer={<ItemStatus isActive={item.isActive} />}
                   foodType={item.type}
                   id={item.id}
                   key={item.id}
@@ -608,7 +711,7 @@ export function ItemsPageClient() {
                 <Button onClick={() => setIsEditing(false)} type="button" variant="outline">
                   Cancel
                 </Button>
-                <SubmitButton isPending={saveItemMutation.isPending} label="Save item" />
+                <SubmitButton isPending={saveItemMutation.isPending} label="Save changes" />
               </div>
             </form>
           ) : (

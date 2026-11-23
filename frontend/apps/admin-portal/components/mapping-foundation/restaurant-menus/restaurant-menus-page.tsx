@@ -20,7 +20,6 @@ import {
   ListPager,
   RecordAvatar,
   RowAction,
-  StatStrip,
   tableStyles,
 } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
@@ -130,7 +129,7 @@ const restaurantMenuSchema = z
     } else if (values.availableFrom && values.availableFrom === values.availableTo) {
       context.addIssue({
         code: 'custom',
-        message: 'Choose a different time from "Available From".',
+        message: 'Choose a different time from "Available from".',
         path: ['availableTo'],
       });
     }
@@ -369,14 +368,7 @@ export function RestaurantMenusPageClient() {
             limit: 0,
           })
         ).data.meta.total;
-      const [all, available, unavailable, inactive] = await Promise.all([
-        count({}),
-        count({ isAvailable: true }),
-        count({ isAvailable: false }),
-        count({ isActive: false }),
-      ]);
-
-      return { all, available, inactive, unavailable };
+      return { all: await count({}) };
     },
     queryKey: queryKeys.restaurantMenus('stats', scopedHospitalId ?? ''),
   });
@@ -553,14 +545,6 @@ export function RestaurantMenusPageClient() {
     searchInput || restaurantFilter || dayFilter || availabilityFilter || activeFilter,
   );
 
-  /** A stat's filter alone: availability or the inactive status, the other cleared. */
-  function showOnly(availability: AvailabilityFilter, status: ActiveFilter) {
-    changeFilter(() => {
-      setAvailabilityFilter(availability);
-      setActiveFilter(status);
-    });
-  }
-
   function clearFilters() {
     setSearch('');
     setRestaurantFilter('');
@@ -608,44 +592,7 @@ export function RestaurantMenusPageClient() {
         }
         count={stats?.all}
         description="What each restaurant sells, from which store or kitchen, when, and at what price."
-        title="Restaurant Menus"
-      />
-
-      <StatStrip
-        label="Menu items at a glance"
-        stats={[
-          {
-            active: !availabilityFilter && !activeFilter,
-            label: 'Menu items',
-            onSelect: () => showOnly('', ''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: availabilityFilter === 'available',
-            label: 'Available now',
-            onSelect: () => showOnly('available', ''),
-            share: stats?.all ? stats.available / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.available ?? '–',
-          },
-          {
-            active: availabilityFilter === 'unavailable',
-            label: 'Not available',
-            onSelect: () => showOnly('unavailable', ''),
-            share: stats?.all ? stats.unavailable / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.unavailable ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showOnly('', 'inactive'),
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.inactive ?? '–',
-          },
-        ]}
+        title="Restaurant menus"
       />
 
       {restaurantsQuery.data?.length === 0 ? (

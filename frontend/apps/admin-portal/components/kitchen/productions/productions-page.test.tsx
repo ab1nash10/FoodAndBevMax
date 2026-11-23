@@ -67,8 +67,8 @@ beforeEach(() => {
   atLocation(ppg);
   signedIn(chef);
   api.listKitchens.mockReturnValue(page([{ id: 'k-1', kitchenName: 'Main Kitchen' }]) as never);
-  api.listKitchenProductions.mockImplementation(((query: { statusCounts?: boolean }) =>
-    query.statusCounts
+  api.listKitchenProductions.mockImplementation(((query: { limit?: number }) =>
+    query.limit === 0
       ? reply({
           items: [],
           meta: {
@@ -85,7 +85,7 @@ beforeEach(() => {
 const listRequests = () =>
   api.listKitchenProductions.mock.calls
     .map(([query]) => query)
-    .filter((query) => !query?.statusCounts);
+    .filter((query) => query?.limit !== 0);
 const column = (name: string) => within(screen.getByRole('region', { name }));
 
 describe('the production board', () => {
@@ -107,12 +107,11 @@ describe('the production board', () => {
     ).toBeInTheDocument();
   });
 
-  it('counts the productions by status, and shows one column when a status is picked', async () => {
+  it('shows one column when a status is picked in Filters', async () => {
     const { user } = renderScreen(<KitchenProductionsPageClient />);
-    const strip = within(screen.getByRole('group', { name: 'Productions at a glance' }));
 
-    expect(await strip.findByText('7')).toBeInTheDocument();
-    await user.click(strip.getByRole('button', { name: /^Posted/ }));
+    await user.click(await screen.findByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'POSTED');
 
     await waitFor(() => expect(listRequests().at(-1)).toMatchObject({ status: 'POSTED' }));
     expect(screen.queryByRole('region', { name: 'Draft productions' })).toBeNull();

@@ -75,7 +75,7 @@ export function EmployeeCreatePageClient() {
       backHref="/masters/employees"
       icon={UsersRound}
       subtitle="Create an employee record for future staff discount checks."
-      title="Create Employee"
+      title="Create employee"
     >
       <form
         className="grid gap-4"
@@ -88,7 +88,7 @@ export function EmployeeCreatePageClient() {
           <SubmitButton
             disabledReason={disabledReason}
             isPending={createEmployeeMutation.isPending}
-            label="Create Employee"
+            label="Create employee"
           />
         </div>
       </form>

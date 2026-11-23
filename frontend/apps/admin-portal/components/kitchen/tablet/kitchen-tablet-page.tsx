@@ -376,7 +376,7 @@ export function KitchenTabletPageClient() {
             ) : items.length === 0 ? (
               <div className={cn('p-2', card)}>
                 <EmptyState
-                  description="Map the items this kitchen makes under Item & Menu Setup → Item Mapping."
+                  description="Map the items this kitchen makes under Item & menu → Item Mapping."
                   icon={ChefHat}
                   title={term ? 'No item matches' : 'Nothing is mapped to this kitchen'}
                 />

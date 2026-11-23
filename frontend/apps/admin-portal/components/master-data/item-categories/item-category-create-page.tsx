@@ -78,7 +78,7 @@ export function ItemCategoryCreatePageClient() {
       backHref="/masters/item-categories"
       icon={Tags}
       subtitle="Create a global category reusable across hospitals."
-      title="Create Item Category"
+      title="Create item category"
     >
       <form
         className="grid gap-4"
@@ -94,7 +94,7 @@ export function ItemCategoryCreatePageClient() {
                 ?.issues[0]?.message
             }
             isPending={createCategoryMutation.isPending}
-            label="Create Category"
+            label="Create category"
           />
         </div>
       </form>

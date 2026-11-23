@@ -6,6 +6,7 @@ import type * as CsvModule from '@/lib/csv';
 import type * as ApiModule from '@/lib/api';
 import { page, renderScreen, reply } from '@/test/harness';
 import { signedIn } from '@/test/auth';
+import { atLocation } from '@/test/location';
 import { downloadCsv } from '@/lib/csv';
 import { ItemsPageClient } from './items-page';
 
@@ -54,12 +55,24 @@ const omelette = item({
   type: 'EGGETARIAN',
 });
 
+// Counts (limit 0): 2 items, 1 inactive; by where they are made, 1 live, 1 readymade, 0 store.
+const counts: Record<string, number> = { LIVE: 1, MRP: 0, READYMADE: 1 };
+
 function serve(items: Item[]) {
   organizationApi.listItems.mockImplementation((query?: ItemListQuery) =>
     query?.limit === 0
       ? reply({
           items: [],
-          meta: { limit: 0, page: 1, total: query.isActive === false ? 1 : 2, totalPages: 1 },
+          meta: {
+            limit: 0,
+            page: 1,
+            total: query.itemType
+              ? (counts[query.itemType] ?? 0)
+              : query.isActive === false
+                ? 1
+                : 2,
+            totalPages: 1,
+          },
         })
       : page(items),
   );
@@ -77,6 +90,7 @@ const goTo = (url: string) => act(() => window.history.replaceState(null, '', ur
 beforeEach(() => {
   vi.clearAllMocks();
   goTo('/masters/items');
+  atLocation(null);
   signedIn(['ITEM_VIEW', 'ITEM_CREATE', 'ITEM_UPDATE']);
   serve([thali, omelette]);
   organizationApi.updateItem.mockImplementation(() => reply(thali));
@@ -91,10 +105,13 @@ describe('Items', () => {
     expect(thaliRow.getByText('ITM0001')).toBeInTheDocument();
     expect(thaliRow.getByText('2106')).toBeInTheDocument();
     expect(thaliRow.getByText('15 min')).toBeInTheDocument();
-    expect(thaliRow.getByRole('switch', { name: 'Veg Thali active' })).toBeChecked();
-    expect(
-      within(row('Egg Omelette')).getByRole('switch', { name: 'Egg Omelette active' }),
-    ).not.toBeChecked();
+    expect(thaliRow.getByText('Active')).toBeInTheDocument();
+    expect(within(row('Egg Omelette')).getByText('Inactive')).toBeInTheDocument();
+    expect(thaliRow.getByRole('button', { name: 'Edit Veg Thali' })).toHaveTextContent('Edit');
+    // No Made at or Prices columns: the views say where items are made.
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual(
+      ['', 'Item', 'HSN', 'Prep time', 'Status', 'Updated', 'Actions'],
+    );
     expect(lastListQuery()).toMatchObject({
       limit: 25,
       page: 1,
@@ -103,12 +120,36 @@ describe('Items', () => {
     });
   });
 
-  it('counts all and inactive items', async () => {
-    renderScreen(<ItemsPageClient />);
+  it('lists one item type picked in Filters', async () => {
+    const { user } = renderScreen(<ItemsPageClient />);
 
-    const stats = within(screen.getByRole('group', { name: 'Items at a glance' }));
-    expect(await stats.findByRole('button', { name: /All items\s*2/ })).toBeInTheDocument();
-    expect(stats.getByRole('button', { name: /Inactive\s*1/ })).toBeInTheDocument();
+    await screen.findByText('Veg Thali');
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Item type' }), 'READYMADE');
+    await waitFor(() => expect(lastListQuery()).toMatchObject({ itemType: 'READYMADE' }));
+    expect(new URLSearchParams(window.location.search).get('made')).toBe('READYMADE');
+  });
+
+  it('deactivates the picked items together once confirmed', async () => {
+    serve([thali, item({ id: 'i-dosa', itemCode: 'ITM0003', itemName: 'Masala Dosa' })]);
+    const { user } = renderScreen(<ItemsPageClient />);
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Veg Thali' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select Masala Dosa' }));
+    const bar = within(screen.getByRole('region', { name: 'Bulk actions' }));
+    expect(bar.getByText('2 selected')).toBeInTheDocument();
+    await user.click(bar.getByRole('button', { name: 'Deactivate' }));
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Deactivate 2 items?' })).getByRole(
+        'button',
+        { name: 'Deactivate' },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(organizationApi.updateItem).toHaveBeenCalledWith('i-dosa', { isActive: false }),
+    );
+    expect(organizationApi.updateItem).toHaveBeenCalledWith('i-thali', { isActive: false });
   });
 
   it('invites the first item when the catalogue is empty', async () => {
@@ -173,14 +214,16 @@ describe('Items', () => {
 
   it('offers New item and editing only with the permissions for them', async () => {
     signedIn(['ITEM_VIEW']);
-    renderScreen(<ItemsPageClient />);
+    const { user } = renderScreen(<ItemsPageClient />);
     await screen.findByText('Veg Thali');
 
     expect(screen.queryByRole('link', { name: 'New item' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit Veg Thali' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument();
-    // The server refuses a status change without ITEM_UPDATE.
-    expect(screen.getByRole('switch', { name: 'Veg Thali active' })).toBeDisabled();
+    // The server refuses a status change without ITEM_UPDATE: ticked rows offer no Activate.
+    await user.click(screen.getByRole('checkbox', { name: 'Select Veg Thali' }));
+    const bar = within(screen.getByRole('region', { name: 'Bulk actions' }));
+    expect(bar.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument();
   });
 
   it('links New item to its form', async () => {
@@ -220,7 +263,7 @@ describe('Items', () => {
     await user.clear(dialog.getByLabelText('HSN code'));
     await user.clear(dialog.getByLabelText(/^Item name/));
     await user.type(dialog.getByLabelText(/^Item name/), 'Deluxe Veg Thali');
-    await user.click(dialog.getByRole('button', { name: 'Save item' }));
+    await user.click(dialog.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
       expect(organizationApi.updateItem).toHaveBeenCalledWith('i-thali', {
@@ -241,7 +284,7 @@ describe('Items', () => {
     const { user } = renderScreen(<ItemsPageClient />);
 
     await user.click(await screen.findByRole('button', { name: 'Edit Veg Thali' }));
-    await user.click(screen.getByRole('button', { name: 'Save item' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     const dialog = within(screen.getByRole('dialog', { name: 'Edit Veg Thali' }));
     expect(await dialog.findByText('An item with this name already exists')).toBeInTheDocument();
@@ -255,7 +298,7 @@ describe('Items', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'Edit Veg Thali' }));
     await user.clear(dialog.getByLabelText(/^Item name/));
     await user.type(dialog.getByLabelText(/^Item name/), '***');
-    await user.click(dialog.getByRole('button', { name: 'Save item' }));
+    await user.click(dialog.getByRole('button', { name: 'Save changes' }));
 
     expect(
       await dialog.findByText('Item name must include at least one letter or number.'),
@@ -266,10 +309,21 @@ describe('Items', () => {
   it('activates an inactive item once confirmed', async () => {
     const { user } = renderScreen(<ItemsPageClient />);
 
-    await user.click(await screen.findByRole('switch', { name: 'Egg Omelette active' }));
-    await user.click(screen.getByRole('button', { name: 'Activate' }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Egg Omelette' }));
+    await user.click(
+      within(screen.getByRole('region', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Activate',
+      }),
+    );
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Activate 1 item?' })).getByRole('button', {
+        name: 'Activate',
+      }),
+    );
 
-    expect(organizationApi.updateItem).toHaveBeenCalledWith('i-omelette', { isActive: true });
+    await waitFor(() =>
+      expect(organizationApi.updateItem).toHaveBeenCalledWith('i-omelette', { isActive: true }),
+    );
   });
 
   it('exports the same columns the import reads', async () => {

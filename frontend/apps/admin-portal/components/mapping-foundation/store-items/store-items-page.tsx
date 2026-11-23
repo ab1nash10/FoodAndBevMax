@@ -82,8 +82,9 @@ function useStoreOptions(hospitalId?: string) {
 }
 
 /**
- * Inside the Item Mapping page (`embedded`) it drops its own title and shows the page's
- * Store / Kitchen tabs above the list; Create and Edit open in pop-ups.
+ * Inside Item locations (`embedded`) it drops its own title and Map item button: the page's
+ * header has them, and opens the pop-up through `creating`. The page's Store / Kitchen tabs
+ * (`listTabs`) sit on top of the list card, above the search. Create and Edit open in pop-ups.
  */
 /** This store's mappings of an item, for greying out the categories it already has. */
 const existingStoreMappings = {
@@ -93,9 +94,16 @@ const existingStoreMappings = {
 };
 
 export function StoreItemsPageClient({
+  creating,
   embedded = false,
   listTabs,
-}: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
+  onCreatingChange,
+}: Readonly<{
+  creating?: boolean;
+  embedded?: boolean;
+  listTabs?: ReactNode;
+  onCreatingChange?: (open: boolean) => void;
+}> = {}) {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   const [limit, setLimit] = useListLimit(setPage);
@@ -114,7 +122,9 @@ export function StoreItemsPageClient({
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<StoreItem | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [ownCreating, setOwnCreating] = useState(false);
+  const isCreating = creating ?? ownCreating;
+  const setIsCreating = onCreatingChange ?? setOwnCreating;
   // The form's location: the header's, fixed, or picked in the form when the header shows them
   // all. Its stores are the only ones offered.
   const [formHospitalId, setFormHospitalId] = useState(scopedHospitalId ?? '');
@@ -338,7 +348,7 @@ export function StoreItemsPageClient({
         <PageHeader
           icon={StoreIcon}
           subtitle="Choose which packaged items each store keeps."
-          title="Store Items"
+          title="Store items"
         />
       )}
       <Modal
@@ -350,13 +360,13 @@ export function StoreItemsPageClient({
             </Button>
             <Button disabled={saveMappingMutation.isPending} form="create-store-item" type="submit">
               {saveMappingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Create Store Item
+              Create store item
             </Button>
           </div>
         }
         onClose={() => setIsCreating(false)}
         open={isCreating}
-        title="Map Item to Store"
+        title="Map item to store"
       >
         <form
           className="grid gap-4"
@@ -414,7 +424,7 @@ export function StoreItemsPageClient({
         }
         onClose={cancelEditingMapping}
         open={editingMapping !== null}
-        title="Edit Store Item"
+        title="Edit store item"
       >
         <form
           className="grid gap-4"
@@ -446,15 +456,15 @@ export function StoreItemsPageClient({
         </form>
       </Modal>
       <Panel className="overflow-hidden">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ds-divider px-4 pt-3">
-          {listTabs ?? <span />}
-          {hasPermission('STORE_ITEM_CREATE') ? (
-            <Button className="mb-2" onClick={() => setIsCreating(true)} type="button">
+        {listTabs ? <div className="pt-2">{listTabs}</div> : null}
+        {!embedded && hasPermission('STORE_ITEM_CREATE') ? (
+          <div className="flex justify-end border-b border-ds-divider px-4 py-2">
+            <Button onClick={() => setIsCreating(true)} type="button">
               <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
               Map item
             </Button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         <ListToolbar>
           <SearchInput
             label="Search store items"

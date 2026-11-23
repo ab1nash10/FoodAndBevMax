@@ -184,7 +184,7 @@ async function openNew(user: ReturnType<typeof renderScreen>['user']) {
   return dialog;
 }
 
-describe('Restaurant Menus', () => {
+describe('Restaurant menus', () => {
   it('lists what each restaurant sells, from where, when and at what price', async () => {
     renderScreen(<RestaurantMenusPageClient />);
 
@@ -273,11 +273,11 @@ describe('Restaurant Menus', () => {
       const dialog = await openNew(user);
 
       await user.selectOptions(
-        dialog.getByRole('combobox', { name: /^Food Item/ }),
+        dialog.getByRole('combobox', { name: /^Food item/ }),
         dialog.getByRole('option', { name: 'Potato Chips - Packaged · Main Store' }),
       );
       expect(dialog.getByLabelText('Store / Kitchen')).toHaveValue('Main Store (store)');
-      expect(dialog.getByLabelText('Food Category')).toHaveValue('Packaged');
+      expect(dialog.getByLabelText('Food category')).toHaveValue('Packaged');
       await user.type(dialog.getByLabelText(/^Price/), '20');
       await user.type(dialog.getByLabelText(/^In-Room Price/), '25.5');
       await user.click(dialog.getByRole('button', { name: 'Add to menu' }));
@@ -324,10 +324,10 @@ describe('Restaurant Menus', () => {
       const { user } = renderScreen(<RestaurantMenusPageClient />);
       const dialog = await openNew(user);
       await user.selectOptions(
-        dialog.getByRole('combobox', { name: /^Food Item/ }),
+        dialog.getByRole('combobox', { name: /^Food item/ }),
         dialog.getByRole('option', { name: 'Potato Chips - Packaged · Main Store' }),
       );
-      await user.type(dialog.getByLabelText('Available From'), '09:00');
+      await user.type(dialog.getByLabelText('Available from'), '09:00');
 
       await user.click(dialog.getByRole('button', { name: 'Add to menu' }));
 
@@ -343,11 +343,11 @@ describe('Restaurant Menus', () => {
       const { user } = renderScreen(<RestaurantMenusPageClient />);
       const dialog = await openNew(user);
       await user.selectOptions(
-        dialog.getByRole('combobox', { name: /^Food Item/ }),
+        dialog.getByRole('combobox', { name: /^Food item/ }),
         dialog.getByRole('option', { name: 'Potato Chips - Packaged · Main Store' }),
       );
 
-      await user.click(dialog.getByRole('radio', { name: 'Counter Only' }));
+      await user.click(dialog.getByRole('radio', { name: 'Counter only' }));
       expect(dialog.queryByLabelText(/^In-Room Price/)).not.toBeInTheDocument();
       await user.type(dialog.getByLabelText(/^Price/), '20');
       await user.click(dialog.getByRole('button', { name: 'Add to menu' }));
@@ -365,7 +365,7 @@ describe('Restaurant Menus', () => {
       const dialog = await openNew(user);
 
       await user.selectOptions(
-        dialog.getByRole('combobox', { name: /^Food Item/ }),
+        dialog.getByRole('combobox', { name: /^Food item/ }),
         dialog.getByRole('option', { name: 'Masala Dosa - Snacks · Main Kitchen' }),
       );
 
@@ -388,7 +388,7 @@ describe('Restaurant Menus', () => {
     expect(dialog.getByLabelText('Menu item code')).toHaveValue('RMI0001');
     await user.type(dialog.getByLabelText(/^In-Room Price/), '90');
     await user.selectOptions(
-      dialog.getByRole('combobox', { name: 'Position In Menu' }),
+      dialog.getByRole('combobox', { name: 'Position in menu' }),
       'AFTER_ITEM',
     );
     await user.click(dialog.getByRole('button', { name: 'Save changes' }));
@@ -398,7 +398,7 @@ describe('Restaurant Menus', () => {
     expect(
       dialog.queryByRole('option', { name: /Masala Dosa \(ITM0002\)/ }),
     ).not.toBeInTheDocument();
-    await user.selectOptions(dialog.getByRole('combobox', { name: /^Reference Item/ }), id(52));
+    await user.selectOptions(dialog.getByRole('combobox', { name: /^Reference item/ }), id(52));
     await user.click(dialog.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>

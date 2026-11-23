@@ -37,7 +37,6 @@ import {
   DateTimeCell,
   RecordAvatar,
   RowAction,
-  StatStrip,
   tableStyles,
 } from '@/components/design-system';
 import { RowSwitch } from '@/components/mapping-foundation/shared/components';
@@ -239,9 +238,7 @@ export function ItemCategoriesPageClient() {
     queryFn: async () => {
       const count = async (isActive?: boolean) =>
         (await organizationApi.listItemCategories({ isActive, limit: 0 })).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.itemCategories('stats'),
   });
@@ -275,12 +272,6 @@ export function ItemCategoriesPageClient() {
   function clearFilters() {
     setSearch('');
     setActiveFilter('');
-    setPage(1);
-  }
-
-  /** A stat's status filter alone. */
-  function showStatus(status: ActiveFilter) {
-    setActiveFilter(status);
     setPage(1);
   }
 
@@ -354,36 +345,7 @@ export function ItemCategoriesPageClient() {
         }
         count={stats?.all}
         description="Configure global item grouping reusable across hospitals."
-        title="Item Categories"
-      />
-
-      <StatStrip
-        label="Item categories at a glance"
-        stats={[
-          {
-            active: !activeFilter,
-            label: 'All categories',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            share: stats?.all ? stats.active / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showStatus('inactive'),
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.inactive ?? '–',
-          },
-        ]}
+        title="Item categories"
       />
 
       <Modal

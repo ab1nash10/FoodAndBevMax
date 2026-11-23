@@ -84,7 +84,7 @@ beforeEach(() => {
   );
 });
 
-describe('ERP Posting', () => {
+describe('ERP posting', () => {
   it('lists each day sent, its result, and who sent it', async () => {
     renderScreen(<ErpPostingPageClient />);
 

@@ -168,7 +168,7 @@ function ReportingManagerField({
 
   if (manager) {
     return (
-      <Field label="Reporting Manager" name="employee-manager">
+      <Field label="Reporting manager" name="employee-manager">
         <div className="flex gap-2">
           <Input
             id="employee-manager"
@@ -192,7 +192,7 @@ function ReportingManagerField({
       excludeId={employeeId}
       hospitalId={hospitalId}
       id="employee-manager"
-      label="Reporting Manager"
+      label="Reporting manager"
       onPick={(match) =>
         form.setValue(
           'reportingManager',
@@ -236,13 +236,13 @@ export function EmployeeFormFields({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           error={errors.employeeName?.message}
-          label="Employee Name"
+          label="Employee name"
           name="employee-name"
           required
         >
           <Input id="employee-name" {...form.register('employeeName')} />
         </Field>
-        <Field error={errors.employeeCode?.message} label="Employee Code" name="employee-code">
+        <Field error={errors.employeeCode?.message} label="Employee code" name="employee-code">
           <Input
             id="employee-code"
             placeholder="Left empty, one is made (EMP0001)"
@@ -251,7 +251,7 @@ export function EmployeeFormFields({
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={errors.officialEmail?.message} label="Official Email" name="employee-email">
+        <Field error={errors.officialEmail?.message} label="Official email" name="employee-email">
           <Input id="employee-email" type="email" {...form.register('officialEmail')} />
         </Field>
         <Field error={errors.mobile?.message} label="Mobile" name="employee-mobile">
@@ -259,12 +259,12 @@ export function EmployeeFormFields({
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={errors.birthDate?.message} label="Birth Date" name="employee-birth-date">
+        <Field error={errors.birthDate?.message} label="Birth date" name="employee-birth-date">
           <Input id="employee-birth-date" type="date" {...form.register('birthDate')} />
         </Field>
         <Field
           error={errors.joiningDate?.message}
-          label="Joining Date"
+          label="Joining date"
           name="employee-joining-date"
         >
           <Input id="employee-joining-date" type="date" {...form.register('joiningDate')} />
@@ -280,7 +280,7 @@ export function EmployeeFormFields({
             ['OUTSOURCED', 'Off-Role'],
           ]}
           required
-          title="Employment Type"
+          title="Employment type"
         />
         <RadioGroup
           error={errors.gender?.message}
@@ -302,7 +302,7 @@ export function EmployeeFormFields({
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={errors.employeeLevel?.message} label="Employee Level" name="employee-level">
+        <Field error={errors.employeeLevel?.message} label="Employee level" name="employee-level">
           <Input id="employee-level" {...form.register('employeeLevel')} />
         </Field>
         <ReportingManagerField employeeId={employeeId} form={form} />

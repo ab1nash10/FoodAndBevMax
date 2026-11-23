@@ -23,7 +23,6 @@ import {
   DateTimeCell,
   RecordAvatar,
   RowAction,
-  StatStrip,
   tableStyles,
 } from '@/components/design-system';
 import { useToast } from '@/components/toast-provider';
@@ -141,14 +140,7 @@ export function EmployeesPageClient() {
             limit: 0,
           })
         ).data.meta.total;
-      const [all, active, eligible, inactive] = await Promise.all([
-        count({}),
-        count({ isActive: true }),
-        count({ eligibleForDiscount: true }),
-        count({ isActive: false }),
-      ]);
-
-      return { active, all, eligible, inactive };
+      return { all: await count({}) };
     },
     queryKey: queryKeys.employees('stats', scopedHospitalId ?? 'all'),
   });
@@ -242,13 +234,6 @@ export function EmployeesPageClient() {
     setPage(1);
   }
 
-  /** A stat's filter alone: the status or discount eligibility, the other cleared. */
-  function showOnly(status: ActiveFilter, discount: DiscountFilter) {
-    setActiveFilter(status);
-    setDiscountFilter(discount);
-    setPage(1);
-  }
-
   function openCreate() {
     form.reset(emptyEmployeeFormValues(defaultHospitalId));
     setDialog({ mode: 'create' });
@@ -303,41 +288,6 @@ export function EmployeesPageClient() {
         count={stats?.all}
         description="Maintain employee records for future staff discount validation."
         title="Employees"
-      />
-      <StatStrip
-        label="Employees at a glance"
-        stats={[
-          {
-            active: !activeFilter && !discountFilter,
-            label: 'All employees',
-            onSelect: () => showOnly('', ''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active' && !discountFilter,
-            label: 'Active',
-            onSelect: () => showOnly('active', ''),
-            share: stats?.all ? stats.active / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.active ?? '–',
-          },
-          {
-            active: discountFilter === 'eligible' && !activeFilter,
-            label: 'Discount eligible',
-            onSelect: () => showOnly('', 'eligible'),
-            share: stats?.all ? stats.eligible / stats.all : undefined,
-            value: stats?.eligible ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive' && !discountFilter,
-            label: 'Inactive',
-            onSelect: () => showOnly('inactive', ''),
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.inactive ?? '–',
-          },
-        ]}
       />
 
       <Panel className="overflow-hidden">

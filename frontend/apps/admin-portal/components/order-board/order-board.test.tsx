@@ -95,6 +95,28 @@ describe('the order board', () => {
     ).toBeInTheDocument();
   });
 
+  // A 404 can be passing (a deploy, a restaurant switched back on): the TV must not need a restart.
+  it('keeps checking a refused link, slower than its refresh, and comes back when it works', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.getBoardFeed.mockRejectedValue(new ApiClientError(404, 'Not found'));
+      renderScreen(board('t'));
+      await screen.findByRole('heading', { name: 'This board link is no longer valid' });
+
+      api.getBoardFeed.mockImplementation(() => reply(feed()));
+      await act(() => vi.advanceTimersByTimeAsync(3500));
+      expect(api.getBoardFeed).toHaveBeenCalledTimes(1);
+      await act(() => vi.advanceTimersByTimeAsync(3000));
+
+      expect(
+        await screen.findByRole('heading', { name: 'No orders right now' }),
+      ).toBeInTheDocument();
+      expect(api.getBoardFeed).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('explains how it works while there are no orders', async () => {
     renderScreen(board('t'));
 

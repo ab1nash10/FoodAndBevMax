@@ -85,7 +85,7 @@ export function ItemCreatePageClient() {
       backHref="/masters/items"
       icon={PackageOpen}
       subtitle="Create a global item for future menu, inventory, and billing workflows."
-      title="Create Item"
+      title="Create item"
     >
       <form
         className="grid gap-4"
@@ -98,7 +98,7 @@ export function ItemCreatePageClient() {
           <SubmitButton
             disabledReason={disabledReason}
             isPending={createItemMutation.isPending}
-            label="Create Item"
+            label="Create item"
           />
         </div>
       </form>

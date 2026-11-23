@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { FnbMark } from '@/components/design-system';
 import { withBasePath } from '@/lib/base-path';
 import { formatDay, formatSlot, formatTime } from '@/lib/order-board/format';
 import styles from './board.module.css';
@@ -45,7 +46,7 @@ export function BoardHeader({
   return (
     <header className="flex h-[124px] shrink-0 items-center gap-[24px] px-[56px]">
       <div className="flex min-w-0 flex-1 basis-0 items-center gap-[24px]">
-        <LogoChip alt="AAHAR" src="/brand/aahar-logo.png" width={56} />
+        <FnbMark className="h-[56px] w-[56px] rounded-[16px] text-[18px]" />
         <div className="min-w-0">
           <h1 className="truncate text-[44px] font-bold leading-none tracking-[-0.03em]">
             {restaurantName ?? ''}

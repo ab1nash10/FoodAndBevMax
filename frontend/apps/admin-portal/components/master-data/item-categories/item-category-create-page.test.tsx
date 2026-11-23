@@ -25,10 +25,10 @@ beforeEach(() => {
 describe('the new category form', () => {
   it('needs a name before it can be created', async () => {
     const { user } = renderScreen(<ItemCategoryCreatePageClient />);
-    const submit = screen.getByRole('button', { name: 'Create Category' });
+    const submit = screen.getByRole('button', { name: 'Create category' });
 
     expect(submit).toHaveAccessibleDescription('Category name is required.');
-    await user.type(screen.getByLabelText(/^Category Name/), 'Snacks');
+    await user.type(screen.getByLabelText(/^Category name/), 'Snacks');
     expect(submit).toBeEnabled();
   });
 
@@ -38,9 +38,9 @@ describe('the new category form', () => {
     );
     const { user } = renderScreen(<ItemCategoryCreatePageClient />);
 
-    await user.type(screen.getByLabelText(/^Category Name/), '  Snacks ');
+    await user.type(screen.getByLabelText(/^Category name/), '  Snacks ');
     await user.click(screen.getByRole('checkbox', { name: 'Active' }));
-    await user.click(screen.getByRole('button', { name: 'Create Category' }));
+    await user.click(screen.getByRole('button', { name: 'Create category' }));
 
     await waitFor(() =>
       expect(organizationApi.createItemCategory).toHaveBeenCalledWith({
@@ -59,8 +59,8 @@ describe('the new category form', () => {
     );
     const { user } = renderScreen(<ItemCategoryCreatePageClient />);
 
-    await user.type(screen.getByLabelText(/^Category Name/), 'snacks!');
-    await user.click(screen.getByRole('button', { name: 'Create Category' }));
+    await user.type(screen.getByLabelText(/^Category name/), 'snacks!');
+    await user.click(screen.getByRole('button', { name: 'Create category' }));
 
     expect(
       await screen.findByText('Similar category already exists', { selector: 'p.font-medium' }),

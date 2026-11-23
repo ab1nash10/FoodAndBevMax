@@ -96,8 +96,9 @@ function useKitchenOptions(hospitalId?: string) {
 }
 
 /**
- * Inside the Item Mapping page (`embedded`) it drops its own title and shows the page's
- * Store / Kitchen tabs above the list; Create and Edit open in pop-ups.
+ * Inside Item locations (`embedded`) it drops its own title and Map item button: the page's
+ * header has them, and opens the pop-up through `creating`. The page's Store / Kitchen tabs
+ * (`listTabs`) sit on top of the list card, above the search. Create and Edit open in pop-ups.
  */
 /** This kitchen's mappings of an item, for greying out the categories it already has. */
 const existingKitchenMappings = {
@@ -108,9 +109,16 @@ const existingKitchenMappings = {
 };
 
 export function KitchenItemsPageClient({
+  creating,
   embedded = false,
   listTabs,
-}: Readonly<{ embedded?: boolean; listTabs?: ReactNode }> = {}) {
+  onCreatingChange,
+}: Readonly<{
+  creating?: boolean;
+  embedded?: boolean;
+  listTabs?: ReactNode;
+  onCreatingChange?: (open: boolean) => void;
+}> = {}) {
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const [page, setPage] = useUrlNumberParam('page');
   const [limit, setLimit] = useListLimit(setPage);
@@ -134,7 +142,9 @@ export function KitchenItemsPageClient({
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [editingMapping, setEditingMapping] = useState<KitchenItem | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [ownCreating, setOwnCreating] = useState(false);
+  const isCreating = creating ?? ownCreating;
+  const setIsCreating = onCreatingChange ?? setOwnCreating;
   // The form's location: the header's, fixed, or picked in the form when the header shows them
   // all. Its kitchens are the only ones offered.
   const [formHospitalId, setFormHospitalId] = useState(scopedHospitalId ?? '');
@@ -374,7 +384,7 @@ export function KitchenItemsPageClient({
         <PageHeader
           icon={ChefHat}
           subtitle="Map readymade items to kitchens for future production handoff."
-          title="Kitchen Items"
+          title="Kitchen items"
         />
       )}
       <Modal
@@ -390,13 +400,13 @@ export function KitchenItemsPageClient({
               type="submit"
             >
               {saveMappingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Create Kitchen Item
+              Create kitchen item
             </Button>
           </div>
         }
         onClose={() => setIsCreating(false)}
         open={isCreating}
-        title="Map Item to Kitchen"
+        title="Map item to kitchen"
       >
         <form
           className="grid gap-4"
@@ -456,7 +466,7 @@ export function KitchenItemsPageClient({
         }
         onClose={cancelEditingMapping}
         open={editingMapping !== null}
-        title="Edit Kitchen Item"
+        title="Edit kitchen item"
       >
         <form
           className="grid gap-4"
@@ -488,15 +498,15 @@ export function KitchenItemsPageClient({
         </form>
       </Modal>
       <Panel className="overflow-hidden">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ds-divider px-4 pt-3">
-          {listTabs ?? <span />}
-          {hasPermission('KITCHEN_ITEM_CREATE') ? (
-            <Button className="mb-2" onClick={() => setIsCreating(true)} type="button">
+        {listTabs ? <div className="pt-2">{listTabs}</div> : null}
+        {!embedded && hasPermission('KITCHEN_ITEM_CREATE') ? (
+          <div className="flex justify-end border-b border-ds-divider px-4 py-2">
+            <Button onClick={() => setIsCreating(true)} type="button">
               <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
               Map item
             </Button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         <ListToolbar>
           <SearchInput
             label="Search kitchen items"

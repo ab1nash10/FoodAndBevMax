@@ -49,7 +49,7 @@ describe('a failed load', () => {
   it('puts a network failure in plain words', () => {
     renderScreen(<LoadError error={new TypeError('Failed to fetch')} />);
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Unable to connect to AAHAR services.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Unable to connect to F&B services.');
   });
 });
 

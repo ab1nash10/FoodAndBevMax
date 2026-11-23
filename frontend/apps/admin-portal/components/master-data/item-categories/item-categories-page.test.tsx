@@ -80,15 +80,13 @@ beforeEach(() => {
   );
 });
 
-describe('Item Categories', () => {
+describe('Item categories', () => {
   it('lists the categories in menu order with their status', async () => {
     renderScreen(<ItemCategoriesPageClient />);
 
     expect(await screen.findByText('Snacks')).toBeInTheDocument();
     expect(within(row('Sweets')).getByRole('switch', { name: 'Sweets active' })).not.toBeChecked();
     expect(lastListQuery()).toMatchObject({ page: 1, sortBy: 'sortOrder', sortOrder: 'asc' });
-    const stats = within(screen.getByRole('group', { name: 'Item categories at a glance' }));
-    expect(await stats.findByRole('button', { name: /All categories\s*3/ })).toBeInTheDocument();
   });
 
   it('says there are none, without naming a location (categories are shared)', async () => {
@@ -125,8 +123,8 @@ describe('Item Categories', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Edit Snacks' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Edit category' }));
-    await user.clear(dialog.getByLabelText(/^Category Name/));
-    await user.type(dialog.getByLabelText(/^Category Name/), 'Hot Snacks');
+    await user.clear(dialog.getByLabelText(/^Category name/));
+    await user.type(dialog.getByLabelText(/^Category name/), 'Hot Snacks');
     await user.click(dialog.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
