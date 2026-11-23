@@ -38,7 +38,7 @@ const rowLine = (row: GrnRefusal['rows'][number]) =>
   `${row.part_item_code} · ${row.batch} · ${row.flag === 1 ? 'return' : 'in'} ${numberFormat.format(row.transaction_qty)}`;
 
 /**
- * GRNs the ERP sent that AAHAR refused, newest first: nothing was saved and no stock moved. Each
+ * GRNs the ERP sent that F&B refused, newest first: nothing was saved and no stock moved. Each
  * shows every reason and what it asked for, for the store team to take up with the ERP.
  */
 export function ErpGrnErrorsPage() {
@@ -70,7 +70,7 @@ export function ErpGrnErrorsPage() {
   return (
     <section className="space-y-4">
       <AppPageHeader
-        description="GRNs the ERP sent that AAHAR refused, with why. Nothing of these was saved and no stock moved."
+        description="GRNs the ERP sent that F&B refused, with why. Nothing of these was saved and no stock moved."
         eyebrow="Logs"
         title="ERP GRN errors"
       />
@@ -151,7 +151,7 @@ export function ErpGrnErrorsPage() {
                       description={
                         activeFilters
                           ? 'Try other filters.'
-                          : 'A GRN AAHAR cannot take is listed here, with why.'
+                          : 'A GRN F&B cannot take is listed here, with why.'
                       }
                       icon={FileWarning}
                       title="No refused GRNs"

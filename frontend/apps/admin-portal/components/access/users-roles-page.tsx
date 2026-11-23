@@ -12,7 +12,6 @@ import {
   ListPager,
   RecordAvatar,
   RowAction,
-  StatStrip,
   tableStyles,
 } from '@/components/design-system';
 import { BulkLocationBar } from '@/components/access/bulk-location-bar';
@@ -188,7 +187,7 @@ export function UsersRolesPageClient() {
   const [page, setPage] = useUrlNumberParam('page');
   // 50 users a page unless another size is picked under the list.
   const [limit, setLimit] = useListLimit(setPage, 50);
-  // The users working at the location chosen in the sidebar ("All Locations": everyone reachable).
+  // The users working at the location chosen in the sidebar ("All locations": everyone reachable).
   const { isLoadingLocations, scopedHospitalId } = useLocationContext();
   const hospitalScope = scopedHospitalId ?? 'all';
 
@@ -223,10 +222,8 @@ export function UsersRolesPageClient() {
   });
   // Operator roles have their own screen (/operators).
   const roles = (rolesQuery.data?.items ?? []).filter((role) => !role.isOperator);
-  const superAdminRoleId = roles.find((role) => role.name === SUPER_ADMIN_ROLE)?.id;
   // Totals at the chosen location; Super Admins once the roles say which role that is.
   const statsQuery = useQuery({
-    enabled: !rolesQuery.isLoading,
     queryFn: async () => {
       const count = async (query: { roleId?: string; status?: UserStatus }) =>
         (
@@ -238,16 +235,9 @@ export function UsersRolesPageClient() {
             page: 1,
           })
         ).data.meta.total;
-      const [all, active, disabled, superAdmins] = await Promise.all([
-        count({}),
-        count({ status: 'ACTIVE' }),
-        count({ status: 'DISABLED' }),
-        superAdminRoleId ? count({ roleId: superAdminRoleId }) : null,
-      ]);
-
-      return { active, all, disabled, superAdmins };
+      return { all: await count({}) };
     },
-    queryKey: queryKeys.accessUsers('ADMINS', 'stats', hospitalScope, superAdminRoleId ?? 'none'),
+    queryKey: queryKeys.accessUsers('ADMINS', 'stats', hospitalScope),
   });
   const stats = statsQuery.data;
   const users = usersQuery.data?.items ?? [];
@@ -286,14 +276,6 @@ export function UsersRolesPageClient() {
     });
   }
 
-  /** A stat's filter alone: the status or the role, the other cleared. */
-  function showOnly(status: '' | UserStatus, roleId: string) {
-    changeFilter(() => {
-      setStatusFilter(status);
-      setRoleFilter(roleId);
-    });
-  }
-
   return (
     <section className="space-y-4">
       <AppPageHeader
@@ -308,43 +290,6 @@ export function UsersRolesPageClient() {
         count={stats?.all}
         description="Super Admins, Admins and every role that is not an operator: create them, assign roles, and manage permission overrides."
         title="Admins"
-      />
-      <StatStrip
-        label="Users at a glance"
-        stats={[
-          {
-            active: !statusFilter && !roleFilter,
-            label: 'Users',
-            onSelect: () => showOnly('', ''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: statusFilter === 'ACTIVE' && !roleFilter,
-            label: 'Active',
-            onSelect: () => showOnly('ACTIVE', ''),
-            share: stats?.all ? stats.active / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.active ?? '–',
-          },
-          {
-            active: statusFilter === 'DISABLED' && !roleFilter,
-            label: 'Disabled',
-            onSelect: () => showOnly('DISABLED', ''),
-            share: stats?.all ? stats.disabled / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.disabled ?? '–',
-          },
-          {
-            active: Boolean(superAdminRoleId) && roleFilter === superAdminRoleId && !statusFilter,
-            label: 'Super Admins',
-            onSelect: superAdminRoleId ? () => showOnly('', superAdminRoleId) : undefined,
-            share:
-              stats?.all && stats.superAdmins !== null ? stats.superAdmins / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.superAdmins ?? '–',
-          },
-        ]}
       />
       <Panel className="overflow-hidden">
         <ListToolbar>

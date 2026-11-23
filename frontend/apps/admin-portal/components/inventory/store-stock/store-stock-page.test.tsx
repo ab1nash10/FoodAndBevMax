@@ -65,8 +65,8 @@ beforeEach(() => {
   atLocation(ppg);
   signedIn(['STOCK_VIEW']);
   api.listStores.mockReturnValue(page([]));
-  api.listStoreStockSummaries.mockImplementation(((query: { statusCounts?: boolean }) =>
-    query.statusCounts
+  api.listStoreStockSummaries.mockImplementation(((query: { limit?: number }) =>
+    query.limit === 0
       ? reply({
           items: [],
           meta: {
@@ -83,7 +83,7 @@ beforeEach(() => {
 const listRequests = () =>
   api.listStoreStockSummaries.mock.calls
     .map(([query]) => query)
-    .filter((query) => !query?.statusCounts);
+    .filter((query) => query?.limit !== 0);
 
 describe('store stock', () => {
   it('shows each item’s store, category, available and reserved quantity and status', async () => {
@@ -97,15 +97,6 @@ describe('store stock', () => {
     expect(within(row).getByText('Readymade')).toBeInTheDocument();
     expect(within(row).getByText('Available')).toBeInTheDocument();
     expect(listRequests()[0]).toMatchObject({ hospitalId: ppg.id, locationType: 'STORE' });
-  });
-
-  it('counts the location’s stock by status in the strip', async () => {
-    renderScreen(<StoreStockPageClient />);
-    const strip = within(screen.getByRole('group', { name: 'Store stock at a glance' }));
-
-    expect(await strip.findByText('30')).toBeInTheDocument();
-    expect(strip.getByText('4')).toBeInTheDocument();
-    expect(strip.getByText('2')).toBeInTheDocument();
   });
 
   it('shows the batches of an item when its row is expanded', async () => {
@@ -152,7 +143,8 @@ describe('store stock', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search store stock' }), 'pan');
     await waitFor(() => expect(listRequests().at(-1)).toMatchObject({ search: 'pan' }));
 
-    await user.click(screen.getByRole('button', { name: /Expiring in 30 days/ }));
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'NEAR_EXPIRY');
     await waitFor(() => expect(listRequests().at(-1)).toMatchObject({ status: 'NEAR_EXPIRY' }));
 
     await user.click(screen.getByRole('button', { name: /^Filters/ }));

@@ -1,6 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ClipboardCheck } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AppPageHeader,
@@ -8,9 +7,7 @@ import {
   FlowStepper,
   FoodTypeMarker,
   ListPager,
-  QuickTiles,
   RecordAvatar,
-  StatStrip,
   StatusChip,
 } from './design-system';
 
@@ -28,45 +25,6 @@ describe('the page header', () => {
     expect(screen.getByRole('heading', { level: 1, name: /^Items\s*42$/ })).toBeInTheDocument();
     expect(screen.getByText('One catalogue.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New item' })).toBeInTheDocument();
-  });
-});
-
-describe('the stat strip', () => {
-  it('makes each stat a filter button, the current one pressed', async () => {
-    const user = userEvent.setup();
-    const onInactive = vi.fn();
-    render(
-      <StatStrip
-        label="Items at a glance"
-        stats={[
-          { active: true, label: 'All items', onSelect: vi.fn(), value: 12 },
-          { label: 'Inactive', onSelect: onInactive, tone: 'pending', value: 3 },
-          { label: 'Shared', value: '–' },
-        ]}
-      />,
-    );
-
-    const strip = within(screen.getByRole('group', { name: 'Items at a glance' }));
-    expect(strip.getByRole('button', { name: /All items\s*12/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await user.click(strip.getByRole('button', { name: /Inactive\s*3/ }));
-    expect(onInactive).toHaveBeenCalled();
-    // Without onSelect a stat is only a number.
-    expect(strip.queryByRole('button', { name: /Shared/ })).not.toBeInTheDocument();
-  });
-
-  it('draws rich stage cards the same way', () => {
-    render(
-      <StatStrip
-        label="Stages"
-        rich
-        stats={[{ icon: ClipboardCheck, label: 'To verify', onSelect: vi.fn(), value: 5 }]}
-      />,
-    );
-
-    expect(screen.getByRole('button', { name: /5\s*To verify/ })).toBeInTheDocument();
   });
 });
 
@@ -159,47 +117,16 @@ describe('record marks', () => {
     expect(screen.getByRole('img', { name: 'Egg' })).toBeInTheDocument();
   });
 
+  it('takes initials from letters, not brackets', () => {
+    render(<RecordAvatar name="Khichdi (Light Diet)" />);
+
+    expect(screen.getByText('KL')).toBeInTheDocument();
+  });
+
   it('labels a status in words', () => {
     render(<StatusChip status="POSTED" />);
 
     expect(screen.getByText(/posted/i)).toBeInTheDocument();
-  });
-});
-
-describe('quick tiles', () => {
-  it('link to where the work is, with what waits there', () => {
-    render(
-      <QuickTiles
-        label="Quick actions"
-        tiles={[
-          {
-            count: 2,
-            countLabel: 'to verify',
-            detail: 'Check and post',
-            href: '/inventory/erp-grns',
-            icon: ClipboardCheck,
-            title: 'GRNs',
-            tone: 'blue',
-          },
-          {
-            count: 0,
-            detail: 'Nothing waiting',
-            href: '/inventory/transfers',
-            icon: ClipboardCheck,
-            title: 'Transfers',
-            tone: 'green',
-          },
-        ]}
-      />,
-    );
-
-    const tiles = within(screen.getByRole('navigation', { name: 'Quick actions' }));
-    expect(tiles.getByRole('link', { name: /GRNs/ })).toHaveAttribute(
-      'href',
-      '/inventory/erp-grns',
-    );
-    expect(tiles.getByRole('link', { name: /GRNs/ })).toHaveTextContent('2 to verify');
-    expect(tiles.getByRole('link', { name: /Transfers/ })).toHaveTextContent('All done');
   });
 });
 

@@ -35,10 +35,10 @@ interface TabPage {
 }
 
 const tabs: Array<{ group: string; icon: LucideIcon; label: string }> = [
-  { group: 'Overview', icon: LayoutGrid, label: 'Today' },
-  { group: 'Point of Sale', icon: Receipt, label: 'POS' },
+  { group: 'Dashboard', icon: LayoutGrid, label: 'Today' },
+  { group: 'POS', icon: Receipt, label: 'POS' },
   { group: 'Inventory', icon: Package, label: 'Inventory' },
-  { group: 'Kitchen Operations', icon: ChefHat, label: 'Kitchen' },
+  { group: 'Kitchen', icon: ChefHat, label: 'Kitchen' },
 ];
 
 /**
@@ -65,7 +65,7 @@ export function MobileTabBar({
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-30 flex h-[68px] border-t border-ds-border bg-ds-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl nav:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex h-[68px] border-t border-ds-border bg-ds-surface pb-[env(safe-area-inset-bottom)] nav:hidden"
     >
       {items.map(({ group, href, icon: Icon, label }) => {
         const isActive = group === activeGroup;

@@ -81,7 +81,7 @@ async function fillNewUser(
 ) {
   await user.type(field(/^Name/), 'neha kapoor');
   await user.type(field(/^Email/), ' Neha@Max.in ');
-  await user.type(field(/^Employee Code/), 'e200');
+  await user.type(field(/^Employee code/), 'e200');
   await user.type(field(/^Mobile/), '98-0000-0002');
   await user.selectOptions(field(/^Role/), roleName);
 }
@@ -100,7 +100,7 @@ describe('adding a user', () => {
   it('asks for the required fields before sending anything', async () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={null} />);
 
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('Complete the required fields');
     expect(userApi.createUser).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('adding a user', () => {
     await screen.findByRole('option', { name: 'SKT - Saket' });
     await user.selectOptions(field(/^Default location/), 'h-skt');
 
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
 
     expect(userApi.createUser).toHaveBeenCalledWith({
       designation: undefined,
@@ -131,7 +131,7 @@ describe('adding a user', () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={null} />);
     await fillNewUser(user);
 
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       'The Store Manager role needs at least one location.',
@@ -143,7 +143,7 @@ describe('adding a user', () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={null} />);
     await fillNewUser(user, 'Cashier');
 
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('Select a location');
     expect(screen.getByRole('alert')).toHaveTextContent('The Cashier role works at one location');
@@ -153,17 +153,17 @@ describe('adding a user', () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={null} />);
     await fillNewUser(user, 'Super Admin');
 
-    expect(screen.getByRole('button', { name: /Add Location/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add location/ })).toBeDisabled();
     expect(
       screen.getByText(
         'Super Admin reaches every location, so only the default location is needed.',
       ),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Select a default location');
 
     await user.selectOptions(field(/^Default location/), 'h-ppg');
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
     expect(userApi.createUser).toHaveBeenCalledWith(
       expect.objectContaining({ hospitalIds: ['h-ppg'], roleId: 'r-super' }),
     );
@@ -173,7 +173,7 @@ describe('adding a user', () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={null} />);
     await fillNewUser(user);
 
-    await user.click(screen.getByRole('button', { name: /Add Location/ }));
+    await user.click(screen.getByRole('button', { name: /Add location/ }));
     const picker = within(screen.getByRole('dialog', { name: 'Select locations' }));
     await user.click(await picker.findByRole('checkbox', { name: 'PPG - Patparganj' }));
     await user.click(picker.getByRole('checkbox', { name: 'SKT - Saket' }));
@@ -181,7 +181,7 @@ describe('adding a user', () => {
 
     // The first picked becomes the default.
     expect(screen.getByText('(default)').parentElement).toHaveTextContent('Patparganj');
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
     expect(userApi.createUser).toHaveBeenCalledWith(
       expect.objectContaining({ hospitalIds: ['h-ppg', 'h-skt'] }),
     );
@@ -193,7 +193,7 @@ describe('adding a user', () => {
     await fillNewUser(user);
     await user.selectOptions(field(/^Default location/), 'h-ppg');
 
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('User was not created');
@@ -227,7 +227,7 @@ describe('adding someone from the Employees list', () => {
     );
     expect(field(/^Name/)).toHaveValue('Adarsh Shukla');
     expect(field(/^Email/)).toHaveValue('adarsh@max.in');
-    expect(field(/^Employee Code/)).toHaveValue('7449');
+    expect(field(/^Employee code/)).toHaveValue('7449');
     expect(field(/^Mobile/)).toHaveValue('9569258373');
     expect(field(/^Designation/)).toHaveValue('Steward');
     expect(field(/^Default location/)).toHaveValue('h-skt');
@@ -235,7 +235,7 @@ describe('adding someone from the Employees list', () => {
     await user.clear(field(/^Email/));
     await user.type(field(/^Email/), 'adarsh.s@max.in');
     await user.selectOptions(field(/^Role/), 'Cashier');
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Add user' }));
 
     expect(userApi.createUser).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -265,10 +265,10 @@ describe('editing a user', () => {
   it('keeps the employee code unless changed, sends no password, and clears a blanked designation', async () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={asha} />);
 
-    expect(field(/^Employee Code/)).toBeDisabled();
+    expect(field(/^Employee code/)).toBeDisabled();
     expect(field(/^Name/)).toHaveValue('Asha Rao');
     await user.clear(field(/^Designation/));
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     const [id, body] = userApi.updateUser.mock.calls[0]!;
     expect(id).toBe('u-asha');
@@ -285,7 +285,7 @@ describe('editing a user', () => {
     const { user } = renderScreen(<UserDialog onClose={onClose} roles={roles} user={asha} />);
 
     await user.click(screen.getByRole('checkbox', { name: 'Active' }));
-    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(userApi.updateUser).toHaveBeenCalledWith(
       'u-asha',

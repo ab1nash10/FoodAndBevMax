@@ -1,13 +1,15 @@
 import { Panel, Skeleton } from '@/components/ui';
+import { pillLabel } from '@/components/admin-shell/top-nav';
 import { withBasePath } from '@/lib/base-path';
+import { findPage, getActiveNavHref, navigationGroups } from '@/lib/navigation';
+import { usePathname } from 'next/navigation';
 import { pageSizes as standardPageSizes } from '@/lib/list-limit';
 import { statusPresentation, type StatusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import type { FoodType, InventoryLocationType } from '@aahar/api-client';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Inbox, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Inbox, X } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 interface BrandMarkProps {
@@ -15,28 +17,37 @@ interface BrandMarkProps {
   className?: string;
 }
 
+/** The product's mark: "F&B" on a Max-blue tile (the product was renamed from AAHAR, 2026-11-22). */
+export function FnbMark({ className }: Readonly<{ className?: string }>) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-linear-to-br from-[#2477cf] to-ds-primary text-[12px] font-extrabold tracking-[-0.02em] text-white shadow-[0_8px_18px_-8px_rgb(11_87_164/0.8)]',
+        className,
+      )}
+    >
+      F&amp;B
+    </span>
+  );
+}
+
 export function BrandMark({ collapsed = false, className }: BrandMarkProps) {
   return (
     <div className={cn('flex items-center gap-3', className)}>
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-control-lg border border-ds-border bg-ds-logo-chip p-1.5">
-        <Image
-          alt="AAHAR"
-          className="h-full w-full object-contain"
-          height={44}
-          src={withBasePath('/brand/aahar-logo.png')}
-          width={44}
-        />
-      </span>
-      {!collapsed ? (
+      <FnbMark />
+      {collapsed ? (
+        <span className="sr-only">F&amp;B</span>
+      ) : (
         <span className="min-w-0">
-          <span className="block text-[15px] font-extrabold leading-5 tracking-[0.08em] text-ds-text">
-            AAHAR
+          <span className="block text-[15px] font-extrabold leading-5 tracking-[0.02em] text-ds-text">
+            F&amp;B
           </span>
           <span className="block truncate text-[11.5px] leading-4 text-ds-muted">
-            Food & Cafeteria Platform
+            Food &amp; Beverage
           </span>
         </span>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -60,6 +71,19 @@ export function MaxHealthcareMark({ className }: Readonly<{ className?: string }
   );
 }
 
+/** The open page's module, over its title (Item & menu, Inventory…); nothing outside the menu. */
+function ModuleEyebrow() {
+  const href = getActiveNavHref(usePathname() ?? '');
+  const page = href ? findPage(href) : undefined;
+  const group = page && navigationGroups.find((each) => each.label === page.group);
+
+  return group && group.label !== 'Dashboard' ? (
+    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ds-link">
+      {pillLabel(group)}
+    </p>
+  ) : null;
+}
+
 interface AppPageHeaderProps {
   action?: ReactNode;
   /** How many records the page lists, beside the title. */
@@ -78,292 +102,32 @@ interface AppPageHeaderProps {
  */
 export function AppPageHeader({ action, count, description, eyebrow, title }: AppPageHeaderProps) {
   return (
-    // No `isolate`: a dialog opened from `action` must not be trapped under the page below.
-    <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    // Premium look (2026-11-22, canvas row C): the module over a large title, its count in a
+    // pill, the actions on the right. No `isolate` or clipping: a dialog or menu opened from
+    // `action` must not be trapped inside it.
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        {eyebrow ? <p className="text-[13px] font-medium text-ds-muted">{eyebrow}</p> : null}
-        <h1 className="mt-0.5 flex items-center gap-2.5 text-[28px] font-semibold leading-[34px] tracking-[-0.015em] text-ds-text">
+        {eyebrow ? (
+          <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ds-link">
+            {eyebrow}
+          </p>
+        ) : (
+          <ModuleEyebrow />
+        )}
+        <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-[30px] font-bold leading-9 tracking-[-0.035em] text-ds-text sm:text-[38px] sm:leading-[44px]">
           {title}
+          {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø". */}
           {count === undefined ? null : (
-            <span className="rounded-full bg-ds-primary-soft px-[9px] py-0.5 text-xs font-medium tracking-normal text-ds-link tabular-nums">
+            <span className="rounded-full bg-ds-primary-soft px-3 py-0.5 text-[14px] font-semibold leading-6 tracking-normal text-ds-link tabular-nums">
               {count}
             </span>
           )}
         </h1>
         {description ? (
-          <p className="mt-1.5 max-w-2xl text-[14px] leading-5 text-ds-text-2">{description}</p>
+          <p className="mt-2 max-w-3xl text-[15px] leading-6 text-ds-muted">{description}</p>
         ) : null}
       </div>
-      {action ? <div className="flex shrink-0 flex-wrap items-center gap-3">{action}</div> : null}
-    </div>
-  );
-}
-
-/**
- * The Dashboard's welcome: a large greeting over a soft colour field that drifts slowly, its
- * actions under it, a floating card (`aside`) over the colour on the right, and anything quick to
- * reach below.
- */
-export function HeroHeader({
-  action,
-  children,
-  description,
-  eyebrow,
-  title,
-}: Readonly<{
-  action?: ReactNode;
-  /** The hero's right side: its quick tiles. */
-  children?: ReactNode;
-  description?: ReactNode;
-  eyebrow?: ReactNode;
-  title: string;
-}>) {
-  return (
-    // The Dashboard's hero: brand blue easing into violet, two soft circles for depth.
-    <section className="relative isolate overflow-hidden rounded-[28px] bg-[linear-gradient(105deg,#0b57a4_0%,#327ad9_60%,#8c80fa_100%)] px-5 py-5 text-white shadow-[0_30px_60px_-30px_rgb(11_87_164/0.6)] sm:px-9 sm:py-8">
-      <span
-        aria-hidden="true"
-        className="absolute left-[62%] top-[-120px] -z-10 h-[300px] w-[300px] rounded-full bg-white/10"
-      />
-      <span
-        aria-hidden="true"
-        className="absolute bottom-[-110px] right-[-40px] -z-10 h-[220px] w-[220px] rounded-full bg-white/8"
-      />
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 max-w-2xl">
-          {eyebrow ? (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-white/85">
-              {eyebrow}
-            </p>
-          ) : null}
-          {/* The full title always shows: a long name wraps, it is never cut off. */}
-          <h1 className="mt-2 text-[24px] font-semibold leading-[1.2] tracking-[-0.02em] text-white wrap-anywhere sm:mt-2.5 sm:text-[40px] sm:leading-[1.15]">
-            {title}
-          </h1>
-          {description ? (
-            <p className="mt-2.5 text-[15px] leading-6 text-white/90">{description}</p>
-          ) : null}
-          {action ? <div className="mt-5 flex flex-wrap items-center gap-2.5">{action}</div> : null}
-        </div>
-        {children ? <div className="min-w-0 lg:shrink-0">{children}</div> : null}
-      </div>
-    </section>
-  );
-}
-
-export interface QuickTile {
-  /** Work waiting there now: a badge ("2 waiting"), or "All done" at 0. Undefined: no badge. */
-  count?: number;
-  /** What the count is, e.g. "to verify"; "waiting" by default. */
-  countLabel?: string;
-  detail: string;
-  href: string;
-  icon: LucideIcon;
-  title: string;
-  tone: 'blue' | 'green' | 'rose' | 'violet';
-}
-
-/** Where to go next, as pastel tiles (a hero's quick actions). Pass only tiles the user may open. */
-export function QuickTiles({ label, tiles }: Readonly<{ label: string; tiles: QuickTile[] }>) {
-  return (
-    <nav aria-label={label}>
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 lg:*:w-[150px] 2xl:grid-cols-4">
-        {tiles.map((tile) => {
-          const Icon = tile.icon;
-
-          return (
-            <li key={tile.href}>
-              <Link
-                className={cn(
-                  'group flex h-full min-h-[118px] flex-col justify-between gap-4 rounded-[20px] p-4 text-ds-text ring-1 ring-ds-text/5 transition duration-150 hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link motion-safe:hover:-translate-y-0.5',
-                  `tile-${tile.tone}`,
-                )}
-                href={tile.href}
-              >
-                <span className="flex items-start justify-between gap-2">
-                  <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-ds-surface text-ds-link shadow-xs">
-                    <Icon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.9} />
-                  </span>
-                  {tile.count ? (
-                    <span className="rounded-full bg-ds-status-pending-bg px-2 py-0.5 text-xs font-bold tabular-nums whitespace-nowrap text-ds-status-pending-fg">
-                      {tile.count} {tile.countLabel ?? 'waiting'}
-                    </span>
-                  ) : tile.count === 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-ds-surface/75 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-ds-status-ok-fg">
-                      <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
-                      All done
-                    </span>
-                  ) : null}
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold leading-snug">{tile.title}</span>
-                  <span className="mt-0.5 flex items-center gap-1 text-xs text-ds-text-3">
-                    {tile.detail}
-                    <ArrowRight
-                      aria-hidden="true"
-                      className="h-3 w-3 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5"
-                    />
-                  </span>
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
-}
-
-export interface Stat {
-  /** Marks the stat whose filter the list shows now. */
-  active?: boolean;
-  /** Its icon on a `rich` card. */
-  icon?: LucideIcon;
-  label: string;
-  /** Picking the stat filters the list to it. */
-  onSelect?: () => void;
-  /** Its part of the whole, 0–1: drawn as a thin bar under the number in a `rich` strip. */
-  share?: number;
-  tone?: 'bad' | 'default' | 'ok' | 'pending';
-  value: ReactNode;
-}
-
-const statDot: Record<NonNullable<Stat['tone']>, string> = {
-  bad: 'bg-ds-status-bad-fg',
-  default: 'bg-ds-link',
-  ok: 'bg-ds-status-ok-fg',
-  pending: 'bg-ds-status-pending-fg',
-};
-
-const richTile: Record<NonNullable<Stat['tone']>, string> = {
-  bad: 'bg-ds-status-bad-bg text-ds-status-bad-fg',
-  default: 'bg-ds-primary-soft text-ds-link',
-  ok: 'bg-ds-status-ok-bg text-ds-status-ok-fg',
-  pending: 'bg-ds-status-pending-bg text-ds-status-pending-fg',
-};
-
-/**
- * The numbers a list is about, above it, as one slim row of filter pills: each part of the
- * list with its count, a click away. They look like what they are (buttons) and leave the list
- * near the top. Values load as dashes so the row never jumps. `rich`: stage cards instead (icon,
- * big number, label), for a list whose stages are the point (Transfers). `share` is kept for
- * callers but no longer drawn.
- */
-export function StatStrip({
-  label,
-  rich = false,
-  stats,
-}: Readonly<{ label: string; rich?: boolean; stats: Stat[] }>) {
-  if (rich) {
-    return (
-      <div aria-label={label} className="flex flex-wrap gap-3" role="group">
-        {stats.map((stat) => {
-          const tone = stat.tone ?? 'default';
-          const Icon = stat.icon;
-          const body = (
-            <>
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
-                  richTile[tone],
-                )}
-              >
-                {Icon ? (
-                  <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-                ) : (
-                  <span className={cn('h-2.5 w-2.5 rounded-full', statDot[tone])} />
-                )}
-              </span>
-              <span className="flex min-w-0 flex-col text-left">
-                <span className="text-[28px] font-semibold leading-[34px] tabular-nums text-ds-text">
-                  {stat.value}
-                </span>
-                <span className="text-[13px] leading-4 text-ds-text-2">{stat.label}</span>
-              </span>
-            </>
-          );
-          const box = cn(
-            'flex min-w-[150px] flex-1 items-center gap-3 rounded-[18px] border bg-ds-surface py-3 pl-3 pr-3 shadow-card sm:pr-5 transition-colors duration-150 sm:flex-none',
-            stat.active
-              ? 'border-ds-primary ring-1 ring-inset ring-ds-primary'
-              : 'border-ds-border',
-          );
-
-          return stat.onSelect ? (
-            <button
-              aria-pressed={stat.active ?? false}
-              className={cn(
-                box,
-                'cursor-pointer hover:border-ds-primary-border focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link',
-              )}
-              key={stat.label}
-              onClick={stat.onSelect}
-              type="button"
-            >
-              {body}
-            </button>
-          ) : (
-            <div className={box} key={stat.label}>
-              {body}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      aria-label={label}
-      className="inline-flex max-w-full flex-wrap gap-1 rounded-[22px] bg-ds-subtle p-1 ring-1 ring-ds-border"
-      role="group"
-    >
-      {stats.map((stat) => {
-        const tone = stat.tone ?? 'default';
-        const body = (
-          <>
-            <span
-              aria-hidden="true"
-              className={cn('h-2 w-2 shrink-0 rounded-full', statDot[tone])}
-            />
-            <span className="whitespace-nowrap">{stat.label}</span>
-            {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø". */}
-            <span
-              className={cn(
-                'min-w-6 rounded-full px-1.5 text-center text-xs font-medium tabular-nums',
-                stat.active ? 'bg-ds-primary-soft text-ds-link' : 'text-ds-muted',
-              )}
-            >
-              {stat.value}
-            </span>
-          </>
-        );
-        const box = cn(
-          'inline-flex h-9 items-center gap-2 rounded-full pl-3 pr-2 text-[13.5px] font-medium transition-[background-color,box-shadow,color] duration-150',
-          // ds-link, not ds-primary: a primary ring would vanish on the dark theme's blue tiles.
-          stat.active ? 'bg-ds-surface text-ds-text shadow-card' : 'text-ds-text-2',
-        );
-
-        return stat.onSelect ? (
-          <button
-            aria-pressed={stat.active ?? false}
-            className={cn(
-              box,
-              'cursor-pointer hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-link pointer-coarse:h-11',
-            )}
-            key={stat.label}
-            onClick={stat.onSelect}
-            type="button"
-          >
-            {body}
-          </button>
-        ) : (
-          <div className={box} key={stat.label}>
-            {body}
-          </div>
-        );
-      })}
+      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2.5">{action}</div> : null}
     </div>
   );
 }
@@ -374,16 +138,16 @@ export function StatStrip({
  */
 export const tableStyles = {
   code: 'font-mono text-[12px] text-ds-muted',
-  // v3: a tinted header band, so the columns read at a glance.
-  head: 'sticky top-0 z-10 border-y border-ds-border bg-ds-subtle text-left text-[12px] text-ds-muted',
+  // Premium look: quiet words on white, so the data reads first.
+  head: 'sticky top-0 z-10 border-y border-ds-divider bg-ds-surface text-left text-[12.5px] font-medium text-ds-muted',
   num: 'font-mono tabular-nums',
   /** A secondary column left out on phones, so the ones that matter fit without scrolling. */
   phoneHidden: 'hidden sm:table-cell',
   /** A record row. Clicking it does nothing: its own buttons and links act (the user's rule). */
-  row: 'row-accent group border-t border-ds-divider transition-colors duration-150 hover:bg-ds-subtle',
+  row: 'row-accent group border-t border-ds-divider transition-colors duration-150 hover:bg-ds-selected',
   table: 'w-full text-[13.5px]',
-  td: 'px-4 py-3.5 align-middle first:pl-6',
-  th: 'px-4 py-2.5 font-medium first:pl-6',
+  td: 'px-4 py-3 align-middle first:pl-5',
+  th: 'px-4 py-3 font-medium first:pl-5',
   title: 'font-semibold text-ds-text',
 };
 
@@ -471,7 +235,7 @@ export function ListPager({
   const first = (page - 1) * limit + 1;
   const last = Math.min(page * limit, total);
   const arrow =
-    'grid h-9 w-9 place-items-center rounded-full border border-ds-border bg-ds-surface text-ds-text-2 transition hover:bg-ds-subtle disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary';
+    'grid h-8 w-8 place-items-center rounded-control border border-ds-input bg-ds-surface text-ds-text-2 pointer-coarse:h-11 pointer-coarse:w-11 transition hover:bg-ds-subtle disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary';
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ds-divider px-4 py-2.5 text-[13px] text-ds-muted">
@@ -487,7 +251,7 @@ export function ListPager({
           <label className="mr-1.5 flex items-center gap-1.5">
             Rows
             <select
-              className="h-9 rounded-full border border-ds-border bg-ds-surface px-2.5 font-mono text-[13px] text-ds-text"
+              className="h-8 rounded-control border border-ds-input bg-ds-surface px-2 font-mono text-[12.5px] text-ds-text pointer-coarse:h-11"
               onChange={(event) => onLimitChange(Number(event.target.value))}
               value={limit}
             >
@@ -617,11 +381,13 @@ export function RecordAvatar({
   name,
   size = 'md',
 }: Readonly<{ foodType?: FoodType; name: string; size?: 'md' | 'sm' }>) {
+  // Only words that start with a letter or digit: "Khichdi (Light Diet)" is KL, not K(.
   const initials = name
     .split(/\s+/)
-    .filter(Boolean)
+    .map((word) => /[\p{L}\p{N}]/u.exec(word)?.[0])
+    .filter((letter): letter is string => Boolean(letter))
     .slice(0, 2)
-    .map((word) => word[0]!.toUpperCase())
+    .map((letter) => letter.toUpperCase())
     .join('');
 
   return (
@@ -702,7 +468,7 @@ export function RowOpen({
     <button
       aria-label={label}
       className={cn(
-        'inline-flex h-8 items-center gap-0.5 rounded-full px-2.5 text-[12.5px] font-semibold whitespace-nowrap transition-[opacity,background-color] duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
+        'inline-flex h-8 items-center gap-0.5 rounded-control px-2.5 text-[12.5px] font-semibold whitespace-nowrap transition-[opacity,background-color] duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary',
         nextStep
           ? 'bg-ds-primary-soft text-ds-link hover:bg-ds-primary hover:text-white'
           : 'text-ds-link hover:bg-ds-primary-soft',
@@ -891,7 +657,7 @@ export function StatusChip({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-semibold',
         statusToneClasses[presentation.tone],
         className,
       )}

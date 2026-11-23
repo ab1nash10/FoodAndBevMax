@@ -228,7 +228,7 @@ export function TodayPageClient() {
               : 'Nothing needs you right now: stock is healthy and nothing expires this week.'
         }
         eyebrow={[longDate.format(now), locationName].filter(Boolean).join(' · ')}
-        title="Store Today"
+        title="Store today"
       />
 
       {levelsQuery.isError ? (

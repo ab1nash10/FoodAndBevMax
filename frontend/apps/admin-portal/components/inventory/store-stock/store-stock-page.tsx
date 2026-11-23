@@ -22,7 +22,6 @@ import {
   InlineProgress,
   RecordAvatar,
   RowAction,
-  StatStrip,
   StatusChip,
   tableStyles,
 } from '@/components/design-system';
@@ -167,17 +166,9 @@ export function StoreStockPageClient() {
           hospitalId: hospitalFilter,
           limit: 0,
           locationType: 'STORE',
-          statusCounts: true,
         })
       ).data;
-      const count = (status: StockBalanceStatus) => meta.statusCounts?.[status] ?? 0;
-
-      return {
-        all: meta.total,
-        expired: count('EXPIRED'),
-        nearExpiry: count('NEAR_EXPIRY'),
-        outOfStock: count('OUT_OF_STOCK'),
-      };
+      return { all: meta.total };
     },
     queryKey: queryKeys.stockBalances('stats', hospitalFilter),
   });
@@ -201,12 +192,6 @@ export function StoreStockPageClient() {
     setPage(1);
   }
 
-  /** A stat's status alone; picking the one in force goes back to all stock. */
-  function showStatus(status: '' | StockBalanceStatus) {
-    setStatusFilter((current) => (current === status ? '' : status));
-    setPage(1);
-  }
-
   function toggleSummary(summary: StoreStockSummary) {
     const key = `${summary.storeId}:${summary.itemId}`;
 
@@ -221,43 +206,7 @@ export function StoreStockPageClient() {
       <PageHeader
         count={stats?.all}
         subtitle="Current store stock summarized by store and item, with batch details on expand."
-        title="Store Stock"
-      />
-      <StatStrip
-        label="Store stock at a glance"
-        stats={[
-          {
-            active: !statusFilter,
-            label: 'All items',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: statusFilter === 'NEAR_EXPIRY',
-            label: 'Expiring in 30 days',
-            onSelect: () => showStatus('NEAR_EXPIRY'),
-            share: stats?.all ? stats.nearExpiry / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.nearExpiry ?? '–',
-          },
-          {
-            active: statusFilter === 'EXPIRED',
-            label: 'Expired',
-            onSelect: () => showStatus('EXPIRED'),
-            share: stats?.all ? stats.expired / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.expired ?? '–',
-          },
-          {
-            active: statusFilter === 'OUT_OF_STOCK',
-            label: 'Out of stock',
-            onSelect: () => showStatus('OUT_OF_STOCK'),
-            share: stats?.all ? stats.outOfStock / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.outOfStock ?? '–',
-          },
-        ]}
+        title="Store stock"
       />
       <Panel aria-label="Store stock list" className="overflow-hidden" role="region">
         <ListToolbar>

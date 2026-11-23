@@ -797,7 +797,7 @@ export function CreateTransferPageClient() {
             Transfers
           </Link>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-extrabold tracking-[-0.01em] text-ds-text">
+            <h1 className="text-xl font-bold leading-7 tracking-[-0.01em] text-ds-text">
               New transfer
             </h1>
             <StatusChip label="Draft" status="DRAFT" />

@@ -79,7 +79,7 @@ export function LocationPickerDialog({
     >
       <Panel className="flex max-h-[85vh] w-full max-w-2xl flex-col p-0">
         <div className="flex items-center justify-between border-b border-ds-border px-5 py-3">
-          <h2 className="text-base font-semibold text-ds-text">Select Location(s)</h2>
+          <h2 className="text-base font-semibold text-ds-text">Select a location(s)</h2>
           <Button aria-label="Close" onClick={onCancel} size="icon" type="button" variant="ghost">
             <X className="h-4 w-4" />
           </Button>

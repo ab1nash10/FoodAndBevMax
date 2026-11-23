@@ -13,6 +13,7 @@ import { useToast } from '@/components/toast-provider';
 import { SegmentedControl } from '@/components/ui-controls';
 import { authApi, getApiErrorMessage } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
+import { FnbMark } from '@/components/design-system';
 import { cn } from '@/lib/utils';
 import {
   applyValidationErrors,
@@ -218,7 +219,7 @@ export default function LoginPage() {
     // The brand panel on the left, the form on plain white beside it.
     <main className="flex min-h-screen flex-wrap bg-ds-surface text-ds-text">
       <section
-        aria-label="About AAHAR"
+        aria-label="About F&B"
         className="relative isolate hidden max-w-[640px] flex-[1_1_520px] flex-col gap-8 overflow-hidden bg-[linear-gradient(150deg,#09336b_0%,#0b57a4_55%,#6e73fa_100%)] px-14 py-12 text-white lg:flex [@media(max-height:760px)]:gap-5 [@media(max-height:760px)]:py-8"
       >
         <span
@@ -231,19 +232,10 @@ export default function LoginPage() {
         />
         <div className="flex items-center justify-between gap-6">
           <span className="flex items-center gap-3">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-ds-logo-chip p-1.5">
-              <Image
-                alt=""
-                className="h-full w-full object-contain"
-                height={149}
-                priority
-                src={withBasePath('/brand/aahar-logo.png')}
-                width={200}
-              />
-            </span>
+            <FnbMark className="h-12 w-12 rounded-2xl bg-none bg-white text-[15px] text-ds-primary" />
             <span className="flex flex-col">
-              <strong className="text-base font-semibold leading-[22px]">AAHAR</strong>
-              <span className="text-xs text-white/80">Food &amp; Cafeteria</span>
+              <strong className="text-base font-semibold leading-[22px]">F&amp;B</strong>
+              <span className="text-xs text-white/80">Food &amp; Beverage</span>
             </span>
           </span>
           <span className="flex rounded-xl bg-ds-logo-chip px-3 py-2">
@@ -278,7 +270,7 @@ export default function LoginPage() {
         </ul>
         <div className="flex-1" />
         <p className="text-xs text-white/75">
-          Max Healthcare · AAHAR food &amp; cafeteria management
+          Max Healthcare · F&amp;B food and beverage management
         </p>
       </section>
 
@@ -288,19 +280,10 @@ export default function LoginPage() {
       >
         <div className="flex w-full max-w-[420px] flex-col gap-[22px]">
           <div className="flex items-center gap-3 lg:hidden">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-ds-border bg-ds-logo-chip">
-              <Image
-                alt=""
-                className="h-auto w-8"
-                height={149}
-                priority
-                src={withBasePath('/brand/aahar-logo.png')}
-                width={200}
-              />
-            </span>
+            <FnbMark className="h-11 w-11 rounded-xl text-[13px]" />
             <span className="flex min-w-0 flex-col">
-              <span className="text-[15px] font-semibold">AAHAR</span>
-              <span className="truncate text-xs text-ds-muted">Food &amp; Cafeteria</span>
+              <span className="text-[15px] font-semibold">F&amp;B</span>
+              <span className="truncate text-xs text-ds-muted">Food &amp; Beverage</span>
             </span>
             <span className="ml-auto flex shrink-0 rounded-lg border border-ds-border bg-ds-logo-chip px-2 py-1.5">
               <Image
@@ -426,7 +409,7 @@ export default function LoginPage() {
                   <ErrorText id="login-email-error">{errors.email.message}</ErrorText>
                 ) : (
                   <span className="text-xs text-ds-muted" id="login-email-hint">
-                    We’ll email a 6-digit code to the address on your AAHAR profile.
+                    We’ll email a 6-digit code to the address on your F&amp;B profile.
                   </span>
                 )}
               </div>

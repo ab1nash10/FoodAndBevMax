@@ -17,7 +17,7 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { DateTimeCell, StatStrip, tableStyles } from '@/components/design-system';
+import { DateTimeCell, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { Input, Panel, Select } from '@/components/ui';
 import { RecordLink } from '@/components/record-link';
@@ -267,18 +267,9 @@ export function StockLedgersPageClient() {
         await organizationApi.listStockLedgers({
           hospitalId: hospitalFilter,
           limit: 0,
-          referenceTypeCounts: true,
         })
       ).data;
-      const count = (referenceType: StockReferenceType) =>
-        meta.referenceTypeCounts?.[referenceType] ?? 0;
-
-      return {
-        acknowledged: count('TRANSFER_ACKNOWLEDGEMENT'),
-        all: meta.total,
-        dispatched: count('TRANSFER'),
-        grns: count('GRN'),
-      };
+      return { all: meta.total };
     },
     queryKey: queryKeys.stockLedgers('stats', hospitalFilter),
   });
@@ -310,54 +301,12 @@ export function StockLedgersPageClient() {
     setPage(1);
   }
 
-  /** A stat's reference type alone; picking the one in force goes back to every entry. */
-  function showReference(referenceType: '' | StockReferenceType) {
-    setReferenceTypeFilter((current) => (current === referenceType ? '' : referenceType));
-    setPage(1);
-  }
-
   return (
     <section className="space-y-4">
       <PageHeader
         count={stats?.all}
         subtitle="Read-only movement history across store, kitchen, restaurant and counter stock."
-        title="Stock Ledgers"
-      />
-      <StatStrip
-        label="Stock movements at a glance"
-        stats={[
-          {
-            active: !referenceTypeFilter,
-            label: 'All entries',
-            onSelect: () => showReference(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: referenceTypeFilter === 'GRN',
-            label: 'GRN receipts · in',
-            onSelect: () => showReference('GRN'),
-            share: stats?.all ? stats.grns / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.grns ?? '–',
-          },
-          {
-            active: referenceTypeFilter === 'TRANSFER',
-            label: 'Transfers dispatched · out',
-            onSelect: () => showReference('TRANSFER'),
-            share: stats?.all ? stats.dispatched / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.dispatched ?? '–',
-          },
-          {
-            active: referenceTypeFilter === 'TRANSFER_ACKNOWLEDGEMENT',
-            label: 'Transfers acknowledged · in',
-            onSelect: () => showReference('TRANSFER_ACKNOWLEDGEMENT'),
-            share: stats?.all ? stats.acknowledged / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.acknowledged ?? '–',
-          },
-        ]}
+        title="Stock ledgers"
       />
       <Panel aria-label="Stock ledger" className="overflow-hidden" role="region">
         <ListToolbar>

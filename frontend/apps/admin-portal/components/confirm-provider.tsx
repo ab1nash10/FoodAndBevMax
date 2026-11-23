@@ -62,7 +62,7 @@ function ConfirmDialog({
       aria-describedby={request.description ? descriptionId : undefined}
       aria-labelledby={titleId}
       aria-modal="true"
-      className="m-auto w-[min(420px,calc(100vw-32px))] overflow-hidden rounded-[26px] border-0 bg-ds-surface p-0 text-ds-text shadow-[0_32px_80px_-24px_rgb(16_24_40/0.45)] ring-1 ring-ds-text/5 backdrop:bg-ds-text/35 backdrop:backdrop-blur-[3px]"
+      className="m-auto w-[min(420px,calc(100vw-32px))] overflow-hidden rounded-card border-0 bg-ds-surface p-0 text-ds-text shadow-[0_32px_80px_-24px_rgb(16_24_40/0.45)] ring-1 ring-ds-text/5 backdrop:bg-ds-text/35 backdrop:backdrop-blur-[3px]"
       onCancel={(event) => {
         // Esc: answer "no" ourselves, so the request always settles.
         event.preventDefault();

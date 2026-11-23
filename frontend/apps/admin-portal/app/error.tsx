@@ -13,7 +13,7 @@ export default function GlobalError({
   reset: () => void;
 }>) {
   useEffect(() => {
-    console.error('AAHAR page error', {
+    console.error('F&B page error', {
       digest: error.digest,
       message: error.message,
     });

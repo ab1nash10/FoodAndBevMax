@@ -71,8 +71,8 @@ beforeEach(() => {
   api.listRestaurantStockLevels.mockReturnValue(
     reply({ items: [], lowCoverDays: 3, windowDays: 28 }),
   );
-  api.listRestaurantStock.mockImplementation(((query: { statusCounts?: boolean }) =>
-    query.statusCounts
+  api.listRestaurantStock.mockImplementation(((query: { limit?: number }) =>
+    query.limit === 0
       ? reply({
           items: [],
           meta: { limit: 0, page: 1, statusCounts: { OUT_OF_STOCK: 1 }, total: 2, totalPages: 1 },
@@ -81,9 +81,7 @@ beforeEach(() => {
 });
 
 const listRequests = () =>
-  api.listRestaurantStock.mock.calls
-    .map(([query]) => query)
-    .filter((query) => !query?.statusCounts);
+  api.listRestaurantStock.mock.calls.map(([query]) => query).filter((query) => query?.limit !== 0);
 
 describe('restaurant stock', () => {
   it('shows each batch with its restaurant, source, quantity and status', async () => {
@@ -125,12 +123,13 @@ describe('restaurant stock', () => {
     await waitFor(() => expect(listRequests().at(-1)).toMatchObject({ itemType: 'MRP' }));
   });
 
-  it('searches and shows one status from the strip', async () => {
+  it('searches and shows one status picked in Filters', async () => {
     const { user } = renderScreen(<RestaurantStockPageClient />);
     await screen.findByText('Water bottle');
 
     await user.type(screen.getByRole('searchbox', { name: 'Search restaurant stock' }), 'wat');
-    await user.click(screen.getByRole('button', { name: /^Out of stock/ }));
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'OUT_OF_STOCK');
 
     await waitFor(() =>
       expect(listRequests().at(-1)).toMatchObject({ search: 'wat', status: 'OUT_OF_STOCK' }),

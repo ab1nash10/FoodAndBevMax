@@ -45,7 +45,7 @@ export function StoreReturnsPageClient() {
       <AppPageHeader
         count={returnsQuery.data?.meta.total}
         description="Stock restaurants sent back to the store. Count each one in: what is counted goes into the store, anything missing goes back to the restaurant."
-        title="Count Returns"
+        title="Count returns"
       />
       <Panel aria-label="Returns waiting to be counted" className="overflow-hidden" role="region">
         <div className="overflow-x-auto">

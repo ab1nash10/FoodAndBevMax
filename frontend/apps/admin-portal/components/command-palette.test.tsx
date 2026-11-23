@@ -34,10 +34,10 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 
 const pages: PalettePage[] = [
-  { group: 'Overview', href: '/dashboard', label: 'Dashboard' },
+  { group: 'Dashboard', href: '/dashboard', label: 'Dashboard' },
   { count: 2, group: 'Inventory', href: '/inventory/transfers', label: 'Transfers' },
-  { group: 'Inventory', href: '/inventory/store-stock', label: 'Store Stock' },
-  { group: 'Item & Menu Setup', href: '/masters/items', label: 'Items' },
+  { group: 'Inventory', href: '/inventory/store-stock', label: 'Store stock' },
+  { group: 'Item & menu', href: '/masters/items', label: 'Items' },
 ];
 
 const options = () => screen.getAllByRole('option').map((option) => option.textContent);
@@ -91,7 +91,7 @@ describe('the command palette', () => {
     openPalette();
 
     await user.keyboard('stock');
-    expect(options()).toEqual([expect.stringContaining('Store Stock')]);
+    expect(options()).toEqual([expect.stringContaining('Store stock')]);
     await user.keyboard('{Enter}');
 
     expect(router.push).toHaveBeenCalledWith('/inventory/store-stock');

@@ -109,7 +109,7 @@ export function AuditLogPageClient() {
         }
         description="Who changed what and when: deliveries, transfers, production, masters, users and sign-ins."
         eyebrow="Logs"
-        title="Activity Logs"
+        title="Activity logs"
       />
       <Panel aria-label="Audit log" className="overflow-hidden" role="region">
         <ListToolbar>

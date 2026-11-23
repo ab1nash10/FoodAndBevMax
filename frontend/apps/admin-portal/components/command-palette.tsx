@@ -528,7 +528,7 @@ export function CommandPalette({ pages }: Readonly<{ pages: PalettePage[] }>) {
       <div
         aria-label="Search and commands"
         aria-modal="true"
-        className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-2xl"
+        className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-card border border-ds-border bg-ds-surface shadow-2xl"
         role="dialog"
       >
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-ds-border px-4 text-ds-muted">

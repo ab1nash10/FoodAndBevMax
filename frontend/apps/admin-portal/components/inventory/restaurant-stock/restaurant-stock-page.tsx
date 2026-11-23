@@ -24,7 +24,7 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { RecordAvatar, StatStrip, StatusChip, tableStyles } from '@/components/design-system';
+import { RecordAvatar, StatusChip, tableStyles } from '@/components/design-system';
 import { useLocationContext } from '@/components/location-context';
 import { Panel, Select } from '@/components/ui';
 import { IfCanOpen, RecordLink } from '@/components/record-link';
@@ -158,17 +158,9 @@ export function RestaurantStockPageClient() {
         await organizationApi.listRestaurantStock({
           hospitalId: hospitalFilter,
           limit: 0,
-          statusCounts: true,
         })
       ).data;
-      const count = (status: StockBalanceStatus) => meta.statusCounts?.[status] ?? 0;
-
-      return {
-        all: meta.total,
-        expired: count('EXPIRED'),
-        nearExpiry: count('NEAR_EXPIRY'),
-        outOfStock: count('OUT_OF_STOCK'),
-      };
+      return { all: meta.total };
     },
     queryKey: queryKeys.restaurantStock('stats', hospitalFilter),
   });
@@ -220,12 +212,6 @@ export function RestaurantStockPageClient() {
     setPage(1);
   }
 
-  /** A stat's status alone; picking the one in force goes back to all stock. */
-  function showStatus(status: '' | StockBalanceStatus) {
-    setStatusFilter((current) => (current === status ? '' : status));
-    setPage(1);
-  }
-
   return (
     <section className="space-y-4">
       <DiscardStockDialog batch={discarding} onClose={() => setDiscarding(null)} />
@@ -244,43 +230,7 @@ export function RestaurantStockPageClient() {
         }
         count={stats?.all}
         subtitle="Current restaurant stock received from acknowledged transfers."
-        title="Restaurant Stock"
-      />
-      <StatStrip
-        label="Restaurant stock at a glance"
-        stats={[
-          {
-            active: !statusFilter,
-            label: 'All batches',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: statusFilter === 'NEAR_EXPIRY',
-            label: 'Expiring in 30 days',
-            onSelect: () => showStatus('NEAR_EXPIRY'),
-            share: stats?.all ? stats.nearExpiry / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.nearExpiry ?? '–',
-          },
-          {
-            active: statusFilter === 'EXPIRED',
-            label: 'Expired',
-            onSelect: () => showStatus('EXPIRED'),
-            share: stats?.all ? stats.expired / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.expired ?? '–',
-          },
-          {
-            active: statusFilter === 'OUT_OF_STOCK',
-            label: 'Out of stock',
-            onSelect: () => showStatus('OUT_OF_STOCK'),
-            share: stats?.all ? stats.outOfStock / stats.all : undefined,
-            tone: 'bad',
-            value: stats?.outOfStock ?? '–',
-          },
-        ]}
+        title="Restaurant stock"
       />
       <Panel aria-label="Restaurant stock list" className="overflow-hidden" role="region">
         <ListToolbar>

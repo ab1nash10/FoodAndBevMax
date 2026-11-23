@@ -69,8 +69,8 @@ beforeEach(() => {
   api.listStores.mockReturnValue(page([{ id: 'store-1', storeName: 'Main Store' }]) as never);
   api.listKitchens.mockReturnValue(page([]));
   api.listRestaurants.mockReturnValue(page([]));
-  api.listStockLedgers.mockImplementation(((query: { referenceTypeCounts?: boolean }) =>
-    query.referenceTypeCounts
+  api.listStockLedgers.mockImplementation(((query: { limit?: number }) =>
+    query.limit === 0
       ? reply({
           items: [],
           meta: {
@@ -85,9 +85,7 @@ beforeEach(() => {
 });
 
 const listRequests = () =>
-  api.listStockLedgers.mock.calls
-    .map(([query]) => query)
-    .filter((query) => !query?.referenceTypeCounts);
+  api.listStockLedgers.mock.calls.map(([query]) => query).filter((query) => query?.limit !== 0);
 
 describe('stock ledgers', () => {
   it('shows each movement with its quantities in, out and the balance after', async () => {
@@ -116,17 +114,6 @@ describe('stock ledgers', () => {
 
     expect(await screen.findByText('ERP-9')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'ERP-9' })).toBeNull();
-  });
-
-  it('counts the movements by document in the strip, and shows one kind when picked', async () => {
-    const { user } = renderScreen(<StockLedgersPageClient />);
-    const strip = within(screen.getByRole('group', { name: 'Stock movements at a glance' }));
-
-    expect(await strip.findByText('9')).toBeInTheDocument();
-    expect(strip.getByText('5')).toBeInTheDocument();
-    await user.click(strip.getByRole('button', { name: /Transfers dispatched/ }));
-
-    await waitFor(() => expect(listRequests().at(-1)).toMatchObject({ referenceType: 'TRANSFER' }));
   });
 
   it('filters by transaction, a store and dates', async () => {

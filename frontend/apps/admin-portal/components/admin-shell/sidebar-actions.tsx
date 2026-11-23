@@ -92,7 +92,7 @@ export function AccountMenu({
           focusRing,
         )}
       >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ds-primary-soft text-xs font-semibold text-ds-link">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-linear-to-br from-[#2477cf] to-ds-primary text-xs font-semibold text-white">
           {initials || 'AU'}
         </span>
         {compact || below ? null : (

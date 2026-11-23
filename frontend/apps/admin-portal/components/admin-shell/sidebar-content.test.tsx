@@ -42,12 +42,12 @@ describe('the side menu', () => {
       'aria-expanded',
       'true',
     );
-    expect(menu.getByRole('button', { name: 'Item & Menu Setup' })).toHaveAttribute(
+    expect(menu.getByRole('button', { name: 'Item & menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
     expect(menu.getByRole('link', { name: 'ERP GRNs' })).toHaveAttribute('aria-current', 'page');
-    expect(menu.getByRole('link', { name: 'Store Stock' })).toBeInTheDocument();
+    expect(menu.getByRole('link', { name: 'Store stock' })).toBeInTheDocument();
     expect(menu.queryByRole('button', { name: 'Access' })).not.toBeInTheDocument();
     expect(menu.queryByRole('link', { name: 'Transfers' })).not.toBeInTheDocument();
   });
@@ -56,10 +56,10 @@ describe('the side menu', () => {
     const user = userEvent.setup();
     render(<SidebarContent counts={{}} hasPermission={may(['GRN_VIEW', 'ITEM_VIEW'])} />);
 
-    await user.click(screen.getByRole('button', { name: 'Item & Menu Setup' }));
+    await user.click(screen.getByRole('button', { name: 'Item & menu' }));
     expect(screen.getByRole('link', { name: 'Items' })).toHaveAttribute('href', '/masters/items');
 
-    await user.click(screen.getByRole('button', { name: 'Item & Menu Setup' }));
+    await user.click(screen.getByRole('button', { name: 'Item & menu' }));
     expect(screen.queryByRole('link', { name: 'Items' })).not.toBeInTheDocument();
   });
 
@@ -112,7 +112,7 @@ describe('the work-waiting counts', () => {
 
 describe('the phone tab bar', () => {
   const pages = [
-    { group: 'Overview', href: '/dashboard' },
+    { group: 'Dashboard', href: '/dashboard' },
     { group: 'Inventory', href: '/inventory/erp-grns' },
     { group: 'Inventory', href: '/inventory/store-stock' },
   ];

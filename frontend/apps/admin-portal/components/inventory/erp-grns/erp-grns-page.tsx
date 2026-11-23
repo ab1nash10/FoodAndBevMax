@@ -121,7 +121,7 @@ export function ErpGrnsPageClient({ log = false }: Readonly<{ log?: boolean }> =
   return (
     <section className="space-y-4">
       <AppPageHeader
-        description="GRNs the ERP sent. Goods in go into the location's Main Store as they arrive; a reverse takes what the store holds, and the rest stays owed (Pending) until the batch comes back. A GRN AAHAR cannot take is on ERP GRN errors."
+        description="GRNs the ERP sent. Goods in go into the location's Main Store as they arrive; a reverse takes what the store holds, and the rest stays owed (Pending) until the batch comes back. A GRN F&B cannot take is on ERP GRN errors."
         eyebrow={log ? 'Logs' : 'Inventory'}
         title={log ? 'ERP GRN log' : 'ERP GRNs'}
       />
@@ -509,7 +509,7 @@ function ErpGrnPanel({
 
       {closing ? (
         <form
-          className="mt-4 grid gap-2 rounded-2xl border border-ds-border p-3"
+          className="mt-4 grid gap-2 rounded-card border border-ds-border p-3"
           onSubmit={(event) => {
             event.preventDefault();
             if (canClose && reason) {
@@ -590,7 +590,7 @@ function BatchCard({ row }: Readonly<{ row: GrnEntryRow }>) {
   return (
     <li
       aria-label={`Batch ${row.batch}`}
-      className="rounded-2xl border border-ds-border p-3"
+      className="rounded-card border border-ds-border p-3"
       data-row={row.row_id}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">

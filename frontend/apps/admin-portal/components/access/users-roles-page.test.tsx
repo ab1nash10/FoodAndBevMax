@@ -176,20 +176,6 @@ describe('Admins', () => {
     ).toBeNull();
   });
 
-  it('counts users, active, disabled and Super Admins at the location', async () => {
-    renderScreen(<UsersRolesPageClient />);
-
-    const stats = within(screen.getByRole('group', { name: 'Users at a glance' }));
-    expect(await stats.findByRole('button', { name: /Super Admins\s*1/ })).toBeInTheDocument();
-    expect(stats.getByRole('button', { name: /^Users\s*3/ })).toBeInTheDocument();
-    expect(stats.getByRole('button', { name: /Active\s*2/ })).toBeInTheDocument();
-    expect(stats.getByRole('button', { name: /Disabled\s*1/ })).toBeInTheDocument();
-    // The Super Admins count asks by that role's id.
-    expect(userApi.listUsers).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 1, roleId: 'r-super' }),
-    );
-  });
-
   it('says there are no users yet when the list is empty', async () => {
     serve([], { ACTIVE: 0, DISABLED: 0, all: 0, superAdmins: 0 });
     renderScreen(<UsersRolesPageClient />);
@@ -237,14 +223,6 @@ describe('Admins', () => {
     const params = new URLSearchParams(window.location.search);
     expect(params.get('status')).toBe('ACTIVE');
     expect(params.get('page')).toBeNull();
-  });
-
-  it('shows only Super Admins from their count', async () => {
-    const { user } = renderScreen(<UsersRolesPageClient />);
-
-    await user.click(await screen.findByRole('button', { name: /Super Admins\s*1/ }));
-
-    expect(new URLSearchParams(window.location.search).get('role')).toBe('r-super');
   });
 
   it('offers no way to add or change a user to someone who may only view them', async () => {

@@ -6,10 +6,10 @@ import { Providers } from './providers';
 
 export const metadata: Metadata = {
   title: {
-    default: 'AAHAR | Food & Cafeteria Management Platform',
-    template: '%s | AAHAR',
+    default: 'F&B | Food & Beverage',
+    template: '%s | F&B',
   },
-  description: 'AAHAR Food & Cafeteria Management Platform for Max Healthcare.',
+  description: 'F&B: food and beverage management for Max Healthcare.',
   icons: {
     icon: withBasePath('/brand/max-favicon.ico'),
   },

@@ -65,7 +65,7 @@ beforeEach(() => {
   auditApi.listAuditLogs.mockReturnValue(reply({ items: [posted, nightly], nextCursor: null }));
 });
 
-describe('Activity Logs', () => {
+describe('Activity logs', () => {
   it('lists who did what to which record, at the chosen location', async () => {
     renderScreen(<AuditLogPageClient />);
 

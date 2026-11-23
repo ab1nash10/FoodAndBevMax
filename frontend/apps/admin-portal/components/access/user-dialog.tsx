@@ -254,7 +254,7 @@ export function UserDialog({
             </Button>
             <Button disabled={saveMutation.isPending} onClick={submit} type="button">
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Submit
+              {user ? 'Save changes' : `Add ${noun}`}
             </Button>
           </div>
         }
@@ -308,12 +308,12 @@ export function UserDialog({
             />
           </Field>
 
-          <Field label="Employee Code" name="employeeCode" required={!user}>
+          <Field label="Employee code" name="employeeCode" required={!user}>
             <Input
               disabled={Boolean(user)}
               id="employeeCode"
               onChange={(event) => update('employeeCode', event.target.value)}
-              placeholder="Employee Code"
+              placeholder="Employee code"
               value={values.employeeCode}
             />
           </Field>
@@ -415,7 +415,7 @@ export function UserDialog({
                 variant="outline"
               >
                 <MapPin className="h-4 w-4" />
-                Add Location(s)
+                Add locations
               </Button>
               <Button
                 disabled={accessIds.length === 0}

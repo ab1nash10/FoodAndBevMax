@@ -2,19 +2,10 @@
 
 import { Button } from '@aahar/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  CircleCheck,
-  CircleX,
-  ClipboardCheck,
-  Download,
-  FilePen,
-  Plus,
-  Truck,
-  type LucideIcon,
-} from 'lucide-react';
+import { ClipboardCheck, Download, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { InventoryLocationType, SortOrder, Transfer, TransferStatus } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import {
@@ -29,7 +20,6 @@ import {
   EmptyState,
   InlineProgress,
   ListPager,
-  StatStrip,
   StatusChip,
   tableStyles,
   TypeTag,
@@ -277,18 +267,10 @@ export function TransfersPageClient() {
     queryKey: queryKeys.transfers(page, ...filterKey, statusFilter, sortOrder, limit),
   });
 
-  // One count per saved view, under the same filters: one request answers every tab.
-  const viewCountsQuery = useQuery({
-    queryFn: async () => {
-      const { meta } = (
-        await organizationApi.listTransfers({ ...listFilters, limit: 0, statusCounts: true })
-      ).data;
-
-      return Object.fromEntries([
-        ['', meta.total],
-        ...transferStatuses.map((status) => [status, meta.statusCounts?.[status] ?? 0]),
-      ]) as Record<TransferView, number>;
-    },
+  // Every transfer under the same filters, whatever the status, for the header.
+  const totalQuery = useQuery({
+    queryFn: async () =>
+      (await organizationApi.listTransfers({ ...listFilters, limit: 0 })).data.meta.total,
     queryKey: queryKeys.transfersViewCounts(...filterKey),
   });
 
@@ -425,49 +407,32 @@ export function TransfersPageClient() {
     });
   }
 
-  /** A stat's status alone; picking the one in force goes back to every transfer. */
-  function showStatus(status: TransferStatus) {
-    changeFilter(() => setStatusFilter((current) => (current === status ? '' : status)));
-  }
+  // An open transfer sits beside the list from xl, the list keeping its place with the open one
+  // marked; below xl it gets the whole page, as a GRN does, and its back link returns to the list.
+  let detail: ReactNode = null;
 
-  const viewCounts = viewCountsQuery.data;
-  const statTones: Partial<Record<TransferStatus, 'bad' | 'ok' | 'pending'>> = {
-    ACKNOWLEDGED: 'ok',
-    CANCELLED: 'bad',
-    PENDING_ACKNOWLEDGEMENT: 'pending',
-  };
-  const statIcons: Partial<Record<TransferStatus, LucideIcon>> = {
-    ACKNOWLEDGED: CircleCheck,
-    CANCELLED: CircleX,
-    DRAFT: FilePen,
-    PENDING_ACKNOWLEDGEMENT: Truck,
-  };
-
-  // An open transfer gets the whole page, as a GRN does; the back link returns to the list.
-  if (selectedTransferId) {
-    if (!selectedTransfer) {
-      return linkedTransferQuery.isError ? (
-        <Panel className="p-6">
-          <EmptyState
-            action={
-              <Button onClick={() => setUrlParams({ id: null })} type="button" variant="outline">
-                Back to transfers
-              </Button>
-            }
-            description="It may have been deleted, or it belongs to a location you can't view."
-            title="Transfer not found"
-          />
-        </Panel>
-      ) : (
-        <section className="space-y-4">
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-80 w-full" />
-        </section>
-      );
-    }
-
-    return (
+  if (selectedTransferId && !selectedTransfer) {
+    detail = linkedTransferQuery.isError ? (
+      <Panel className="p-6">
+        <EmptyState
+          action={
+            <Button onClick={() => setUrlParams({ id: null })} type="button" variant="outline">
+              Back to transfers
+            </Button>
+          }
+          description="It may have been deleted, or it belongs to a location you can't view."
+          title="Transfer not found"
+        />
+      </Panel>
+    ) : (
+      <section className="space-y-4">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-80 w-full" />
+      </section>
+    );
+  } else if (selectedTransferId && selectedTransfer) {
+    detail = (
       <TransferDetails
         actions={
           selectedTransfer.status === 'DRAFT' ? (
@@ -526,8 +491,8 @@ export function TransfersPageClient() {
     );
   }
 
-  return (
-    <section className="space-y-4">
+  const list = (
+    <section className={cn('min-w-0 space-y-4', detail && 'hidden xl:block')}>
       <AppPageHeader
         action={
           <>
@@ -551,24 +516,12 @@ export function TransfersPageClient() {
             ) : null}
           </>
         }
-        count={viewCounts?.['']}
+        count={totalQuery.data}
         description="Stock sent from stores and kitchens to restaurants, and leftovers between restaurants."
         title="Transfers"
       />
 
       {/* One count per status under the list's other filters; the title's count is all of them. */}
-      <StatStrip
-        label="Transfers by status"
-        rich
-        stats={transferStatuses.map((status) => ({
-          active: statusFilter === status,
-          icon: statIcons[status],
-          label: longStatus(status),
-          onSelect: () => showStatus(status),
-          tone: statTones[status],
-          value: viewCounts?.[status] ?? '–',
-        }))}
-      />
 
       <div className="flex flex-wrap items-start gap-5">
         <Panel
@@ -590,143 +543,156 @@ export function TransfersPageClient() {
                 Export CSV
               </Button>
             </BulkActionBar>
-          ) : (
-            <ListToolbar>
-              <FilterSearch
-                label="Search transfers"
-                onChange={(value) => changeFilter(() => setSearch(value))}
-                placeholder="Transfer no., item or remarks"
-                value={searchInput}
-              />
-              <FiltersMenu
-                activeCount={
-                  [
-                    hospitalParam,
-                    sourceTypeFilter,
-                    storeFilter,
-                    kitchenFilter,
-                    restaurantFilter,
-                    dateRange,
-                  ].filter(Boolean).length
-                }
-              >
-                {!scopedHospitalId ? (
-                  <FilterField label="Location">
-                    <Select
-                      onChange={(event) =>
-                        changeFilter(() => {
-                          setHospitalFilter(event.target.value);
-                          setStoreFilter('');
-                          setKitchenFilter('');
-                          setRestaurantFilter('');
-                        })
-                      }
-                      value={hospitalFilter}
-                    >
-                      <option value="">All locations</option>
-                      {(hospitalsQuery.data ?? []).map((hospital) => (
-                        <option key={hospital.id} value={hospital.id}>
-                          {hospital.hospitalName}
-                        </option>
-                      ))}
-                    </Select>
-                  </FilterField>
-                ) : null}
-                <FilterField label="From">
+          ) : null}
+          <ListToolbar>
+            <FilterSearch
+              label="Search transfers"
+              onChange={(value) => changeFilter(() => setSearch(value))}
+              placeholder="Transfer no., item or remarks"
+              value={searchInput}
+            />
+            <FiltersMenu
+              activeCount={
+                [
+                  hospitalParam,
+                  sourceTypeFilter,
+                  storeFilter,
+                  kitchenFilter,
+                  restaurantFilter,
+                  statusFilter,
+                  dateRange,
+                ].filter(Boolean).length
+              }
+            >
+              {!scopedHospitalId ? (
+                <FilterField label="Location">
                   <Select
                     onChange={(event) =>
                       changeFilter(() => {
-                        setSourceTypeFilter(event.target.value as '' | InventoryLocationType);
+                        setHospitalFilter(event.target.value);
                         setStoreFilter('');
                         setKitchenFilter('');
+                        setRestaurantFilter('');
                       })
                     }
-                    value={sourceTypeFilter}
+                    value={hospitalFilter}
                   >
-                    <option value="">Any source</option>
-                    <option value="STORE">Stores</option>
-                    <option value="KITCHEN">Kitchens</option>
-                    <option value="RESTAURANT">Restaurants (leftovers)</option>
+                    <option value="">All locations</option>
+                    {(hospitalsQuery.data ?? []).map((hospital) => (
+                      <option key={hospital.id} value={hospital.id}>
+                        {hospital.hospitalName}
+                      </option>
+                    ))}
                   </Select>
                 </FilterField>
-                {sourceTypeFilter && sourceTypeFilter !== 'RESTAURANT' && hospitalFilter ? (
-                  <FilterField label={sourceTypeFilter === 'KITCHEN' ? 'Kitchen' : 'Store'}>
-                    <Select
-                      onChange={(event) =>
-                        changeFilter(() =>
-                          sourceTypeFilter === 'KITCHEN'
-                            ? setKitchenFilter(event.target.value)
-                            : setStoreFilter(event.target.value),
-                        )
-                      }
-                      value={sourceTypeFilter === 'KITCHEN' ? kitchenFilter : storeFilter}
-                    >
-                      <option value="">
-                        {sourceTypeFilter === 'KITCHEN' ? 'Any kitchen' : 'Any store'}
-                      </option>
-                      {sourceTypeFilter === 'KITCHEN'
-                        ? (kitchensQuery.data ?? []).map((kitchen) => (
-                            <option key={kitchen.id} value={kitchen.id}>
-                              {kitchen.kitchenName}
-                            </option>
-                          ))
-                        : (storesQuery.data ?? []).map((store) => (
-                            <option key={store.id} value={store.id}>
-                              {store.storeName}
-                            </option>
-                          ))}
-                    </Select>
-                  </FilterField>
-                ) : null}
-                <FilterField label="To">
+              ) : null}
+              <FilterField label="From">
+                <Select
+                  onChange={(event) =>
+                    changeFilter(() => {
+                      setSourceTypeFilter(event.target.value as '' | InventoryLocationType);
+                      setStoreFilter('');
+                      setKitchenFilter('');
+                    })
+                  }
+                  value={sourceTypeFilter}
+                >
+                  <option value="">Any source</option>
+                  <option value="STORE">Stores</option>
+                  <option value="KITCHEN">Kitchens</option>
+                  <option value="RESTAURANT">Restaurants (leftovers)</option>
+                </Select>
+              </FilterField>
+              {sourceTypeFilter && sourceTypeFilter !== 'RESTAURANT' && hospitalFilter ? (
+                <FilterField label={sourceTypeFilter === 'KITCHEN' ? 'Kitchen' : 'Store'}>
                   <Select
-                    disabled={!hospitalFilter}
                     onChange={(event) =>
-                      changeFilter(() => setRestaurantFilter(event.target.value))
+                      changeFilter(() =>
+                        sourceTypeFilter === 'KITCHEN'
+                          ? setKitchenFilter(event.target.value)
+                          : setStoreFilter(event.target.value),
+                      )
                     }
-                    value={restaurantFilter}
+                    value={sourceTypeFilter === 'KITCHEN' ? kitchenFilter : storeFilter}
                   >
                     <option value="">
-                      {hospitalFilter ? 'Any restaurant' : 'Choose a location first'}
+                      {sourceTypeFilter === 'KITCHEN' ? 'Any kitchen' : 'Any store'}
                     </option>
-                    {(restaurantsQuery.data ?? []).map((restaurant) => (
-                      <option key={restaurant.id} value={restaurant.id}>
-                        {restaurant.restaurantName}
-                      </option>
-                    ))}
+                    {sourceTypeFilter === 'KITCHEN'
+                      ? (kitchensQuery.data ?? []).map((kitchen) => (
+                          <option key={kitchen.id} value={kitchen.id}>
+                            {kitchen.kitchenName}
+                          </option>
+                        ))
+                      : (storesQuery.data ?? []).map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.storeName}
+                          </option>
+                        ))}
                   </Select>
                 </FilterField>
-                <FilterField label="Date">
-                  <Select
-                    onChange={(event) =>
-                      changeFilter(() => setDateRange(event.target.value as TransferDateRange))
-                    }
-                    value={dateRange}
-                  >
-                    <option value="">Any time</option>
-                    {transferDateRanges.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </FilterField>
-              </FiltersMenu>
-              <SortControl
-                onOrderChange={(value) => changeFilter(() => setSortOrder(value))}
-                options={[{ label: 'Created date', value: 'createdAt' }]}
-                order={sortOrder}
-                sortBy="createdAt"
-              />
-              <RefreshButton
-                onClick={() => {
-                  void transfersQuery.refetch();
-                  void viewCountsQuery.refetch();
-                }}
-              />
-              <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
-            </ListToolbar>
-          )}
+              ) : null}
+              <FilterField label="To">
+                <Select
+                  disabled={!hospitalFilter}
+                  onChange={(event) => changeFilter(() => setRestaurantFilter(event.target.value))}
+                  value={restaurantFilter}
+                >
+                  <option value="">
+                    {hospitalFilter ? 'Any restaurant' : 'Choose a location first'}
+                  </option>
+                  {(restaurantsQuery.data ?? []).map((restaurant) => (
+                    <option key={restaurant.id} value={restaurant.id}>
+                      {restaurant.restaurantName}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+              <FilterField label="Status">
+                <Select
+                  onChange={(event) =>
+                    changeFilter(() => setStatusFilter(event.target.value as TransferView))
+                  }
+                  value={statusFilter}
+                >
+                  <option value="">Any status</option>
+                  {transferStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {longStatus(status)}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+              <FilterField label="Date">
+                <Select
+                  onChange={(event) =>
+                    changeFilter(() => setDateRange(event.target.value as TransferDateRange))
+                  }
+                  value={dateRange}
+                >
+                  <option value="">Any time</option>
+                  {transferDateRanges.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+            </FiltersMenu>
+            <SortControl
+              onOrderChange={(value) => changeFilter(() => setSortOrder(value))}
+              options={[{ label: 'Created date', value: 'createdAt' }]}
+              order={sortOrder}
+              sortBy="createdAt"
+            />
+            <RefreshButton
+              onClick={() => {
+                void transfersQuery.refetch();
+                void totalQuery.refetch();
+              }}
+            />
+            <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
+          </ListToolbar>
 
           {transfers.length > 0 ? (
             // Phones: one card per transfer instead of a table that scrolls sideways.
@@ -973,5 +939,16 @@ export function TransfersPageClient() {
         </Panel>
       </div>
     </section>
+  );
+
+  return detail ? (
+    <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,600px)] xl:items-start xl:gap-5">
+      {list}
+      <div className="min-w-0 xl:sticky xl:top-[calc(var(--app-header-h)+1.25rem)] xl:max-h-[calc(100dvh-var(--app-header-h)-2.5rem)] xl:overflow-y-auto">
+        {detail}
+      </div>
+    </div>
+  ) : (
+    list
   );
 }

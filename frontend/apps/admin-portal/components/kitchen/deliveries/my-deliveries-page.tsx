@@ -87,7 +87,7 @@ export function MyDeliveriesPageClient() {
     <section className="space-y-4">
       <AppPageHeader
         description="Room orders given to you. Take a ready one to the bed, then tap Delivered."
-        title="My Deliveries"
+        title="My deliveries"
       />
       {deliveries.isLoading ? (
         <Skeleton className="h-40 w-full" />

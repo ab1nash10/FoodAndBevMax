@@ -34,7 +34,7 @@ describe('the header location', () => {
     render(<HeaderLocationSelector />);
 
     expect(
-      screen.getByRole('button', { name: 'Select Location. Current selection: Patparganj' }),
+      screen.getByRole('button', { name: 'Select a location. Current selection: Patparganj' }),
     ).toBeInTheDocument();
   });
 
@@ -42,8 +42,8 @@ describe('the header location', () => {
     const user = userEvent.setup();
     render(<HeaderLocationSelector />);
 
-    await user.click(screen.getByRole('button', { name: /^Select Location/ }));
-    expect(screen.getByRole('button', { name: /^Select Location/ })).toHaveAttribute(
+    await user.click(screen.getByRole('button', { name: /^Select a location/ }));
+    expect(screen.getByRole('button', { name: /^Select a location/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
@@ -53,24 +53,24 @@ describe('the header location', () => {
     expect(screen.queryByRole('button', { name: /^Saket/ })).not.toBeInTheDocument();
   });
 
-  it('offers All Locations only to a user who reaches every location', async () => {
+  it('offers All locations only to a user who reaches every location', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<HeaderLocationSelector />);
-    await user.click(screen.getByRole('button', { name: /^Select Location/ }));
-    await user.click(screen.getByRole('button', { name: /^All Locations/ }));
+    await user.click(screen.getByRole('button', { name: /^Select a location/ }));
+    await user.click(screen.getByRole('button', { name: /^All locations/ }));
     expect(setSelectedLocation).toHaveBeenCalledWith(null);
     unmount();
 
     override.location = { canSelectAllLocations: false, setSelectedLocation };
     render(<HeaderLocationSelector />);
-    await user.click(screen.getByRole('button', { name: /^Select Location/ }));
-    expect(screen.queryByRole('button', { name: /^All Locations/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Select a location/ }));
+    expect(screen.queryByRole('button', { name: /^All locations/ })).not.toBeInTheDocument();
   });
 
   it('closes on Esc without changing the location', async () => {
     const user = userEvent.setup();
     render(<HeaderLocationSelector />);
-    await user.click(screen.getByRole('button', { name: /^Select Location/ }));
+    await user.click(screen.getByRole('button', { name: /^Select a location/ }));
 
     await user.keyboard('{Escape}');
 
@@ -100,7 +100,7 @@ describe('the header location', () => {
     override.location = { canSelectAllLocations: false, setSelectedLocation };
     render(<HeaderLocationSelector />);
 
-    await user.click(screen.getByRole('button', { name: /^Select Location/ }));
+    await user.click(screen.getByRole('button', { name: /^Select a location/ }));
 
     expect(screen.getByText('No active locations available.')).toBeInTheDocument();
   });

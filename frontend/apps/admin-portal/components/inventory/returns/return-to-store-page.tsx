@@ -35,7 +35,7 @@ export function ReturnToStorePageClient() {
   const { scopedHospitalId } = useLocationContext();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  // The POS and Restaurant Stock links name the restaurant.
+  // The POS and Restaurant stock links name the restaurant.
   const [restaurantId, setRestaurantId] = useUrlParam('restaurant');
   const [pickedHospitalId, setPickedHospitalId] = useState('');
   const hospitalId = scopedHospitalId ?? pickedHospitalId;
@@ -161,7 +161,7 @@ export function ReturnToStorePageClient() {
     <section className="space-y-4">
       <AppPageHeader
         description="Send MRP stock back to the store, at shift end, day end or any time. The store counts it in; anything it does not find comes back to the restaurant's stock."
-        title="Return to Store"
+        title="Return to store"
       />
 
       <Panel className="flex flex-wrap gap-3.5 p-[18px]">

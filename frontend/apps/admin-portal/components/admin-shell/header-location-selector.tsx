@@ -79,12 +79,12 @@ export function HeaderLocationSelector({
         aria-label={
           isLocationSelectorLocked
             ? `Your location: ${locationLabel}`
-            : `Select Location. Current selection: ${locationLabel}`
+            : `Select a location. Current selection: ${locationLabel}`
         }
         className={cn(
           wide
-            ? 'h-10 w-full justify-start px-3 text-ds-text'
-            : 'w-10 px-0 text-ds-text-2 xl:w-auto xl:px-3.5',
+            ? 'h-10 w-full justify-start rounded-full px-3.5 text-ds-text'
+            : 'h-10 w-10 rounded-full px-0 text-ds-text-2 xl:w-auto xl:px-4',
           !allLocationsSelected && 'border-ds-primary-border bg-ds-selected',
           isLocationSelectorLocked && 'cursor-default',
         )}
@@ -100,7 +100,9 @@ export function HeaderLocationSelector({
         <span
           className={cn(
             'truncate text-left',
-            wide ? 'min-w-0 flex-1 text-[13px] font-medium' : 'hidden max-w-40 xl:inline',
+            wide
+              ? 'min-w-0 flex-1 text-[13px] font-medium'
+              : 'hidden max-w-32 xl:inline 2xl:max-w-44',
           )}
         >
           {locationLabel}
@@ -123,7 +125,7 @@ export function HeaderLocationSelector({
           )}
         >
           <div className="border-b border-ds-divider px-4 py-3">
-            <p className="text-sm font-bold text-ds-text">Select Location</p>
+            <p className="text-sm font-bold text-ds-text">Select a location</p>
             <p className="mt-1 text-xs text-ds-muted">
               Choose a location to view location-specific data
             </p>
@@ -142,7 +144,7 @@ export function HeaderLocationSelector({
                   <MapPin className="h-4 w-4" strokeWidth={1.8} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-ds-text">All Locations</span>
+                  <span className="block text-sm font-semibold text-ds-text">All locations</span>
                   <span className="mt-0.5 block text-xs text-ds-muted">
                     View consolidated data across all locations
                   </span>

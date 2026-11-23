@@ -45,6 +45,13 @@ function formatAgeSince(value: string): string {
     : `${Math.floor(hours / 24)}d`;
 }
 
+/** A location kind as a word: STORE is "Store". */
+const locationKind: Record<string, string> = {
+  KITCHEN: 'Kitchen',
+  RESTAURANT: 'Restaurant',
+  STORE: 'Store',
+};
+
 const rejectionReasons = [
   'Short received',
   'Damaged in transit',
@@ -317,12 +324,12 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         href={backHref}
       >
         <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-        {isReturn ? 'Count Returns' : 'Transfers'}
+        {isReturn ? 'Count returns' : 'Transfers'}
       </Link>
       {/* The record's header card, as on the transfer and GRN pages. */}
-      <div className="relative isolate flex flex-col gap-1.5 overflow-hidden rounded-[24px] border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6">
+      <div className="relative isolate flex flex-col gap-1.5 overflow-hidden rounded-card border border-ds-border bg-ds-surface p-5 shadow-card sm:p-6">
         <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ds-text">
+          <h1 className="text-xl font-bold leading-7 tracking-[-0.01em] text-ds-text">
             Acknowledge <span className="font-mono tracking-normal">{transfer.transferNumber}</span>
           </h1>
           <StatusChip
@@ -349,12 +356,12 @@ export function AcknowledgeTransferPageClient({ transferId }: Readonly<{ transfe
         {[
           {
             href: locationLink(transfer.sourceType, transfer.sourceId),
-            label: `From · ${transfer.sourceType}`,
+            label: `From · ${locationKind[transfer.sourceType]}`,
             value: sourceLabel,
           },
           {
             href: locationLink(transfer.destinationType, transfer.destinationId),
-            label: `To · ${transfer.destinationType}`,
+            label: `To · ${locationKind[transfer.destinationType]}`,
             value: destinationLabel,
           },
           { href: null, label: 'Sent', value: formatWhen(transfer.updatedAt) },

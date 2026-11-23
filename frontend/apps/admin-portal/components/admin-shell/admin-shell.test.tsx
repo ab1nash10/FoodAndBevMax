@@ -15,6 +15,12 @@ const override = vi.hoisted(() => ({
 }));
 
 vi.mock('next/navigation', () => import('@/test/next-navigation'));
+// Whether a link's page is still on its way (Next's useLinkStatus): set per test.
+const linkStatus = vi.hoisted(() => ({ pending: false }));
+vi.mock('next/link', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useLinkStatus: () => ({ pending: linkStatus.pending }),
+}));
 vi.mock('@/components/auth-provider', async () => {
   const auth = await import('@/test/auth');
   return { ...auth, useAuth: () => ({ ...auth.useAuth(), ...override.auth }) };
@@ -67,6 +73,7 @@ const modules = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  linkStatus.pending = false;
   override.auth = { logout };
   override.location = {};
   at('/masters/items');
@@ -85,17 +92,35 @@ describe('the portal shell', () => {
     renderShell();
 
     expect(screen.getByRole('heading', { name: 'Items page' })).toBeInTheDocument();
-    expect(modules()).toEqual(['Dashboard', 'Item & Menu', 'Access']);
+    expect(modules()).toEqual(['Dashboard', 'Item & menu', 'Access']);
     const pills = within(screen.getByRole('navigation', { name: 'Modules' }));
-    expect(pills.getByRole('link', { current: 'page' })).toHaveTextContent('Item & Menu');
+    expect(pills.getByRole('link', { current: 'page' })).toHaveTextContent('Item & menu');
+  });
+
+  it('answers a menu click at once: the page gives way to the loading shape', () => {
+    // A module or page link whose page has not arrived yet (dev mode, or not prefetched).
+    linkStatus.pending = true;
+    renderShell();
+
+    const main = within(screen.getByRole('main'));
+    expect(main.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(main.queryByRole('heading', { name: 'Items page' })).not.toBeInTheDocument();
+  });
+
+  it('leaves the page up when no menu link is waiting (a prefetched page opens at once)', () => {
+    renderShell();
+
+    const main = within(screen.getByRole('main'));
+    expect(main.getByRole('heading', { name: 'Items page' })).toBeInTheDocument();
+    expect(main.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
   });
 
   it('lists the current module’s pages as tabs', () => {
     renderShell();
 
-    const tabs = within(screen.getByRole('navigation', { name: 'Item & Menu Setup pages' }));
+    const tabs = within(screen.getByRole('navigation', { name: 'Item & menu pages' }));
     expect(tabs.getAllByRole('link').map((link) => link.textContent)).toEqual([
-      'Item Categories',
+      'Item categories',
       'Items',
     ]);
     expect(tabs.getByRole('link', { name: 'Items' })).toHaveAttribute('aria-current', 'page');
@@ -204,7 +229,7 @@ describe('the portal shell', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     expect(screen.getAllByRole('navigation', { name: 'Modules' })).toHaveLength(2);
-    expect(screen.getByRole('button', { name: 'Item & Menu Setup' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Item & menu' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );

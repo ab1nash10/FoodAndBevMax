@@ -15,11 +15,11 @@
   --breakpoint-xl: 1280px;
   --breakpoint-2xl: 1536px;
 
-  /* v3 (2026-10-24, "bolder"): rounder cards and controls. */
-  --radius-card: 24px;
-  --radius-control: 14px;
-  --radius-control-lg: 16px;
-  --radius-tile: 18px;
+  /* Premium Care Kitchen look (2026-11-22, canvas row C): soft rounded cards and controls. */
+  --radius-card: 22px;
+  --radius-control: 12px;
+  --radius-control-lg: 14px;
+  --radius-tile: 16px;
 
   --color-background: hsl(var(--background));
   --color-border: hsl(var(--border));
@@ -161,12 +161,20 @@
 
   --container-content: 1850px;
 
-  /* 44px: a comfortable touch target for every input, select and button. */
-  --spacing-control: 44px;
+  /* 42px inputs, selects and buttons with a mouse; 46px on a touch screen (the pointer: coarse
+     rule under @theme). */
+  --spacing-control: 42px;
   --spacing-cta: 46px;
   /* The collapsed sidebar rail. */
   --spacing-rail: 72px;
   --spacing-sidebar: 248px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --spacing-control: 46px;
+    --spacing-cta: 48px;
+  }
 }
 
 /*
@@ -271,17 +279,18 @@
 
 :root {
   /* The accent: logo blue, lifted a little at the top-left. */
-  --ds-primary-gradient: linear-gradient(135deg, rgb(36 119 207), rgb(11 87 164));
-  --ds-primary-gradient-hover: linear-gradient(135deg, rgb(52 136 224), rgb(16 99 184));
+  /* Max blue lit from the top (premium look). */
+  --ds-primary-gradient: linear-gradient(180deg, rgb(28 110 196), rgb(11 87 164));
+  --ds-primary-gradient-hover: linear-gradient(180deg, rgb(38 124 212), rgb(14 96 180));
   /* Design tokens (UI concepts). RGB channels, used through the ds-* Tailwind colours. */
   /* Blue and white: Max blue (#0B57A4, primary) graded 50–900, greys leaning slightly blue.
      Blue means brand, action and "you are here"; green only ever means done/ready or veg. */
   /* An airy near-white page with white cards on soft borders (Riotters reference). */
-  --ds-page: 241 245 251;
+  --ds-page: 245 248 252;
   --ds-surface: 255 255 255;
   --ds-subtle: 245 247 250;
   --ds-subtle-2: 250 251 252;
-  --ds-border: 232 235 240;
+  --ds-border: 228 233 241;
   --ds-divider: 241 243 246;
   --ds-input: 203 213 227;
   --ds-text: 14 26 43;
@@ -343,9 +352,8 @@
   --ds-food-non-veg: 154 52 18;
   --ds-food-egg: 180 83 9;
   --ds-food-egg-dot: 245 158 11;
-  --ds-card-shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 14px 34px -18px rgb(11 87 164 / 0.22);
-  --ds-card-shadow-hover:
-    0 18px 36px -12px rgb(16 24 40 / 0.2), 0 4px 10px -4px rgb(16 24 40 / 0.08);
+  --ds-card-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 18px 40px -28px rgb(11 87 164 / 0.35);
+  --ds-card-shadow-hover: 0 2px 4px rgb(15 23 42 / 0.05), 0 26px 50px -26px rgb(11 87 164 / 0.45);
   /* Brand logos sit on white in both themes. */
   --ds-logo-chip: 255 255 255;
 
@@ -532,13 +540,12 @@
     background-color: rgb(var(--ds-subtle));
   }
 
-  /* Table headers: small, grey, sentence case, so the data reads first. Applies to every table. */
+  /* Table headers (premium look, 2026-11-22): quiet words in sentence case on white, so the
+     data reads first. Applies to every table. */
   thead th {
     color: rgb(var(--ds-muted));
     font-size: 12.5px;
     font-weight: 500;
-    letter-spacing: 0;
-    text-transform: none;
   }
 
   .divide-slate-100 > :not(:last-child),
@@ -684,6 +691,11 @@
 [role='dialog'][data-side] {
   animation-name: side-in;
   animation-duration: 140ms;
+  /* Care Kitchen edit panels (2026-11-22): roomy 44px fields and buttons with softer corners,
+     while the lists around them stay compact. */
+  --spacing-control: 44px;
+  --spacing-cta: 46px;
+  --radius-control: 12px;
 }
 
 /* On phones the side panel is a bottom sheet (ui-controls Modal): it slides up instead. */
@@ -818,13 +830,12 @@
    has to be scrolled to. -1.25rem and -1.5rem undo the scroll area's py-5 / px-6 (Modal side). */
 [data-side] form > :last-child:has(button[type='submit']) {
   position: sticky;
-  bottom: -1.25rem;
+  bottom: -1.5rem;
   z-index: 2;
-  margin: 0.25rem -1.5rem -1.25rem;
+  margin: 0.25rem -1.5rem -1.5rem;
   padding: 0.875rem 1.5rem;
   border-top: 1px solid rgb(var(--ds-divider));
-  background: rgb(var(--ds-surface) / 0.92);
-  backdrop-filter: blur(8px);
+  background: rgb(var(--ds-surface));
 }
 
 /* The sidebar: a light panel on the page in both themes, set apart by its border; blue marks
@@ -890,26 +901,41 @@
 
 @media (width >= 900px) {
   :root {
-    --app-header-h: 106px;
+    --app-header-h: 118px;
   }
 }
 
-/* v3: the wash at the top of every page (admin-shell). Static: no animation, nothing to repaint. */
-.shell-wash {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 420px;
-  z-index: -1;
-  pointer-events: none;
+/* The page under the top bar: a soft Max-blue glow at its top, then a cool white. Painted once
+   with the page (no fixed layer), so it costs nothing while scrolling. */
+.app-canvas {
   background:
-    radial-gradient(60% 120% at 12% 0%, rgb(36 119 207 / 0.2), transparent 70%),
-    radial-gradient(40% 90% at 70% 0%, rgb(56 189 248 / 0.18), transparent 70%),
-    radial-gradient(35% 80% at 95% 10%, rgb(167 139 250 / 0.16), transparent 70%);
-  mask-image: linear-gradient(to bottom, black 40%, transparent);
+    radial-gradient(1100px 420px at 8% -120px, rgb(11 87 164 / 0.1), transparent 70%),
+    radial-gradient(800px 360px at 96% -140px, rgb(56 189 248 / 0.12), transparent 70%),
+    rgb(var(--ds-page));
 }
 
-.dark .shell-wash {
-  opacity: 0.5;
+.dark .app-canvas {
+  background:
+    radial-gradient(1100px 420px at 8% -120px, rgb(73 158 244 / 0.1), transparent 70%),
+    rgb(var(--ds-page));
+}
+
+/* The bar of actions for ticked rows floats up from the bottom. */
+.bulk-float {
+  animation: bulk-in 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes bulk-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bulk-float {
+    animation: none;
+  }
 }
 
 /* Quick-action tiles: a pastel wash per tone, light in light mode and deep in dark. */
@@ -1044,6 +1070,29 @@ tr[data-flash] > td:first-child::after {
 @media (prefers-reduced-motion: reduce) {
   tr[data-flash] > td:first-child::after {
     animation-timing-function: linear;
+  }
+}
+
+/* Swiss motion (components/swiss-motion.tsx): a row's chosen-item indicator slides along the
+   row, and a figure that changed rolls up into place. Short, crisp, transform-led; the pill's
+   width eases with it (one absolutely placed element). */
+.slide-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
+.slide-indicator[data-slides] {
+  transition:
+    transform 150ms cubic-bezier(0.2, 0, 0, 1),
+    width 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-indicator[data-slides] {
+    transition: none;
   }
 }
 
@@ -1201,29 +1250,6 @@ tr[data-flash] > td:first-child::after {
 
 .dark .tile-green {
   background: linear-gradient(135deg, rgb(14 40 35), rgb(16 50 43));
-}
-
-/* Sections fade up as they scroll into view, tied to the scroll itself (no timers, off the main
-   thread). What is on screen when a page opens is already past the range, so it shows at once. */
-@supports (animation-timeline: view()) {
-  .reveal {
-    animation: reveal linear both;
-    animation-timeline: view();
-    animation-range: entry 0% entry 30%;
-  }
-}
-
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reveal {
-    animation: none;
-  }
 }
 
 @keyframes kiosk-screen-enter {

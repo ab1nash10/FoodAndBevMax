@@ -5,7 +5,7 @@ import { Button } from '@aahar/ui';
 import { AlertTriangle, Menu, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { LogOutShiftDialog } from '@/components/admin-shell/log-out-shift-dialog';
 import { MobileTabBar } from '@/components/admin-shell/mobile-tab-bar';
 import { AccountMenu, SidebarActions } from '@/components/admin-shell/sidebar-actions';
@@ -15,10 +15,11 @@ import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
 import { PreferencesDialog } from '@/components/preferences/preferences-dialog';
 import { useApplyThemePreference } from '@/components/preferences/use-preferences';
-import { Skeleton } from '@/components/ui';
+import { PageSkeleton, Skeleton } from '@/components/ui';
 import { organizationApi } from '@/lib/api';
 import { openCommandPalette } from '@/lib/command-palette-events';
-import { canOpenPath, getPermittedPages } from '@/lib/navigation';
+import { useScreenEnter } from '@/components/swiss-motion';
+import { canOpenPath, getActiveNavHref, getPermittedPages } from '@/lib/navigation';
 import { useApplyDensity } from '@/lib/use-density';
 import { usePhoneCardLabels } from '@/lib/use-phone-card-labels';
 import { HeaderLocationSelector } from '@/components/admin-shell/header-location-selector';
@@ -36,7 +37,7 @@ function LoadingShell({ onRetry }: Readonly<{ onRetry?: () => void }>) {
                 Try again
               </Button>
             }
-            description="AAHAR services are not answering yet. They may be starting; try again in a moment."
+            description="F&B services are not answering yet. They may be starting; try again in a moment."
             icon={AlertTriangle}
             title="Could not load your locations"
           />
@@ -88,6 +89,16 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       })),
     [hasPermission, navCounts],
   );
+  // The open page's place in the menu: which side a new screen slides in from.
+  const activeHref = getActiveNavHref(pathname);
+  const mainRef = useScreenEnter<HTMLElement>(
+    pathname,
+    palettePages.findIndex((page) => page.href === activeHref),
+  );
+  // Menu links whose page is still on its way (dev mode, or not prefetched yet): until it
+  // arrives the old page gives way to the loading shape, so a click answers at once.
+  const [pendingLinks, setPendingLinks] = useState(0);
+  const onPending = useCallback((change: 1 | -1) => setPendingLinks((n) => n + change), []);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   // The user's open POS shift, found on Log out: they are asked to end or hand it over first.
@@ -137,8 +148,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     return <LoadingShell onRetry={locationsFailed ? retryLocations : undefined} />;
   }
 
-  const displayName =
-    currentUser?.name ?? currentUser?.email ?? currentUser?.mobile ?? 'AAHAR User';
+  const displayName = currentUser?.name ?? currentUser?.email ?? currentUser?.mobile ?? 'F&B User';
   const initials = displayName
     .split(/[.@\s]+/)
     .filter(Boolean)
@@ -172,9 +182,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   );
 
   return (
-    <div className="relative isolate min-h-screen bg-ds-page text-ds-text">
-      {/* v3: a soft blue wash across the top of every page, behind the header and title. */}
-      <div aria-hidden="true" className="shell-wash" />
+    <div className="app-canvas relative isolate min-h-screen text-ds-text">
       <a
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-70 focus:rounded-control focus:bg-ds-surface focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:text-ds-link focus:shadow-xl focus:outline-hidden focus:ring-2 focus:ring-ds-primary"
         href="#main-content"
@@ -232,12 +240,14 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       {/* The logo, the module pills, then location, search and account; the module's pages as
           tabs underneath. Below xl a menu button stands in for the pills. */}
       <header
-        className="sticky top-0 z-30 border-b border-ds-border/70 bg-ds-surface/80 backdrop-blur-xl"
+        // Solid, not blurred glass: a blur behind a bar that stays put is redrawn on every scroll
+        // frame, and Zen (Firefox) scrolled "sticky as hell" under it (2026-11-22).
+        className="sticky top-0 z-30 border-b border-ds-border/70 bg-ds-surface"
         ref={trackHeaderHeight}
       >
         {/* The same width as <main>, so the logo, the modules, the tabs and the page title share
             one left edge. */}
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-3 px-4 nav:gap-4 nav:px-8 min-[1800px]:max-w-[1760px]">
+        <div className="mx-auto flex h-16 max-w-[1480px] items-center gap-3 px-4 nav:gap-5 nav:px-8">
           <Button
             aria-label="Open navigation"
             className="shrink-0 xl:hidden nav:w-auto nav:gap-2 nav:px-3.5"
@@ -254,7 +264,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             ) : null}
           </Button>
           <Link
-            aria-label="AAHAR dashboard"
+            aria-label="F&B dashboard"
             className="hidden shrink-0 rounded-control-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary nav:block"
             href="/dashboard"
           >
@@ -268,43 +278,48 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             className="hidden min-w-0 flex-1 xl:flex"
             counts={navCounts}
             hasPermission={hasPermission}
+            onPending={onPending}
           />
           <div className="hidden flex-1 nav:block xl:hidden" />
           <div className="flex shrink-0 items-center gap-2">
             <div className="hidden nav:block">
               <HeaderLocationSelector />
             </div>
-            <Button
+            {/* Search (the command palette, Ctrl K): a round icon, so the modules always fit. */}
+            <button
               aria-keyshortcuts="Control+K"
               aria-label="Search"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-ds-border bg-ds-surface text-ds-text-2 transition-colors duration-150 hover:border-ds-primary-border hover:text-ds-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
               onClick={openPalette}
-              size="icon"
               title="Search (Ctrl K)"
               type="button"
-              variant="outline"
             >
-              <Search className="h-[18px] w-[18px]" strokeWidth={1.8} />
-            </Button>
+              <Search className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+            </button>
             {account(true)}
           </div>
         </div>
         <ModuleTabs
-          className="mx-auto hidden max-w-[1440px] px-4 nav:block nav:px-8 min-[1800px]:max-w-[1760px]"
+          className="mx-auto hidden max-w-[1480px] px-4 py-2 nav:block nav:px-8"
           counts={navCounts}
           hasPermission={hasPermission}
+          onPending={onPending}
         />
       </header>
       <main
         // pb-24 below nav: room for the phone tab bar, so it never hides the last row.
-        className="mx-auto w-full max-w-[1440px] min-[1800px]:max-w-[1760px] px-4 pb-24 pt-5 focus:outline-hidden nav:px-8 nav:pb-12 nav:pt-8"
+        className="mx-auto w-full max-w-[1480px] px-4 pb-24 pt-6 focus:outline-hidden nav:px-8 nav:pb-14 nav:pt-8"
         id="main-content"
+        ref={mainRef}
         tabIndex={-1}
       >
-        {/* No screen-change animation: a React ViewTransition waits for the whole new screen
-            before it starts, which held each click for ~0.9 s on a revisited page (measured
-            2026-10-22: 850–880 ms with it, 130–160 ms without). A screen shows the moment it
-            is ready. */}
-        {children}
+        {/* No React ViewTransition: it waits for the whole new screen before it starts, which
+            held each click ~0.9 s (measured 2026-10-22). The screen shows the moment it is
+            ready and slides in from where it was opened as it shows (useScreenEnter). */}
+        <div className="contents" hidden={pendingLinks > 0}>
+          {children}
+        </div>
+        {pendingLinks > 0 ? <PageSkeleton /> : null}
       </main>
       <MobileTabBar
         onMore={() => setIsMobileMenuOpen(true)}

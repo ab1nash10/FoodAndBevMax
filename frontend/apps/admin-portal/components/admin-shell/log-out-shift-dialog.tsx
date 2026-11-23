@@ -43,7 +43,7 @@ export function LogOutShiftDialog({
           advice={
             shift.hasTill
               ? 'On that counter’s till, open End shift, count the cash, then Close sales, or Hand over to next person.'
-              : 'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & Payment Machines → Counters.'
+              : 'That counter has no till, so it can’t be ended there. Ask an admin to end it under POS & payment machines → Counters.'
           }
           heading="You still have a POS shift open."
           lead="End it, or hand it over to the next cashier, before you log out."

@@ -106,7 +106,7 @@ function Welcome({
       type="button"
     >
       <span className="relative z-10 text-[18px] font-bold uppercase tracking-[0.18em] text-white/70">
-        {restaurantName ?? 'AAHAR'}
+        {restaurantName ?? 'F&B'}
         {locationName ? ` · ${locationName}` : ''}
       </span>
       <span

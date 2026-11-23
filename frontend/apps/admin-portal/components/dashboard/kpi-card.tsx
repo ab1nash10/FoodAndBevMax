@@ -54,7 +54,7 @@ export function KpiCard({
 }>) {
   return (
     <Link
-      className="group flex flex-col gap-3 rounded-card border border-ds-border bg-ds-surface px-[18px] pb-4 pt-4 text-ds-text shadow-card transition duration-200 hover:border-ds-primary/30 hover:shadow-card-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary motion-safe:hover:-translate-y-0.5"
+      className="group flex flex-col gap-2 rounded-card border border-ds-border bg-ds-surface px-3.5 py-3 text-ds-text transition-colors duration-150 hover:border-ds-primary-border focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary"
       href={href}
     >
       {/* The same head as a list page's stat strip: a dot and the label, then the scope under
@@ -65,7 +65,7 @@ export function KpiCard({
           <span
             aria-hidden="true"
             className={cn(
-              'grid h-11 w-11 shrink-0 place-items-center rounded-[14px]',
+              'grid h-8 w-8 shrink-0 place-items-center rounded-[7px]',
               !status || loading || error
                 ? 'bg-ds-status-info-bg text-ds-status-info-fg'
                 : status === 'clear'
@@ -73,7 +73,7 @@ export function KpiCard({
                   : 'bg-ds-status-pending-bg text-ds-status-pending-fg',
             )}
           >
-            <Icon className="h-[22px] w-[22px]" strokeWidth={1.9} />
+            <Icon className="h-4 w-4" strokeWidth={1.9} />
           </span>
         ) : (
           <span
@@ -96,7 +96,7 @@ export function KpiCard({
         </span>
       </span>
       {loading ? (
-        <Skeleton className="h-[36px] w-20" />
+        <Skeleton className="h-7 w-20" />
       ) : (
         <span className="flex flex-wrap items-baseline gap-2">
           {/* Sans, not mono: Geist Mono's slashed zero reads as "Ø" this large. */}
@@ -105,7 +105,7 @@ export function KpiCard({
               {empty}
             </span>
           ) : (
-            <span className="text-[36px] font-bold leading-none tracking-[-0.035em] tabular-nums">
+            <span className="text-[22px] font-semibold leading-7 tracking-[-0.02em] tabular-nums">
               {error ? '—' : value}
             </span>
           )}

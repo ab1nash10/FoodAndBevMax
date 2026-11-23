@@ -106,8 +106,8 @@ beforeEach(() => {
   api.listRestaurants.mockReturnValue(
     page([{ id: 'rest-1', restaurantName: 'Cafeteria' }]) as never,
   );
-  api.listTransfers.mockImplementation(((query: { statusCounts?: boolean }) =>
-    query.statusCounts
+  api.listTransfers.mockImplementation(((query: { limit?: number }) =>
+    query.limit === 0
       ? reply({
           items: [],
           meta: {
@@ -122,7 +122,7 @@ beforeEach(() => {
 });
 
 const listRequests = () =>
-  api.listTransfers.mock.calls.map(([query]) => query).filter((query) => !query?.statusCounts);
+  api.listTransfers.mock.calls.map(([query]) => query).filter((query) => query?.limit !== 0);
 const table = () => within(screen.getByRole('table'));
 const rowOf = (number: string) => table().getByRole('link', { name: number }).closest('tr')!;
 
@@ -144,23 +144,14 @@ describe('the transfer list', () => {
   });
 
   it('says which operator a pending transfer waits on', async () => {
-    api.listTransfers.mockImplementation(((query: { statusCounts?: boolean }) =>
-      query.statusCounts
+    api.listTransfers.mockImplementation(((query: { limit?: number }) =>
+      query.limit === 0
         ? reply({ items: [], meta: { limit: 0, page: 1, total: 1, totalPages: 1 } })
         : page([{ ...pending, receiverId: 'user-ravi', receiverName: 'Ravi Kumar' }])) as never);
     renderScreen(<TransfersPageClient />);
     await table().findByRole('link', { name: 'TR-002' });
 
     expect(within(rowOf('TR-002')).getByText('Waiting on Ravi Kumar')).toBeInTheDocument();
-  });
-
-  it('counts the transfers by status', async () => {
-    renderScreen(<TransfersPageClient />);
-    const strip = within(screen.getByRole('group', { name: 'Transfers by status' }));
-
-    expect(await strip.findByRole('button', { name: /^2\s*Draft/ })).toBeInTheDocument();
-    expect(strip.getByRole('button', { name: /^1\s*Pending acknowledgement/ })).toBeInTheDocument();
-    expect(strip.getByRole('button', { name: /^4\s*Acknowledged/ })).toBeInTheDocument();
   });
 
   it('offers Acknowledge on a pending transfer only to someone who may acknowledge', async () => {
@@ -183,7 +174,11 @@ describe('the transfer list', () => {
     await table().findByRole('link', { name: 'TR-001' });
     expect(listRequests()[0]).toMatchObject({ hospitalId: ppg.id, page: 1, sortOrder: 'desc' });
 
-    await user.click(screen.getByRole('button', { name: /Pending acknowledgement/ }));
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Status' }),
+      'PENDING_ACKNOWLEDGEMENT',
+    );
     await waitFor(() =>
       expect(listRequests().at(-1)).toMatchObject({ status: 'PENDING_ACKNOWLEDGEMENT' }),
     );
@@ -242,6 +237,15 @@ describe('the transfer list', () => {
 });
 
 describe('an open transfer', () => {
+  it('opens beside the list, the open one marked in it', async () => {
+    at('/inventory/transfers', 'id=tr-1');
+    renderScreen(<TransfersPageClient />);
+
+    await screen.findByRole('heading', { name: 'TR-001', level: 1 });
+    const list = within(screen.getByRole('region', { name: 'Transfer list' }));
+    expect(await list.findAllByRole('link', { current: true, name: 'TR-001' })).not.toHaveLength(0);
+  });
+
   it('shows its lines, and dispatches a draft', async () => {
     api.dispatchTransfer.mockReturnValue(reply(draft));
     at('/inventory/transfers', 'id=tr-1');
