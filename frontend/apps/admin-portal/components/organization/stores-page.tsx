@@ -12,13 +12,7 @@ import {
 } from '@/components/list-toolbar';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import {
-  DateTimeCell,
-  RecordAvatar,
-  RowAction,
-  StatStrip,
-  tableStyles,
-} from '@/components/design-system';
+import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -128,9 +122,7 @@ export function StoresPageClient() {
             limit: 0,
           })
         ).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.stores('stats', scopedHospitalId ?? 'all'),
   });
@@ -223,11 +215,6 @@ export function StoresPageClient() {
     statusMutation.mutate({ id: store.id, isActive: nextIsActive });
   }
 
-  function showStatus(status: ActiveFilter) {
-    setActiveFilter(status);
-    setPage(1);
-  }
-
   return (
     <section className="space-y-5">
       <PageHeader
@@ -273,34 +260,6 @@ export function StoresPageClient() {
         icon={Store}
         subtitle="Manage F&B stores linked to locations."
         title="Stores"
-      />
-      <StatStrip
-        label="Stores at a glance"
-        stats={[
-          {
-            active: !activeFilter,
-            label: 'All stores',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            tone: 'ok',
-            share: stats?.all ? stats.active / stats.all : undefined,
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showStatus('inactive'),
-            tone: 'pending',
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            value: stats?.inactive ?? '–',
-          },
-        ]}
       />
       <Panel>
         <ListToolbar>

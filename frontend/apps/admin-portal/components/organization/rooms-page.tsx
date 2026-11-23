@@ -11,13 +11,7 @@ import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import { CsvImportExport, fetchAllPages } from '@/components/csv-import-export';
-import {
-  DateTimeCell,
-  RecordAvatar,
-  RowAction,
-  StatStrip,
-  tableStyles,
-} from '@/components/design-system';
+import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import {
   FilterField,
   FiltersMenu,
@@ -168,9 +162,7 @@ export function RoomsPageClient() {
             restaurantId: listQuery.restaurantId,
           })
         ).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.rooms(
       'stats',
@@ -349,46 +341,21 @@ export function RoomsPageClient() {
         }
         icon={BedDouble}
         subtitle="Rooms and beds, and the restaurants' dine-in tables. Each one's QR opens ordering with it filled in."
-        title="Rooms & Tables"
-      />
-      <SavedViewTabs<Kind>
-        label="Rooms or tables"
-        onChange={switchKind}
-        views={[
-          { label: 'Rooms & beds', value: 'rooms' },
-          { label: 'Tables', value: 'tables' },
-        ]}
-        value={kind}
-      />
-      <StatStrip
-        label={tables ? 'Tables at a glance' : 'Rooms at a glance'}
-        stats={[
-          {
-            active: !activeFilter,
-            label: tables ? 'All tables' : 'All rooms',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            share: stats?.all ? stats.active / stats.all : undefined,
-            tone: 'ok',
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showStatus('inactive'),
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            tone: 'pending',
-            value: stats?.inactive ?? '–',
-          },
-        ]}
+        title="Rooms & tables"
       />
       <Panel>
+        {/* Rooms or tables on top of the list card, as Item locations has Store / Kitchen. */}
+        <div className="pt-2">
+          <SavedViewTabs<Kind>
+            label="Rooms or tables"
+            onChange={switchKind}
+            views={[
+              { label: 'Rooms & beds', value: 'rooms' },
+              { label: 'Tables', value: 'tables' },
+            ]}
+            value={kind}
+          />
+        </div>
         <ListToolbar>
           <SearchInput
             label={tables ? 'Search tables' : 'Search rooms'}
@@ -842,7 +809,7 @@ function RoomQrDialog({ onClose, room }: Readonly<{ onClose: () => void; room: R
         {image ? (
           <Image
             alt={`QR code for ${room?.roomName ?? 'room'}`}
-            className="mx-auto h-56 w-56 rounded-2xl bg-white object-contain"
+            className="mx-auto h-56 w-56 rounded-card bg-white object-contain"
             height={512}
             src={image}
             unoptimized

@@ -37,11 +37,11 @@ beforeEach(() => {
   api.listLegalEntities.mockImplementation(() => page([entity]));
 });
 
-describe('Add Location', () => {
+describe('Add location', () => {
   it('names what is missing and sends nothing', async () => {
     const { user } = renderScreen(<HospitalCreatePageClient />);
 
-    await user.click(screen.getByRole('button', { name: 'Save Location' }));
+    await user.click(screen.getByRole('button', { name: 'Create location' }));
 
     expect(await screen.findByText('Title is required.')).toBeInTheDocument();
     expect(screen.getByText('Location code is required.')).toBeInTheDocument();
@@ -67,15 +67,15 @@ describe('Add Location', () => {
     const { user } = renderScreen(<HospitalCreatePageClient />);
 
     await user.type(screen.getByLabelText(/Title/), 'Saket');
-    await user.type(screen.getByLabelText(/Location Code/), 'skt');
+    await user.type(screen.getByLabelText(/Location code/), 'skt');
     await user.selectOptions(screen.getByLabelText(/State/), 'Delhi');
     await user.selectOptions(screen.getByLabelText(/City/), 'Saket');
-    await user.type(screen.getByLabelText('Postal Code'), '110017');
-    await user.click(screen.getByRole('radio', { name: 'RazorPay' }));
+    await user.type(screen.getByLabelText('Postal code'), '110017');
+    await user.click(screen.getByRole('radio', { name: 'Razorpay' }));
     // The location's own gateway account; the secret is a password box.
     await user.type(screen.getByLabelText('Key ID'), 'rzp_live_1');
-    await user.type(screen.getByLabelText('Key Secret'), 'secret-1');
-    await user.click(screen.getByRole('button', { name: 'Save Location' }));
+    await user.type(screen.getByLabelText('Key secret'), 'secret-1');
+    await user.click(screen.getByRole('button', { name: 'Create location' }));
 
     await waitFor(() =>
       expect(api.createHospital).toHaveBeenCalledWith(
@@ -103,8 +103,8 @@ describe('Add Location', () => {
   it('rejects a postal code that is not 6 digits', async () => {
     const { user } = renderScreen(<HospitalCreatePageClient />);
 
-    await user.type(screen.getByLabelText('Postal Code'), '1100');
-    await user.click(screen.getByRole('button', { name: 'Save Location' }));
+    await user.type(screen.getByLabelText('Postal code'), '1100');
+    await user.click(screen.getByRole('button', { name: 'Create location' }));
 
     expect(await screen.findByText('Postal code must be 6 digits.')).toBeInTheDocument();
   });
@@ -114,10 +114,10 @@ describe('Add Location', () => {
     const { user } = renderScreen(<HospitalCreatePageClient />);
 
     await user.type(screen.getByLabelText(/Title/), 'Saket');
-    await user.type(screen.getByLabelText(/Location Code/), 'SKT');
+    await user.type(screen.getByLabelText(/Location code/), 'SKT');
     await user.selectOptions(screen.getByLabelText(/State/), 'Delhi');
     await user.selectOptions(screen.getByLabelText(/City/), 'Saket');
-    await user.click(screen.getByRole('button', { name: 'Save Location' }));
+    await user.click(screen.getByRole('button', { name: 'Create location' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Location code SKT is already taken',

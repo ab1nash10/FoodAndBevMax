@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { useAuth } from '@/components/auth-provider';
-import { RecordAvatar, RowAction, StatStrip, tableStyles } from '@/components/design-system';
+import { RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
 import {
@@ -64,6 +64,7 @@ import {
   allowsOnlineOrdering,
   isRestaurantOpen,
 } from '@/components/organization/shared/restaurants';
+import { RestaurantEditPageClient } from '@/components/organization/restaurant-form-pages';
 import { StaffDiscountPanel } from '@/components/organization/staff-discount-panel';
 import type { ActiveFilter } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
@@ -89,6 +90,8 @@ function RestaurantThumbnail({ restaurant }: Readonly<{ restaurant: Restaurant }
 
 export function RestaurantsPageClient() {
   const router = useRouter();
+  // The restaurant whose edit panel is open over the list (in place, like every other edit).
+  const [editingId, setEditingId] = useState<string | null>(null);
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -148,9 +151,7 @@ export function RestaurantsPageClient() {
             limit: 0,
           })
         ).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.restaurants('stats', scopedHospitalId ?? 'all'),
   });
@@ -320,11 +321,6 @@ export function RestaurantsPageClient() {
     setPage(1);
   }
 
-  function showStatus(status: ActiveFilter) {
-    setActiveFilter(status);
-    setPage(1);
-  }
-
   async function toggleRestaurantStatus(restaurant: Restaurant) {
     const nextIsActive = !restaurant.isActive;
     const confirmed = await confirmStatusChange(confirm, {
@@ -393,34 +389,6 @@ export function RestaurantsPageClient() {
         icon={Utensils}
         subtitle="Manage restaurant profiles and ordering availability."
         title="Restaurants"
-      />
-      <StatStrip
-        label="Restaurants at a glance"
-        stats={[
-          {
-            active: !activeFilter,
-            label: 'All restaurants',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            tone: 'ok',
-            share: stats?.all ? stats.active / stats.all : undefined,
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive · offline',
-            onSelect: () => showStatus('inactive'),
-            tone: 'pending',
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            value: stats?.inactive ?? '–',
-          },
-        ]}
       />
       <Panel>
         <ListToolbar>
@@ -576,7 +544,7 @@ export function RestaurantsPageClient() {
                               label={`Edit ${restaurant.restaurantName}`}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                router.push(editHref);
+                                setEditingId(restaurant.id);
                               }}
                               {...prefetchDetail}
                             />
@@ -639,6 +607,9 @@ export function RestaurantsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      {editingId ? (
+        <RestaurantEditPageClient onClose={() => setEditingId(null)} restaurantId={editingId} />
+      ) : null}
       <StaffDiscountPanel
         onClose={() => setStaffDiscountRestaurant(null)}
         restaurant={staffDiscountRestaurant}
@@ -677,7 +648,7 @@ export function RestaurantsPageClient() {
               <X aria-hidden="true" className="h-4 w-4" />
             </Button>
           </div>
-          <div className="mt-6 grid gap-5 rounded-[24px] border border-[#e1e9f3] bg-white p-4 sm:grid-cols-[minmax(0,1fr)_230px] sm:items-center sm:p-6">
+          <div className="mt-6 grid gap-5 rounded-card border border-[#e1e9f3] bg-white p-4 sm:grid-cols-[minmax(0,1fr)_230px] sm:items-center sm:p-6">
             <div className="order-2 sm:order-1">
               <p className="text-[18px] font-extrabold text-[#14233b]">Ready to scan</p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-ds-muted">
@@ -691,7 +662,7 @@ export function RestaurantsPageClient() {
             {qrImage ? (
               <Image
                 alt={`QR code for ${qrRestaurant?.restaurantName ?? 'restaurant'} menu and ordering`}
-                className="order-1 mx-auto h-56 w-56 max-w-full rounded-2xl bg-white object-contain sm:order-2 sm:h-56 sm:w-56"
+                className="order-1 mx-auto h-56 w-56 max-w-full rounded-card bg-white object-contain sm:order-2 sm:h-56 sm:w-56"
                 height={512}
                 src={qrImage}
                 unoptimized
@@ -709,7 +680,7 @@ export function RestaurantsPageClient() {
           </div>
           {qrImage && kioskUrl ? (
             // The same link the QR holds, to send by message or open on a screen without a camera.
-            <div className="mt-5 rounded-[20px] border border-[#e1e9f3] bg-white p-4">
+            <div className="mt-5 rounded-card border border-[#e1e9f3] bg-white p-4">
               <label
                 className="text-[13px] font-bold text-[#14233b]"
                 htmlFor="restaurant-menu-qr-link"

@@ -13,7 +13,7 @@ import type {
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { useConfirm } from '@/components/confirm-provider';
-import { AppPageHeader, RecordAvatar, StatStrip, tableStyles } from '@/components/design-system';
+import { AppPageHeader, RecordAvatar, tableStyles } from '@/components/design-system';
 import { FilterField, FiltersMenu, ListToolbar, RefreshButton } from '@/components/list-toolbar';
 import { useLocationContext } from '@/components/location-context';
 import { hoursRange } from '@/lib/hours';
@@ -130,7 +130,7 @@ function toInput(values: FormValues): EmployeeDiscountInput {
 }
 
 /**
- * Employee Discounts: a restaurant's discount rules for staff. At the till, an eligible employee
+ * Employee discounts: a restaurant's discount rules for staff. At the till, an eligible employee
  * (Employee ID or registered mobile) gets the best live rule for their level, on its serve days
  * and inside its special timings; archived rules never apply.
  */
@@ -188,9 +188,7 @@ export function EmployeeDiscountsPageClient() {
             restaurantId: restaurantFilter || undefined,
           })
         ).data.meta.total;
-      const [live, archived] = await Promise.all([count(false), count(true)]);
-
-      return { archived, live };
+      return { live: await count(false) };
     },
     queryKey: queryKeys.employeeDiscounts('counts', scopedHospitalId ?? '', restaurantFilter),
   });
@@ -276,7 +274,6 @@ export function EmployeeDiscountsPageClient() {
   const discounts = discountsQuery.data?.items ?? [];
   const meta = discountsQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const counts = countsQuery.data;
-  const total = counts ? counts.live + counts.archived : undefined;
   const set = (patch: Partial<FormValues>) => setValues((current) => ({ ...current, ...patch }));
 
   return (
@@ -292,35 +289,7 @@ export function EmployeeDiscountsPageClient() {
         }
         count={counts?.live}
         description="Discounts for staff only, per restaurant. At the till, an eligible employee gets the best rule that applies now."
-        title="Employee Discounts"
-      />
-
-      <StatStrip
-        label="Employee discounts at a glance"
-        stats={[
-          {
-            active: view === 'live',
-            label: 'Live rules',
-            onSelect: () => {
-              setView('live');
-              setPage(1);
-            },
-            share: total ? (counts?.live ?? 0) / total : undefined,
-            tone: 'ok',
-            value: counts?.live ?? '–',
-          },
-          {
-            active: view === 'archived',
-            label: 'Archived',
-            onSelect: () => {
-              setView('archived');
-              setPage(1);
-            },
-            share: total ? (counts?.archived ?? 0) / total : undefined,
-            tone: 'pending',
-            value: counts?.archived ?? '–',
-          },
-        ]}
+        title="Employee discounts"
       />
 
       <Modal
@@ -506,7 +475,7 @@ export function EmployeeDiscountsPageClient() {
             placeholder="Discount or restaurant name"
             value={searchInput}
           />
-          <FiltersMenu activeCount={restaurantFilter ? 1 : 0}>
+          <FiltersMenu activeCount={[restaurantFilter, view === 'archived'].filter(Boolean).length}>
             <FilterField label="Restaurant">
               <Select
                 onChange={(event) => {
@@ -521,6 +490,18 @@ export function EmployeeDiscountsPageClient() {
                     {restaurant.restaurantName}
                   </option>
                 ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Rules">
+              <Select
+                onChange={(event) => {
+                  setView(event.target.value as 'archived' | 'live');
+                  setPage(1);
+                }}
+                value={view}
+              >
+                <option value="live">Live rules</option>
+                <option value="archived">Archived</option>
               </Select>
             </FilterField>
           </FiltersMenu>

@@ -48,7 +48,7 @@ function StatusToggleButton({
       aria-checked={isActive}
       aria-label={isActive ? 'Set inactive' : 'Set active'}
       className={cn(
-        'inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary/40 disabled:cursor-not-allowed disabled:opacity-60',
         isActive ? 'border-ds-primary bg-ds-primary' : 'border-ds-input bg-ds-divider',
       )}
       disabled={disabled}
@@ -58,8 +58,8 @@ function StatusToggleButton({
     >
       <span
         className={cn(
-          'h-[18px] w-[18px] rounded-full bg-white shadow-xs transition',
-          isActive ? 'translate-x-5' : 'translate-x-0',
+          'h-3.5 w-3.5 rounded-full bg-white shadow-xs transition',
+          isActive ? 'translate-x-4' : 'translate-x-0',
         )}
       />
     </button>
@@ -120,5 +120,5 @@ export { QueryState } from '@/components/location-empty-states';
 export { ListPager as PaginationControls } from '@/components/design-system';
 
 export function SectionHeading({ title }: Readonly<{ title: string }>) {
-  return <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-ds-link">{title}</h2>;
+  return <h2 className="text-xs font-bold uppercase tracking-[0.1em] text-ds-link">{title}</h2>;
 }

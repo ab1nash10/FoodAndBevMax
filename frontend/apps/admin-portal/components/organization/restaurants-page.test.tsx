@@ -20,6 +20,7 @@ type Client = typeof ApiModule.organizationApi;
 
 // The API calls the screen makes, each a typed stand-in.
 const api = vi.hoisted(() => ({
+  getRestaurant: vi.fn<Client['getRestaurant']>(),
   getRestaurantBoardLink: vi.fn<Client['getRestaurantBoardLink']>(),
   getStaffDiscounts: vi.fn<Client['getStaffDiscounts']>(),
   listEmployeeDiscounts: vi.fn<Client['listEmployeeDiscounts']>(),
@@ -81,7 +82,7 @@ describe('Restaurants', () => {
     expect(
       within(row).getByRole('switch', { name: 'Cafe Max restaurant availability' }),
     ).toBeChecked();
-    expect(within(row).getByText('In Room Dining')).toBeInTheDocument();
+    expect(within(row).getByText('In-room dining')).toBeInTheDocument();
     expect(within(row).getByText('POS Orders')).toBeInTheDocument();
     expect(api.listRestaurants).toHaveBeenCalledWith(
       expect.objectContaining({ hospitalId: 'h-ppg', page: 1, sortBy: 'createdAt' }),
@@ -125,8 +126,13 @@ describe('Restaurants', () => {
       'href',
       '/masters/restaurants/new',
     );
+    api.getRestaurant.mockImplementation(() => reply(restaurant()));
     await user.click(await screen.findByRole('button', { name: 'Edit Cafe Max' }));
-    expect(router.push).toHaveBeenCalledWith('/masters/restaurants/rest-1/edit');
+    // Its panel opens over the list at once, as every other edit does: no page to load first.
+    expect(await screen.findByRole('dialog', { name: 'Edit Cafe Max' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(router.push).not.toHaveBeenCalledWith('/masters/restaurants/rest-1/edit');
     await user.click(
       screen.getByRole('button', { name: 'Activity for Cafe Max: orders and TV board' }),
     );

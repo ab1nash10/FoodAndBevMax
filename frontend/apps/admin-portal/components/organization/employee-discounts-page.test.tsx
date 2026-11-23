@@ -63,7 +63,7 @@ beforeEach(() => {
   api.listRestaurants.mockImplementation(() => page([cafe as Restaurant]));
 });
 
-describe('Employee Discounts', () => {
+describe('Employee discounts', () => {
   it('lists each live rule with its value, days, timings and level', async () => {
     api.listEmployeeDiscounts.mockImplementation(() => page([discount()]));
     renderScreen(<EmployeeDiscountsPageClient />);
@@ -91,6 +91,17 @@ describe('Employee Discounts', () => {
     api.listEmployeeDiscounts.mockRejectedValue(new Error('Discounts could not be loaded'));
     renderScreen(<EmployeeDiscountsPageClient />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Discounts could not be loaded');
+  });
+
+  it('shows the archived rules when picked in Filters', async () => {
+    api.listEmployeeDiscounts.mockImplementation(() => page([]));
+    const { user } = renderScreen(<EmployeeDiscountsPageClient />);
+
+    await user.click(await screen.findByRole('button', { name: /^Filters/ }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Rules' }), 'archived');
+
+    expect(await screen.findByText('Archived discounts show here.')).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('archived');
   });
 
   it('asks the API for archived rules, the restaurant in the link and the search typed', async () => {

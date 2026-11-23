@@ -76,8 +76,8 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('Rooms & Tables', () => {
-  it('lists the rooms at the location with how many are active and inactive', async () => {
+describe('Rooms & tables', () => {
+  it('lists the rooms at the location', async () => {
     listOf([
       bed(),
       bed({ id: 'r2', isActive: false, roomCode: 'R-000002', roomName: 'Bed 2220 b' }),
@@ -86,17 +86,6 @@ describe('Rooms & Tables', () => {
 
     expect(await screen.findByText('PG-ECO-06 (EWS)')).toBeInTheDocument();
     expect(screen.getByText('R-000002')).toBeInTheDocument();
-    const glance = screen.getByRole('group', { name: 'Rooms at a glance' });
-    // Each count sits beside its name: "Active 1".
-    await waitFor(() =>
-      expect(within(glance).getByRole('button', { name: /^Active/ })).toHaveTextContent('Active1'),
-    );
-    expect(within(glance).getByRole('button', { name: /^Inactive/ })).toHaveTextContent(
-      'Inactive1',
-    );
-    expect(within(glance).getByRole('button', { name: /^All rooms/ })).toHaveTextContent(
-      'All rooms2',
-    );
     expect(api.listRooms).toHaveBeenCalledWith(
       expect.objectContaining({
         hospitalId: 'h-ppg',
@@ -305,7 +294,7 @@ describe('Rooms & Tables', () => {
   });
 });
 
-describe('Rooms & Tables: dine-in tables', () => {
+describe('Rooms & tables: dine-in tables', () => {
   const cafe = {
     atTableDining: true,
     id: 'rest-1',
@@ -341,7 +330,12 @@ describe('Rooms & Tables: dine-in tables', () => {
     expect(api.listRooms).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'ROOM' }));
 
     listOf([table()]);
-    // Tabs, as Access has Admins and Operators.
+    // Tabs on top of the list card, as Item locations has them, above the search.
+    const tabs = screen.getByRole('tablist', { name: 'Rooms or tables' });
+    expect(
+      tabs.compareDocumentPosition(screen.getByRole('searchbox', { name: 'Search rooms' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Tables' }));
     expect(screen.getByRole('tab', { name: 'Tables' })).toHaveAttribute('aria-selected', 'true');
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@aahar/ui';
-import { Loader2, Plus, type LucideIcon } from 'lucide-react';
+import { Loader2, type LucideIcon } from 'lucide-react';
 import { useId, type ChangeEvent, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 import { FormPanel } from '@/components/ui-controls';
@@ -10,6 +10,7 @@ import { FormPanel } from '@/components/ui-controls';
 export function FormShell({
   backHref,
   children,
+  onClose,
   subtitle,
   title,
 }: Readonly<{
@@ -17,11 +18,13 @@ export function FormShell({
   children: ReactNode;
   /** Older call sites pass an icon; the panel shows none. */
   icon?: LucideIcon;
-  subtitle: string;
+  /** Given when the list opened it in place: closing (and saving) calls it. */
+  onClose?: () => void;
+  subtitle?: string;
   title: string;
 }>) {
   return (
-    <FormPanel backHref={backHref} subtitle={subtitle} title={title}>
+    <FormPanel backHref={backHref} onClose={onClose} subtitle={subtitle} title={title}>
       {children}
     </FormPanel>
   );
@@ -51,7 +54,8 @@ export function SubmitButton({
         disabled={Boolean(disabledReason) || isPending}
         type="submit"
       >
-        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+        {/* No icon: a plus said "add" on every save, edits included (as the other panels). */}
+        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {label}
       </Button>
     </div>

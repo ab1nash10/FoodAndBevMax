@@ -13,13 +13,7 @@ import {
 import { invalidateKitchenQueries } from '@/lib/query-invalidation';
 import { useAuth } from '@/components/auth-provider';
 import { useLocationContext } from '@/components/location-context';
-import {
-  DateTimeCell,
-  RecordAvatar,
-  RowAction,
-  StatStrip,
-  tableStyles,
-} from '@/components/design-system';
+import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import { EditMasterDialog } from '@/components/organization/shared/edit-master-dialog';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
@@ -129,9 +123,7 @@ export function KitchensPageClient() {
             limit: 0,
           })
         ).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.kitchens('stats', scopedHospitalId ?? 'all'),
   });
@@ -222,11 +214,6 @@ export function KitchensPageClient() {
     statusMutation.mutate({ id: kitchen.id, isActive: nextIsActive });
   }
 
-  function showStatus(status: ActiveFilter) {
-    setActiveFilter(status);
-    setPage(1);
-  }
-
   return (
     <section className="space-y-5">
       <PageHeader
@@ -274,34 +261,6 @@ export function KitchensPageClient() {
         icon={ChefHat}
         subtitle="Manage production kitchens for location food service."
         title="Kitchens"
-      />
-      <StatStrip
-        label="Kitchens at a glance"
-        stats={[
-          {
-            active: !activeFilter,
-            label: 'All kitchens',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            tone: 'ok',
-            share: stats?.all ? stats.active / stats.all : undefined,
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showStatus('inactive'),
-            tone: 'pending',
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            value: stats?.inactive ?? '–',
-          },
-        ]}
       />
       <Panel>
         <ListToolbar>

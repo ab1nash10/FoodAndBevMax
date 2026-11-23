@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { EmptyState, HeroHeader, QuickTiles, type QuickTile } from '@/components/design-system';
-import { useNavCounts } from '@/components/admin-shell/sidebar-content';
+import { AppPageHeader, EmptyState } from '@/components/design-system';
 import { useAuth } from '@/components/auth-provider';
 import { useGreeting } from '@/lib/greeting';
 import { createCommands } from '@/components/command-palette';
@@ -13,10 +12,8 @@ import { useDashboardStats, type DashboardStats } from '@/hooks/use-dashboard-st
 import type { Period } from '@/lib/dashboard-stats';
 import { useUrlParam } from '@/lib/use-url-state';
 import { Button } from '@aahar/ui';
-import { ArrowRightLeft, ChefHat, ClipboardCheck, Gauge, Plus } from 'lucide-react';
-import { canOpenPath } from '@/lib/navigation';
+import { ArrowRightLeft, Plus } from 'lucide-react';
 import { pendingHref } from '@/components/organization/dashboard/format';
-import { CountersRow } from '@/components/organization/dashboard/counters-row';
 import { KpiRow, NewKpiRow } from '@/components/organization/dashboard/kpi-row';
 import { LocationsRow } from '@/components/organization/dashboard/locations-card';
 import {
@@ -24,6 +21,7 @@ import {
   QuickCreateCard,
 } from '@/components/organization/dashboard/master-data-card';
 import { OutcomeRow } from '@/components/organization/dashboard/outcome-row';
+import { ServiceDay } from '@/components/organization/dashboard/service-day';
 import { TrendsExplainer, TrendsRow } from '@/components/organization/dashboard/trends-row';
 import { WorkQueue, WorkRow } from '@/components/organization/dashboard/work-queue';
 
@@ -57,51 +55,32 @@ function NewWorkspaceRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   );
 }
 
-// The day's usual first stops, as the hero's tiles.
-const dashboardTiles: QuickTile[] = [
-  {
-    detail: 'Waiting on restaurants',
-    href: pendingHref,
-    icon: ArrowRightLeft,
-    title: 'Transfers to acknowledge',
-    tone: 'blue',
-  },
-  {
-    detail: 'Returns waiting on the store',
-    href: '/inventory/erp-grns?view=PENDING',
-    icon: ClipboardCheck,
-    title: 'ERP GRNs waiting',
-    tone: 'violet',
-  },
-  {
-    detail: 'Running low and expiring',
-    href: '/inventory/stock-levels',
-    icon: Gauge,
-    title: 'Stock levels',
-    tone: 'green',
-  },
-  {
-    detail: 'What the kitchens made',
-    href: '/kitchen/productions',
-    icon: ChefHat,
-    title: 'Kitchen production',
-    tone: 'rose',
-  },
-];
-
+/**
+ * The Dashboard. A role that may see the counters' sales gets the day's service (Service Desk,
+ * 2026-11-22): today beside the same weekday last week, the counters, what waits and the
+ * kitchen. Any other role gets its stock and kitchen numbers over a period.
+ */
 export function DashboardOverview() {
+  const { hasPermission } = useAuth();
+
+  return hasPermission(['ORDER_REPORT_VIEW', 'POS_ORDER_VIEW']) ? (
+    <ServiceDashboard />
+  ) : (
+    <StockDashboard />
+  );
+}
+
+/** The day's service: its own header row (the day, what it is compared with, live, export). */
+function ServiceDashboard() {
+  return <ServiceDay />;
+}
+
+function StockDashboard() {
   const greeting = useGreeting();
   const { isAllLocations, locationLabel } = useLocationContext();
   const { currentUser, hasPermission } = useAuth();
   const [days, setDays] = useUrlParam<PeriodValue>('days', '7', periodValues);
   const stats = useDashboardStats(Number(days) as Period);
-  // The sidebar badges' counts (one shared request): what each tile has waiting right now.
-  const navCounts = useNavCounts(hasPermission);
-  const tileCounts: Record<string, Pick<QuickTile, 'count' | 'countLabel'>> = {
-    '/inventory/erp-grns?view=PENDING': { count: navCounts.grns, countLabel: 'waiting' },
-    '/kitchen/productions': { count: navCounts.productions, countLabel: 'to post' },
-    [pendingHref]: { count: navCounts.transfers, countLabel: 'waiting' },
-  };
   const { can } = stats;
   const pendingTotal = stats.pending.data?.meta.total ?? 0;
   const showOperations = can.transfers || can.grns || can.productions;
@@ -115,12 +94,11 @@ export function DashboardOverview() {
 
   return (
     <section className="space-y-5">
-      <HeroHeader
+      <AppPageHeader
         action={
           <>
             {showOperations ? (
               <SegmentedControl<PeriodValue>
-                className="bg-ds-surface"
                 label="Stats period"
                 onChange={setDays}
                 options={periodValues.map((value) => ({ label: `${value} days`, value }))}
@@ -131,10 +109,7 @@ export function DashboardOverview() {
                 on a new workspace would turn into "New transfer" a moment later. */}
             {!stats.isModeKnown ? null : isNew ? (
               <IfCanOpen href="/inventory/transfers/new">
-                <Button
-                  asChild
-                  className="bg-white px-4 text-ds-link shadow-black/20 hover:bg-white/90"
-                >
+                <Button asChild>
                   <Link href="/inventory/transfers/new">
                     <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
                     New transfer
@@ -142,10 +117,7 @@ export function DashboardOverview() {
                 </Button>
               </IfCanOpen>
             ) : can.transfers ? (
-              <Button
-                asChild
-                className="bg-white px-4 text-ds-link shadow-black/20 hover:bg-white/90"
-              >
+              <Button asChild variant="outline">
                 <Link href={pendingHref}>
                   <ArrowRightLeft aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
                   Review pending
@@ -159,33 +131,13 @@ export function DashboardOverview() {
             ) : null}
           </>
         }
-        description={
-          !stats.isModeKnown ? (
-            <span
-              aria-hidden="true"
-              className="skeleton inline-block h-[18px] w-[min(26rem,100%)] rounded-md align-middle"
-            />
-          ) : (
-            'What needs you today, how the last days went, and where to start.'
-          )
-        }
-        eyebrow={
-          <>
-            {headerDateFormatter.format(new Date())} · Max Healthcare ·{' '}
-            <span className="font-semibold text-white">
-              {isAllLocations ? 'All locations' : locationLabel}
-            </span>
-          </>
-        }
+        description={`${headerDateFormatter.format(new Date())} · ${
+          isAllLocations ? 'All locations' : locationLabel
+        }`}
         title={userName ? `${greeting}, ${userName}` : 'Dashboard'}
-      >
-        <QuickTiles
-          label="Go to"
-          tiles={dashboardTiles
-            .filter((tile) => canOpenPath(tile.href, hasPermission))
-            .map((tile) => ({ ...tile, ...tileCounts[tile.href] }))}
-        />
-      </HeroHeader>
+      />
+
+      <ServiceDay />
 
       {isNew ? (
         <>
@@ -195,7 +147,6 @@ export function DashboardOverview() {
       ) : (
         <>
           <KpiRow stats={stats} />
-          <CountersRow />
           <OutcomeRow stats={stats} />
           <TrendsRow stats={stats} />
           <WorkRow stats={stats} />

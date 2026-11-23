@@ -21,7 +21,10 @@ import {
 import type { HospitalFormValues } from '@/components/organization/shared/types';
 import { queryKeys } from '@/lib/query-keys';
 
-export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalId: string }>) {
+export function HospitalLocationsPageClient({
+  hospitalId,
+  onClose,
+}: Readonly<{ hospitalId: string; onClose?: () => void }>) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { showToast } = useToast();
@@ -73,7 +76,8 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
         variant: 'success',
       });
       // Saved: back to the list, as every record panel closes on save.
-      router.push('/masters/locations');
+      if (onClose) onClose();
+      else router.push('/masters/locations');
     },
   });
 
@@ -96,7 +100,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
   return (
     <FormShell
       backHref="/masters/locations"
-      subtitle="Creating a Location will auto-create Main Store, Main Kitchen and Counter Kitchen."
+      onClose={onClose}
       title={hospital ? `Edit ${getLocationTitle(hospital)}` : 'Edit location'}
     >
       {hospitalQuery.isLoading ? (
@@ -124,10 +128,7 @@ export function HospitalLocationsPageClient({ hospitalId }: Readonly<{ hospitalI
             savedSecrets={hospital}
           />
           <div className="flex justify-end">
-            <SubmitButton
-              isPending={updateLocationMasterMutation.isPending}
-              label="Update Location"
-            />
+            <SubmitButton isPending={updateLocationMasterMutation.isPending} label="Save changes" />
           </div>
         </form>
       ) : null}

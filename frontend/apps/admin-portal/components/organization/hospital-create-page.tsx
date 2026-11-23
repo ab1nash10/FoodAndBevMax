@@ -68,7 +68,7 @@ export function HospitalCreatePageClient() {
       backHref="/masters/locations"
       icon={MapPin}
       subtitle="Creating a Location will auto-create Main Store, Main Kitchen and Counter Kitchen."
-      title="Add Location"
+      title="Add location"
     >
       <form
         className="grid gap-4"
@@ -78,7 +78,7 @@ export function HospitalCreatePageClient() {
       >
         <LocationMasterFormFields disabled={createHospitalMutation.isPending} form={form} />
         <div className="flex justify-end">
-          <SubmitButton isPending={createHospitalMutation.isPending} label="Save Location" />
+          <SubmitButton isPending={createHospitalMutation.isPending} label="Create location" />
         </div>
       </form>
     </FormShell>

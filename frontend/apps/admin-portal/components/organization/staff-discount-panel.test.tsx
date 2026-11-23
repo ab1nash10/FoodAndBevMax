@@ -54,7 +54,7 @@ describe('the staff discount panel', () => {
     expect(within(dialog).getByText('On roll · 12:00–15:00')).toBeInTheDocument();
     expect(within(dialog).getByText('15%')).toBeInTheDocument();
     expect(
-      within(dialog).getByRole('link', { name: /Manage in Employee Discounts/ }),
+      within(dialog).getByRole('link', { name: /Manage in Employee discounts/ }),
     ).toHaveAttribute('href', '/masters/employee-discounts?restaurant=rest-1');
     expect(api.listEmployeeDiscounts).toHaveBeenCalledWith({
       archived: false,

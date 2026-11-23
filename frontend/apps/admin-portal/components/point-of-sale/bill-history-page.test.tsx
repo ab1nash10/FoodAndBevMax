@@ -123,7 +123,7 @@ beforeEach(() => {
   signedIn([]);
   api.listPosCounters.mockImplementation(() => reply([]));
   api.listPosBills.mockImplementation((query) =>
-    query?.statusCounts
+    query?.limit === 0
       ? list([], { complimentaryCount: 1, statusCounts: { CANCELLED: 2 }, total: 12 })
       : list([summary()]),
   );
@@ -148,7 +148,7 @@ describe('bill history', () => {
 
   it('names the table of a dine-in bill, and filters to table bills', async () => {
     api.listPosBills.mockImplementation((query) =>
-      query?.statusCounts
+      query?.limit === 0
         ? list([])
         : list([summary({ channel: 'TABLE', roomNumber: null, tableName: 'Window 2' })]),
     );
@@ -164,15 +164,6 @@ describe('bill history', () => {
         expect.objectContaining({ channel: 'TABLE' }),
       ),
     );
-  });
-
-  it('counts all, cancelled and complimentary bills', async () => {
-    renderScreen(<BillHistoryPageClient />);
-
-    const stats = within(await screen.findByRole('group', { name: 'Bills at a glance' }));
-    expect(await stats.findByRole('button', { name: /All bills/ })).toHaveTextContent('12');
-    expect(stats.getByRole('button', { name: /Cancelled/ })).toHaveTextContent('2');
-    expect(stats.getByText('Complimentary').parentElement).toHaveTextContent('1');
   });
 
   it('shows the discount under the total and strikes out a cancelled bill', async () => {
@@ -202,17 +193,6 @@ describe('bill history', () => {
     expect(api.listPosBills).toHaveBeenCalledWith(
       expect.objectContaining({ isComplimentary: true, paymentMode: undefined }),
     );
-  });
-
-  it('adds the day’s sales for one counter on one day', async () => {
-    at('/pos/history', 'counter=counter-1&from=2026-11-18&to=2026-11-18');
-    api.getPosDaySummary.mockImplementation(() =>
-      reply({ complimentary: { amount: 0, count: 0 }, sales: 4321 } as never),
-    );
-    renderScreen(<BillHistoryPageClient />);
-
-    expect(await screen.findByText('₹4,321.00')).toBeInTheDocument();
-    expect(api.getPosDaySummary).toHaveBeenCalledWith('counter-1', '2026-11-18');
   });
 
   it('says when no bill matches', async () => {

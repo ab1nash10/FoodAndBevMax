@@ -10,14 +10,7 @@ import type {
   SortOrder,
 } from '@aahar/api-client';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
-import {
-  AppPageHeader,
-  ListPager,
-  StatStrip,
-  StatusChip,
-  tableStyles,
-  type Stat,
-} from '@/components/design-system';
+import { AppPageHeader, ListPager, StatusChip, tableStyles } from '@/components/design-system';
 import {
   FilterField,
   FiltersMenu,
@@ -143,29 +136,14 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
 
   const statsQuery = useQuery({
     queryFn: async () => {
-      const { meta } = (
-        await organizationApi.listPosBills({ ...baseQuery, limit: 0, statusCounts: true })
-      ).data;
+      const { meta } = (await organizationApi.listPosBills({ ...baseQuery, limit: 0 })).data;
 
-      return {
-        all: meta.total,
-        cancelled: meta.statusCounts?.CANCELLED ?? 0,
-        complimentary: complimentary ? null : (meta.complimentaryCount ?? 0),
-      };
+      return { all: meta.total };
     },
     queryKey: queryKeys.posBills('stats', ...filterKey),
   });
 
-  // Takings are only known per counter and day; a wider range shows counts alone.
-  const singleCounterDay = Boolean(counterFilter) && from === to;
-  const summaryQuery = useQuery({
-    enabled: singleCounterDay,
-    queryFn: async () => (await organizationApi.getPosDaySummary(counterFilter, from)).data,
-    queryKey: queryKeys.posSummary(counterFilter, from),
-  });
-
   const stats = statsQuery.data;
-  const summary = singleCounterDay ? summaryQuery.data : undefined;
   const bills = billsQuery.data?.items ?? [];
   const meta = billsQuery.data?.meta ?? { limit, page, total: 0, totalPages: 1 };
   const isRange = from !== to;
@@ -186,55 +164,6 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
     setPage(1);
   }
 
-  function showStatus(status: '' | OrderStatus) {
-    setStatusFilter(status);
-    setPage(1);
-  }
-
-  const statList: Stat[] = [
-    {
-      active: !statusFilter,
-      label: complimentary ? 'Complimentary bills' : 'All bills',
-      onSelect: () => showStatus(''),
-      share: stats?.all ? 1 : undefined,
-      value: stats?.all ?? '–',
-    },
-    {
-      active: statusFilter === 'CANCELLED',
-      label: 'Cancelled',
-      onSelect: () => showStatus(statusFilter === 'CANCELLED' ? '' : 'CANCELLED'),
-      share: stats?.all ? stats.cancelled / stats.all : undefined,
-      tone: 'bad',
-      value: stats?.cancelled ?? '–',
-    },
-  ];
-
-  if (!complimentary) {
-    statList.push({
-      label: 'Complimentary',
-      share:
-        stats?.all && stats.complimentary !== null ? stats.complimentary / stats.all : undefined,
-      tone: 'pending',
-      value: stats?.complimentary ?? '–',
-    });
-  }
-
-  if (singleCounterDay) {
-    statList.push(
-      complimentary
-        ? {
-            label: "Day's complimentary value",
-            tone: 'pending',
-            value: summary ? formatMoney(summary.complimentary.amount) : '–',
-          }
-        : {
-            label: "Day's sales",
-            tone: 'ok',
-            value: summary ? formatMoney(summary.sales) : '–',
-          },
-    );
-  }
-
   return (
     <section className="space-y-4">
       <AppPageHeader
@@ -244,11 +173,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
             ? 'Bills given free of charge. Admins review each one here with the reason it was given.'
             : 'Every bill raised at the counters, by business day.'
         }
-        title={complimentary ? 'Complimentary' : 'Bill History'}
-      />
-      <StatStrip
-        label={complimentary ? 'Complimentary bills at a glance' : 'Bills at a glance'}
-        stats={statList}
+        title={complimentary ? 'Complimentary' : 'Bill history'}
       />
       <Panel className="overflow-hidden">
         <ListToolbar>
@@ -371,9 +296,6 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
             onClick={() => {
               void billsQuery.refetch();
               void statsQuery.refetch();
-              if (singleCounterDay) {
-                void summaryQuery.refetch();
-              }
             }}
           />
           <ClearFiltersButton active={hasFilters} onClear={clearFilters} />

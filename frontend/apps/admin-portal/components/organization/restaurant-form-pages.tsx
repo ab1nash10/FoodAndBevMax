@@ -61,7 +61,10 @@ function chooseEntity(
   }
 }
 
-function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: string }>) {
+function RestaurantFormPageClient({
+  onClose,
+  restaurantId,
+}: Readonly<{ onClose?: () => void; restaurantId?: string }>) {
   const isEditMode = Boolean(restaurantId);
   const { isAllLocations, scopedHospitalId } = useLocationContext();
   const form = useForm<RestaurantFormValues>({
@@ -172,7 +175,8 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         title: restaurantId ? 'Restaurant updated' : 'Restaurant created',
         variant: 'success',
       });
-      router.push(href);
+      if (onClose) onClose();
+      else router.push(href);
     },
   });
 
@@ -253,8 +257,8 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
       <FormShell
         backHref="/masters/restaurants"
         icon={Utensils}
-        subtitle="Load restaurant details for editing."
-        title="Update Restaurant"
+        onClose={onClose}
+        title="Edit restaurant"
       >
         <div className="grid gap-4">
           <Skeleton className="h-16" />
@@ -270,8 +274,8 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
       <FormShell
         backHref="/masters/restaurants"
         icon={Utensils}
-        subtitle="Load restaurant details for editing."
-        title="Update Restaurant"
+        onClose={onClose}
+        title="Edit restaurant"
       >
         <p className="text-sm font-medium text-ds-status-bad-fg">
           {getApiErrorMessage(restaurantQuery.error)}
@@ -284,12 +288,13 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
     <FormShell
       backHref="/masters/restaurants"
       icon={Utensils}
-      subtitle={
+      onClose={onClose}
+      subtitle={isEditMode ? undefined : 'Create a restaurant profile for location food service.'}
+      title={
         isEditMode
-          ? 'Update restaurant profile for location food service.'
-          : 'Create a restaurant profile for location food service.'
+          ? `Edit ${restaurantQuery.data?.restaurantName ?? 'restaurant'}`
+          : 'Create Restaurant'
       }
-      title={isEditMode ? 'Update Restaurant' : 'Create Restaurant'}
     >
       <form
         className="grid gap-7"
@@ -298,7 +303,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         }}
       >
         <div className="space-y-4">
-          <SectionHeading title="Basic Information" />
+          <SectionHeading title="Basic information" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.hospitalId?.message}
@@ -344,7 +349,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
               <Input id="restaurant-name" {...form.register('restaurantName')} />
             </Field>
             {isEditMode ? (
-              <Field label="Restaurant Code" name="restaurant-code">
+              <Field label="Restaurant code" name="restaurant-code">
                 <Input
                   id="restaurant-code"
                   readOnly
@@ -450,7 +455,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
             </Field>
             <Field
               error={form.formState.errors.legalName?.message}
-              label="Legal Name"
+              label="Legal name"
               name="restaurant-legal-name"
             >
               <Input id="restaurant-legal-name" {...form.register('legalName')} />
@@ -473,7 +478,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         </div>
 
         <div className="space-y-4 border-t border-ds-divider pt-6">
-          <SectionHeading title="Banking Information" />
+          <SectionHeading title="Banking information" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               error={form.formState.errors.unitNameForQr?.message}
@@ -498,7 +503,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
             </Field>
             <Field
               error={form.formState.errors.accountNumber?.message}
-              label="Account Number"
+              label="Account number"
               name="restaurant-account"
             >
               <Input id="restaurant-account" {...form.register('accountNumber')} />
@@ -514,17 +519,17 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         </div>
 
         <div className="space-y-4 border-t border-ds-divider pt-6">
-          <SectionHeading title="More Options" />
+          <SectionHeading title="More options" />
           <div className="grid gap-3 md:grid-cols-3">
             {[
               ['isOffline', 'Offline'],
               ['isOpen24x7', 'Open 24x7'],
               ['isPosOrdersEnabled', 'POS Orders'],
-              ['isInRoomDiningEnabled', 'In Room Dining'],
-              // Its dine-in tables' QRs take orders (Rooms & Tables → Tables).
+              ['isInRoomDiningEnabled', 'In-room dining'],
+              // Its dine-in tables' QRs take orders (Rooms & tables → Tables).
               ['isAtTableDiningEnabled', 'At Table Dining'],
               ['isTakeawayEnabled', 'Takeaway'],
-              ['isOnlineOrdersEnabled', 'Online Orders'],
+              ['isOnlineOrdersEnabled', 'Online orders'],
               ['isInventoryEnabled', 'Inventory'],
               ['isIhcOnly', 'IHC Only'],
               // Veg only, delivery, home delivery and in-car dining are no longer offered; their
@@ -559,7 +564,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
         {restaurantId ? (
           // Saved on its own from the panel; this form never sends staffDiscountApplicable.
           <div className="space-y-4 border-t border-ds-divider pt-6">
-            <SectionHeading title="Staff Discount" />
+            <SectionHeading title="Staff discount" />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ds-muted">
                 Whether staff get a discount here, and its Employee Discount rules.
@@ -622,7 +627,7 @@ function RestaurantFormPageClient({ restaurantId }: Readonly<{ restaurantId?: st
           <SubmitButton
             disabledReason={disabledReason}
             isPending={saveRestaurantMutation.isPending || isUploadingImages}
-            label={isEditMode ? 'Update Restaurant' : 'Create Restaurant'}
+            label={isEditMode ? 'Save changes' : 'Create Restaurant'}
           />
         </div>
       </form>
@@ -642,6 +647,9 @@ export function RestaurantCreatePageClient() {
   return <RestaurantFormPageClient />;
 }
 
-export function RestaurantEditPageClient({ restaurantId }: Readonly<{ restaurantId: string }>) {
-  return <RestaurantFormPageClient restaurantId={restaurantId} />;
+export function RestaurantEditPageClient({
+  onClose,
+  restaurantId,
+}: Readonly<{ onClose?: () => void; restaurantId: string }>) {
+  return <RestaurantFormPageClient onClose={onClose} restaurantId={restaurantId} />;
 }

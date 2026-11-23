@@ -153,11 +153,11 @@ export function NewKpiRow({ stats }: Readonly<{ stats: DashboardStats }>) {
   return (
     <section aria-labelledby="dashboard-needs-you" className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-[15px] font-semibold text-ds-text" id="dashboard-needs-you">
-          Needs you today
+        <h2 className="text-[13.5px] font-semibold text-ds-text" id="dashboard-needs-you">
+          Stock and kitchen
         </h2>
         <p className="text-[12.5px] text-ds-muted">
-          What waits on you first, then what moved in the last {period} days.
+          What waits and what moved in the last {period} days.
         </p>
       </div>
       <div className="flex flex-wrap gap-3.5 *:min-w-0 *:grow *:basis-full sm:*:basis-[calc(50%-7px)] xl:*:basis-0">

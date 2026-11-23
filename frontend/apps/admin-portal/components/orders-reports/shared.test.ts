@@ -31,7 +31,7 @@ describe('orders & reports helpers', () => {
 
   it('history: each step that happened, in order, in India time', () => {
     expect(historyOf(row)).toEqual([
-      ['Ordered At', '05 Nov, 01:59 PM'],
+      ['Ordered at', '05 Nov, 01:59 PM'],
       ['Paid At', '05 Nov, 01:59 PM'],
       ['Accepted At', '05 Nov, 01:59 PM'],
       ['Ready At', '05 Nov, 02:00 PM'],

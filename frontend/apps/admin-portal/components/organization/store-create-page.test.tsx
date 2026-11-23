@@ -40,7 +40,7 @@ beforeEach(() => {
   );
 });
 
-describe('Create Store', () => {
+describe('Create store', () => {
   it('creates the store at the header location and goes back to the list', async () => {
     api.createStore.mockImplementation(() =>
       reply({ id: 's9', storeCode: 'STR-0009', storeName: 'Dry Store' } as never),
@@ -51,11 +51,11 @@ describe('Create Store', () => {
     await waitFor(() => expect(location).toHaveValue(patparganj.id));
     // The header decides the location here.
     expect(location).toBeDisabled();
-    const create = screen.getByRole('button', { name: 'Create Store' });
+    const create = screen.getByRole('button', { name: 'Create store' });
     expect(create).toBeDisabled();
     expect(screen.getByText('Store name is required.')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/Store Name/), 'dry store');
+    await user.type(screen.getByLabelText(/Store name/), 'dry store');
     await user.click(create);
 
     await waitFor(() =>
@@ -73,21 +73,21 @@ describe('Create Store', () => {
     const { user } = renderScreen(<StoreCreatePageClient />);
 
     const location = screen.getByLabelText(/Location/);
-    await user.type(screen.getByLabelText(/Store Name/), 'Main Store');
+    await user.type(screen.getByLabelText(/Store name/), 'Main Store');
     expect(screen.getByText('Select a location.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create Store' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Create store' })).toBeDisabled();
 
     await waitFor(() => expect(location).toBeEnabled());
     await user.selectOptions(location, saketHospital.id);
-    expect(screen.getByRole('button', { name: 'Create Store' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create store' })).toBeEnabled();
   });
 
   it('shows why the API refused the store', async () => {
     api.createStore.mockRejectedValue(new Error('Store name already exists at Patparganj'));
     const { user } = renderScreen(<StoreCreatePageClient />);
 
-    await user.type(screen.getByLabelText(/Store Name/), 'Main Store');
-    await user.click(screen.getByRole('button', { name: 'Create Store' }));
+    await user.type(screen.getByLabelText(/Store name/), 'Main Store');
+    await user.click(screen.getByRole('button', { name: 'Create store' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Store name already exists at Patparganj',

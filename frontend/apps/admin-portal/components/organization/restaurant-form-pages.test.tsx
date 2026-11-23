@@ -100,7 +100,7 @@ describe('Create Restaurant', () => {
     // Once its option has loaded, the select shows the location.
     await waitFor(() => expect(screen.getByLabelText(/Location/)).toHaveValue(patparganj.id));
     await waitFor(() => expect(screen.getByLabelText('Entity')).toHaveValue('e1'));
-    expect(screen.getByLabelText('Legal Name')).toHaveValue(
+    expect(screen.getByLabelText('Legal name')).toHaveValue(
       'Balaji Medical and Diagnostic Research Centre',
     );
     expect(screen.getByLabelText('GST Number')).toHaveValue('07AABCB1234A1Z5');
@@ -116,7 +116,7 @@ describe('Create Restaurant', () => {
     await waitFor(() => expect(screen.getByLabelText('Entity')).toHaveValue('e1'));
     await user.type(screen.getByLabelText(/^Name/), 'Cafe Max');
     await user.click(screen.getByRole('checkbox', { name: 'POS Orders' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Online Orders' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Online orders' }));
     // Its dine-in tables' QRs take orders.
     await user.click(screen.getByRole('checkbox', { name: 'At Table Dining' }));
     await user.click(screen.getByRole('button', { name: 'Create Restaurant' }));
@@ -177,7 +177,7 @@ describe('Create Restaurant', () => {
   });
 });
 
-describe('Update Restaurant', () => {
+describe('Edit restaurant', () => {
   it('fills the form with the restaurant and saves it, keeping its saved images', async () => {
     api.getRestaurant.mockImplementation(() => reply(cafe));
     api.updateRestaurant.mockImplementation(() => reply(cafe));
@@ -185,14 +185,16 @@ describe('Update Restaurant', () => {
 
     const name = await screen.findByLabelText(/^Name/);
     await waitFor(() => expect(name).toHaveValue('Cafe Max'));
-    expect(screen.getByLabelText('Restaurant Code')).toHaveValue('RST-0001');
+    // Titled like every other edit panel.
+    expect(screen.getByRole('dialog', { name: 'Edit Cafe Max' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Restaurant code')).toHaveValue('RST-0001');
     expect(screen.getByLabelText('Mobile')).toHaveValue('9876543210');
     // Saved on their own, from their panels.
     expect(screen.getByRole('button', { name: /Staff discount/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Shift settings/ })).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText('Email'));
-    await user.click(screen.getByRole('button', { name: 'Update Restaurant' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(api.updateRestaurant).toHaveBeenCalled());
     const [id, body] = api.updateRestaurant.mock.calls[0]!;
@@ -211,6 +213,6 @@ describe('Update Restaurant', () => {
     renderScreen(<RestaurantEditPageClient restaurantId="gone" />);
 
     expect(await screen.findByText('Restaurant not found')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Update Restaurant' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
   });
 });

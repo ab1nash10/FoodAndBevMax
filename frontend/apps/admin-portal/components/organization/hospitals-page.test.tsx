@@ -19,6 +19,7 @@ type Client = typeof ApiModule.organizationApi;
 
 // The API calls the screen makes, each a typed stand-in.
 const api = vi.hoisted(() => ({
+  getHospital: vi.fn<Client['getHospital']>(),
   listHospitals: vi.fn<Client['listHospitals']>(),
   listLegalEntities: vi.fn<Client['listLegalEntities']>(),
   updateHospital: vi.fn<Client['updateHospital']>(),
@@ -102,7 +103,7 @@ describe('Locations', () => {
     expect(within(ppgRow).getByText('Max Super Speciality Hospital Ltd')).toBeInTheDocument();
     expect(within(ppgRow).getByText('108A, IP Extension')).toBeInTheDocument();
     expect(within(ppgRow).getByText('New Delhi, Delhi 110092')).toBeInTheDocument();
-    expect(within(ppgRow).getByText('RAZORPAY')).toBeInTheDocument();
+    expect(within(ppgRow).getByText('Razorpay')).toBeInTheDocument();
 
     // No entity or address yet; inactive, so its services are frozen.
     const saketRow = screen.getByText('Saket').closest('tr') as HTMLElement;
@@ -121,7 +122,7 @@ describe('Locations', () => {
     api.listHospitals.mockRejectedValue(new Error('Failed to fetch'));
     renderScreen(<HospitalsPageClient />);
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Unable to connect to AAHAR services. Please check your network and try again.',
+      'Unable to connect to F&B services. Please check your network and try again.',
     );
   });
 
@@ -156,8 +157,13 @@ describe('Locations', () => {
       'href',
       '/masters/locations/new',
     );
+    api.getHospital.mockImplementation(() => reply(location()));
     await user.click(await screen.findByRole('button', { name: 'Edit MSSH PPG' }));
-    expect(router.push).toHaveBeenCalledWith('/masters/locations/h-ppg/edit');
+    // Its panel opens over the list at once, as every other edit does: no page to load first.
+    expect(await screen.findByRole('dialog', { name: /^Edit / })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it('hides New location and Import from those who may only view', async () => {

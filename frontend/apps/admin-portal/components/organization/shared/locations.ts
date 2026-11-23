@@ -143,5 +143,5 @@ export function formatRestaurantLocationOption(hospital: HospitalRecord): string
 export const onlinePaymentOptions: Array<{ label: string; value: OnlinePaymentOption }> = [
   { label: 'None', value: 'NONE' },
   { label: 'PayU', value: 'PAYU' },
-  { label: 'RazorPay', value: 'RAZORPAY' },
+  { label: 'Razorpay', value: 'RAZORPAY' },
 ];

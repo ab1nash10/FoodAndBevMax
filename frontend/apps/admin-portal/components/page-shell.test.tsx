@@ -1,8 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { at } from '@/test/next-navigation';
 import { FoodArt, foodIcon, toneOf } from './food-art';
-import { PageIcon } from './page-icon';
 import { PageShell } from './page-shell';
 
 vi.mock('next/navigation', () => import('@/test/next-navigation'));
@@ -15,18 +13,6 @@ describe('a placeholder page', () => {
     expect(screen.getByText('No records')).toBeInTheDocument();
     for (const button of screen.getAllByRole('button', { name: 'New store' }))
       expect(button).toBeDisabled();
-  });
-});
-
-describe('the page icon', () => {
-  it('draws the open page’s icon, and nothing off the menu', () => {
-    at('/masters/items');
-    const { container, rerender } = render(<PageIcon />);
-    expect(container.querySelector('svg')).not.toBeNull();
-
-    at('/nowhere');
-    rerender(<PageIcon />);
-    expect(container).toBeEmptyDOMElement();
   });
 });
 

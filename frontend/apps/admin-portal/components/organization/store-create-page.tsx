@@ -96,7 +96,7 @@ export function StoreCreatePageClient() {
       backHref="/masters/stores"
       icon={Store}
       subtitle="Create a store for food and beverage inventory flow."
-      title="Create Store"
+      title="Create store"
     >
       <form
         className="grid gap-4"
@@ -131,13 +131,13 @@ export function StoreCreatePageClient() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.storeName?.message}
-            label="Store Name"
+            label="Store name"
             name="store-name"
             required
           >
             <Input id="store-name" {...form.register('storeName')} />
           </Field>
-          <Field label="Store Code" name="store-code">
+          <Field label="Store code" name="store-code">
             <Input id="store-code" readOnly value="Auto-generated after save" />
           </Field>
         </div>
@@ -154,7 +154,7 @@ export function StoreCreatePageClient() {
           <SubmitButton
             disabledReason={disabledReason}
             isPending={createStoreMutation.isPending}
-            label="Create Store"
+            label="Create store"
           />
         </div>
       </form>

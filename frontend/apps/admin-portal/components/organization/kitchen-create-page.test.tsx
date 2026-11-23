@@ -40,7 +40,7 @@ beforeEach(() => {
   );
 });
 
-describe('Create Kitchen', () => {
+describe('Create kitchen', () => {
   it('creates the kitchen at the header location and goes back to the list', async () => {
     api.createKitchen.mockImplementation(() =>
       reply({ id: 'k9', kitchenCode: 'KIT-0009', kitchenName: 'Live Kitchen' } as never),
@@ -51,11 +51,11 @@ describe('Create Kitchen', () => {
     await waitFor(() => expect(location).toHaveValue(patparganj.id));
     // The header decides the location here.
     expect(location).toBeDisabled();
-    const create = screen.getByRole('button', { name: 'Create Kitchen' });
+    const create = screen.getByRole('button', { name: 'Create kitchen' });
     expect(create).toBeDisabled();
     expect(screen.getByText('Kitchen name is required.')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/Kitchen Name/), 'live kitchen');
+    await user.type(screen.getByLabelText(/Kitchen name/), 'live kitchen');
     await user.click(create);
 
     await waitFor(() =>
@@ -73,21 +73,21 @@ describe('Create Kitchen', () => {
     const { user } = renderScreen(<KitchenCreatePageClient />);
 
     const location = screen.getByLabelText(/Location/);
-    await user.type(screen.getByLabelText(/Kitchen Name/), 'Main Kitchen');
+    await user.type(screen.getByLabelText(/Kitchen name/), 'Main Kitchen');
     expect(screen.getByText('Select a location.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create Kitchen' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Create kitchen' })).toBeDisabled();
 
     await waitFor(() => expect(location).toBeEnabled());
     await user.selectOptions(location, saketHospital.id);
-    expect(screen.getByRole('button', { name: 'Create Kitchen' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create kitchen' })).toBeEnabled();
   });
 
   it('shows why the API refused the kitchen', async () => {
     api.createKitchen.mockRejectedValue(new Error('Kitchen name already exists at Patparganj'));
     const { user } = renderScreen(<KitchenCreatePageClient />);
 
-    await user.type(screen.getByLabelText(/Kitchen Name/), 'Main Kitchen');
-    await user.click(screen.getByRole('button', { name: 'Create Kitchen' }));
+    await user.type(screen.getByLabelText(/Kitchen name/), 'Main Kitchen');
+    await user.click(screen.getByRole('button', { name: 'Create kitchen' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Kitchen name already exists at Patparganj',

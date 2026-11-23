@@ -300,7 +300,7 @@ function OrderCard({
               Not ready
             </Button>
           ) : order.source === 'COUNTER' ? null : (
-            // A counter bill is cancelled from Bill History, with a reason and a restock.
+            // A counter bill is cancelled from Bill history, with a reason and a restock.
             <Button
               disabled={isPending}
               onClick={() =>
@@ -475,7 +475,7 @@ export function RestaurantOrdersPageClient({ restaurantId }: Readonly<{ restaura
       ) : orders.length === 0 ? (
         <Panel>
           <EmptyState
-            description="Orders appear here as soon as they are placed. A POS sends them with its key (POS & Payment Machines); kiosks, QR ordering and other apps with this restaurant's Order key."
+            description="Orders appear here as soon as they are placed. A POS sends them with its key (POS & payment machines); kiosks, QR ordering and other apps with this restaurant's Order key."
             title={`No open orders${restaurantName ? ` at ${restaurantName}` : ''}`}
           />
         </Panel>

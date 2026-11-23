@@ -95,7 +95,7 @@ export function KitchenCreatePageClient() {
       backHref="/masters/kitchens"
       icon={ChefHat}
       subtitle="Create a kitchen for location food production."
-      title="Create Kitchen"
+      title="Create kitchen"
     >
       <form
         className="grid gap-4"
@@ -130,13 +130,13 @@ export function KitchenCreatePageClient() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             error={form.formState.errors.kitchenName?.message}
-            label="Kitchen Name"
+            label="Kitchen name"
             name="kitchen-name"
             required
           >
             <Input id="kitchen-name" {...form.register('kitchenName')} />
           </Field>
-          <Field label="Kitchen Code" name="kitchen-code">
+          <Field label="Kitchen code" name="kitchen-code">
             <Input id="kitchen-code" readOnly value="Auto-generated after save" />
           </Field>
         </div>
@@ -153,7 +153,7 @@ export function KitchenCreatePageClient() {
           <SubmitButton
             disabledReason={disabledReason}
             isPending={createKitchenMutation.isPending}
-            label="Create Kitchen"
+            label="Create kitchen"
           />
         </div>
       </form>

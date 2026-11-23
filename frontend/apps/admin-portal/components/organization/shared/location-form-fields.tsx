@@ -29,7 +29,7 @@ const gatewayFields: Record<
   RAZORPAY: {
     fields: [
       { label: 'Key ID', name: 'razorpayKeyId' },
-      { label: 'Key Secret', name: 'razorpayKeySecret', secret: true },
+      { label: 'Key secret', name: 'razorpayKeySecret', secret: true },
     ],
     title: 'RazorPay Details',
   },
@@ -116,7 +116,7 @@ export function LocationMasterFormFields({
 
   return (
     <div className="grid gap-6">
-      <SectionHeading title="Add/Update Location" />
+      <SectionHeading title="Location details" />
       {/* First: the location's name and address follow from its entity. */}
       <Field
         error={form.formState.errors.legalEntityId?.message}
@@ -155,7 +155,7 @@ export function LocationMasterFormFields({
         </Field>
         <Field
           error={form.formState.errors.locationCode?.message}
-          label="Location Code"
+          label="Location code"
           name="location-code"
           required
         >
@@ -170,14 +170,14 @@ export function LocationMasterFormFields({
       <div className="grid gap-4 md:grid-cols-2">
         <Field
           error={form.formState.errors.displayName?.message}
-          label="Display Name"
+          label="Display name"
           name="location-display-name"
         >
           <Input disabled={disabled} id="location-display-name" {...form.register('displayName')} />
         </Field>
         <Field
           error={form.formState.errors.invoicePrefix?.message}
-          label="Invoice Prefix"
+          label="Invoice prefix"
           name="location-invoice-prefix"
         >
           <Input
@@ -217,6 +217,9 @@ export function LocationMasterFormFields({
             disabled={disabled || !selectedState}
             id="location-city"
             {...form.register('city')}
+            // React shows the city, after the state's cities are in the list. Left to the form, a
+            // saved city was set before its options existed and read "Select city" (2026-11-22).
+            value={selectedCity ?? ''}
           >
             <option value="">Select city</option>
             {cityOptions.map((city) => (
@@ -228,7 +231,7 @@ export function LocationMasterFormFields({
         </Field>
         <Field
           error={form.formState.errors.postalCode?.message}
-          label="Postal Code"
+          label="Postal code"
           name="location-postal-code"
         >
           <Input

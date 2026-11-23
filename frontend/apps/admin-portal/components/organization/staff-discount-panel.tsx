@@ -16,7 +16,7 @@ const levelLabels = { ON_ROLL: 'On roll', OUTSOURCED: 'Outsourced' } as const;
 
 /**
  * A restaurant's staff discount switch, with its live Employee Discount rules. The rules
- * themselves (%, level, days, timings) are kept in Employee Discounts; the POS applies the best
+ * themselves (%, level, days, timings) are kept in Employee discounts; the POS applies the best
  * one to discountable menu items for eligible employees, only while this switch is on.
  */
 export function StaffDiscountPanel({
@@ -57,7 +57,7 @@ export function StaffDiscountPanel({
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
-    // The old per-type rates are sent back unchanged; Employee Discounts replaced them.
+    // The old per-type rates are sent back unchanged; Employee discounts replaced them.
     mutationFn: () =>
       organizationApi.setStaffDiscounts(restaurant!.id, {
         rates: settingsQuery.data!.rates.map(({ discountPercent, employmentType }) => ({
@@ -161,7 +161,7 @@ export function StaffDiscountPanel({
                 className="inline-flex items-center gap-1 text-sm font-semibold text-ds-link hover:underline"
                 href={`/masters/employee-discounts?restaurant=${restaurant?.id ?? ''}`}
               >
-                Manage in Employee Discounts
+                Manage in Employee discounts
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>

@@ -16,7 +16,7 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
-import { RowAction, StatStrip, tableStyles } from '@/components/design-system';
+import { RowAction, tableStyles } from '@/components/design-system';
 import {
   ActiveFilterSelect,
   PaginationControls,
@@ -97,9 +97,7 @@ export function LegalEntitiesPageClient() {
     queryFn: async () => {
       const count = async (isActive?: boolean) =>
         (await organizationApi.listLegalEntities({ isActive, limit: 0 })).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.legalEntities('stats'),
   });
@@ -171,11 +169,6 @@ export function LegalEntitiesPageClient() {
     setPage(1);
   }
 
-  function showStatus(status: ActiveFilter) {
-    setActiveFilter(status);
-    setPage(1);
-  }
-
   function openDialog(entity: LegalEntity | 'new') {
     setDialog(entity);
     form.reset(
@@ -243,34 +236,6 @@ export function LegalEntitiesPageClient() {
         icon={Landmark}
         subtitle="The legal entities locations and restaurants bill under: registered name, address and GST number."
         title="Entities"
-      />
-      <StatStrip
-        label="Entities at a glance"
-        stats={[
-          {
-            active: !activeFilter,
-            label: 'All entities',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            tone: 'ok',
-            share: stats?.all ? stats.active / stats.all : undefined,
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive',
-            onSelect: () => showStatus('inactive'),
-            tone: 'pending',
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            value: stats?.inactive ?? '–',
-          },
-        ]}
       />
 
       <Modal

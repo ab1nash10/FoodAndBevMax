@@ -173,7 +173,7 @@ describe('restaurant options', () => {
       onlineOrders,
     }) as unknown as Restaurant;
 
-  test('online ordering is the Online Orders (QR) option, and only while the restaurant is open', () => {
+  test('online ordering is the Online orders (QR) option, and only while the restaurant is open', () => {
     expect(allowsOnlineOrdering(restaurant(false, true))).toBe(true);
     expect(allowsOnlineOrdering(restaurant(false, false))).toBe(false);
     // Inactive and Offline (as BLK was): no online orders, whatever the option says.
@@ -182,10 +182,10 @@ describe('restaurant options', () => {
     expect(allowsOnlineOrdering(restaurant(true, true, true))).toBe(false);
   });
 
-  test('the status badges follow Online Orders and show Offline', () => {
+  test('the status badges follow Online orders and show Offline', () => {
     const labels = (r: Restaurant) => getRestaurantStatusBadges(r).map((badge) => badge.label);
 
-    expect(labels(restaurant(false, true))).toEqual(['Online Orders']);
+    expect(labels(restaurant(false, true))).toEqual(['Online orders']);
     expect(labels(restaurant(false, false))).toEqual([]);
     expect(labels(restaurant(true, false))).toEqual(['Offline']);
     expect(labels(restaurant(true, true))).toEqual(['Offline']);

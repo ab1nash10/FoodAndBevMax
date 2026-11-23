@@ -44,7 +44,7 @@ export function getRestaurantStatusBadges(restaurant: Restaurant): RestaurantOpt
         restaurant.isInRoomDiningEnabled ||
         restaurant.inRoomDining ||
         restaurant.inRoomDiningEnabled,
-      label: 'In Room Dining',
+      label: 'In-room dining',
       variant: 'neutral',
     },
     {
@@ -64,7 +64,7 @@ export function getRestaurantStatusBadges(restaurant: Restaurant): RestaurantOpt
     },
     {
       enabled: allowsOnlineOrdering(restaurant),
-      label: 'Online Orders',
+      label: 'Online orders',
       variant: 'neutral',
     },
     {

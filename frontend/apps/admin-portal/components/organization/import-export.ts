@@ -160,7 +160,7 @@ export function locationColumns(
     {
       example: 'None',
       header: 'Online payment option',
-      hint: 'None, PayU or RazorPay only. Blank: None when added, unchanged on an update.',
+      hint: 'None, PayU or Razorpay only. Blank: None when added, unchanged on an update.',
       value: (location) =>
         onlinePaymentOptions.find((option) => option.value === location.onlinePaymentOption)?.label,
     },
@@ -233,7 +233,7 @@ export async function startLocationImport(api: ImportApi): Promise<CsvRowImporte
     );
 
     if (paymentCell && !payment) {
-      throw new Error('Online payment option must be None, PayU or RazorPay.');
+      throw new Error('Online payment option must be None, PayU or Razorpay.');
     }
 
     const input = toHospitalInput(

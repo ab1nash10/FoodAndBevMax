@@ -42,7 +42,7 @@ export function historyOf(
   row: Pick<OrderReportRow, 'acceptedAt' | 'deliveredAt' | 'paidAt' | 'placedAt' | 'readyAt'>,
 ): Array<[string, string]> {
   const steps: Array<[string, string | null]> = [
-    ['Ordered At', row.placedAt],
+    ['Ordered at', row.placedAt],
     ['Paid At', row.paidAt],
     ['Accepted At', row.acceptedAt],
     ['Ready At', row.readyAt],

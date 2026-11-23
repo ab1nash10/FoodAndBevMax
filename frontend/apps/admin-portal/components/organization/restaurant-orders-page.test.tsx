@@ -109,7 +109,7 @@ describe("a restaurant's live orders", () => {
     );
   });
 
-  it('cancels an app order once confirmed, but leaves counter bills to Bill History', async () => {
+  it('cancels an app order once confirmed, but leaves counter bills to Bill history', async () => {
     api.listRestaurantOrders.mockImplementation(() =>
       reply([order(), order({ id: 'o3', orderNumber: '103', source: 'COUNTER' })]),
     );

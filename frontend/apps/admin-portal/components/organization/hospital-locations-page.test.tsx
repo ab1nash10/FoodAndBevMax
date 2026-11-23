@@ -61,10 +61,13 @@ describe('Edit location', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Edit Patparganj' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText(/Title/)).toHaveValue('Patparganj'));
-    expect(screen.getByLabelText(/Location Code/)).toHaveValue('PPG');
+    // An edit, not a create: no note about what creating sets up, no "Add/Update" heading.
+    expect(screen.queryByText(/Creating a Location/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Add\/Update/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Location code/)).toHaveValue('PPG');
     expect(screen.getByLabelText(/City/)).toHaveValue('New Delhi');
     expect(screen.getByLabelText('Key ID')).toHaveValue('rzp_live_ppg');
-    const secret = screen.getByLabelText('Key Secret');
+    const secret = screen.getByLabelText('Key secret');
     expect(secret).toHaveValue('');
     expect(secret).toHaveAttribute(
       'placeholder',
@@ -77,11 +80,11 @@ describe('Edit location', () => {
     api.updateHospital.mockImplementation(() => reply(patparganj));
     const { user } = renderScreen(<HospitalLocationsPageClient hospitalId="h-ppg" />);
 
-    const displayName = await screen.findByLabelText('Display Name');
+    const displayName = await screen.findByLabelText('Display name');
     await waitFor(() => expect(displayName).toHaveValue('Patparganj'));
     await user.clear(displayName);
     await user.type(displayName, 'Max Patparganj');
-    await user.click(screen.getByRole('button', { name: 'Update Location' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(api.updateHospital).toHaveBeenCalled());
     const [id, body] = api.updateHospital.mock.calls[0]!;
@@ -98,7 +101,7 @@ describe('Edit location', () => {
     const { user } = renderScreen(<HospitalLocationsPageClient hospitalId="h-ppg" />);
 
     await waitFor(() => expect(screen.getByLabelText(/Title/)).toHaveValue('Patparganj'));
-    await user.click(screen.getByRole('button', { name: 'Update Location' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Invoice prefix PPG is already used',
@@ -111,6 +114,6 @@ describe('Edit location', () => {
     renderScreen(<HospitalLocationsPageClient hospitalId="h-gone" />);
 
     expect(await screen.findByText('Location not found')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Update Location' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
   });
 });

@@ -130,7 +130,7 @@ describe('locations', () => {
       'Status',
     ]);
     expect(row()('Entity')).toBe('MSSH SKT');
-    expect(row()('Online payment option')).toBe('RazorPay');
+    expect(row()('Online payment option')).toBe('Razorpay');
   });
 
   test('a row with a known code updates it, keeping gateway keys; a new code adds one', async () => {
@@ -187,7 +187,7 @@ describe('locations', () => {
     );
     await expect(refused({ Entity: 'Nobody' })).rejects.toThrow('No entity is named Nobody.');
     await expect(refused({ 'Online payment option': 'Paytm' })).rejects.toThrow(
-      'Online payment option must be None, PayU or RazorPay.',
+      'Online payment option must be None, PayU or Razorpay.',
     );
   });
 });

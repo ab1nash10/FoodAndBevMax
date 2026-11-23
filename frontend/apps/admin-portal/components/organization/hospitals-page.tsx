@@ -1,17 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
 import { confirmStatusChange, useConfirm } from '@/components/confirm-provider';
-import {
-  DateTimeCell,
-  RecordAvatar,
-  RowAction,
-  StatStrip,
-  tableStyles,
-} from '@/components/design-system';
+import { DateTimeCell, RecordAvatar, RowAction, tableStyles } from '@/components/design-system';
 import {
   FilterField,
   FiltersMenu,
@@ -19,6 +12,7 @@ import {
   RefreshButton,
   SortControl,
 } from '@/components/list-toolbar';
+import { HospitalLocationsPageClient } from '@/components/organization/hospital-locations-page';
 import { useToast } from '@/components/toast-provider';
 import { Panel, Select } from '@/components/ui';
 import { useUrlNumberParam, useUrlParam, useUrlSearchParam } from '@/lib/use-url-state';
@@ -61,7 +55,8 @@ import { queryKeys } from '@/lib/query-keys';
 import { useListLimit } from '@/lib/list-limit';
 
 export function HospitalsPageClient() {
-  const router = useRouter();
+  // The location whose edit panel is open over the list (in place, like every other edit).
+  const [editingId, setEditingId] = useState<string | null>(null);
   const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -123,9 +118,7 @@ export function HospitalsPageClient() {
     queryFn: async () => {
       const count = async (isActive?: boolean) =>
         (await organizationApi.listHospitals({ isActive, limit: 0 })).data.meta.total;
-      const [all, active, inactive] = await Promise.all([count(), count(true), count(false)]);
-
-      return { active, all, inactive };
+      return { all: await count() };
     },
     queryKey: queryKeys.hospitals('stats'),
   });
@@ -193,11 +186,6 @@ export function HospitalsPageClient() {
     statusMutation.mutate({ id: location.id, isActive: nextIsActive });
   }
 
-  function showStatus(status: ActiveFilter) {
-    setActiveFilter(status);
-    setPage(1);
-  }
-
   return (
     <section className="space-y-5">
       <PageHeader
@@ -248,34 +236,6 @@ export function HospitalsPageClient() {
         icon={MapPin}
         subtitle="Manage operating locations for food and cafeteria services."
         title="Locations"
-      />
-      <StatStrip
-        label="Locations at a glance"
-        stats={[
-          {
-            active: !activeFilter,
-            label: 'All locations',
-            onSelect: () => showStatus(''),
-            share: stats?.all ? 1 : undefined,
-            value: stats?.all ?? '–',
-          },
-          {
-            active: activeFilter === 'active',
-            label: 'Active',
-            onSelect: () => showStatus('active'),
-            tone: 'ok',
-            share: stats?.all ? stats.active / stats.all : undefined,
-            value: stats?.active ?? '–',
-          },
-          {
-            active: activeFilter === 'inactive',
-            label: 'Inactive · services frozen',
-            onSelect: () => showStatus('inactive'),
-            tone: 'pending',
-            share: stats?.all ? stats.inactive / stats.all : undefined,
-            value: stats?.inactive ?? '–',
-          },
-        ]}
       />
       <Panel>
         <ListToolbar>
@@ -439,7 +399,9 @@ export function HospitalsPageClient() {
                         </p>
                       </td>
                       <td className={cn(tableStyles.td, 'text-ds-text-2')}>
-                        {location.onlinePaymentOption}
+                        {onlinePaymentOptions.find(
+                          (option) => option.value === location.onlinePaymentOption,
+                        )?.label ?? 'None'}
                       </td>
                       <td className={tableStyles.td}>
                         <StatusToggleCell
@@ -463,7 +425,7 @@ export function HospitalsPageClient() {
                               label={`Edit ${title}`}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                router.push(editHref);
+                                setEditingId(location.id);
                               }}
                             />
                           ) : null}
@@ -494,6 +456,9 @@ export function HospitalsPageClient() {
           totalPages={meta.totalPages}
         />
       </Panel>
+      {editingId ? (
+        <HospitalLocationsPageClient hospitalId={editingId} onClose={() => setEditingId(null)} />
+      ) : null}
     </section>
   );
 }
