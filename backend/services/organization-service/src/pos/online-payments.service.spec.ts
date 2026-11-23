@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type OnlinePayment } from '@prisma/client';
 import { test } from 'vitest';
+import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
 import { OnlinePaymentsService } from './online-payments.service';
 import type { PosService } from './pos.service';
@@ -129,13 +130,22 @@ function serviceWith(grandTotal = 105, settings = config, machines: Machine[] = 
     findCounter: () => Promise.resolve(counter),
     quoteBill: () => Promise.resolve({ grandTotal }),
   };
+  const audits: string[] = [];
+  const auditLog = {
+    record: (entry: { summary: string }) => {
+      audits.push(entry.summary);
+      return Promise.resolve();
+    },
+  };
 
   return {
+    audits,
     payments,
     service: new OnlinePaymentsService(
       settings,
       pos as unknown as PosService,
       prisma as unknown as PrismaService,
+      auditLog as unknown as AuditLogService,
     ),
   };
 }
@@ -323,4 +333,32 @@ test('Pine Labs: cancelling clears the machine for the payment’s amount', asyn
   const cancel = plutusSent.find((body) => 'TakeToHomeScreen' in body)!;
   assert.equal(cancel.Amount, 10500);
   assert.equal(cancel.PlutusTransactionReferenceID, 823487);
+});
+
+test('a Razorpay order paid after it was cancelled is found, marked paid and flagged for a refund', async () => {
+  const { audits, payments, service } = serviceWith();
+  payments.push({
+    amount: new Prisma.Decimal(105),
+    hospitalId: 'hospital-1',
+    id: 'late-1',
+    paidReference: null,
+    provider: 'RAZORPAY',
+    providerRef: 'order_1',
+    status: 'CANCELLED',
+  } as unknown as OnlinePayment);
+  const late = payments.at(-1)!;
+
+  link = { items: [], status: 'created' } as typeof link;
+  assert.equal(await service.paidAfterCancel('late-1'), false);
+  assert.equal(late.status, 'CANCELLED');
+
+  link = { items: [{ id: 'pay_LATE', status: 'captured' }], status: 'paid' } as typeof link;
+  assert.equal(await service.paidAfterCancel('late-1'), true);
+  assert.equal(late.status, 'PAID');
+  assert.equal(late.paidReference, 'pay_LATE');
+  assert.deepEqual(audits, ['RAZORPAY payment of 105 paid after it was cancelled: refund it']);
+
+  // Settled: asked again, nothing moves and nothing more is said.
+  assert.equal(await service.paidAfterCancel('late-1'), false);
+  assert.equal(audits.length, 1);
 });

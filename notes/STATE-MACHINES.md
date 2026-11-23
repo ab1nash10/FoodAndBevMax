@@ -11,9 +11,36 @@ areas (POS and payments, inventory and kitchen, sign-in and master data, portal 
 marked "checked" were confirmed in the code by hand; the rest come from a full read of each area
 and carry file:line references to check before fixing. Nothing in the code was changed.
 
+Refreshed 2026-11-23 after the ERP GRN rewrite (owed returns, batches on hold, close reasons,
+refusal log, manual GRNs removed): the GRN rows and inventory findings 3-6 are new, and the
+fix-first list was checked again in the current tree.
+
+Fixed 2026-11-23 (uncommitted at the time, each with a test written first): all seven fix-first
+items; inventory findings 1, 4 (a 5-minute catch-up runs waiting returns), 7 and 8; POS findings
+1-3 and the cancel, ready and steward timestamps; portal findings 1-3, 5 and 6 (4 is covered by
+the server sweep, which bills the kiosk order even if the screen lost it), the board and the
+production draft; sign-in findings 1, 3, 4 (disabling clears the lock) and 7. What is left needs
+a product decision: the refund state, recalling stock in transit, amendment rules, ERP drift,
+cascades and frozen children, the closed-GRN reopen, dead tables, the dev code and names after
+delete.
+
 ## Fix first
 
-These lose money, lose bills or let someone in. All are checked.
+These lost money, lost bills or let someone in. All seven are fixed (2026-11-23):
+
+1. unsent bills are kept through sign-out and sent only by the cashier who queued them;
+2. a paid payment is kept until its bill succeeds, and the retry bills the same payment;
+3. a server sweep every 60 s settles QR and kiosk payments the guest's page left, and lets go of
+   orders unpaid after 30 minutes;
+4. Razorpay-order and PayU payments cancelled in the last 30 minutes are asked again; one found
+   paid is flagged for a refund;
+5. a failed QR bill re-reads the payment and marks the order BILLED when another call billed it;
+   the refund audit row is written only when the status changed;
+6. the guest code counts the try before comparing;
+7. stock rows are one per key (`NULLS NOT DISTINCT`, migration 20261123090000) and stock is added
+   by one `INSERT … ON CONFLICT`.
+
+The table keeps what each one was.
 
 | #   | What happens                                                                                                                                              | Where                                                                              |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -27,7 +54,7 @@ These lose money, lose bills or let someone in. All are checked.
 
 Then, by theme: there is **no refund state** anywhere (cancelled bills keep their payment PAID;
 PAID_NOT_BILLED has no exit); **stock in transit can't be recalled**; **amendments skip
-billing's checks**; **dead states and tables** (four GRN statuses, KioskOrder, StaffDiscountOtp,
+billing's checks**; **dead states and tables** (the old manual Grn table, KioskOrder, StaffDiscountOtp,
 two `deleted_at` columns) mislead readers; and the **active / inactive / deleted lifecycle is
 copied into each service** with different cascades and name rules. A shared transition helper
 (conditional update on the expected status, checked by count) would replace most of the
@@ -43,8 +70,9 @@ hand-written guards.
 | OnlinePayment           | status: OnlinePaymentStatus | PENDING, PAID, CANCELLED, EXPIRED (+ paidAt, orderId)                                                               |
 | QrOrder                 | status: QrOrderStatus       | AWAITING_PAYMENT, BILLED, PAID_NOT_BILLED, CLOSED (+ billedOrderId)                                                 |
 | CounterShift            | status: CounterShiftStatus  | OPEN, CLOSED, HANDED_OVER (+ closedAt, takenOverFrom/By)                                                            |
-| Grn                     | status: GrnStatus           | DRAFT, UNDER_VERIFICATION, PARTIALLY_ACCEPTED, ACCEPTED, REJECTED, POSTED_TO_STOCK, CANCELLED                       |
-| GrnEntry (ERP intake)   | status: GrnEntryStatus      | PENDING, VERIFIED, CLOSED (+ verifiedAt)                                                                            |
+| Grn                     | status: GrnStatus           | **dead since 2026-11-21** (Deliveries (GRN) removed): nothing writes it; stock history still reads old rows         |
+| GrnEntry (ERP intake)   | status: GrnEntryStatus      | PENDING, VERIFIED, CLOSED (+ verifiedAt, rerunActive; flag 0 goods in, 1 return to vendor)                          |
+| ErpGrnRefusal           | —                           | write-once log of refused ERP GRNs (Logs → ERP GRN errors)                                                          |
 | Transfer                | status: TransferStatus      | DRAFT, PENDING_ACKNOWLEDGEMENT, ACKNOWLEDGED, CANCELLED                                                             |
 | TransferAcknowledgement | status                      | ACCEPTED_FULL, ACCEPTED_PARTIAL, REJECTED_FULL (outcome, not a lifecycle)                                           |
 | KitchenProduction       | status                      | DRAFT, POSTED, CANCELLED                                                                                            |
@@ -86,13 +114,14 @@ Most document moves are safe: the handler locks the row (`common/row-lock.ts`, `
 UPDATE`) inside the transaction, re-reads the status, and changes stock in the same transaction.
 The weak spots are the stock balance rows, not the status flags.
 
-| Machine           | States in use                                                     | Moves (guard)                                                                      | Ends                       |
-| ----------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------- |
-| Grn               | DRAFT → POSTED_TO_STOCK / CANCELLED (+ deletedAt while DRAFT)     | row lock + re-read; stock and status in one transaction                            | POSTED_TO_STOCK, CANCELLED |
-| GrnEntry (ERP)    | PENDING → VERIFIED / CLOSED                                       | advisory lock per GRN number; DB CHECK on accepted + rejected                      | VERIFIED, CLOSED           |
-| Transfer          | DRAFT → PENDING_ACKNOWLEDGEMENT → ACKNOWLEDGED; DRAFT → CANCELLED | row lock; acknowledgement unique per transfer (second one rolls back)              | ACKNOWLEDGED, CANCELLED    |
-| KitchenProduction | DRAFT → POSTED / CANCELLED                                        | row lock + re-read                                                                 | POSTED, CANCELLED          |
-| Stock balance     | quantity per location / item / batch / business day               | every decrease is conditional (`available >= qty`); increases are find-then-create | —                          |
+| Machine           | States in use                                                                                                                                                                                                                                       | Moves (guard)                                                                                                                | Ends                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| GrnEntry (ERP)    | one status per GRN number. Arrival moves stock at once; PENDING = a return still owed → VERIFIED (all moved) / CLOSED (rest written off with a fixed reason); VERIFIED or CLOSED → PENDING when the same grn_No is resent and leaves something owed | advisory lock per GRN number; returns take stock by conditional decrement, the rest is owed; DB CHECK on accepted + rejected | none (reopens)                    |
+| Owed-return rerun | `rerunActive` on ↔ paused; reruns on a store arrival (in-memory signal after commit), on Run, on resume                                                                                                                                             | same GRN lock; `whileWaiting` refuses anything not PENDING                                                                   | settled or closed                 |
+| Batch on hold     | derived, no column: a PENDING return with something left puts that batch on hold at the location's counters                                                                                                                                         | POS reads it when billing (`heldForReturn`), no lock                                                                         | when the return settles or closes |
+| Transfer          | DRAFT → PENDING_ACKNOWLEDGEMENT → ACKNOWLEDGED; DRAFT → CANCELLED                                                                                                                                                                                   | row lock; acknowledgement unique per transfer (second one rolls back)                                                        | ACKNOWLEDGED, CANCELLED           |
+| KitchenProduction | DRAFT → POSTED / CANCELLED                                                                                                                                                                                                                          | row lock + re-read                                                                                                           | POSTED, CANCELLED                 |
+| Stock balance     | quantity per location / item / batch / business day                                                                                                                                                                                                 | every decrease is conditional (`available >= qty`); increases are find-then-create                                           | —                                 |
 
 Findings (checked against the code, 2026-11-20):
 
@@ -104,16 +133,24 @@ Findings (checked against the code, 2026-11-20):
    Fix: `NULLS NOT DISTINCT` on the index (Postgres 15+) or an upsert.
 2. **Stock can be stuck in transit.** A dispatched transfer (PENDING_ACKNOWLEDGEMENT) has no
    cancel, recall or timeout; its stock has already left the source.
-3. **Four GRN statuses are dead.** UNDER_VERIFICATION, PARTIALLY_ACCEPTED, ACCEPTED and REJECTED
-   are never set, but the GRN list still has tabs for them. The guards are blacklists
-   ("not POSTED or CANCELLED"), so any future status would be postable by default.
-4. **ERP return over-check runs before the lock** (`erp-grns.service.ts`): two returns for the
-   same batch can both pass; the second waits PENDING until closed by hand. Stock stays right.
-5. **A POS cancel puts stock back on a different row** than the sale took it from (sale: oldest
+3. **The whole `Grn` table is dead** since Deliveries (GRN) was removed: no code writes it and
+   `GrnStatus` is unused; only stock history reads old rows. Drop it, or mark it legacy.
+4. **An owed return's rerun can be missed** (2026-11-23). The store-arrival signal is in memory
+   and fires after the commit (`common/store-arrivals.ts`); a restart in between leaves the
+   return waiting, and its batch on hold at the counters, until that batch arrives again or
+   someone presses Run. (The old "return check before the lock" finding is gone: the rewrite
+   locks first and takes stock by conditional decrement.)
+5. **A closed GRN reopens** when the same grn_No is resent and leaves something owed
+   (`erp-grns.service.ts` settle): status goes back to PENDING and `verifiedAt`/`verifiedBy`
+   are cleared, so who closed it survives only in the audit log and the rows' rejection reason.
+   Check this is wanted.
+6. **The hold check is not locked**: a sale billed while a new return is being saved can sell a
+   batch that is put on hold a moment later. Low impact.
+7. **A POS cancel puts stock back on a different row** than the sale took it from (sale: oldest
    business day; cancel: newest or a no-date row), so ready-made stock drifts between day rows.
-6. **Ledger `balanceAfter` can be off** for discard, ERP return and POS sale: it is computed from
+8. **Ledger `balanceAfter` can be off** for discard, ERP return and POS sale: it is computed from
    a value read before the update.
-7. Smaller: cancelling a cancelled GRN succeeds but a cancelled production throws; discards write
+9. Smaller: a cancelled production cannot be cancelled again; discards write
    a ledger row with no reference; `RESTAURANT_RECEIVE_IN` and `reserved_qty` are never written;
    `transfers.deleted_at` is never set; the `GrnEntry` comment in `schema.prisma` is out of date.
 
@@ -132,15 +169,17 @@ Findings (checked against the code, 2026-11-20):
 
 Findings:
 
-1. **A billed QR order can be flagged "paid but not billed: refund it"** (checked). Bill creation
-   checks for an existing bill before taking the shift lock but not after it
-   (`pos.service.ts:781` vs `:978`). When two status/cancel calls overlap, the second waits on the
-   lock, then hits "payment already on another bill" (409); `qr-orders.service.ts:892-897` turns
-   that into PAID_NOT_BILLED unless the winner's BILLED update landed first, and writes the
-   "refund it" audit row either way (`:898`, no count check).
+1. **A billed QR order can be flagged "paid but not billed: refund it"** (checked again
+   2026-11-23). Under the shift lock only the shift is re-checked, never the QR order
+   (`pos.service.ts:991-999`). When two status/cancel calls overlap, the second waits on the
+   lock, then hits "payment already on another bill" (409). Both result writes are now
+   conditional on AWAITING_PAYMENT (`qr-orders.service.ts:885-897`), but whichever lands first
+   wins, so the loser's PAID_NOT_BILLED can beat the winner's BILLED; and the "refund it" audit
+   row is written either way (`:898`).
 2. **A payment made after a Razorpay order is cancelled is never seen** (checked). Razorpay order
-   cancel does nothing (`online-payment-providers.ts:129-132`); AAHAR then marks the payment
-   CANCELLED and never asks again. With a changed provider key, `cancel` also marks CANCELLED
+   cancel does nothing (`online-payment-providers.ts:130-132`); AAHAR then marks the payment
+   CANCELLED and `check()` skips anything not PENDING (`online-payments.service.ts:165`), so it
+   never asks again; the comment there saying "found by the next check" is wrong. With a changed provider key, `cancel` also marks CANCELLED
    without asking. Whether Razorpay auto-refunds depends on the account's capture setting.
 3. **Nothing settles payments in the background.** QR and kiosk orders move only while the
    guest's browser polls; there is no webhook or sweeper. A guest who pays and closes the page
@@ -174,7 +213,7 @@ Findings:
    the offline queue is `aahar.pos.unsent-bills.<counter>` (`lib/pos-offline-queue.ts:24`).
    Collected money, online-paid bills included, disappears with no record.
 2. **A refused bill drops the guest's payment** (checked). After the guest pays, the till sends
-   the bill and forgets the payment at once (`billing-page.tsx:1385-1396`). If the server refuses
+   the bill and forgets the payment at once (`billing-page.tsx:1389-1399`). If the server refuses
    it (409: the price changed with the 60 s menu refresh), the toast shows, and pressing Complete
    again starts a new payment: the guest pays twice.
 3. **Closing the payment dialog while it is still starting** leaves a live payment polling in the
@@ -202,7 +241,7 @@ Findings:
 Findings:
 
 1. **The QR guest code can be guessed in parallel** (checked). `verifyGuestOtp` reads the wrong
-   tries, compares, and only then counts (`qr-orders.service.ts:438-447`), so a burst of guesses
+   tries, compares, and only then counts (`qr-orders.service.ts:439-448`), so a burst of guesses
    all pass the "fewer than 5" check; only the per-IP throttle limits it. Success gives a 30-day
    token that cannot be revoked, for someone else's mobile, including their staff discount. The
    portal OTP already does this right (count first, then compare).

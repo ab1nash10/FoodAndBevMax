@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { InventoryLocationType, Item, ItemType, Prisma, StockBalance } from '@prisma/client';
+import { InventoryLocationType, Item, ItemType, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { addStock } from '../common/stock-balances';
 
 type GrnClient = Prisma.TransactionClient | PrismaService;
 
@@ -36,36 +37,6 @@ export class GrnsRepository {
     });
   }
 
-  async findStockBalance(
-    {
-      batchNumber,
-      expiryDate,
-      hospitalId,
-      itemId,
-      locationId,
-    }: {
-      batchNumber: string;
-      expiryDate: Date;
-      hospitalId: string;
-      itemId: string;
-      locationId: string;
-    },
-    client: GrnClient,
-  ): Promise<StockBalance | null> {
-    return client.stockBalance.findFirst({
-      where: {
-        batchNumber,
-        deletedAt: null,
-        expiryDate,
-        hospitalId,
-        itemId,
-        itemType: ItemType.MRP,
-        locationId,
-        locationType: InventoryLocationType.STORE,
-      },
-    });
-  }
-
   async upsertStockBalance(
     {
       actorId,
@@ -85,47 +56,21 @@ export class GrnsRepository {
       quantity: number;
     },
     client: GrnClient,
-  ): Promise<StockBalance> {
-    const existing = await this.findStockBalance(
+  ) {
+    return addStock(
+      client,
       {
         batchNumber,
-        expiryDate,
-        hospitalId,
-        itemId,
-        locationId,
-      },
-      client,
-    );
-
-    if (existing) {
-      return client.stockBalance.update({
-        data: {
-          availableQty: {
-            increment: quantity,
-          },
-          lastUpdatedOn: new Date(),
-          updatedBy: actorId,
-        },
-        where: {
-          id: existing.id,
-        },
-      });
-    }
-
-    return client.stockBalance.create({
-      data: {
-        availableQty: quantity,
-        batchNumber,
-        createdBy: actorId,
+        businessDate: null,
         expiryDate,
         hospitalId,
         itemId,
         itemType: ItemType.MRP,
-        lastUpdatedOn: new Date(),
         locationId,
         locationType: InventoryLocationType.STORE,
-        updatedBy: actorId,
       },
-    });
+      quantity,
+      actorId,
+    );
   }
 }

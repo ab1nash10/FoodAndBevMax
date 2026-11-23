@@ -6,11 +6,11 @@ import {
   ItemType,
   Kitchen,
   Prisma,
-  StockBalance,
   User,
   UserStatus,
 } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { addStock } from '../common/stock-balances';
 
 export const kitchenProductionInclude = {
   chef: {
@@ -189,35 +189,6 @@ export class KitchenProductionsRepository {
     });
   }
 
-  async findStockBalance(
-    {
-      businessDate,
-      hospitalId,
-      itemId,
-      locationId,
-    }: {
-      businessDate: Date;
-      hospitalId: string;
-      itemId: string;
-      locationId: string;
-    },
-    client: KitchenProductionClient,
-  ): Promise<StockBalance | null> {
-    return client.stockBalance.findFirst({
-      where: {
-        batchNumber: null,
-        businessDate,
-        deletedAt: null,
-        expiryDate: null,
-        hospitalId,
-        itemId,
-        itemType: ItemType.READYMADE,
-        locationId,
-        locationType: InventoryLocationType.KITCHEN,
-      },
-    });
-  }
-
   async softDeleteLines(
     productionId: string,
     actorId: string | undefined,
@@ -266,45 +237,21 @@ export class KitchenProductionsRepository {
       quantity: number;
     },
     client: KitchenProductionClient,
-  ): Promise<StockBalance> {
-    const existing = await this.findStockBalance(
-      {
-        businessDate,
-        hospitalId,
-        itemId,
-        locationId,
-      },
+  ) {
+    return addStock(
       client,
-    );
-
-    if (existing) {
-      return client.stockBalance.update({
-        data: {
-          availableQty: {
-            increment: quantity,
-          },
-          lastUpdatedOn: new Date(),
-          updatedBy: actorId,
-        },
-        where: {
-          id: existing.id,
-        },
-      });
-    }
-
-    return client.stockBalance.create({
-      data: {
-        availableQty: quantity,
+      {
+        batchNumber: null,
         businessDate,
-        createdBy: actorId,
+        expiryDate: null,
         hospitalId,
         itemId,
         itemType: ItemType.READYMADE,
-        lastUpdatedOn: new Date(),
         locationId,
         locationType: InventoryLocationType.KITCHEN,
-        updatedBy: actorId,
       },
-    });
+      quantity,
+      actorId,
+    );
   }
 }

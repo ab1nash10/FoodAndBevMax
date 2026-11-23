@@ -127,8 +127,9 @@ function razorpay(keyId: string, keySecret: string): PaymentProvider {
 
   return {
     async cancel(providerRef) {
-      // ponytail: Razorpay has no cancel for an order; an unpaid one just lapses, and the guest
-      // closed its checkout on our page. A payment after that is found by the next check.
+      // ponytail: Razorpay has no cancel for an order, so a checkout still open can be paid after
+      // this. AAHAR asks first (cancel checks before it lets go), and the QR sweep asks again for
+      // 30 minutes (QrOrdersService.sweep); a payment later than that is not seen.
       if (isOrder(providerRef)) return;
       await call('RAZORPAY', `${base}/${providerRef}/cancel`, { headers, method: 'POST' });
     },

@@ -1,5 +1,6 @@
 import { getAllowedHospitalIds } from '@aahar/auth';
 import { Injectable } from '@nestjs/common';
+import { CounterShiftStatus, OrderSource, OrderStatus } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { ShortCache } from '../common/short-cache';
@@ -27,10 +28,40 @@ import { ListStoresQueryDto } from '../stores/dto/list-stores-query.dto';
 import { StoresService } from '../stores/stores.service';
 import { ListTransfersQueryDto } from '../transfers/dto/list-transfers-query.dto';
 import { TransfersService } from '../transfers/transfers.service';
-import { DashboardRecordsQueryDto, DashboardSetupQueryDto } from './dto/dashboard-query.dto';
+import { toDateOnly, toNumber } from '../common/values';
+import { userNames } from '../pos/shifts';
+import {
+  DashboardRecordsQueryDto,
+  DashboardServiceQueryDto,
+  DashboardSetupQueryDto,
+} from './dto/dashboard-query.dto';
+import {
+  channelMix,
+  compareDay,
+  counterRows,
+  istDay,
+  itemSummary,
+  salesByHour,
+  totalsOf,
+  whereServed,
+  type DayBill,
+} from './service-day';
 
 /** ponytail: one read of up to 5,000 records per source; aggregate in SQL if a period outgrows it. */
 export const DASHBOARD_RECORDS_CAP = 5000;
+
+/** ponytail: two days' counter bills read whole (slim rows); group by in SQL if a day outgrows it. */
+export const SERVICE_BILLS_CAP = 20_000;
+
+/** The kitchen's lanes, in the order an order moves through them. */
+const KITCHEN_LANES = [
+  OrderStatus.PLACED,
+  OrderStatus.PREPARING,
+  OrderStatus.READY,
+  OrderStatus.COLLECTED,
+] as const;
+
+const IST_OFFSET_MS = 330 * 60_000;
 
 /** ponytail: names only, so 1,000 per kind is light; page through if a group outgrows it. */
 export const LOCATION_NAMES_CAP = 1000;
@@ -125,6 +156,8 @@ export class DashboardService {
   private readonly navCountsCache = new ShortCache(15_000);
   private readonly recordsCache = new ShortCache(30_000);
   private readonly setupCache = new ShortCache(60_000);
+  // The service day moves with every bill: shared for 15 s, like the nav counts.
+  private readonly serviceCache = new ShortCache(15_000);
 
   constructor(
     private readonly employees: EmployeesService,
@@ -367,6 +400,196 @@ export class DashboardService {
       },
       firstGrn,
       firstTransfer,
+    };
+  }
+
+  /**
+   * A day's service (India time; today when no date is given): sales by hour and by channel
+   * beside the same weekday last week, each counter's open shift and takings, and the kitchen's
+   * queue. Sales need ORDER_REPORT_VIEW or POS_ORDER_VIEW and the queue ORDER_VIEW.
+   */
+  serviceDay(query: DashboardServiceQueryDto, permissions: readonly string[]) {
+    return this.serviceCache.get(
+      shareKey(permissions, {
+        compare: query.compare,
+        date: query.date,
+        hospitalId: query.hospitalId,
+      }),
+      () => this.loadServiceDay(query, permissions),
+    );
+  }
+
+  private async loadServiceDay(query: DashboardServiceQueryDto, permissions: readonly string[]) {
+    const can = (permission: string) => permissions.includes(permission);
+    const day = query.date ?? istDay(new Date());
+    const [sales, kitchen] = await Promise.all([
+      // Like the old per-counter takings row: either report or POS bill viewers.
+      can('ORDER_REPORT_VIEW') || can('POS_ORDER_VIEW')
+        ? this.loadSales(day, compareDay(day, query.compare ?? 'week'), query.hospitalId)
+        : undefined,
+      can('ORDER_VIEW') ? this.loadKitchenQueue(day, query.hospitalId) : undefined,
+    ]);
+
+    return { date: day, kitchen, sales };
+  }
+
+  private async loadSales(day: string, comparedDay: string, hospitalId: string | undefined) {
+    const here = hospitalId ? { hospitalId } : {};
+    const rows = await this.prisma.restaurantOrder.findMany({
+      select: {
+        businessDate: true,
+        channel: true,
+        counterId: true,
+        grandTotal: true,
+        id: true,
+        placedAt: true,
+        qrOrder: { select: { source: true } },
+        shiftId: true,
+      },
+      take: SERVICE_BILLS_CAP,
+      where: {
+        ...here,
+        businessDate: { in: [toDateOnly(day), toDateOnly(comparedDay)] },
+        cancelledAt: null,
+        isComplimentary: false,
+        source: OrderSource.COUNTER,
+        status: { not: OrderStatus.CANCELLED },
+      },
+    });
+    const dayOf = (row: (typeof rows)[number]) => row.businessDate?.toISOString().slice(0, 10);
+    const todayRows = rows.filter((row) => dayOf(row) === day);
+    const kioskBilled = new Set(
+      todayRows.length
+        ? (
+            await this.prisma.kioskOrder.findMany({
+              select: { billedOrderId: true },
+              where: { billedOrderId: { in: todayRows.map((row) => row.id) } },
+            })
+          ).map((order) => order.billedOrderId)
+        : [],
+    );
+    const toBill = (row: (typeof rows)[number]): DayBill => ({
+      at: row.placedAt,
+      channel: row.channel,
+      counterId: row.counterId,
+      grandTotal: row.grandTotal === null ? 0 : toNumber(row.grandTotal),
+      kiosk: kioskBilled.has(row.id) || row.qrOrder?.source === 'KIOSK',
+      qr: row.qrOrder?.source === 'QR',
+      shiftId: row.shiftId,
+    });
+    const today = todayRows.map(toBill);
+    const compared = rows.filter((row) => dayOf(row) === comparedDay).map(toBill);
+    const shifts = await this.prisma.counterShift.findMany({
+      orderBy: { openedAt: 'asc' },
+      select: {
+        counter: {
+          select: { counterName: true, restaurant: { select: { restaurantName: true } } },
+        },
+        counterId: true,
+        id: true,
+        openedAt: true,
+        openedBy: true,
+      },
+      where: { ...here, status: CounterShiftStatus.OPEN },
+    });
+    const cashiers = await userNames(
+      this.prisma,
+      shifts.map((shift) => shift.openedBy),
+    );
+    const openCounters = new Set(shifts.map((shift) => shift.counterId));
+    const closedIds = [
+      ...new Set(
+        today
+          .map((bill) => bill.counterId)
+          .filter((id): id is string => Boolean(id) && !openCounters.has(id as string)),
+      ),
+    ];
+    const closed = closedIds.length
+      ? await this.prisma.counter.findMany({
+          select: { counterName: true, id: true, restaurant: { select: { restaurantName: true } } },
+          where: { id: { in: closedIds } },
+        })
+      : [];
+
+    return {
+      byHour: salesByHour(today, compared),
+      channels: channelMix(today),
+      counters: counterRows(
+        today,
+        shifts.map((shift) => ({
+          cashier: cashiers.get(shift.openedBy) ?? null,
+          counterId: shift.counterId,
+          counterName: shift.counter.counterName,
+          id: shift.id,
+          openedAt: shift.openedAt,
+          restaurantName: shift.counter.restaurant.restaurantName,
+        })),
+        new Map(
+          closed.map((counter) => [
+            counter.id,
+            { counterName: counter.counterName, restaurantName: counter.restaurant.restaurantName },
+          ]),
+        ),
+      ),
+      compare: totalsOf(compared),
+      compareDate: comparedDay,
+      today: totalsOf(today),
+      truncated: rows.length >= SERVICE_BILLS_CAP,
+    };
+  }
+
+  /** The day's orders in each kitchen lane, with the two latest in each. */
+  private async loadKitchenQueue(day: string, hospitalId: string | undefined) {
+    const where = {
+      ...(hospitalId ? { hospitalId } : {}),
+      // The day itself, India time: from its midnight to the next.
+      placedAt: {
+        gte: new Date(toDateOnly(day).getTime() - IST_OFFSET_MS),
+        lt: new Date(toDateOnly(day).getTime() - IST_OFFSET_MS + 86_400_000),
+      },
+    };
+    const [counts, latest] = await Promise.all([
+      this.prisma.restaurantOrder.groupBy({
+        _count: { _all: true },
+        by: ['status'],
+        where: { ...where, status: { in: [...KITCHEN_LANES] } },
+      }),
+      Promise.all(
+        KITCHEN_LANES.map((status) =>
+          this.prisma.restaurantOrder.findMany({
+            orderBy: { placedAt: 'desc' },
+            select: {
+              bedNumber: true,
+              billNumber: true,
+              counter: { select: { counterName: true } },
+              deliveredAt: true,
+              id: true,
+              items: true,
+              orderNumber: true,
+              placedAt: true,
+              readyAt: true,
+              roomNumber: true,
+              tableName: true,
+            },
+            take: 2,
+            where: { ...where, status },
+          }),
+        ),
+      ),
+    ]);
+
+    return {
+      lanes: KITCHEN_LANES.map((status, index) => ({
+        count: counts.find((row) => row.status === status)?._count._all ?? 0,
+        orders: (latest[index] ?? []).map((order) => ({
+          at: (order.deliveredAt ?? order.readyAt ?? order.placedAt).toISOString(),
+          id: order.id,
+          items: itemSummary(order.items),
+          number: order.billNumber ?? order.orderNumber,
+          where: whereServed(order),
+        })),
+        status,
+      })),
     };
   }
 }

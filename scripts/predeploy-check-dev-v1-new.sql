@@ -42,6 +42,19 @@ FROM (VALUES ('20260608130222_sprint_1_foundation'), ('20260616090000_phase_1_ho
 LEFT JOIN "_prisma_migrations" m ON m.migration_name = repo.name AND m.rolled_back_at IS NULL
 ORDER BY repo.name;
 
+-- 4a. BLOCKER if false: 20261123090000_stock_rows_one_per_key needs PostgreSQL 15 or newer. On an
+--     older server it stops (changing nothing) and every later deploy waits until it is upgraded.
+SELECT current_setting('server_version') AS postgres_version,
+       current_setting('server_version_num')::int >= 150000 AS new_enough_for_stock_rows;
+
+-- 4b. Duplicate stock rows (same place, item, batch, expiry and business day; empty counts as one
+--     value) that 20261123090000 ADDS UP into the oldest row. Not a failure, a data change.
+SELECT hospital_id, location_type, location_id, item_id, batch_number, expiry_date, business_date,
+       count(*) AS rows, sum(available_qty) FILTER (WHERE deleted_at IS NULL) AS qty_after_merge
+FROM stock_balances
+GROUP BY hospital_id, location_type, location_id, item_id, batch_number, expiry_date, business_date
+HAVING count(*) > 1;
+
 ROLLBACK;
 
 BEGIN;

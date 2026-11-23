@@ -101,3 +101,57 @@ export interface LocationNames {
   }>;
   stores?: Array<{ hospitalId: string; id: string; storeCode: string; storeName: string }>;
 }
+
+/** How a bill reached the counter (GET /dashboard/service's channel mix). */
+export type DashboardChannel = 'COUNTER' | 'KIOSK' | 'QR' | 'ROOM' | 'TABLE';
+
+export interface DashboardDayTotals {
+  averageBill: number;
+  bills: number;
+  roomOrders: number;
+  sales: number;
+}
+
+/**
+ * A day's service (GET /dashboard/service), India time. `sales` is missing without
+ * ORDER_REPORT_VIEW and `kitchen` without ORDER_VIEW.
+ */
+export interface DashboardServiceDay {
+  date: string;
+  kitchen?: {
+    lanes: Array<{
+      count: number;
+      orders: Array<{ at: string; id: string; items: string; number: string; where: string }>;
+      status: 'COLLECTED' | 'PLACED' | 'PREPARING' | 'READY';
+    }>;
+  };
+  sales?: {
+    /** Every hour 0–23: bills and sales on the day and on the day it is compared with. */
+    byHour: Array<{
+      bills: number;
+      compareBills: number;
+      compareSales: number;
+      hour: number;
+      sales: number;
+    }>;
+    /** Every channel, the busiest first. */
+    channels: Array<{ bills: number; key: DashboardChannel; sales: number }>;
+    /** Open shifts first, then counters that billed today and have closed. */
+    counters: Array<{
+      bills: number;
+      cashier: string | null;
+      counterId: string;
+      counterName: string;
+      open: boolean;
+      openedAt: string | null;
+      restaurantName: string;
+      sales: number;
+    }>;
+    /** The day compared with: the same day last week, or yesterday (compare: day). */
+    compare: DashboardDayTotals;
+    compareDate: string;
+    today: DashboardDayTotals;
+    /** More bills than the endpoint reads (20,000): the numbers are a lower bound. */
+    truncated: boolean;
+  };
+}

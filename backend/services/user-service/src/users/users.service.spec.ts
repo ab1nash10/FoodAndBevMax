@@ -153,7 +153,7 @@ function usersService(options: { createError?: Error; superAdminsLeft?: number }
     }));
 
   const db = {
-    $queryRaw: vi.fn(() => Promise.resolve([])),
+    $queryRaw: vi.fn((_sql: TemplateStringsArray, ..._values: unknown[]) => Promise.resolve([])),
     hospital: {
       count: ({ where }: { where: { id: { in: string[] } } }) =>
         Promise.resolve(where.id.in.filter((id) => hospitals.includes(id)).length),
@@ -215,7 +215,21 @@ function usersService(options: { createError?: Error; superAdminsLeft?: number }
         Object.assign(userById(args.where.id), args.data);
         return Promise.resolve(structuredClone(userById(args.where.id)));
       },
-      updateMany: write('user.updateMany'),
+      // One user by id is written only while it still matches (deletedAt: null), as in Postgres.
+      updateMany: (args: {
+        data: Partial<UserRow>;
+        where: { deletedAt?: null; id: string | { in: string[] } };
+      }) => {
+        writes.push(['user.updateMany', args]);
+        const { data, where } = args;
+        if (typeof where.id !== 'string') return Promise.resolve({ count: where.id.in.length });
+        const user = users.get(where.id);
+        if (!user || (where.deletedAt === null && user.deletedAt)) {
+          return Promise.resolve({ count: 0 });
+        }
+        Object.assign(user, data);
+        return Promise.resolve({ count: 1 });
+      },
     },
     userHospital: {
       createMany: write(
@@ -267,8 +281,11 @@ function usersService(options: { createError?: Error; superAdminsLeft?: number }
     prisma as unknown as PrismaService,
   );
   const wrote = (name: string) => writes.filter(([call]) => call === name).map(([, args]) => args);
+  // How many raw queries ran that contain this SQL.
+  const ran = (sql: string) =>
+    db.$queryRaw.mock.calls.filter(([strings]) => strings.join('?').includes(sql)).length;
 
-  return { queryRaw: db.$queryRaw, record, service, users, wrote, writes };
+  return { db, ran, record, service, users, wrote, writes };
 }
 
 test('a non-Super Admin can never grant the Super Admin role', async () => {
@@ -340,9 +357,9 @@ test('a Super Admin may grant and revoke Super Admin, as long as one active Supe
     (service: UsersService) => service.update('u-sa', { status: 'DISABLED' }, superAdmin),
     (service: UsersService) => service.assignRole('u-sa', { roleId: 'role-admin' }, superAdmin),
   ]) {
-    const { queryRaw, service } = usersService({ superAdminsLeft: 0 });
+    const { ran, service } = usersService({ superAdminsLeft: 0 });
     await assert.rejects(attempt(service), lastOne);
-    assert.equal(queryRaw.mock.calls.length, 1, 'the count is taken under the advisory lock');
+    assert.equal(ran('pg_advisory_xact_lock'), 1, 'the count is taken under the advisory lock');
   }
 
   // With another Super Admin left, the same demotion goes through.
@@ -506,9 +523,11 @@ test('a clashing mobile, email or employee code names the field that clashed', a
 test('re-sending unchanged details keeps the user signed in; a real change ends their sessions', async () => {
   const { service, wrote } = usersService();
   const cook = { email: 'U-COOK@max.in', hospitalIds: ['h1'], mobile: '9000000001', name: 'Cook' };
+  const sessionsEnded = () =>
+    wrote('user.updateMany').filter((args) => JSON.stringify(args).includes('sessionVersion'));
 
   await service.update('u-cook', { ...cook, roleId: 'role-kitchen', status: 'ACTIVE' }, admin);
-  assert.equal(wrote('user.updateMany').length, 0);
+  assert.equal(sessionsEnded().length, 0);
 
   for (const dto of [
     { designation: 'Chef' },
@@ -516,15 +535,15 @@ test('re-sending unchanged details keeps the user signed in; a real change ends 
     { status: 'DISABLED' as const },
     { hospitalIds: ['h2'] },
   ]) {
-    const before = wrote('user.updateMany').length;
+    const before = sessionsEnded().length;
     await service.update('u-cook', dto, admin);
     assert.deepEqual(
-      wrote('user.updateMany').slice(before),
+      sessionsEnded().slice(before),
       [{ data: { sessionVersion: { increment: 1 } }, where: { id: { in: ['u-cook'] } } }],
       JSON.stringify(dto),
     );
   }
-  const saved = wrote('user.update').find((args) => JSON.stringify(args).includes('cook2'));
+  const saved = wrote('user.updateMany').find((args) => JSON.stringify(args).includes('cook2'));
   assert.equal((saved as { data: { email: string } }).data.email, 'cook2@max.in');
 });
 
@@ -593,7 +612,7 @@ test('an admin cannot disable, re-role, move, re-permission or delete a user hol
 });
 
 test('deleting a user disables them, drops their roles and frees their mobile and email', async () => {
-  const { queryRaw, record, service, wrote } = usersService();
+  const { ran, record, service, wrote } = usersService();
 
   assert.deepEqual(await service.remove('u-cook', admin), { id: 'u-cook' });
 
@@ -606,9 +625,53 @@ test('deleting a user disables them, drops their roles and frees their mobile an
   assert.ok(data.deletedAt instanceof Date);
   assert.equal(wrote('userRole.updateMany').length, 1);
   assert.equal(record.mock.calls[0]?.[0].action, 'USER_DELETE');
-  assert.equal(queryRaw.mock.calls.length, 0, 'the Super Admin count only runs for Super Admins');
+  assert.equal(ran('pg_advisory_xact_lock'), 0, 'the Super Admin count only runs for Super Admins');
 
   await assert.rejects(service.remove('u-cook', admin), NotFoundException, 'already deleted');
+});
+
+test('a delete reads the user under its row lock; an edit landing after it never puts their mobile back', async () => {
+  const { db, ran, service } = usersService();
+  const lockedWhenRead: boolean[] = [];
+  const read = db.user.findFirst;
+  db.user.findFirst = (args) => {
+    lockedWhenRead.push(ran('FOR UPDATE') === 1);
+    return read(args);
+  };
+
+  await service.remove('u-cook', admin);
+  assert.deepEqual(lockedWhenRead, [true]);
+
+  // The delete commits just after the edit read the user.
+  const edit = usersService();
+  const readBeforeDelete = edit.db.user.findFirst;
+  edit.db.user.findFirst = async (args) => {
+    const user = await readBeforeDelete(args);
+    Object.assign(edit.users.get('u-cook')!, {
+      deletedAt: new Date(),
+      email: null,
+      mobile: 'deleted:u-cook',
+    });
+    return user;
+  };
+
+  await assert.rejects(
+    edit.service.update('u-cook', { mobile: '9111111111' }, admin),
+    NotFoundException,
+  );
+  assert.equal(edit.users.get('u-cook')?.mobile, 'deleted:u-cook');
+});
+
+test('disabling a user frees their email and mobile for admins at once: the 8 h lock is for active users', async () => {
+  const { service, users } = usersService();
+  Object.assign(users.get('u-cook')!, { lastActiveAt: new Date() });
+
+  await service.update('u-cook', { status: 'ACTIVE' }, admin);
+  assert.ok(users.get('u-cook')?.lastActiveAt);
+
+  const disabled = await service.update('u-cook', { status: 'DISABLED' }, admin);
+  assert.equal(users.get('u-cook')?.lastActiveAt, null);
+  assert.equal(disabled?.credentialsLockedUntil, null);
 });
 
 test('assigning locations in bulk is all or nothing, held to each user’s role', async () => {

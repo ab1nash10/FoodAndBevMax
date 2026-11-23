@@ -27,6 +27,7 @@ import type {
   DashboardNavCounts,
   DashboardRecords,
   DashboardRecordsQuery,
+  DashboardServiceDay,
   DashboardSetup,
   LocationNames,
 } from './dashboard';
@@ -340,6 +341,10 @@ export function createOrganizationApi(options: ApiClientOptions) {
     },
     getDashboardSetup(query?: { hospitalId?: string }) {
       return client.request<ApiResponse<DashboardSetup>>('/dashboard/setup', { query });
+    },
+    /** A day's sales, channels, counters and kitchen queue (today when no date). */
+    getDashboardService(query?: { compare?: 'day' | 'week'; date?: string; hospitalId?: string }) {
+      return client.request<ApiResponse<DashboardServiceDay>>('/dashboard/service', { query });
     },
     /** The nav badges' three counts in one request. */
     getDashboardNavCounts(query?: { hospitalId?: string }) {

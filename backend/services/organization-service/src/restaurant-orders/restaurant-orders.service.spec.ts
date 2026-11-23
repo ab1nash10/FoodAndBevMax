@@ -7,16 +7,22 @@ import { RestaurantOrdersService } from './restaurant-orders.service';
 
 interface OrderRow {
   channel: 'COUNTER' | 'ROOM' | null;
-  status: 'COLLECTED' | 'PLACED' | 'PREPARING' | 'READY';
+  status: 'CANCELLED' | 'COLLECTED' | 'PLACED' | 'PREPARING' | 'READY';
   stewardId: string | null;
 }
 
-/** One order, and one steward (a Delivery Operator, steward-1) at its location. */
-function setUp(row: Partial<OrderRow> = {}) {
+/**
+ * One order, and one steward (a Delivery Operator, steward-1) at its location. matches: rows a
+ * conditional write finds (0: someone else changed the order since it was read).
+ */
+function setUp(row: Partial<OrderRow> = {}, matches = 1) {
   const order: OrderRow = { channel: 'ROOM', status: 'PLACED', stewardId: null, ...row };
   const updates: Array<Record<string, unknown>> = [];
+  const conditions: Array<Record<string, unknown>> = [];
   const queries: Array<Record<string, unknown>> = [];
   const prisma = {
+    // Orders pushed with a restaurant's own order key.
+    posDevice: { findFirst: () => Promise.resolve(null) },
     restaurant: {
       findFirst: () =>
         Promise.resolve({
@@ -42,13 +48,25 @@ function setUp(row: Partial<OrderRow> = {}) {
         queries.push(where);
         return Promise.resolve([]);
       },
+      findUnique: () => Promise.resolve({ status: order.status }),
       update: ({ data }: { data: Record<string, unknown> }) => {
         updates.push(data);
         return Promise.resolve(data);
       },
-      updateMany: ({ data }: { data: Record<string, unknown> }) => {
+      updateMany: ({
+        data,
+        where,
+      }: {
+        data: Record<string, unknown>;
+        where: Record<string, unknown>;
+      }) => {
         updates.push(data);
-        return Promise.resolve({ count: 1 });
+        conditions.push(where);
+        return Promise.resolve({ count: matches });
+      },
+      upsert: ({ update }: { update: Record<string, unknown> }) => {
+        updates.push(update);
+        return Promise.resolve({ id: 'order-1', ...order, ...update });
       },
     },
     timeSlot: { findMany: () => Promise.resolve([]) },
@@ -62,7 +80,7 @@ function setUp(row: Partial<OrderRow> = {}) {
     prisma as unknown as PrismaService,
   );
 
-  return { queries, service, updates };
+  return { conditions, queries, service, updates };
 }
 
 const admin = { actorId: 'admin' };
@@ -133,4 +151,41 @@ test('the pickup TV board leaves room and table orders off: nobody collects them
 
   // Orders with no channel (sent by other apps) stay on the board.
   assert.deepEqual(queries[0]?.OR, [{ channel: null }, { channel: { notIn: ['ROOM', 'TABLE'] } }]);
+});
+
+test('every cancel says when it happened; an order sent back from ready is no longer ready', async () => {
+  const kitchen = setUp({ channel: 'COUNTER', status: 'PREPARING' });
+  await kitchen.service.setStatus('order-1', 'CANCELLED', admin);
+  assert.ok(kitchen.updates[0]?.cancelledAt instanceof Date);
+
+  const cancel = { orderId: 'ext-1', orderNumber: 'A-1', status: 'CANCELLED' as const };
+  const external = setUp({ status: 'PLACED' });
+  await external.service.pushOrder('order-key', cancel);
+  assert.ok(external.updates[0]?.cancelledAt instanceof Date);
+
+  // A retried cancel keeps the time of the first.
+  const retried = setUp({ status: 'CANCELLED' });
+  await retried.service.pushOrder('order-key', cancel);
+  assert.equal(retried.updates[0]?.cancelledAt, undefined);
+
+  const sentBack = setUp({ status: 'READY' });
+  await sentBack.service.setStatus('order-1', 'PREPARING', admin);
+  assert.equal(sentBack.updates[0]?.readyAt, null);
+});
+
+test('a steward is given only on the order as it was read: a change in between is refused', async () => {
+  const { conditions, service } = setUp({ channel: 'ROOM', status: 'READY' });
+  await service.setSteward('order-1', 'steward-1', admin);
+  assert.deepEqual(conditions[0], {
+    id: 'order-1',
+    status: { notIn: ['COLLECTED', 'CANCELLED'] },
+    stewardId: null,
+  });
+
+  const raced = setUp({ channel: 'ROOM', status: 'READY' }, 0);
+  await assert.rejects(
+    raced.service.setSteward('order-1', 'steward-1', admin),
+    (error) =>
+      error instanceof ConflictException && /Someone else just updated/.test(error.message),
+  );
 });

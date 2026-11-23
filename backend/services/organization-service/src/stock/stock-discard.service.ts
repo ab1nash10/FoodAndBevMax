@@ -60,7 +60,15 @@ export class StockDiscardService {
         );
       }
 
-      const after = Math.round((available - dto.quantity) * 1000) / 1000;
+      // Read after the update: a sale may have taken some since `balance` was read.
+      const after = toNumber(
+        (
+          await tx.stockBalance.findUniqueOrThrow({
+            select: { availableQty: true },
+            where: { id: balance.id },
+          })
+        ).availableQty,
+      );
       const remarks = discardRemarks(dto.reason, dto.note);
       const ledger = await tx.stockLedger.create({
         data: {

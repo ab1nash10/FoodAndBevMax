@@ -1549,6 +1549,7 @@ describe.skipIf(!databaseUrl)(
         const access = await ok('GET', '/users/me/access', undefined, as);
         expect(shape(access)).toEqual({
           defaultLocationId: 'string',
+          employeeCode: 'string',
           locationScope: 'string',
           locations: [
             {

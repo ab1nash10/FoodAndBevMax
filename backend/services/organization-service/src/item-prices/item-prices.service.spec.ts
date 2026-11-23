@@ -52,6 +52,8 @@ function setup(prices: Price[] = []) {
     r2: { hospitalId: 'h1', isActive: false },
     r9: { hospitalId: 'h2', isActive: true },
   };
+  // Item locks taken and overlap checks made, in order.
+  const events: string[] = [];
   const repository = {
     create: (data: Omit<Price, 'createdAt' | 'deletedAt' | 'id'>) => {
       const price = {
@@ -74,8 +76,9 @@ function setup(prices: Price[] = []) {
       Promise.resolve(restaurants[id]?.hospitalId === hospitalId ? restaurants[id] : null),
     findOverlappingActivePrice: (
       input: Scope & { effectiveFrom: Date; effectiveTo: Date | null; excludeId?: string },
-    ) =>
-      Promise.resolve(
+    ) => {
+      events.push(`overlap check ${input.itemId}`);
+      return Promise.resolve(
         prices.find(
           (price) =>
             sameScope(price, input) &&
@@ -83,7 +86,8 @@ function setup(prices: Price[] = []) {
             price.effectiveFrom <= (input.effectiveTo ?? END_OF_TIME) &&
             (price.effectiveTo === null || price.effectiveTo >= input.effectiveFrom),
         ) ?? null,
-      ),
+      );
+    },
     findResolvedPrice: (input: Scope & { date: Date }) =>
       Promise.resolve(
         prices
@@ -96,6 +100,10 @@ function setup(prices: Price[] = []) {
           .sort((left, right) => right.effectiveFrom.getTime() - left.effectiveFrom.getTime())[0] ??
           null,
       ),
+    lockItemPrices: (itemId: string) => {
+      events.push(`lock ${itemId}`);
+      return Promise.resolve();
+    },
     transaction: <T>(handler: (client: unknown) => Promise<T>) => handler({}),
     update: (id: string, data: Partial<Price>) => {
       const price = prices.find((stored) => stored.id === id)!;
@@ -108,7 +116,7 @@ function setup(prices: Price[] = []) {
     repository as unknown as ItemPricesRepository,
   );
 
-  return { prices, service };
+  return { events, prices, service };
 }
 
 const actor = { actorId: 'user-1' };
@@ -204,6 +212,21 @@ test('two active prices for the same item, rate and place may not share a day', 
   await assert.doesNotReject(service.create(priceDto({ effectiveFrom: '2026-11-01' }), actor));
   // The November price has no end, so anything later clashes with it.
   await assert.rejects(service.create(priceDto({ effectiveFrom: '2027-06-01' }), actor), isOverlap);
+});
+
+test('saves of one item’s prices go one at a time: the item is locked before the overlap check', async () => {
+  // Without the lock, two saves at once both found no overlap and both went in.
+  const { events, service } = setup();
+
+  await service.create(priceDto({ effectiveTo: '2026-10-31' }), actor);
+  await service.update('price-1', { effectiveTo: '2026-10-20' }, actor);
+
+  assert.deepEqual(events, [
+    'lock samosa',
+    'overlap check samosa',
+    'lock samosa',
+    'overlap check samosa',
+  ]);
 });
 
 test('another rate type, a restaurant price or an inactive price does not clash', async () => {

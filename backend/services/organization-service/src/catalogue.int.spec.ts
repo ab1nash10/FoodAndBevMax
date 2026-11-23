@@ -294,7 +294,7 @@ describe.skipIf(!databaseUrl)('catalogue (integration)', { timeout: 30_000 }, ()
   });
 
   describe('items', () => {
-    it('creates an item with the next code, and reads, lists, updates and deletes it', async () => {
+    it('creates an item with the next code, and reads, lists and updates it; never deletes it', async () => {
       const itemName = name('Masala Chai');
       const created = await h.ok('POST', '/items', {
         hsnCode: ' 0902 ab ',
@@ -358,19 +358,14 @@ describe.skipIf(!databaseUrl)('catalogue (integration)', { timeout: 30_000 }, ()
         type: 'EGGETARIAN',
       });
 
-      expect(await h.ok('DELETE', `/items/${idOf(created)}`)).toEqual({ id: idOf(created) });
-      expect(await refused('GET', `/items/${idOf(created)}`)).toEqual([404, 'Item not found']);
-      expect(await refused('PUT', `/items/${idOf(created)}`, { type: 'VEG' })).toEqual([
+      // Items are only switched off (Inactive): there is no delete.
+      expect(await refused('DELETE', `/items/${idOf(created)}`)).toEqual([
         404,
-        'Item not found',
+        expect.stringMatching(/^Cannot DELETE/),
       ]);
-      expect(await refused('DELETE', `/items/${idOf(created)}`)).toEqual([404, 'Item not found']);
-      expect(
-        (await h.ok('GET', `/items?search=${encodeURIComponent(itemName)}`)).meta,
-      ).toMatchObject({ total: 0 });
-      // A deleted item's name may be used again, under a new code.
-      const again = await h.ok('POST', '/items', { itemName, type: 'VEG' });
-      expect(again.itemCode).not.toBe(created.itemCode);
+      expect(await h.ok('GET', `/items/${idOf(created)}`)).toMatchObject({
+        itemCode: created.itemCode,
+      });
     });
 
     it('refuses a duplicate name, ignoring case, spaces and punctuation', async () => {
@@ -420,7 +415,7 @@ describe.skipIf(!databaseUrl)('catalogue (integration)', { timeout: 30_000 }, ()
         'limit must not be greater than 100',
       ]);
       expect(await refused('GET', `/items/${randomUUID()}`)).toEqual([404, 'Item not found']);
-      expect(await refused('DELETE', '/items/123')).toEqual([
+      expect(await refused('GET', '/items/123')).toEqual([
         400,
         'Validation failed (uuid is expected)',
       ]);
@@ -1634,9 +1629,9 @@ describe.skipIf(!databaseUrl)('catalogue (integration)', { timeout: 30_000 }, ()
       for (const path of paths) {
         expect((await h.api('GET', `${path}?limit=1`, undefined, as)).status).toBe(200);
         expect(await refused('POST', path, {}, as)).toEqual([403, 'Forbidden resource']);
-        // Categories are only switched off: they have no DELETE route at all.
+        // Categories and items are only switched off: they have no DELETE route at all.
         expect(await refused('DELETE', `${path}/${randomUUID()}`, undefined, as)).toEqual(
-          path === '/item-categories'
+          path === '/item-categories' || path === '/items'
             ? [404, expect.stringMatching(/^Cannot DELETE/)]
             : [403, 'Forbidden resource'],
         );

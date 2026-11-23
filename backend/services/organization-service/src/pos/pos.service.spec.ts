@@ -73,7 +73,8 @@ const menus = [
 
 interface Balance {
   availableQty: Prisma.Decimal;
-  batchNumber: string;
+  batchNumber: string | null;
+  businessDate?: Date;
   expiryDate: Date | null;
   hospitalId: string;
   id: string;
@@ -118,6 +119,8 @@ function serviceWith(
     payments?: Array<Record<string, unknown>>;
     shiftEnded?: boolean;
     shiftEndedWhileBilling?: boolean;
+    /** Another till's sale, landing between this bill reading the stock and taking it. */
+    soldElsewhere?: (balances: Balance[]) => void;
     staffDiscountApplicable?: boolean;
     upiId?: string;
   } = {},
@@ -286,8 +289,17 @@ function serviceWith(
         ) ?? null,
       // The fixtures are listed earliest expiry first, as the real query orders them.
       // Copies, as Prisma returns: updates do not change rows already read.
-      findMany: ({ where }: { where: { itemId: string } }) =>
-        balances.filter((entry) => entry.itemId === where.itemId).map((entry) => ({ ...entry })),
+      findMany: ({ where }: { where: { itemId: string } }) => {
+        const read = balances
+          .filter((entry) => entry.itemId === where.itemId)
+          .map((entry) => ({ ...entry }));
+        options.soldElsewhere?.(balances);
+        options.soldElsewhere = undefined;
+        return read;
+      },
+      findUniqueOrThrow: ({ where }: { where: { id: string } }) => ({
+        ...balances.find((stored) => stored.id === where.id)!,
+      }),
       update: ({
         data,
         where,
@@ -819,6 +831,65 @@ test('cancelling a bill puts its stock back, once', async () => {
       error instanceof ConflictException && /already cancelled/.test(error.message),
   );
   await assert.rejects(service.cancel('missing', { reason: 'x' }, cashier), NotFoundException);
+});
+
+test('a cancel puts each quantity back on the stock row the sale took it from', async () => {
+  // Ready-made stock: one row per business day, no batch or expiry. The sale takes the oldest
+  // day first; finding a row again by batch and expiry put it all back on one day.
+  const readyMade = (id: string, qty: number, businessDay: string): Balance => ({
+    ...balance(id, qty, null),
+    batchNumber: null,
+    businessDate: day(businessDay),
+  });
+  const balances = [readyMade('day-21', 1, '2026-10-21'), readyMade('day-22', 5, '2026-10-22')];
+  const { ledger, service } = serviceWith({ balances });
+  const made = await service.createOrder(
+    bill({ lines: [{ menuId: 'samosa', quantity: 3 }] }),
+    cashier,
+  );
+  assert.deepEqual(
+    balances.map((entry) => Number(entry.availableQty)),
+    [0, 3],
+  );
+
+  await service.cancel(made.id, { reason: 'wrong item' }, cashier);
+
+  assert.deepEqual(
+    balances.map((entry) => Number(entry.availableQty)),
+    [1, 5],
+  );
+  assert.deepEqual(
+    ledger.map(({ balanceAfter, qtyIn, qtyOut, stockBalanceId }) => [
+      stockBalanceId,
+      qtyOut,
+      qtyIn,
+      Number(balanceAfter),
+    ]),
+    [
+      ['day-21', 1, 0, 0],
+      ['day-22', 2, 0, 3],
+      [undefined, 0, 1, 1],
+      [undefined, 0, 2, 5],
+    ],
+  );
+});
+
+test('a sale’s ledger line shows what the row holds after it, even when another till sold some meanwhile', async () => {
+  const balances = [balance('later', 5, '2026-10-25')];
+  const { ledger, service } = serviceWith({
+    balances,
+    soldElsewhere: ([row]) => {
+      row!.availableQty = row!.availableQty.minus(1);
+    },
+  });
+
+  await service.createOrder(bill({ lines: [{ menuId: 'samosa', quantity: 2 }] }), cashier);
+
+  assert.equal(Number(balances[0]!.availableQty), 2);
+  assert.deepEqual(
+    ledger.map(({ balanceAfter, qtyOut }) => ({ balanceAfter: Number(balanceAfter), qtyOut })),
+    [{ balanceAfter: 2, qtyOut: 2 }],
+  );
 });
 
 test('a bill on a closed day can no longer be cancelled', async () => {

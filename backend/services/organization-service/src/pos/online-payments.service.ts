@@ -221,6 +221,45 @@ export class OnlinePaymentsService {
     return toView(await this.find(id));
   }
 
+  /**
+   * A cancelled payment asked again (QrOrdersService's sweep, for Razorpay orders): Razorpay has
+   * no cancel for an order, so its checkout can still take a payment after AAHAR let it go.
+   * Found paid, it is PAID, on no bill, and flagged for a refund. True when this call moved it.
+   */
+  async paidAfterCancel(id: string) {
+    const payment = await this.find(id);
+    const provider = await this.providerFor(payment);
+
+    if (payment.status !== OnlinePaymentStatus.CANCELLED || !provider) return false;
+
+    const state = await provider.read(payment.providerRef);
+
+    if (!state.paid) return false;
+
+    const { count } = await this.prisma.onlinePayment.updateMany({
+      data: {
+        paidAt: new Date(),
+        paidReference: state.reference,
+        status: OnlinePaymentStatus.PAID,
+      },
+      where: { id, status: OnlinePaymentStatus.CANCELLED },
+    });
+
+    if (count === 1) {
+      void this.auditLog?.record({
+        action: 'STATUS_CHANGE',
+        entityId: id,
+        entityName: 'online_payments',
+        hospitalId: payment.hospitalId,
+        newValue: { status: OnlinePaymentStatus.PAID },
+        oldValue: { status: payment.status },
+        summary: `${payment.provider} payment of ${toNumber(payment.amount)} paid after it was cancelled: refund it`,
+      });
+    }
+
+    return count === 1;
+  }
+
   /** Saved in the background: settling a payment never waits on, or fails with, its audit row. */
   private recordStatusChange(payment: OnlinePayment, status: OnlinePaymentStatus): void {
     void this.auditLog?.record({

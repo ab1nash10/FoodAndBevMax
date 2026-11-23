@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { InventoryLocationType, ItemType, Prisma, StockBalance, Transfer } from '@prisma/client';
+import { Prisma, Transfer } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { addStock, type StockKey } from '../common/stock-balances';
 
 export const acknowledgementInclude = {
   hospital: {
@@ -156,43 +157,6 @@ export class TransferAcknowledgementsRepository {
     });
   }
 
-  async findStockBalance(
-    {
-      batchNumber,
-      businessDate,
-      expiryDate,
-      hospitalId,
-      itemType,
-      itemId,
-      locationId,
-      locationType,
-    }: {
-      batchNumber: string | null;
-      businessDate: Date | null;
-      expiryDate: Date | null;
-      hospitalId: string;
-      itemType: ItemType;
-      itemId: string;
-      locationId: string;
-      locationType: InventoryLocationType;
-    },
-    client: AcknowledgementClient,
-  ): Promise<StockBalance | null> {
-    return client.stockBalance.findFirst({
-      where: {
-        batchNumber,
-        businessDate,
-        deletedAt: null,
-        expiryDate,
-        hospitalId,
-        itemId,
-        itemType,
-        locationId,
-        locationType,
-      },
-    });
-  }
-
   async updateTransfer(
     id: string,
     data: Prisma.TransferUpdateInput,
@@ -220,75 +184,9 @@ export class TransferAcknowledgementsRepository {
   }
 
   async upsertStockBalance(
-    {
-      actorId,
-      batchNumber,
-      businessDate,
-      expiryDate,
-      hospitalId,
-      itemType,
-      itemId,
-      locationId,
-      locationType,
-      quantity,
-    }: {
-      actorId?: string;
-      batchNumber: string | null;
-      businessDate: Date | null;
-      expiryDate: Date | null;
-      hospitalId: string;
-      itemType: ItemType;
-      itemId: string;
-      locationId: string;
-      locationType: InventoryLocationType;
-      quantity: number;
-    },
+    { actorId, quantity, ...key }: StockKey & { actorId?: string; quantity: number },
     client: AcknowledgementClient,
-  ): Promise<StockBalance> {
-    const existing = await this.findStockBalance(
-      {
-        batchNumber,
-        businessDate,
-        expiryDate,
-        hospitalId,
-        itemId,
-        itemType,
-        locationId,
-        locationType,
-      },
-      client,
-    );
-
-    if (existing) {
-      return client.stockBalance.update({
-        data: {
-          availableQty: {
-            increment: quantity,
-          },
-          lastUpdatedOn: new Date(),
-          updatedBy: actorId,
-        },
-        where: {
-          id: existing.id,
-        },
-      });
-    }
-
-    return client.stockBalance.create({
-      data: {
-        availableQty: quantity,
-        batchNumber,
-        businessDate,
-        createdBy: actorId,
-        expiryDate,
-        hospitalId,
-        itemId,
-        itemType,
-        lastUpdatedOn: new Date(),
-        locationId,
-        locationType,
-        updatedBy: actorId,
-      },
-    });
+  ) {
+    return addStock(client, key, quantity, actorId);
   }
 }

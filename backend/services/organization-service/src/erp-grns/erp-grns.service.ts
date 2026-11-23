@@ -5,6 +5,8 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  type OnApplicationBootstrap,
+  type OnModuleDestroy,
   type OnModuleInit,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -74,6 +76,9 @@ export function indiaTime(value: string): Date {
 /** The role whose holders hear about a return the Main Store could not cover. */
 const F_AND_B_ADMIN = 'F&B Admin';
 
+/** How often every waiting reverse runs again, in case its batch's arrival signal was lost. */
+const CATCH_UP_EVERY_MS = 5 * 60_000;
+
 /**
  * GRNs from the ERP. The store person checks the goods in the ERP, so a GRN moves AAHAR's stock
  * the moment it arrives: goods in (flag 0) go into the location's Main Store; a reverse (flag 1)
@@ -84,7 +89,10 @@ const F_AND_B_ADMIN = 'F&B Admin';
  * for the store team (ERP GRN errors).
  */
 @Injectable()
-export class ErpGrnsService implements OnModuleInit {
+export class ErpGrnsService implements OnApplicationBootstrap, OnModuleDestroy, OnModuleInit {
+  private catchingUp = false;
+  private catchUpTimer?: NodeJS.Timeout;
+
   constructor(
     private readonly arrivals: StoreArrivals,
     private readonly auditLog: AuditLogService,
@@ -96,6 +104,43 @@ export class ErpGrnsService implements OnModuleInit {
   /** Stock reaching a store from anywhere (a restaurant return, Deliveries) runs waiting reverses. */
   onModuleInit() {
     this.arrivals.listen((arrivals) => this.runWaitingFor(arrivals));
+  }
+
+  /**
+   * The arrival signal is in memory and sent after the commit, so a restart in between loses it
+   * and the reverse waits (its batch on hold at the counters) until the batch comes again. So
+   * every waiting reverse also runs at start and then every few minutes, on every pod: each runs
+   * under its GRN's lock, so pods never run one twice at once.
+   */
+  onApplicationBootstrap() {
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
+
+    void this.catchUp();
+    this.catchUpTimer = setInterval(() => void this.catchUp(), CATCH_UP_EVERY_MS);
+    this.catchUpTimer.unref();
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.catchUpTimer);
+  }
+
+  /** Runs every waiting reverse; a run still going when the next is due makes that one skip. */
+  async catchUp() {
+    if (this.catchingUp) {
+      return;
+    }
+
+    this.catchingUp = true;
+
+    try {
+      await this.runWaiting({});
+    } catch (error) {
+      logger.error({ err: error }, 'erp_grn_catch_up_failed');
+    } finally {
+      this.catchingUp = false;
+    }
   }
 
   /**
@@ -556,11 +601,16 @@ export class ErpGrnsService implements OnModuleInit {
 
       if (count === 1) {
         taken = round(taken + quantity);
+        // Read after the update: a sale may have taken some since `balances` was read.
+        const after = await tx.stockBalance.findUniqueOrThrow({
+          select: { availableQty: true },
+          where: { id: balance.id },
+        });
         await this.ledger(
           tx,
           row,
           {
-            balanceAfter: round(toNumber(balance.availableQty) - quantity),
+            balanceAfter: toNumber(after.availableQty),
             expiryDate: balance.expiryDate ?? row.expiryDate,
             qtyOut: quantity,
           },
@@ -613,16 +663,18 @@ export class ErpGrnsService implements OnModuleInit {
       return;
     }
 
+    await this.runWaiting({
+      OR: batches.map(({ batchNumber, itemId, storeId }) => ({ batchNumber, itemId, storeId })),
+    });
+  }
+
+  /** Runs the waiting reverses (automatic rerun on) with rows matching `where`, oldest first. */
+  private async runWaiting(where: Prisma.GrnEntryWhereInput) {
     const waiting = await this.prisma.grnEntry.groupBy({
       _min: { createdAt: true },
       by: ['grnNumber'],
       orderBy: { _min: { createdAt: 'asc' } },
-      where: {
-        flag: 1,
-        OR: batches.map(({ batchNumber, itemId, storeId }) => ({ batchNumber, itemId, storeId })),
-        rerunActive: true,
-        status: GrnEntryStatus.PENDING,
-      },
+      where: { ...where, flag: 1, rerunActive: true, status: GrnEntryStatus.PENDING },
     });
 
     for (const { grnNumber } of waiting) {

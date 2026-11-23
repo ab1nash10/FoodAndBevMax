@@ -117,27 +117,32 @@ export class RestaurantOrdersService {
     const where = { senderId_externalOrderId: { externalOrderId, senderId: sender.id } };
 
     // A channel's cancel follows the kitchen screen's rules: a collected order stays collected.
-    if (dto.status) {
-      const existing = await this.prisma.restaurantOrder.findUnique({
-        select: { status: true },
-        where,
-      });
+    const existing = dto.status
+      ? await this.prisma.restaurantOrder.findUnique({ select: { status: true }, where })
+      : null;
 
-      if (
-        existing &&
-        existing.status !== dto.status &&
-        !NEXT_STATUSES[existing.status].includes(dto.status)
-      ) {
-        throw new ConflictException(
-          `An order that is ${existing.status} cannot be marked ${dto.status}.`,
-        );
-      }
+    if (
+      dto.status &&
+      existing &&
+      existing.status !== dto.status &&
+      !NEXT_STATUSES[existing.status].includes(dto.status)
+    ) {
+      throw new ConflictException(
+        `An order that is ${existing.status} cannot be marked ${dto.status}.`,
+      );
     }
+
+    // When it was cancelled, for the reports; a retried cancel keeps the first time.
+    const cancelledAt =
+      dto.status === OrderStatus.CANCELLED && existing?.status !== OrderStatus.CANCELLED
+        ? new Date()
+        : undefined;
 
     // A resend never moves the kitchen's progress back; only a cancel changes the status.
     const saved = await this.prisma.restaurantOrder.upsert({
       create: {
         ...details,
+        cancelledAt,
         externalOrderId,
         hospitalId: sender.restaurant.hospitalId,
         items,
@@ -151,6 +156,7 @@ export class RestaurantOrdersService {
       select: orderSelect,
       update: {
         ...details,
+        cancelledAt,
         orderNumber: dto.orderNumber.trim(),
         ...(dto.items ? { items } : {}),
         ...(dto.status ? { status: dto.status } : {}),
@@ -304,14 +310,24 @@ export class RestaurantOrdersService {
       );
     }
 
-    await this.prisma.restaurantOrder.update({
+    // Only onto the steward just read, and never once handed over or cancelled: a change made in
+    // between is not undone. The kitchen moving it along meanwhile is fine.
+    const { count } = await this.prisma.restaurantOrder.updateMany({
       data: {
         stewardAssignedAt: stewardId ? new Date() : null,
         stewardId,
         updatedBy: context.actorId,
       },
-      where: { id },
+      where: {
+        id,
+        status: { notIn: [OrderStatus.COLLECTED, OrderStatus.CANCELLED] },
+        stewardId: order.stewardId,
+      },
     });
+
+    if (count === 0) {
+      throw new ConflictException('Someone else just updated this order. Refresh and try again.');
+    }
     await this.auditLog.record({
       action: 'STEWARD_ASSIGN',
       actorId: context.actorId,
@@ -400,8 +416,15 @@ export class RestaurantOrdersService {
       data: {
         // The first time the kitchen takes it (a READY sent back keeps it), and the handover.
         acceptedAt: status === OrderStatus.PREPARING && !order.acceptedAt ? new Date() : undefined,
+        cancelledAt: status === OrderStatus.CANCELLED ? new Date() : undefined,
         deliveredAt: status === OrderStatus.COLLECTED ? new Date() : undefined,
-        readyAt: status === OrderStatus.READY ? new Date() : undefined,
+        // A READY sent back to PREPARING is not ready any more.
+        readyAt:
+          status === OrderStatus.READY
+            ? new Date()
+            : status === OrderStatus.PREPARING
+              ? null
+              : undefined,
         status,
         updatedBy: context.actorId,
       },

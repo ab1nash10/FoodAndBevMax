@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { createHmac } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   HttpException,
   NotFoundException,
@@ -9,6 +10,7 @@ import {
 import type { ConfigService } from '@nestjs/config';
 import { test, vi } from 'vitest';
 import type { RedisService, SmsService } from '@aahar/auth';
+import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
 import type { OnlinePaymentsService } from './online-payments.service';
 import type { PosService } from './pos.service';
@@ -627,4 +629,269 @@ test("a kiosk order needs the guest signed in for it; an employee's mobile gets 
   assert.equal(payments[0]?.customerName, 'Asha Rao');
   assert.equal(payments[0]?.customerMobile, '9876543210');
   assert.equal(payments[0]?.employeeCode, 'E100');
+});
+
+test('guessing the guest code in parallel gets no more than five tries', async () => {
+  const { service, texts } = setUp();
+
+  await service.sendGuestOtp('restaurant-1', 'token', { mobile: '9811122233', name: 'Meera' });
+  const otp = texts[0]!.otp;
+  const wrong = Array.from({ length: 8 }, (_, index) =>
+    String((Number(otp) + index + 1) % 1_000_000).padStart(6, '0'),
+  );
+
+  const results = await Promise.allSettled(
+    [...wrong, otp].map((guess) =>
+      service.verifyGuestOtp('restaurant-1', 'token', { mobile: '9811122233', otp: guess }),
+    ),
+  );
+
+  // Each try is counted before it is compared: the right code, sent ninth, is refused too.
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 0);
+  assert.match(String((results.at(-1) as PromiseRejectedResult).reason), /Too many wrong tries/);
+});
+
+/** A waiting QR order as saved, placed `minutesAgo` minutes ago and paid with payment-<id>. */
+const waiting = (id: string, minutesAgo: number) => ({
+  bedNumber: null,
+  channel: 'COUNTER',
+  counterId: 'counter-1',
+  createdAt: new Date(Date.now() - minutesAgo * 60_000),
+  employeeCode: null,
+  hospitalId: 'hospital-1',
+  id,
+  instructions: null,
+  lines: [{ menuId: 'menu-1', quantity: 1 }],
+  onlinePaymentId: `payment-${id}`,
+  roomNumber: null,
+  status: 'AWAITING_PAYMENT',
+  tableName: null,
+});
+
+/**
+ * QR orders settled without the guest's page: what the gateway says of each payment (by order
+ * id; none, and it does not answer), what billing does, and every write and audit row after.
+ */
+function settling(
+  orders: Array<ReturnType<typeof waiting>>,
+  paymentStatus: Record<string, string>,
+  options: {
+    billError?: Error;
+    /** The bill another check already made with the payment. */
+    billedWith?: string;
+    /** Held until resolved: the first query of a sweep waits on it. */
+    hold?: Promise<void>;
+    /** Rows each conditional QR order write matches (0: another call got there first). */
+    matches?: number;
+    /** Payments cancelled lately that the gateway now says are paid. */
+    paidLate?: string[];
+  } = {},
+) {
+  const asked: string[] = [];
+  const audits: string[] = [];
+  const bills: string[] = [];
+  const queries: Array<{ cancelled?: unknown; waiting?: unknown }> = [];
+  const writes: Array<{ data: Record<string, unknown>; where: Record<string, unknown> }> = [];
+  const prisma = {
+    onlinePayment: {
+      findMany: (args: unknown) => {
+        queries.push({ cancelled: args });
+        return Promise.resolve((options.paidLate ?? []).map((id) => ({ id })));
+      },
+      findUnique: () => Promise.resolve({ orderId: options.billedWith ?? null }),
+    },
+    qrOrder: {
+      findMany: async (args: { where: { status: string } }) => {
+        queries.push({ waiting: args });
+        await options.hold;
+        return orders.filter((order) => order.status === args.where.status);
+      },
+      findUnique: ({ where }: { where: { id?: string; onlinePaymentId?: string } }) =>
+        Promise.resolve(
+          orders.find(
+            (order) => order.id === where.id || order.onlinePaymentId === where.onlinePaymentId,
+          ) ?? null,
+        ),
+      findUniqueOrThrow: () =>
+        Promise.resolve({
+          ...orders[0],
+          billedOrder: null,
+          grandTotal: 100,
+          onlinePayment: { paymentUrl: '', provider: 'RAZORPAY', providerRef: 'plink_1' },
+          restaurant: { restaurantName: 'Cafe' },
+        }),
+      updateMany: (args: { data: Record<string, unknown>; where: Record<string, unknown> }) => {
+        writes.push(args);
+        return Promise.resolve({ count: options.matches ?? 1 });
+      },
+    },
+  };
+  const ask = (how: string) => (paymentId: string) => {
+    asked.push(`${how} ${paymentId}`);
+    const status = paymentStatus[paymentId.replace('payment-', '')];
+    return status
+      ? Promise.resolve({ status })
+      : Promise.reject(new Error('Razorpay did not answer.'));
+  };
+  const onlinePayments = {
+    cancel: ask('cancel'),
+    check: ask('check'),
+    paidAfterCancel: (id: string) => Promise.resolve(options.paidLate?.includes(id) ?? false),
+  };
+  const pos = {
+    createOrder: (dto: { clientOrderId: string }) => {
+      bills.push(dto.clientOrderId);
+      return options.billError
+        ? Promise.reject(options.billError)
+        : Promise.resolve({ id: 'bill-1' });
+    },
+  };
+  const auditLog = {
+    record: (entry: { summary: string }) => {
+      audits.push(entry.summary);
+      return Promise.resolve();
+    },
+  };
+  const service = new QrOrdersService(
+    { get: () => undefined, getOrThrow: () => 'secret' } as unknown as ConfigService,
+    onlinePayments as unknown as OnlinePaymentsService,
+    pos as unknown as PosService,
+    prisma as unknown as PrismaService,
+    {} as SmsService,
+    memoryStore() as unknown as RedisService,
+    auditLog as unknown as AuditLogService,
+  );
+
+  return { asked, audits, bills, queries, service, writes };
+}
+
+const keyOf = (id: string) =>
+  createHmac('sha256', 'secret').update(`qr-order:${id}`).digest('base64url');
+
+test("the sweeper settles what the guest's page left: oldest first, a batch at a time, each on its own", async () => {
+  const { asked, bills, queries, service, writes } = settling(
+    [waiting('paid', 5), waiting('down', 4), waiting('lapsed', 3), waiting('stale', 31)],
+    { lapsed: 'EXPIRED', paid: 'PAID', stale: 'CANCELLED' },
+  );
+
+  const before = Date.now();
+  await service.sweep();
+  const after = Date.now();
+
+  const query = queries[0]?.waiting as {
+    orderBy: unknown;
+    take: number;
+    where: { createdAt: { gte: Date; lt: Date }; status: string };
+  };
+  const between = (at: Date, ago: number) =>
+    at.valueOf() >= before - ago && at.valueOf() <= after - ago;
+  assert.deepEqual(query.orderBy, { createdAt: 'asc' });
+  assert.equal(query.take, 20);
+  assert.equal(query.where.status, 'AWAITING_PAYMENT');
+  // Left to the guest's own page for 90 seconds; not looked at again after a day.
+  assert.ok(between(query.where.createdAt.lt, 90_000));
+  assert.ok(between(query.where.createdAt.gte, 24 * 60 * 60_000));
+
+  // Asked as status() asks; still unpaid after 30 minutes, let go as the kiosk's Cancel does.
+  assert.deepEqual(asked, [
+    'check payment-paid',
+    'check payment-down',
+    'check payment-lapsed',
+    'cancel payment-stale',
+  ]);
+  // Paid: billed at its counter. One whose gateway did not answer waits for the next sweep.
+  assert.deepEqual(bills, ['qr-paid']);
+  assert.deepEqual(
+    writes.map(({ data, where }) => [where.id, data.status]),
+    [
+      ['paid', 'BILLED'],
+      ['lapsed', 'CLOSED'],
+      ['stale', 'CLOSED'],
+    ],
+  );
+});
+
+test('a sweep never starts while the last one is still running', async () => {
+  let release = () => {};
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  const { queries, service } = settling([], {}, { hold });
+
+  const first = service.sweep();
+  await service.sweep();
+  release();
+  await first;
+
+  assert.equal(queries.filter((query) => query.waiting).length, 1);
+});
+
+test('two checks at once: the one whose bill loses the payment marks the order billed, never "refund it"', async () => {
+  const taken = new ConflictException('This payment is already on another bill.');
+  const raced = settling(
+    [waiting('paid', 1)],
+    { paid: 'PAID' },
+    { billError: taken, billedWith: 'bill-1' },
+  );
+
+  await raced.service.status('paid', keyOf('paid'));
+
+  // The other check's bill is this order's: billed with it, also over a "not billed" it beat.
+  assert.deepEqual(raced.writes, [
+    {
+      data: { billedOrderId: 'bill-1', failureReason: null, status: 'BILLED' },
+      where: { id: 'paid', status: { in: ['AWAITING_PAYMENT', 'PAID_NOT_BILLED'] } },
+    },
+  ]);
+  assert.deepEqual(raced.audits, []);
+
+  // Not billed for a real reason: flagged for a refund, and said once.
+  const soldOut = new BadRequestException('Poha is sold out.');
+  const flagged = settling([waiting('paid', 1)], { paid: 'PAID' }, { billError: soldOut });
+  await flagged.service.status('paid', keyOf('paid'));
+  assert.deepEqual(
+    flagged.writes.map(({ data }) => data.status),
+    ['PAID_NOT_BILLED'],
+  );
+  assert.deepEqual(flagged.audits, ['QR order paid but not billed: refund it']);
+
+  const again = settling(
+    [waiting('paid', 1)],
+    { paid: 'PAID' },
+    { billError: soldOut, matches: 0 },
+  );
+  await again.service.status('paid', keyOf('paid'));
+  assert.deepEqual(again.audits, []);
+});
+
+test('a Razorpay order paid after it was let go is flagged for a refund; nothing bills it', async () => {
+  const closed = { ...waiting('gone', 40), status: 'CLOSED' };
+  const { audits, bills, queries, service, writes } = settling(
+    [closed],
+    {},
+    { paidLate: ['payment-gone'] },
+  );
+
+  const before = Date.now();
+  await service.sweep();
+  const after = Date.now();
+
+  // Payments whose provider cannot cancel (Razorpay orders, PayU links) cancelled in the last 30
+  // minutes are asked again.
+  const { where } = queries.find((query) => query.cancelled)?.cancelled as {
+    where: { OR: unknown[]; status: string; updatedAt: { gte: Date } };
+  };
+  assert.equal(where.status, 'CANCELLED');
+  assert.deepEqual(where.OR, [
+    { provider: 'RAZORPAY', providerRef: { startsWith: 'order_' } },
+    { provider: 'PAYU' },
+  ]);
+  const since = where.updatedAt.gte.valueOf() + 30 * 60_000;
+  assert.ok(since >= before && since <= after);
+  assert.deepEqual(bills, []);
+  assert.deepEqual(writes, [
+    {
+      data: { failureReason: 'Paid after the order was cancelled.', status: 'PAID_NOT_BILLED' },
+      where: { id: 'gone', status: 'CLOSED' },
+    },
+  ]);
+  assert.deepEqual(audits, ['QR order paid but not billed: refund it']);
 });

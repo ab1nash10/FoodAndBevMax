@@ -7,6 +7,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { RedisService, SmsService } from '@aahar/auth';
+import { logger } from '@aahar/logging';
 import {
   BadRequestException,
   ConflictException,
@@ -16,6 +17,8 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
+  type OnApplicationBootstrap,
+  type OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -53,6 +56,19 @@ const DAY_SECONDS = 24 * 60 * 60;
 /** A guest stays signed in on their phone this long. */
 const GUEST_SESSION_MS = 30 * 24 * 60 * 60_000;
 const signInFirst = 'Confirm your mobile number with an OTP to order.';
+
+/** Waiting orders are settled this often without the guest's page (sweep). */
+const SWEEP_EVERY_MS = 60_000;
+/** The guest's own page checks every few seconds: the sweep leaves an order to it this long. */
+const SWEEP_AFTER_MS = 90_000;
+/** Still unpaid this long after it was placed, an order is let go as the kiosk's Cancel does. */
+const GIVE_UP_AFTER_MS = 30 * 60_000;
+/** One the sweep cannot settle (its gateway refusing it, say) stops being tried after this. */
+const SWEEP_WINDOW_MS = 24 * 60 * 60_000;
+/** A cancelled Razorpay order is asked again this long: an open checkout can still be paid. */
+const RECHECK_CANCELLED_MS = 30 * 60_000;
+const SWEEP_BATCH = 20;
+const paidLate = 'Paid after the order was cancelled.';
 
 const notTaking = 'Ordering is closed right now. Please try again later.';
 const kioskNotTaking = 'This kiosk is not taking orders right now. Please order at the counter.';
@@ -93,8 +109,10 @@ function returnAddress(base: string | undefined, id: string, key: string): strin
  * and a lost reply can be asked for again.
  */
 @Injectable()
-export class QrOrdersService {
+export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly secret: string;
+  private sweeper?: NodeJS.Timeout;
+  private sweeping = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -107,6 +125,17 @@ export class QrOrdersService {
     private readonly auditLog?: AuditLogService,
   ) {
     this.secret = config.getOrThrow<string>('JWT_ACCESS_SECRET');
+  }
+
+  /** Settles waiting orders every minute, so a paid one is billed even after its guest left. */
+  onApplicationBootstrap() {
+    // Integration tests settle orders through status() themselves; a timer would race them.
+    if (this.config.get<string>('NODE_ENV') === 'test') return;
+    this.sweeper = setInterval(() => void this.sweep(), SWEEP_EVERY_MS).unref();
+  }
+
+  onApplicationShutdown() {
+    clearInterval(this.sweeper);
   }
 
   private keyFor(id: string) {
@@ -436,7 +465,9 @@ export class QrOrdersService {
     const saved = await this.store.get(codeKey);
 
     if (!saved) throw new BadRequestException('That OTP has expired. Ask for a new one.');
-    if (Number((await this.store.get(triesKey)) ?? 0) >= MAX_WRONG_TRIES) {
+    // Counted before it is compared, as the portal's OTP is: guesses sent all at once each use
+    // a try, so a burst gets no more than five.
+    if ((await this.store.increment(triesKey, OTP_TTL_MS / 1000)) > MAX_WRONG_TRIES) {
       throw new BadRequestException('Too many wrong tries. Ask for a new OTP.');
     }
 
@@ -444,7 +475,6 @@ export class QrOrdersService {
     const right = Buffer.from(sha256(`${sent.nonce}:${dto.otp}`));
 
     if (!timingSafeEqual(right, Buffer.from(sent.codeHash))) {
-      await this.store.increment(triesKey, OTP_TTL_MS / 1000);
       throw new BadRequestException('That OTP is not right.');
     }
     // Only the first of two at once: a code works once.
@@ -808,19 +838,22 @@ export class QrOrdersService {
     const order = await this.ownOrder(id, key);
 
     if (order.status === QrOrderStatus.AWAITING_PAYMENT) {
-      const payment = await this.onlinePayments.check(order.onlinePaymentId);
-
-      if (payment.status === OnlinePaymentStatus.PAID) {
-        await this.bill(order);
-      } else if (payment.status !== OnlinePaymentStatus.PENDING) {
-        await this.prisma.qrOrder.updateMany({
-          data: { status: QrOrderStatus.CLOSED },
-          where: { id, status: QrOrderStatus.AWAITING_PAYMENT },
-        });
-      }
+      await this.settle(order, (await this.onlinePayments.check(order.onlinePaymentId)).status);
     }
 
     return this.view(id);
+  }
+
+  /** Where its payment stands decides the order: billed once paid, closed once it ended unpaid. */
+  private async settle(order: Prisma.QrOrderGetPayload<object>, payment: OnlinePaymentStatus) {
+    if (payment === OnlinePaymentStatus.PAID) {
+      await this.bill(order);
+    } else if (payment !== OnlinePaymentStatus.PENDING) {
+      await this.prisma.qrOrder.updateMany({
+        data: { status: QrOrderStatus.CLOSED },
+        where: { id: order.id, status: QrOrderStatus.AWAITING_PAYMENT },
+      });
+    }
   }
 
   /** The order a guest's key opens; any other key (or none) finds nothing. */
@@ -847,19 +880,98 @@ export class QrOrdersService {
     const order = await this.ownOrder(id, key);
 
     if (order.status === QrOrderStatus.AWAITING_PAYMENT) {
-      const payment = await this.onlinePayments.cancel(order.onlinePaymentId);
-
-      if (payment.status === OnlinePaymentStatus.PAID) {
-        await this.bill(order);
-      } else if (payment.status !== OnlinePaymentStatus.PENDING) {
-        await this.prisma.qrOrder.updateMany({
-          data: { status: QrOrderStatus.CLOSED },
-          where: { id, status: QrOrderStatus.AWAITING_PAYMENT },
-        });
-      }
+      await this.settle(order, (await this.onlinePayments.cancel(order.onlinePaymentId)).status);
     }
 
     return this.view(id);
+  }
+
+  /**
+   * Settles waiting orders without the guest's page, as status() does: billed once paid (so the
+   * kitchen hears of it after the guest closed the page), closed once the payment ended, and let
+   * go as the kiosk's Cancel does when still unpaid after 30 minutes. Then Razorpay orders
+   * cancelled lately are asked again. The oldest first, a batch per run, never two runs at once
+   * here; an order that fails is logged and tried on the next run.
+   *
+   * ponytail: no lock across pods, so every pod sweeps the same orders. Settling twice is safe
+   * (one bill per order; the loser of a race takes the winner's bill). More than 20 waiting at
+   * once delays the newest until the oldest settle. Add an advisory lock, or a bigger batch, if
+   * pods or volumes grow.
+   */
+  async sweep() {
+    if (this.sweeping) return;
+    this.sweeping = true;
+
+    try {
+      const now = Date.now();
+      const orders = await this.prisma.qrOrder.findMany({
+        orderBy: { createdAt: 'asc' },
+        take: SWEEP_BATCH,
+        where: {
+          createdAt: { gte: new Date(now - SWEEP_WINDOW_MS), lt: new Date(now - SWEEP_AFTER_MS) },
+          status: QrOrderStatus.AWAITING_PAYMENT,
+        },
+      });
+
+      for (const order of orders) {
+        try {
+          const payment =
+            now - order.createdAt.valueOf() > GIVE_UP_AFTER_MS
+              ? await this.onlinePayments.cancel(order.onlinePaymentId)
+              : await this.onlinePayments.check(order.onlinePaymentId);
+
+          await this.settle(order, payment.status);
+        } catch (error) {
+          logger.warn({ err: error, qrOrderId: order.id }, 'qr_order_sweep_failed');
+        }
+      }
+
+      await this.recheckCancelled(now);
+    } catch (error) {
+      logger.error({ err: error }, 'qr_order_sweep_failed');
+    } finally {
+      this.sweeping = false;
+    }
+  }
+
+  /**
+   * Razorpay has no cancel for an order (nor AAHAR for a PayU link), so a checkout still open on
+   * the guest's phone can take a payment after AAHAR let it go. Those cancelled in the last 30
+   * minutes are asked again; one
+   * found paid is kept for a refund: its order, closed by then, becomes paid but not billed (a
+   * till's payment gets its own "refund it" row from OnlinePaymentsService).
+   */
+  private async recheckCancelled(now: number) {
+    const payments = await this.prisma.onlinePayment.findMany({
+      orderBy: { updatedAt: 'asc' },
+      select: { id: true },
+      take: SWEEP_BATCH,
+      where: {
+        // Neither can be cancelled at the provider: a Razorpay order, a PayU payment link.
+        OR: [{ provider: 'RAZORPAY', providerRef: { startsWith: 'order_' } }, { provider: 'PAYU' }],
+        status: OnlinePaymentStatus.CANCELLED,
+        updatedAt: { gte: new Date(now - RECHECK_CANCELLED_MS) },
+      },
+    });
+
+    for (const { id } of payments) {
+      try {
+        if (!(await this.onlinePayments.paidAfterCancel(id))) continue;
+
+        const order = await this.prisma.qrOrder.findUnique({ where: { onlinePaymentId: id } });
+
+        if (!order) continue;
+
+        const { count } = await this.prisma.qrOrder.updateMany({
+          data: { failureReason: paidLate, status: QrOrderStatus.PAID_NOT_BILLED },
+          where: { id: order.id, status: QrOrderStatus.CLOSED },
+        });
+
+        if (count === 1) this.recordNotBilled(order, paidLate);
+      } catch (error) {
+        logger.warn({ err: error, onlinePaymentId: id }, 'online_payment_recheck_failed');
+      }
+    }
   }
 
   private async bill(order: Prisma.QrOrderGetPayload<object>) {
@@ -882,28 +994,54 @@ export class QrOrdersService {
         { actorId: undefined, permissions: ['POS_ROOM_ORDER'] },
       );
 
-      await this.prisma.qrOrder.updateMany({
-        data: { billedOrderId: bill.id, status: QrOrderStatus.BILLED },
-        where: { id: order.id, status: QrOrderStatus.AWAITING_PAYMENT },
-      });
+      await this.markBilled(order.id, bill.id);
     } catch (error) {
       // A reason the bill cannot be made (sold out, shift ended): kept for a refund. Anything
       // else (the database, a timeout) is tried again on the next check.
       if (!(error instanceof HttpException) || error.getStatus() >= 500) throw error;
 
-      await this.prisma.qrOrder.updateMany({
+      // Two checks at once: the other one billed this order with its payment first, and this one
+      // was told the payment is on another bill. That bill is the order's own.
+      const payment = await this.prisma.onlinePayment.findUnique({
+        select: { orderId: true },
+        where: { id: order.onlinePaymentId },
+      });
+
+      if (payment?.orderId) {
+        await this.markBilled(order.id, payment.orderId);
+        return;
+      }
+
+      const { count } = await this.prisma.qrOrder.updateMany({
         data: { failureReason: error.message, status: QrOrderStatus.PAID_NOT_BILLED },
         where: { id: order.id, status: QrOrderStatus.AWAITING_PAYMENT },
       });
-      void this.auditLog?.record({
-        action: 'STATUS_CHANGE',
-        entityId: order.id,
-        entityName: 'qr_orders',
-        hospitalId: order.hospitalId,
-        newValue: { reason: error.message, status: QrOrderStatus.PAID_NOT_BILLED },
-        summary: 'QR order paid but not billed: refund it',
-      });
+
+      // Only the call that flagged it asks for the refund.
+      if (count === 1) this.recordNotBilled(order, error.message);
     }
+  }
+
+  /** Billed with its bill: also over a "paid but not billed" the loser of a race wrote first. */
+  private async markBilled(id: string, billedOrderId: string) {
+    await this.prisma.qrOrder.updateMany({
+      data: { billedOrderId, failureReason: null, status: QrOrderStatus.BILLED },
+      where: {
+        id,
+        status: { in: [QrOrderStatus.AWAITING_PAYMENT, QrOrderStatus.PAID_NOT_BILLED] },
+      },
+    });
+  }
+
+  private recordNotBilled(order: { hospitalId: string; id: string }, reason: string) {
+    void this.auditLog?.record({
+      action: 'STATUS_CHANGE',
+      entityId: order.id,
+      entityName: 'qr_orders',
+      hospitalId: order.hospitalId,
+      newValue: { reason, status: QrOrderStatus.PAID_NOT_BILLED },
+      summary: 'QR order paid but not billed: refund it',
+    });
   }
 
   private async view(id: string) {

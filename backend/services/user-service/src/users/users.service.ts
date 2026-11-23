@@ -340,7 +340,7 @@ export class UsersService {
           await this.endSessions([id], tx);
         }
 
-        const data: Prisma.UserUpdateInput = {};
+        const data: Prisma.UserUpdateManyMutationInput = {};
 
         if (dto.avatarUrl !== undefined) {
           data.avatarUrl = dto.avatarUrl;
@@ -366,19 +366,22 @@ export class UsersService {
           data.status = dto.status;
         }
 
-        if (Object.keys(data).length > 0) {
-          data.updatedBy = context.actorId;
+        // Disabled, they are signed out for good: the 8 h lock on their email and mobile goes too.
+        if (statusChanged && dto.status === UserStatus.DISABLED) {
+          data.lastActiveAt = null;
         }
 
-        const user = Object.keys(data).length
-          ? await tx.user.update({
-              data,
-              include: userInclude,
-              where: {
-                id,
-              },
-            })
-          : existing;
+        if (Object.keys(data).length > 0) {
+          data.updatedBy = context.actorId;
+
+          // Checked at the write, not only when read: a delete that landed in between must not
+          // get the user's real mobile or email back.
+          const { count } = await tx.user.updateMany({ data, where: { deletedAt: null, id } });
+
+          if (count === 0) {
+            throw new NotFoundException('User not found');
+          }
+        }
 
         if (dto.roleId !== undefined) {
           const role = await this.findActiveRole(dto.roleId, tx, context, roleChanged);
@@ -399,7 +402,7 @@ export class UsersService {
           include: userInclude,
           where: {
             deletedAt: null,
-            id: user.id,
+            id,
           },
         });
 
@@ -433,13 +436,16 @@ export class UsersService {
   }
 
   async remove(id: string, context: ActorContext) {
-    const existing = await this.findActiveUser(id, this.prisma, context);
-
-    this.assertCanManageUser(existing, context);
-    assertNotSelf(id, context.actor, 'account');
-    await this.assertHoldsAccessOf(existing, this.prisma, context, 'account');
-
     await this.prisma.$transaction(async (tx) => {
+      // Locked, then read and written in one transaction: an edit cannot land between the read
+      // and the delete, and what the checks and the audit row see is what gets deleted.
+      await tx.$queryRaw`SELECT 1 FROM users WHERE id = ${id}::uuid FOR UPDATE`;
+      const existing = await this.findActiveUser(id, tx, context);
+
+      this.assertCanManageUser(existing, context);
+      assertNotSelf(id, context.actor, 'account');
+      await this.assertHoldsAccessOf(existing, tx, context, 'account');
+
       await tx.user.update({
         data: {
           deletedAt: new Date(),

@@ -28,6 +28,7 @@ import { getOrderBy, getPageMeta, getPagination, toStatusCounts } from '../commo
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { lockRow } from '../common/row-lock';
+import { addStock } from '../common/stock-balances';
 import { optionalText, toDateOnly, toNumber } from '../common/values';
 import type {
   CancelPosOrderDto,
@@ -1231,9 +1232,15 @@ export class PosService {
         );
       }
 
+      // Read after the update: another till may have sold some since `balances` was read.
+      const after = await tx.stockBalance.findUniqueOrThrow({
+        select: { availableQty: true },
+        where: { id: balance.id },
+      });
+
       await tx.stockLedger.create({
         data: {
-          balanceAfter: toNumber(balance.availableQty) - take,
+          balanceAfter: toNumber(after.availableQty),
           batchNumber: balance.batchNumber,
           businessDate,
           createdBy: context.actorId,
@@ -1247,6 +1254,7 @@ export class PosService {
           qtyOut: take,
           referenceId: orderId,
           referenceType: StockReferenceType.ORDER,
+          stockBalanceId: balance.id,
           transactionDateTime: now,
           transactionType: StockTransactionType.SALE_OUT,
           updatedBy: context.actorId,
@@ -1731,33 +1739,39 @@ export class PosService {
 
       for (const entry of sold) {
         const qty = toNumber(entry.qtyOut);
-        // ponytail: the ledger has no balance id, so the batch is found again by batch and
-        // expiry; store the balance id on the ledger if two rows ever share both.
-        const balance = await tx.stockBalance.findFirst({
-          orderBy: { businessDate: { nulls: 'first', sort: 'desc' } },
-          where: {
-            batchNumber: entry.batchNumber,
-            deletedAt: null,
-            expiryDate: entry.expiryDate,
-            itemId: entry.itemId,
-            locationId: entry.locationId,
-            locationType: entry.locationType,
-          },
-        });
-        const restored = balance
+        // Back on the row the sale took it from. A sale from before sales kept their row
+        // (2026-11-23) finds it again by batch and expiry, oldest business day first, as sales
+        // take stock.
+        const balanceId =
+          entry.stockBalanceId ??
+          (
+            await tx.stockBalance.findFirst({
+              orderBy: { businessDate: { nulls: 'last', sort: 'asc' } },
+              select: { id: true },
+              where: {
+                batchNumber: entry.batchNumber,
+                deletedAt: null,
+                expiryDate: entry.expiryDate,
+                itemId: entry.itemId,
+                locationId: entry.locationId,
+                locationType: entry.locationType,
+              },
+            })
+          )?.id;
+        const restored = balanceId
           ? await tx.stockBalance.update({
               data: {
                 availableQty: { increment: qty },
                 lastUpdatedOn: now,
                 updatedBy: context.actorId,
               },
-              where: { id: balance.id },
+              where: { id: balanceId },
             })
-          : await tx.stockBalance.create({
-              data: {
-                availableQty: qty,
+          : await addStock(
+              tx,
+              {
                 batchNumber: entry.batchNumber,
-                createdBy: context.actorId,
+                businessDate: null,
                 expiryDate: entry.expiryDate,
                 hospitalId: entry.hospitalId,
                 itemId: entry.itemId,
@@ -1765,7 +1779,9 @@ export class PosService {
                 locationId: entry.locationId,
                 locationType: entry.locationType,
               },
-            });
+              qty,
+              context.actorId,
+            );
 
         await tx.stockLedger.create({
           data: {

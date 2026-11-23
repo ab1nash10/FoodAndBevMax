@@ -1922,6 +1922,8 @@ model StockLedger {
   transactionType     StockTransactionType  @map("transaction_type")
   referenceType       StockReferenceType?   @map("reference_type")
   referenceId         String?               @map("reference_id") @db.Uuid
+  /// The stock row a sale took from, so a cancel puts it back on that row. Sales only.
+  stockBalanceId      String?               @map("stock_balance_id") @db.Uuid
   qtyIn               Decimal               @default(0) @map("qty_in") @db.Decimal(12, 3)
   qtyOut              Decimal               @default(0) @map("qty_out") @db.Decimal(12, 3)
   balanceAfter        Decimal               @default(0) @map("balance_after") @db.Decimal(12, 3)
@@ -1974,6 +1976,8 @@ model StockBalance {
   hospital Hospital @relation(fields: [hospitalId], references: [id])
   item     Item     @relation(fields: [itemId], references: [id])
 
+  // NULLS NOT DISTINCT in the database (20261123090000), which Prisma cannot express: an empty
+  // batch, expiry or business day is one value, so stock is added with INSERT ... ON CONFLICT.
   @@unique([hospitalId, locationType, locationId, itemId, batchNumber, expiryDate, businessDate], map: "stock_balances_unique_stock_key")
   @@index([batchNumber])
   @@index([businessDate])

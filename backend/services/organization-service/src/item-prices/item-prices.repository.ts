@@ -118,6 +118,15 @@ export class ItemPricesRepository {
     });
   }
 
+  /**
+   * Holds the item's price lock until the transaction ends. Nothing in the database stops two
+   * active prices overlapping, so two saves at once could both pass the overlap check; taken
+   * first, the lock makes the second wait and then see what the first saved.
+   */
+  async lockItemPrices(itemId: string, client: Prisma.TransactionClient): Promise<void> {
+    await client.$queryRaw`SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(${`item-price:${itemId}`}))) AS locked`;
+  }
+
   async findOverlappingActivePrice(
     input: {
       effectiveFrom: Date;

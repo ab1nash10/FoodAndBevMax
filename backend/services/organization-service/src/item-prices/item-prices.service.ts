@@ -431,6 +431,7 @@ export class ItemPricesService {
     },
     client: ItemPriceClient,
   ): Promise<void> {
+    await this.itemPrices.lockItemPrices(input.itemId, client);
     const overlappingPrice = await this.itemPrices.findOverlappingActivePrice(input, client);
 
     if (overlappingPrice) {

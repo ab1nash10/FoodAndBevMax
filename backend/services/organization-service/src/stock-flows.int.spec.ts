@@ -532,6 +532,48 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
     expect(await atRestaurant(fx.restaurantId)).toBe(before - 2);
   });
 
+  it('stock rows: receipts at the same moment add to one row; an empty batch or expiry is one value', async () => {
+    const { PrismaService } = await import('./common/prisma/prisma.service.js');
+    const { addStock } = await import('./common/stock-balances.js');
+    const prisma = app!.get(PrismaService);
+    // A business day no other test uses, so the row starts empty.
+    const businessDay = day(-400);
+    const key = {
+      batchNumber: null,
+      businessDate: new Date(`${businessDay}T00:00:00Z`),
+      expiryDate: null,
+      hospitalId: fx.hospitalId,
+      itemId: fx.readyItemId,
+      itemType: 'READYMADE' as const,
+      locationId: fx.kitchenId,
+      locationType: 'KITCHEN' as const,
+    };
+
+    await Promise.all([2, 3, 5].map((qty) => prisma.$transaction((tx) => addStock(tx, key, qty))));
+
+    expect(
+      await rawQuery(
+        `SELECT available_qty::text AS qty FROM stock_balances
+         WHERE item_id = $1::uuid AND location_id = $2::uuid AND business_date = $3::date`,
+        fx.readyItemId,
+        fx.kitchenId,
+        businessDay,
+      ),
+    ).toEqual([{ qty: '10.000' }]);
+    // The unique index itself refuses a second row of that key.
+    await expect(
+      rawQuery(
+        `INSERT INTO stock_balances (stock_balance_id, hospital_id, location_type, location_id,
+           item_id, item_type, business_date, updated_at)
+         VALUES (gen_random_uuid(), $1::uuid, 'KITCHEN', $2::uuid, $3::uuid, 'READYMADE', $4::date, now())`,
+        fx.hospitalId,
+        fx.kitchenId,
+        fx.readyItemId,
+        businessDay,
+      ),
+    ).rejects.toThrow(/unique/i);
+  });
+
   it('stock views: balances list and the grouped store summary agree', async () => {
     await stockBatch('SV', 9);
     const list = await api(
