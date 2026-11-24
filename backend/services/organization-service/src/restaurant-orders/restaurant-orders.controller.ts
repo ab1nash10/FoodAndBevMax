@@ -19,6 +19,8 @@ import { getActorId, getIpAddress, type RequestContextLike } from '../common/req
 import {
   BoardLinkDto,
   ListRestaurantOrdersQueryDto,
+  MarkDeliveredDto,
+  NotDeliveredDto,
   SetQrCounterDto,
   SetStewardDto,
   UpdateOrderStatusDto,
@@ -156,11 +158,33 @@ export class RestaurantOrdersController {
   @ApiOkResponse({ description: 'Order delivered.' })
   async markDelivered(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: MarkDeliveredDto,
     @CurrentUser() user: JwtRequestUser | undefined,
     @Req() request: RequestContextLike,
   ) {
     return {
-      data: await this.orders.markDelivered(id, {
+      data: await this.orders.markDelivered(id, body.code, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('restaurant-orders/:id/not-delivered')
+  @ApiBearerAuth('access-token')
+  @Permissions('ORDER_DELIVER')
+  @ApiOperation({ summary: 'The steward could not hand it over: it comes off them, with why' })
+  @ApiOkResponse({ description: 'Order given back.' })
+  async notDelivered(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: NotDeliveredDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.orders.notDelivered(id, body.reason, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
       }),

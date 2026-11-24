@@ -26,6 +26,7 @@ import {
   GuestOrderSource,
   OnlinePaymentStatus,
   OrderChannel,
+  OrderStatus,
   PaymentMode,
   Prisma,
   QrOrderStatus,
@@ -994,7 +995,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
         { actorId: undefined, permissions: ['POS_ROOM_ORDER'] },
       );
 
-      await this.markBilled(order.id, bill.id);
+      await this.markBilled(order.id, bill.id, order.channel);
     } catch (error) {
       // A reason the bill cannot be made (sold out, shift ended): kept for a refund. Anything
       // else (the database, a timeout) is tried again on the next check.
@@ -1008,7 +1009,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
       });
 
       if (payment?.orderId) {
-        await this.markBilled(order.id, payment.orderId);
+        await this.markBilled(order.id, payment.orderId, order.channel);
         return;
       }
 
@@ -1023,7 +1024,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
   }
 
   /** Billed with its bill: also over a "paid but not billed" the loser of a race wrote first. */
-  private async markBilled(id: string, billedOrderId: string) {
+  private async markBilled(id: string, billedOrderId: string, channel: OrderChannel) {
     await this.prisma.qrOrder.updateMany({
       data: { billedOrderId, failureReason: null, status: QrOrderStatus.BILLED },
       where: {
@@ -1031,6 +1032,14 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
         status: { in: [QrOrderStatus.AWAITING_PAYMENT, QrOrderStatus.PAID_NOT_BILLED] },
       },
     });
+    // A room order is handed over at the bed: its code, shown on the guest's page as a QR, is
+    // what the steward scans there. Never over a code it already has (a second check).
+    if (channel === OrderChannel.ROOM) {
+      await this.prisma.restaurantOrder.updateMany({
+        data: { deliveryCode: randomInt(0, 1_000_000).toString().padStart(6, '0') },
+        where: { deliveryCode: null, id: billedOrderId },
+      });
+    }
   }
 
   private recordNotBilled(order: { hospitalId: string; id: string }, reason: string) {
@@ -1051,6 +1060,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
           select: {
             billNumber: true,
             deliveredAt: true,
+            deliveryCode: true,
             lines: {
               select: {
                 itemName: true,
@@ -1110,6 +1120,11 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
           }
         : null,
       deliveredAt: billed?.deliveredAt?.toISOString() ?? null,
+      /** Six digits the steward scans (as a QR) or types at the bed; gone once delivered. */
+      deliveryCode:
+        billed && billed.status !== OrderStatus.COLLECTED && billed.status !== OrderStatus.CANCELLED
+          ? billed.deliveryCode
+          : null,
       grandTotal: toNumber(order.grandTotal),
       id: order.id,
       key: this.keyFor(order.id),

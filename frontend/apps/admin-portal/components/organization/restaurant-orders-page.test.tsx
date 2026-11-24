@@ -171,6 +171,19 @@ describe("a restaurant's live orders", () => {
     await waitFor(() => expect(api.setOrderSteward).toHaveBeenCalledWith('o2', 'st1'));
   });
 
+  it('says why a steward could not deliver an order, until it is given to a steward again', async () => {
+    api.listRestaurantOrders.mockImplementation(() =>
+      reply([{ ...roomOrder, undeliveredReason: 'Patient discharged' }]),
+    );
+    renderScreen(<RestaurantOrdersPageClient restaurantId="rest-1" />);
+
+    expect(
+      await screen.findByText(
+        'Couldn’t deliver: Patient discharged. Give it to a steward again or cancel it.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('shows the board to those who may only view orders, without controls', async () => {
     signedIn(['ORDER_VIEW']);
     api.listRestaurantOrders.mockImplementation(() =>

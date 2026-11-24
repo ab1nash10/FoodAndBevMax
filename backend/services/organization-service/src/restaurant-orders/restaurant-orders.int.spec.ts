@@ -417,6 +417,7 @@ describe.skipIf(!databaseUrl)(
           "stewardId": null,
           "stewardName": null,
           "tableName": null,
+          "undeliveredReason": null,
         }
       `);
       const placedAts = listed.map((o) => Date.parse(String(o.placedAt)));

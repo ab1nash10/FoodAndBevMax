@@ -88,6 +88,7 @@ const order = (patch: Partial<QrOrderView> = {}): QrOrderView => ({
   channel: 'COUNTER',
   checkout: null,
   deliveredAt: null,
+  deliveryCode: null,
   grandTotal: 200,
   id: 'abcdef123456',
   key: 'key-1',

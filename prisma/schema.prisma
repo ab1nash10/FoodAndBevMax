@@ -840,6 +840,14 @@ model RestaurantOrder {
   /// The steward (a Delivery Operator) taking it to the guest, and when they were given it.
   stewardId         String?      @map("steward_id") @db.Uuid
   stewardAssignedAt DateTime?    @map("steward_assigned_at")
+  /// The steward's "Couldn't deliver": why, when and who. The order came off them; giving it to a
+  /// steward again clears these.
+  undeliveredReason String?      @map("undelivered_reason")
+  undeliveredAt     DateTime?    @map("undelivered_at")
+  undeliveredBy     String?      @map("undelivered_by") @db.Uuid
+  /// A room order the guest placed on their phone: six digits their order page shows (as a QR)
+  /// for the steward to scan or type at the bed, proving it reached them.
+  deliveryCode      String?      @map("delivery_code")
   updatedAt         DateTime     @updatedAt @map("updated_at")
   updatedBy         String?      @map("updated_by") @db.Uuid
 

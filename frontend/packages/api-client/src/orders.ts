@@ -26,7 +26,28 @@ export interface RestaurantOrder {
   /** The steward (Delivery Operator) taking it to the guest; kitchen screen only. */
   stewardId?: string | null;
   stewardName?: string | null;
+  /** Why the last steward could not deliver it (kitchen screen); cleared once given again. */
+  undeliveredReason?: string | null;
 }
+
+/** Why a steward could not hand a room order over: they pick one at the bed. */
+export const UNDELIVERED_REASONS = [
+  'Patient discharged',
+  'Patient not in room',
+  'Patient refused it',
+] as const;
+
+export type UndeliveredReason = (typeof UNDELIVERED_REASONS)[number];
+
+/** One of a steward's room orders today: to take, delivered, or given back. */
+export type Delivery = RestaurantOrder & {
+  deliveredAt: string | null;
+  /** Placed on the guest's phone: Delivered needs their code (scanned from their QR, or typed). */
+  needsCode: boolean;
+  restaurantName: string;
+  stewardAssignedAt: string | null;
+  undeliveredAt: string | null;
+};
 
 /** One order on the TV pickup board: its number and pickup details, never the guest's. */
 export interface BoardOrder {
@@ -670,6 +691,8 @@ export interface QrOrderView {
   /** Razorpay's checkout on this page, while it waits for payment; else the payment page. */
   checkout: QrCheckout | null;
   deliveredAt: string | null;
+  /** A room order's six digits, shown as a QR for the steward to scan at the bed; gone once delivered. */
+  deliveryCode: string | null;
   grandTotal: number;
   id: string;
   /** Reads this order again (GET /qr/orders/:id?key=). */

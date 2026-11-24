@@ -56,6 +56,8 @@ import type {
   StaffDiscountInput,
   StaffDiscountSettings,
   RestaurantOrder,
+  Delivery,
+  UndeliveredReason,
   PaidNotBilled,
   QrChannel,
   QrGuest,
@@ -689,15 +691,21 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'PATCH',
       });
     },
-    /** A steward's own room orders today: ready ones to take, and what is coming. */
+    /** A steward's own room orders today: to take, coming, delivered and given back. */
     listMyDeliveries() {
-      return client.request<ApiResponse<Array<RestaurantOrder & { restaurantName: string }>>>(
-        '/restaurant-orders/deliveries',
+      return client.request<ApiResponse<Delivery[]>>('/restaurant-orders/deliveries');
+    },
+    /** The steward could not hand it over: it comes off them, with why. */
+    markOrderNotDelivered(id: string, reason: UndeliveredReason) {
+      return client.request<ApiResponse<{ id: string; undeliveredReason: string }>>(
+        `/restaurant-orders/${id}/not-delivered`,
+        { body: { reason }, method: 'POST' },
       );
     },
     /** The steward hands over a ready room order given to them. */
-    markOrderDelivered(id: string) {
+    markOrderDelivered(id: string, code?: string) {
       return client.request<ApiResponse<RestaurantOrder>>(`/restaurant-orders/${id}/delivered`, {
+        body: code ? { code } : undefined,
         method: 'POST',
       });
     },

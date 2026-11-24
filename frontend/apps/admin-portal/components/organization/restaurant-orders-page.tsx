@@ -241,6 +241,12 @@ function OrderCard({
           {order.instructions}
         </p>
       ) : null}
+      {/* A steward gave it back from the bed: someone decides who takes it now, or cancels it. */}
+      {order.undeliveredReason && !order.stewardId ? (
+        <p className="mt-2 rounded bg-ds-status-bad-bg px-2 py-1 text-xs font-semibold text-ds-status-bad-fg">
+          Couldn’t deliver: {order.undeliveredReason}. Give it to a steward again or cancel it.
+        </p>
+      ) : null}
       {/* Stewards take orders to rooms; a counter order is picked up and needs none. */}
       {order.channel !== 'ROOM' ? null : onSteward ? (
         <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-ds-text-3">

@@ -476,6 +476,31 @@ test('a paid order shows its dishes, when it was paid and when it should be read
   assert.equal(view.readyAt, null);
 });
 
+test("a room order's page shows the guest the code the steward scans, until it is delivered", async () => {
+  const billed = {
+    billNumber: 'MAX/0018',
+    deliveredAt: null,
+    deliveryCode: '482913',
+    lines: [],
+    orderNumber: '18',
+    placedAt: new Date('2026-11-19T05:12:00Z'),
+    readyAt: null,
+    status: 'READY',
+  };
+  const ready = await setUp({}, [], billed).service.createOrder('restaurant-1', 'token', {
+    ...order,
+    channel: 'COUNTER',
+  });
+  assert.equal(ready.deliveryCode, '482913');
+
+  const delivered = await setUp({}, [], { ...billed, status: 'COLLECTED' }).service.createOrder(
+    'restaurant-1',
+    'token',
+    { ...order, channel: 'COUNTER' },
+  );
+  assert.equal(delivered.deliveryCode, null);
+});
+
 test('a guest signs in once with an OTP to their mobile; orders go under that name and number', async () => {
   const { payments, service, store, texts } = setUp();
 
@@ -653,7 +678,7 @@ test('guessing the guest code in parallel gets no more than five tries', async (
 
 /** A waiting QR order as saved, placed `minutesAgo` minutes ago and paid with payment-<id>. */
 const waiting = (id: string, minutesAgo: number) => ({
-  bedNumber: null,
+  bedNumber: null as string | null,
   channel: 'COUNTER',
   counterId: 'counter-1',
   createdAt: new Date(Date.now() - minutesAgo * 60_000),
@@ -663,7 +688,7 @@ const waiting = (id: string, minutesAgo: number) => ({
   instructions: null,
   lines: [{ menuId: 'menu-1', quantity: 1 }],
   onlinePaymentId: `payment-${id}`,
-  roomNumber: null,
+  roomNumber: null as string | null,
   status: 'AWAITING_PAYMENT',
   tableName: null,
 });
@@ -692,7 +717,14 @@ function settling(
   const bills: string[] = [];
   const queries: Array<{ cancelled?: unknown; waiting?: unknown }> = [];
   const writes: Array<{ data: Record<string, unknown>; where: Record<string, unknown> }> = [];
+  const codes: Array<{ data: Record<string, unknown>; where: Record<string, unknown> }> = [];
   const prisma = {
+    restaurantOrder: {
+      updateMany: (args: { data: Record<string, unknown>; where: Record<string, unknown> }) => {
+        codes.push(args);
+        return Promise.resolve({ count: 1 });
+      },
+    },
     onlinePayment: {
       findMany: (args: unknown) => {
         queries.push({ cancelled: args });
@@ -762,7 +794,7 @@ function settling(
     auditLog as unknown as AuditLogService,
   );
 
-  return { asked, audits, bills, queries, service, writes };
+  return { asked, audits, bills, codes, queries, service, writes };
 }
 
 const keyOf = (id: string) =>
@@ -822,6 +854,23 @@ test('a sweep never starts while the last one is still running', async () => {
   await first;
 
   assert.equal(queries.filter((query) => query.waiting).length, 1);
+});
+
+test('a paid room order gets a code for the steward to scan at the bed; a pickup order needs none', async () => {
+  const room = settling(
+    [{ ...waiting('paid', 1), bedNumber: 'B', channel: 'ROOM', roomNumber: '304' }],
+    { paid: 'PAID' },
+  );
+  await room.service.status('paid', keyOf('paid'));
+
+  assert.equal(room.codes.length, 1);
+  assert.match(String(room.codes[0]?.data.deliveryCode), /^\d{6}$/);
+  // Only on this bill, and never over a code it already has.
+  assert.deepEqual(room.codes[0]?.where, { deliveryCode: null, id: 'bill-1' });
+
+  const pickup = settling([waiting('paid', 1)], { paid: 'PAID' });
+  await pickup.service.status('paid', keyOf('paid'));
+  assert.equal(pickup.codes.length, 0);
 });
 
 test('two checks at once: the one whose bill loses the payment marks the order billed, never "refund it"', async () => {

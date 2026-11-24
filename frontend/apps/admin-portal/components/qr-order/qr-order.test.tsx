@@ -24,6 +24,9 @@ const api = vi.hoisted(() => ({
   verifyQrGuestOtp: vi.fn<Client['verifyQrGuestOtp']>(),
 }));
 
+vi.mock('qrcode', () => ({
+  default: { toDataURL: vi.fn(() => Promise.resolve('data:image/png;base64,QR')) },
+}));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
   publicOrganizationApi: api,
@@ -91,6 +94,7 @@ const view = (patch: Partial<QrOrderView> = {}): QrOrderView => ({
   channel: 'COUNTER',
   checkout: null,
   deliveredAt: null,
+  deliveryCode: null,
   grandTotal: 210,
   id: 'order-1',
   key: 'key-1',
@@ -622,6 +626,29 @@ describe('a placed QR order', () => {
     const dishes = await screen.findByRole('region', { name: 'Your dishes' });
     expect(dishes).toHaveTextContent('2 × Paneer Tikka₹210.00');
     expect(dishes).toHaveTextContent('Invoice INV-7');
+  });
+
+  it('shows the guest a QR and code for the steward to scan at the bed', async () => {
+    api.getQrOrder.mockImplementation(() =>
+      reply(
+        view({
+          channel: 'ROOM',
+          deliveryCode: '482913',
+          kitchenStatus: 'READY',
+          roomNumber: 'PG-ECO-06 (EWS)',
+        }),
+      ),
+    );
+    open();
+
+    const card = await screen.findByRole('region', { name: 'Your delivery code' });
+    expect(card).toHaveTextContent('Show this when your food arrives');
+    expect(
+      await within(card).findByRole('img', { name: 'QR code for the steward to scan' }),
+    ).toBeInTheDocument();
+    expect(card).toHaveTextContent('482 913');
+    const QRCode = (await import('qrcode')).default;
+    expect(QRCode.toDataURL).toHaveBeenCalledWith('fandb-delivery:482913', expect.anything());
   });
 
   it('starts a new order, forgetting the one on this phone', async () => {

@@ -28,6 +28,8 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
+import Image from 'next/image';
+import QRCode from 'qrcode';
 import {
   useEffect,
   useMemo,
@@ -1434,6 +1436,52 @@ function Dot({ state }: Readonly<{ state: StepState }>) {
   );
 }
 
+/**
+ * A room order's proof of delivery: the steward scans this QR at the bed (or types the six digits
+ * the guest reads out) to hand the order over. Drawn here, on the phone: no request.
+ */
+function DeliveryCode({ code }: Readonly<{ code: string }>) {
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    void QRCode.toDataURL(`fandb-delivery:${code}`, { margin: 1, width: 440 }).then((url) => {
+      if (current) setQr(url);
+    });
+    return () => {
+      current = false;
+    };
+  }, [code]);
+
+  return (
+    <section
+      aria-label="Your delivery code"
+      className="grid justify-items-center gap-2 rounded-[18px] bg-ds-surface p-5 text-center"
+    >
+      <h3 className="text-lg font-extrabold">Show this when your food arrives</h3>
+      <p className="text-[15px] text-ds-muted">The steward scans it to hand your order over.</p>
+      {qr ? (
+        <Image
+          alt="QR code for the steward to scan"
+          className="h-56 w-56"
+          height={440}
+          src={qr}
+          unoptimized
+          width={440}
+        />
+      ) : (
+        <span aria-hidden="true" className="h-56 w-56 animate-pulse rounded-xl bg-ds-subtle" />
+      )}
+      <p className="text-[15px] text-ds-muted">
+        Or read out this code{' '}
+        <span className="block font-mono text-[28px] font-bold tracking-[0.2em] text-ds-text">
+          {code.slice(0, 3)} {code.slice(3)}
+        </span>
+      </p>
+    </section>
+  );
+}
+
 function OrderProgress({
   back,
   doneLabel = 'Order something else',
@@ -1601,6 +1649,7 @@ function OrderProgress({
             )}
           </div>
         </section>
+        {view.deliveryCode ? <DeliveryCode code={view.deliveryCode} /> : null}
         {cancelled ? null : (
           <ol aria-label="Order progress" className="rounded-[18px] bg-ds-surface px-5 py-[18px]">
             {steps.map((step, index) => {

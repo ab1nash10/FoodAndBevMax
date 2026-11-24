@@ -9,6 +9,7 @@ import {
 import { OrderChannel, OrderSource, OrderStatus, Prisma, UserStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { AuditLogService } from '../common/audit/audit-log.service';
+import { istDay } from '../dashboard/service-day';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
 import { boardSchedule } from './board-schedule';
@@ -44,7 +45,11 @@ const orderSelect = {
 } satisfies Prisma.RestaurantOrderSelect;
 
 /** The kitchen screen's: also who is taking it to the guest. Not for senders or the board. */
-const kitchenSelect = { ...orderSelect, stewardId: true } satisfies Prisma.RestaurantOrderSelect;
+const kitchenSelect = {
+  ...orderSelect,
+  stewardId: true,
+  undeliveredReason: true,
+} satisfies Prisma.RestaurantOrderSelect;
 
 // ponytail: stewards are found by this role's name; give them a permission of their own if roles
 // start being renamed.
@@ -316,6 +321,10 @@ export class RestaurantOrdersService {
       data: {
         stewardAssignedAt: stewardId ? new Date() : null,
         stewardId,
+        // A steward's "Couldn't deliver" is settled once someone decides who takes it now.
+        undeliveredAt: null,
+        undeliveredBy: null,
+        undeliveredReason: null,
         updatedBy: context.actorId,
       },
       where: {
@@ -346,28 +355,46 @@ export class RestaurantOrdersService {
 
   /** A steward's own room orders today, at any restaurant: ready ones to take, and what is coming. */
   async myDeliveries(stewardId: string) {
+    // Today in India time, for what they delivered or gave back.
+    const today = new Date(`${istDay(new Date())}T00:00:00+05:30`);
     const orders = await this.prisma.restaurantOrder.findMany({
       orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
-      select: { ...orderSelect, restaurant: { select: { restaurantName: true } } },
-      take: 100,
+      select: {
+        ...orderSelect,
+        deliveredAt: true,
+        deliveryCode: true,
+        restaurant: { select: { restaurantName: true } },
+        stewardAssignedAt: true,
+        undeliveredAt: true,
+        undeliveredReason: true,
+      },
+      take: 200,
       where: {
         channel: OrderChannel.ROOM,
-        placedAt: { gte: activeSince() },
-        status: { in: ACTIVE_STATUSES },
-        stewardId,
+        OR: [
+          { stewardId, status: { in: ACTIVE_STATUSES }, placedAt: { gte: activeSince() } },
+          { stewardId, status: OrderStatus.COLLECTED, deliveredAt: { gte: today } },
+          { undeliveredBy: stewardId, undeliveredAt: { gte: today } },
+        ],
       },
     });
 
-    return orders.map(({ restaurant, ...order }) => ({
+    // Whether the guest's code is needed, never the code: it is theirs to show at the bed.
+    return orders.map(({ deliveryCode, restaurant, ...order }) => ({
       ...order,
+      needsCode: Boolean(deliveryCode),
       restaurantName: restaurant.restaurantName,
     }));
   }
 
-  /** The steward hands a ready room order over at the bed. Only theirs: anyone else's is not found. */
-  async markDelivered(id: string, context: ActorContext) {
+  /**
+   * The steward hands a ready room order over at the bed. Only theirs: anyone else's is not found.
+   * One the guest placed on their phone needs their code (scanned from their QR, or typed): the
+   * proof it reached them. The till and kitchen can still mark it delivered from the order board.
+   */
+  async markDelivered(id: string, code: string | undefined, context: ActorContext) {
     const order = await this.prisma.restaurantOrder.findFirst({
-      select: { status: true, stewardId: true },
+      select: { deliveryCode: true, status: true, stewardId: true },
       where: { id },
     });
 
@@ -377,8 +404,66 @@ export class RestaurantOrdersService {
     if (order.status !== OrderStatus.READY) {
       throw new ConflictException('This order is not ready yet: the kitchen marks it ready first.');
     }
+    // ponytail: six digits and the service's request limit stand against guessing; count wrong
+    // tries per order if a steward is ever found guessing.
+    if (order.deliveryCode && code !== order.deliveryCode) {
+      throw new ConflictException(
+        code
+          ? 'That code doesn’t match this order. Scan the guest’s QR again, or check the six digits with them.'
+          : 'Scan the guest’s QR, or type the six digits under it, to mark this delivered.',
+      );
+    }
 
     return this.setStatus(id, OrderStatus.COLLECTED, context);
+  }
+
+  /**
+   * The steward could not hand it over (discharged, not in the room, refused): it comes off them
+   * with why, for the cashier or kitchen to give it to a steward again or cancel it. Only theirs,
+   * and only before it is delivered.
+   */
+  async notDelivered(id: string, reason: string, context: ActorContext) {
+    const order = await this.prisma.restaurantOrder.findFirst({
+      select: { status: true, stewardId: true },
+      where: { id },
+    });
+
+    if (!order || !context.actorId || order.stewardId !== context.actorId) {
+      throw new NotFoundException('Order not found');
+    }
+    if (order.status === OrderStatus.COLLECTED) {
+      throw new ConflictException('This order is already delivered.');
+    }
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new ConflictException('This order is cancelled, so there is nothing to deliver.');
+    }
+
+    const { count } = await this.prisma.restaurantOrder.updateMany({
+      data: {
+        stewardAssignedAt: null,
+        stewardId: null,
+        undeliveredAt: new Date(),
+        undeliveredBy: context.actorId,
+        undeliveredReason: reason,
+        updatedBy: context.actorId,
+      },
+      where: { id, status: { in: ACTIVE_STATUSES }, stewardId: context.actorId },
+    });
+
+    if (count === 0) {
+      throw new ConflictException('Someone else just updated this order. Refresh and try again.');
+    }
+    await this.auditLog.record({
+      action: 'ORDER_NOT_DELIVERED',
+      actorId: context.actorId,
+      entityId: id,
+      entityName: 'restaurant_orders',
+      ipAddress: context.ipAddress,
+      newValue: { stewardId: null, undeliveredReason: reason },
+      oldValue: { stewardId: order.stewardId },
+    });
+
+    return { id, undeliveredReason: reason };
   }
 
   async setStatus(id: string, status: OrderStatus, context: ActorContext) {
