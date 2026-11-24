@@ -55,6 +55,8 @@ export default [
     ignores: [
       // Agent skills are vendored as installed (skills-lock.json), not project code.
       '.agents/**',
+      // The steward phone app is its own Expo project (npm, outside the pnpm workspace): `npx expo lint` there.
+      'frontend/mobile/**',
       '**/.next/**',
       '**/.turbo/**',
       '**/coverage/**',

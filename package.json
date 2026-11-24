@@ -30,7 +30,7 @@
   "lint-staged": {
     "*.{css,json,md,yaml,yml}": "prettier --write",
     "*.{js,cjs,mjs,ts,tsx}": [
-      "eslint --fix",
+      "eslint --fix --no-warn-ignored --config eslint.config.mjs",
       "prettier --write"
     ]
   },

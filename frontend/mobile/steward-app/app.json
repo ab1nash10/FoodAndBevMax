@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "F&B Deliveries",
+    "slug": "fandb-deliveries",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.maxhealthcare.fandb.deliveries"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B57A4",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.maxhealthcare.fandb.deliveries"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "fandb-deliveries",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow F&B Deliveries to use the camera to scan the guest's delivery QR.",
+          "barcodeScannerEnabled": true,
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+    ]
+  }
+}
