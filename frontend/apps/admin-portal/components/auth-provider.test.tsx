@@ -1,5 +1,5 @@
 import { ApiClientError } from '@aahar/api-client';
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ApiModule from '@/lib/api';
 import { renderScreen, reply } from '@/test/harness';
@@ -195,5 +195,44 @@ describe('the signed-in session', () => {
     act(() => void window.dispatchEvent(new StorageEvent('storage', { key: storageKey })));
 
     expect(screen.getByText('signed out')).toBeInTheDocument();
+  });
+});
+
+describe('signing out after 8 hours without activity (the user, 2026-11-23)', () => {
+  const lastInput = (hoursAgo: number) =>
+    localStorage.setItem('aahar.last-activity', String(Date.now() - hoursAgo * 3_600_000));
+
+  it('signs out a screen opened again after 8 idle hours, and ends the session on the server', async () => {
+    storeSession(asha());
+    lastInput(9);
+    renderProvider();
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/auth/login?reason=idle'));
+    expect(screen.queryByText('signed in as Asha Rao')).not.toBeInTheDocument();
+    expect(authApi.logout).toHaveBeenCalledWith({ refreshToken: 'refresh-1' });
+    expect(localStorage.getItem(storageKey)).toBeNull();
+    expect(refreshStoredSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps a screen used within the 8 hours signed in', async () => {
+    storeSession(asha());
+    lastInput(7);
+    renderProvider();
+
+    expect(await screen.findByText('signed in as Asha Rao')).toBeInTheDocument();
+    await act(() => Promise.resolve());
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('never signs out the POS till, however long it sat idle', async () => {
+    at('/pos/billing');
+    storeSession(asha());
+    lastInput(20);
+    renderProvider();
+
+    expect(await screen.findByText('signed in as Asha Rao')).toBeInTheDocument();
+    await act(() => Promise.resolve());
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(authApi.logout).not.toHaveBeenCalled();
   });
 });

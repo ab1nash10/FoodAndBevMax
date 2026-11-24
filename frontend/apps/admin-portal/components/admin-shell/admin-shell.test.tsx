@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ApiModule from '@/lib/api';
 import type * as LocationModule from '@/components/location-context';
@@ -97,6 +97,15 @@ describe('the portal shell', () => {
     expect(pills.getByRole('link', { current: 'page' })).toHaveTextContent('Item & menu');
   });
 
+  it('gives a steward’s phone screen the whole phone: no top bar', () => {
+    signedIn(['ORDER_DELIVER'], ['Delivery Operator']);
+    at('/deliveries');
+    renderShell();
+
+    expect(screen.getByRole('heading', { name: 'Items page' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Modules' })).toBeNull();
+  });
+
   it('answers a menu click at once: the page gives way to the loading shape', () => {
     // A module or page link whose page has not arrived yet (dev mode, or not prefetched).
     linkStatus.pending = true;
@@ -148,6 +157,19 @@ describe('the portal shell', () => {
     renderShell();
 
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/auth/login'));
+    expect(screen.queryByRole('heading', { name: 'Items page' })).not.toBeInTheDocument();
+  });
+
+  it('leaves an ended session to the sign-in redirect that says why (8 idle hours)', async () => {
+    override.auth = {
+      currentUser: null,
+      isAuthenticated: false,
+      sessionNotice: 'You were signed out after 8 hours without activity. Please login again.',
+    };
+    renderShell();
+
+    await act(() => Promise.resolve());
+    expect(router.replace).not.toHaveBeenCalledWith('/auth/login');
     expect(screen.queryByRole('heading', { name: 'Items page' })).not.toBeInTheDocument();
   });
 

@@ -14,6 +14,7 @@ import { authApi, refreshStoredSession, setApiSessionExpiredHandler, userApi } f
 import { isServiceUnavailable, serviceRetries, serviceRetryDelay } from '@/lib/query-client';
 import { isAccessTokenExpired, sessionUserFromAccessToken, type SessionUser } from '@/lib/session';
 import { watchSession } from '@/lib/session-watch';
+import { idleTooLong, LAST_ACTIVITY_KEY, watchIdle } from '@/lib/idle-sign-out';
 import { useQueryClient } from '@tanstack/react-query';
 import { LogIn } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -23,9 +24,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
+
+/** The POS till stays signed in however long it sits idle (the user, 2026-11-23). */
+const isPosScreen = (path: string) => path === '/pos' || path.startsWith('/pos/');
+const IDLE_NOTICE = 'You were signed out after 8 hours without activity. Please login again.';
 
 interface AuthContextValue {
   accessToken: string | null;
@@ -62,15 +68,34 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   }, [queryClient]);
 
   const expireSession = useCallback(
-    (message = 'Your session has expired. Please login again.') => {
+    (message = 'Your session has expired. Please login again.', reason = 'session-expired') => {
       clearSessionState();
       setSessionNotice(message);
 
       if (!pathname.startsWith('/auth/login')) {
-        router.replace('/auth/login?reason=session-expired');
+        router.replace(`/auth/login?reason=${reason}`);
       }
     },
     [clearSessionState, pathname, router],
+  );
+
+  // Read by the idle checks, which outlive a render.
+  const onPosRef = useRef(isPosScreen(pathname));
+
+  useEffect(() => {
+    onPosRef.current = isPosScreen(pathname);
+  }, [pathname]);
+
+  // 8 hours without activity: end the session here and on the server.
+  const signOutIdle = useCallback(
+    (refreshToken: string | null) => {
+      if (refreshToken) {
+        void authApi.logout({ refreshToken }).catch(() => undefined);
+      }
+
+      expireSession(IDLE_NOTICE, 'idle');
+    },
+    [expireSession],
   );
 
   useEffect(() => {
@@ -88,6 +113,18 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       if (!storedAuth) {
         if (isMounted) {
           setAuth(null);
+          setIsReady(true);
+        }
+
+        return;
+      }
+
+      // Opened again after 8 idle hours (a closed browser, a computer that slept): sign out
+      // before anything shows or renews.
+      if (!onPosRef.current && idleTooLong(window.localStorage, Date.now())) {
+        signOutIdle(storedAuth.refreshToken);
+
+        if (isMounted) {
           setIsReady(true);
         }
 
@@ -177,7 +214,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     return () => {
       isMounted = false;
     };
-  }, [expireSession]);
+  }, [expireSession, signOutIdle]);
 
   useEffect(() => {
     function syncAuthFromStorage() {
@@ -217,10 +254,22 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     return watchSession(() => void userApi.getMyAccess().catch(() => undefined));
   }, [isSignedIn]);
 
+  useEffect(() => {
+    if (!isSignedIn) {
+      return undefined;
+    }
+
+    return watchIdle(() => signOutIdle(getStoredRefreshToken()), {
+      isExempt: () => onPosRef.current,
+    });
+  }, [isSignedIn, signOutIdle]);
+
   const signIn = useCallback(
     (tokens: AuthTokens) => {
       queryClient.clear();
       setSessionNotice(null);
+      // Signing in is activity: an hours-old time left behind must not sign them straight out.
+      window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
       setAuth(saveStoredAuth(tokens));
     },
     [queryClient],

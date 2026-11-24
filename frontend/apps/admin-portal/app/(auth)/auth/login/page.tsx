@@ -92,14 +92,17 @@ export default function LoginPage() {
         : new URLSearchParams(window.location.search).get('reason');
 
     // However the ended session got here: by the expiry redirect, or by a page's own sign-in check.
-    if (hasShownSessionNotice || (reason !== 'session-expired' && !sessionNotice)) {
+    const idle = reason === 'idle';
+
+    if (hasShownSessionNotice || (reason !== 'session-expired' && !idle && !sessionNotice)) {
       return;
     }
 
     showToast({
       // One browser at a time: signing in elsewhere ends this browser's session too.
-      description:
-        'You signed in on another browser, or your session ran out. Please login again to continue.',
+      description: idle
+        ? 'You were signed out after 8 hours without activity. Please login again to continue.'
+        : 'You signed in on another browser, or your session ran out. Please login again to continue.',
       title: 'Signed out',
       variant: 'info',
     });

@@ -70,7 +70,8 @@ function trackHeaderHeight(header: HTMLElement | null) {
 }
 
 export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
-  const { currentUser, hasPermission, isAuthenticated, isReady, logout, roles } = useAuth();
+  const { currentUser, hasPermission, isAuthenticated, isReady, logout, roles, sessionNotice } =
+    useAuth();
   const { isLoadingLocations, locationsFailed, retryLocations } = useLocationContext();
   useApplyThemePreference();
   usePhoneCardLabels();
@@ -106,11 +107,13 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   // Where a swipe on the phone menu began; a swipe left of 60px closes it.
   const swipeStartX = useRef<number | null>(null);
 
+  // A session that just ended (sessionNotice) is already on its way to sign-in with the reason
+  // in the address (8 idle hours, expired); a second redirect here would drop that reason.
   useEffect(() => {
-    if (isReady && !isAuthenticated) {
+    if (isReady && !isAuthenticated && !sessionNotice) {
       router.replace('/auth/login');
     }
-  }, [isAuthenticated, isReady, router]);
+  }, [isAuthenticated, isReady, router, sessionNotice]);
 
   // A page the user's permissions do not cover (typed, bookmarked or linked from elsewhere)
   // goes to /forbidden before it mounts, so it never shows its chrome or fires refused requests.
@@ -146,6 +149,11 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   // for it rather than for every location.
   if (!isReady || !isAuthenticated || !isPermitted || isLoadingLocations) {
     return <LoadingShell onRetry={locationsFailed ? retryLocations : undefined} />;
+  }
+
+  // A steward's phone screen fills the phone with its own header: no top bar, menus or tabs.
+  if (pathname === '/deliveries') {
+    return <main id="main-content">{children}</main>;
   }
 
   const displayName = currentUser?.name ?? currentUser?.email ?? currentUser?.mobile ?? 'F&B User';
