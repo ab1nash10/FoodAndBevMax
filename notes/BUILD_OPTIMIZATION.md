@@ -124,7 +124,7 @@ The Jenkinsfile's total is the portal running in parallel with the backend set, 
   compile). The warm Jenkinsfile set is 38.8 s, against 71.7 s at the baseline. This run's
   cold numbers include a 56 s download for an install that took 24 s in iteration 1.
 
-### Iteration 4 (measured, not applied): production-only dependencies in the backend images
+### Iteration 4 (measured, not applied; applied in iteration 5): production-only dependencies in the backend images
 
 - **What it would save:** in the image, `node_modules` is 663 MB. A production-only reinstall
   from the build stage's local pnpm store (offline, about 2 s) brings it to 441 MB, taking
@@ -145,6 +145,47 @@ The Jenkinsfile's total is the portal running in parallel with the backend set, 
 - **If you want it:** apply it to the single-service images first (the Helm chart runs
   migrations from the separate `migrate` image, which keeps the full set), then to
   `SERVICE=all` once `prisma` and `tsx` are dependencies.
+
+### Iteration 5 (2026-11-24): smaller images, nothing else changed
+
+| Image                                             | Before   | After                       |
+| ------------------------------------------------- | -------- | --------------------------- |
+| Backend `SERVICE=all` (FANDB-API), single service | 1,185 MB | **871 MB** (−314 MB, −27 %) |
+| Portal (FANDB-UI)                                 | 346 MB   | **319 MB** (−27 MB)         |
+| `migrate`                                         | 1,190 MB | unchanged, on purpose       |
+
+Backend build on a fresh `node:24-alpine`, default builder: first build 234 → 170 s, after a
+code change 92 → 77 s, and the same 4 of 12 layers change per code change (within this
+machine's noise: not slower).
+
+- **Backend:** a `prod-deps` stage prunes the installer's `node_modules` to production
+  packages in place (offline, about 4 s, redone only when the lockfile changes) and the
+  runner copies the store from there. `prisma` and `tsx` moved to the root `dependencies`,
+  because `SERVICE=all` runs `prisma migrate deploy` and the seed at startup. `migrate` keeps
+  the full set.
+- **Portal:** the glibc builds of sharp (which cannot load on Alpine) are dropped from the
+  standalone output; image optimisation is off (`images.unoptimized`), the musl build stays.
+- **Portal healthcheck fixed:** Docker's HEALTHCHECK probed `/api/health` when
+  `NEXT_PUBLIC_BASE_PATH` was not passed, so every such image went unhealthy; it now defaults
+  to `/fandb` like `lib/base-path.ts`. Kubernetes uses its own probes, so the cluster never saw it.
+- **Gotchas:** `@aahar/auth` reaches `@nestjs/*`, `helmet` and the throttler through its
+  devDependency links (they are its peerDependencies), so the runner keeps each package's
+  links from the builder and swaps only the store underneath; taking production links per
+  package left 37 imports unresolved. `pnpm install --prod` runs the root `prepare` (husky,
+  a devDependency), so the stage drops it; `modules-cache-max-age=0` deletes pruned packages
+  instead of keeping them a week.
+- **Verified:** every bare import (722 in 372 files: the compiled services and packages, the
+  entrypoint, the seed, `prisma.config.mjs`) resolves the same in the old and new images.
+  `SERVICE=all` on an empty Postgres 16: migrations, seed, health 200 in 14 s (old image 18 s),
+  401 and 400 from protected and validated routes, Docker healthcheck healthy, uid 1000.
+  `migrate`: `db:deploy` and `db:seed` exit 0. Portal: health, sign-in and dashboard pages 200,
+  Docker healthcheck healthy. The devops fandb charts override no command or args; probes are HTTP.
+- **Trivy, HIGH/CRITICAL:** backend 14 → 13 (`vite` gone), portal 13 → 13, no criticals, none
+  in our own dependencies. All the rest are in `node:24-alpine`: npm's bundled brace-expansion,
+  ip-address, tar and undici, and Alpine's musl and zlib. A fresh pull of the same tag
+  (11 Nov 2026) leaves 6, all inside npm, which no container runs.
+- **Rollback:** revert the commit (both Dockerfiles, `package.json`, `pnpm-lock.yaml`) or
+  redeploy the previous image tag. No schema, data or chart change.
 
 ## Where the baseline time goes
 
@@ -198,4 +239,11 @@ The Jenkinsfile's total is the portal running in parallel with the backend set, 
 - **Next's type check during `next build`** (about 14 s of the portal build) stays: it may be
   the only type check the platform's FANDB-UI job runs. The shared packages' compile before
   it is about 5 s and stays for the reason given in the Dockerfile.
-- **Production-only dependencies:** see iteration 4.
+- **Production-only dependencies:** applied in iteration 5.
+- **`--pull` on the builds:** `docker build` reuses whatever `node:24-alpine` the agent cached;
+  `--pull` takes the latest patch (13 → 6 scanner findings in Nov 2026). It is a Jenkins job
+  change, and it moves Node's patch version when Docker Hub updates the tag.
+- **Removing npm from the runtime images:** no size gain (it sits in the base layer) and it
+  only clears the 6 npm findings; `npx` in a pod for manual Prisma fixes would stop working.
+- **tini:** node is PID 1 and handles SIGTERM. The seed leaves one exited `esbuild` process
+  that nothing reaps, in the old image too; harmless.

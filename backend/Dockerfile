@@ -67,6 +67,23 @@ FROM base AS installer
 COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
+# ---- production dependencies ----------------------------------------------------------
+# What the runtime image carries. The installer's node_modules also holds the toolchain
+# (turbo, TypeScript, the Nest CLI, SWC, esbuild, rolldown, ESLint, Vitest, Prettier...),
+# a third of node_modules that nothing runs. Pruned in place from the installer (offline,
+# about 4 s), so this stage is redone only when a manifest or the lockfile changes, never
+# on a code change. prisma and tsx are root dependencies, not devDependencies, because
+# SERVICE=all runs `prisma migrate deploy` and the seed itself. The root `prepare` script
+# runs husky, a devDependency, so it is dropped first; modules-cache-max-age=0 deletes the
+# pruned packages instead of keeping them for a week.
+FROM installer AS prod-deps
+RUN npm pkg delete scripts.prepare \
+ && pnpm install --frozen-lockfile --prod --offline \
+      --config.confirmModulesPurge=false --config.modules-cache-max-age=0
+COPY --from=pruner /app/prisma ./prisma
+COPY --from=pruner /app/prisma.config.mjs ./prisma.config.mjs
+RUN pnpm exec prisma generate --schema prisma/schema.prisma
+
 # ---- build ----------------------------------------------------------------------------
 FROM installer AS builder
 # turbo prune only carries workspace packages. These live at the repository root: every
@@ -118,7 +135,12 @@ ENV NODE_ENV=production
 # The workspace layout is preserved on purpose. pnpm resolves a package's dependencies
 # through its own node_modules, which symlinks into the root store, so flattening the
 # service into / would break every runtime import.
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+# The store holds production packages only (prod-deps); it changes only with the lockfile,
+# so a code change does not resend it. Each package keeps the builder's own links, so
+# @aahar/auth still reaches @nestjs/* through its devDependency links (they are its peers)
+# and loads the very copy the services load. Links to dev-only tools point at nothing, and
+# nothing loads them.
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/backend/packages ./backend/packages
 # All three compiled services come along, a few MB, so this layer is shared by every backend
 # image; SERVICE (below) decides which one runs.

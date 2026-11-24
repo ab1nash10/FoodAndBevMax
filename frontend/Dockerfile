@@ -71,6 +71,11 @@ ENV NEXT_PUBLIC_ORGANIZATION_API_URL=$NEXT_PUBLIC_ORGANIZATION_API_URL
 # `-r` builds the workspace packages in dependency order before the portal, so nothing
 # relies on build output that happened to exist on a developer's machine.
 RUN pnpm -r build
+# The standalone output traces both of sharp's native builds. The glibc ones (18 MB) cannot
+# load on Alpine's musl, so they never run; the musl ones stay. (Image optimisation is off
+# anyway: images.unoptimized in next.config.ts.)
+RUN rm -rf frontend/apps/admin-portal/.next/standalone/node_modules/.pnpm/@img+sharp-libvips-linux-x64@* \
+           frontend/apps/admin-portal/.next/standalone/node_modules/.pnpm/@img+sharp-linux-x64@*
 
 # ---- runtime --------------------------------------------------------------------------
 FROM base AS runner
@@ -92,10 +97,12 @@ EXPOSE 3000
 
 # basePath is baked into the bundle at build time, so it is carried into the runtime stage
 # for the check: with /fandb the portal answers at /fandb/api/health, not /api/health.
+# Unset means /fandb, as in lib/base-path.ts; the check used to fall back to no prefix and
+# so failed on every image built without the build arg (Kubernetes uses its own probes).
 ARG NEXT_PUBLIC_BASE_PATH
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
-  CMD node -e "const b=(process.env.NEXT_PUBLIC_BASE_PATH||'').replace(/\/+$/,'');fetch('http://127.0.0.1:3000'+b+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "const b=(process.env.NEXT_PUBLIC_BASE_PATH||'/fandb').replace(/\/+$/,'');fetch('http://127.0.0.1:3000'+b+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "frontend/apps/admin-portal/server.js"]
