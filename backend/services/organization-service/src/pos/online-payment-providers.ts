@@ -1,6 +1,7 @@
 import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { OnlinePaymentProvider, Prisma } from '@prisma/client';
+import { openField } from '../common/field-crypto';
 
 /** A payment page the guest opens from the till's QR, and the provider's id for it. */
 export interface ProviderLink {
@@ -394,7 +395,7 @@ export async function findCardMachine(
       imei: machine.pinelabImei?.trim() ?? '',
       merchantId: machine.pinelabMerchantId?.trim() ?? '',
       merchantStorePosCode: machine.pinelabMerchantStorePosCode?.trim() ?? '',
-      securityToken: machine.pinelabSecurityToken?.trim() ?? '',
+      securityToken: openField(machine.pinelabSecurityToken)?.trim() ?? '',
     };
 
     if (Object.values(details).every(Boolean)) {
@@ -434,7 +435,7 @@ export function locationProviders(config: ConfigService, location: LocationPayme
   };
 
   if (location.onlinePaymentOption === 'RAZORPAY') {
-    const [keyId, keySecret] = own(location.razorpayKeyId, location.razorpayKeySecret);
+    const [keyId, keySecret] = own(location.razorpayKeyId, openField(location.razorpayKeySecret));
     const provider =
       keyId && keySecret
         ? once(`RAZORPAY:${keyId}:${keySecret}`, () => razorpay(keyId, keySecret))
@@ -445,7 +446,7 @@ export function locationProviders(config: ConfigService, location: LocationPayme
   if (location.onlinePaymentOption === 'PAYU') {
     const [clientId, clientSecret, merchantId] = own(
       location.payuClientId,
-      location.payuClientSecret,
+      openField(location.payuClientSecret),
       location.payuMerchantId,
     );
     const endpoints = { baseUrl: value('PAYU_BASE_URL'), tokenUrl: value('PAYU_TOKEN_URL') };

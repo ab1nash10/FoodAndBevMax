@@ -11,6 +11,9 @@ overrides:
   mysql2@3: ^3.23.1
   multer@2: ^2.5.0
   qs@6: ^6.16.1
+  # @prisma/config pins these; drop both once prisma ships effect >=3.22.1 (GHSA-7589-6fvf-x4pw).
+  deepmerge-ts@7: ^8.0.2
+  effect@3: ^3.22.2
 
 allowBuilds:
   '@prisma/client': true

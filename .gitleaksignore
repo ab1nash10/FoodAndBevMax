@@ -1,0 +1,4 @@
+# Reviewed false positives (gitleaks git): a test-only ERP secret and REPLACE_ME placeholders.
+ccc52fb4c78db8e56039ddbf315ace2183b1da61:backend/services/organization-service/src/erp-grns/erp-grns.int.spec.ts:generic-api-key:18
+d67f0551794102405edc749019c0fc0cdf7a9ac2:infra/k8s/11-secret.yaml:generic-api-key:47
+fbd0977597e50eb8d43b2d93be6de2d846df3294:infra/k8s/11-secret.yaml:generic-api-key:47

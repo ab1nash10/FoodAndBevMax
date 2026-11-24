@@ -4,6 +4,7 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
 import { handlePrismaError } from '../common/prisma-errors';
 import type { ActorContext } from '../common/request-context';
+import { openField, sealField } from '../common/field-crypto';
 import { maskSecret } from '../common/values';
 import { CreatePaymentMachineDto } from './dto/create-payment-machine.dto';
 import { ListPaymentMachinesQueryDto } from './dto/list-payment-machines-query.dto';
@@ -34,7 +35,7 @@ function toPaymentMachineResponse(paymentMachine: PaymentMachineWithRelations) {
     pinelabImei: paymentMachine.pinelabImei,
     pinelabMerchantId: paymentMachine.pinelabMerchantId,
     pinelabMerchantStorePosCode: paymentMachine.pinelabMerchantStorePosCode,
-    pinelabSecurityToken: maskSecret(paymentMachine.pinelabSecurityToken),
+    pinelabSecurityToken: maskSecret(openField(paymentMachine.pinelabSecurityToken)),
     posDevice: {
       code: paymentMachine.posDevice.code,
       id: paymentMachine.posDevice.id,
@@ -127,8 +128,7 @@ export class PaymentMachinesService {
             pinelabImei: dto.pinelabImei,
             pinelabMerchantId: dto.pinelabMerchantId,
             pinelabMerchantStorePosCode: dto.pinelabMerchantStorePosCode,
-            // Local dev configuration only; production should move this to Key Vault/encrypted storage.
-            pinelabSecurityToken: dto.pinelabSecurityToken,
+            pinelabSecurityToken: sealField(dto.pinelabSecurityToken),
             posDeviceId: dto.posDeviceId,
             primaryUpi: dto.primaryUpi,
             serialNumber: dto.serialNumber,
@@ -212,7 +212,7 @@ export class PaymentMachinesService {
         }
 
         if (dto.pinelabSecurityToken !== undefined) {
-          data.pinelabSecurityToken = dto.pinelabSecurityToken;
+          data.pinelabSecurityToken = sealField(dto.pinelabSecurityToken);
         }
 
         if (dto.posDeviceId !== undefined) {

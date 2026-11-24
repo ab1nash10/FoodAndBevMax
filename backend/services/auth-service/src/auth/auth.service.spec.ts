@@ -119,7 +119,7 @@ function authService(env: Record<string, unknown> = { NODE_ENV: 'test' }) {
     },
   };
   const otp = new OtpService(
-    new ConfigService(env),
+    new ConfigService({ JWT_ACCESS_SECRET: 'test-access-secret', ...env }),
     mail as unknown as MailService,
     redis as unknown as RedisService,
     sms as unknown as SmsService,

@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { assertPosEntitiesMatch } from '../common/pos-entity-guard';
 import { getOrderBy, getPageMeta, getPagination } from '../common/pagination';
+import { sealField } from '../common/field-crypto';
 import { handlePrismaError } from '../common/prisma-errors';
 import { assertMayChangeLegalEntity, type ActorContext } from '../common/request-context';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
@@ -140,7 +141,7 @@ export class RestaurantsService {
           {
             address: dto.address,
             b2cQrEnabled: dto.b2cQrEnabled ?? false,
-            accountNumber: dto.accountNumber,
+            accountNumber: sealField(dto.accountNumber),
             atTableDining: dto.isAtTableDiningEnabled ?? dto.atTableDining ?? false,
             bankBranch: dto.bankBranch,
             bankName: dto.bankNameBranch ?? dto.bankName,
@@ -272,7 +273,7 @@ export class RestaurantsService {
           await this.assertActiveKitchens(requestedKitchenIds, hospitalId, tx);
         }
 
-        if (dto.accountNumber !== undefined) data.accountNumber = dto.accountNumber;
+        if (dto.accountNumber !== undefined) data.accountNumber = sealField(dto.accountNumber);
         if (dto.address !== undefined) data.address = dto.address;
         if (dto.isAtTableDiningEnabled !== undefined || dto.atTableDining !== undefined) {
           data.atTableDining = dto.isAtTableDiningEnabled ?? dto.atTableDining;

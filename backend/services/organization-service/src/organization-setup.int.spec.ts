@@ -839,13 +839,13 @@ describe.skipIf(!databaseUrl)(
       });
       expect(shape(created.body)).toMatchSnapshot('payment machine');
       const first = idOf(created.data);
-      // ...but it is stored as sent (the DTO notes production should move it to a vault).
-      expect(
-        await h.rawQuery(
-          `SELECT pinelab_security_token AS token FROM payment_machines WHERE id = $1::uuid`,
-          first,
-        ),
-      ).toEqual([{ token: 'secret-token-1234' }]);
+      // ...and the database holds it sealed, never as sent.
+      const [stored] = await h.rawQuery<{ token: string }>(
+        `SELECT pinelab_security_token AS token FROM payment_machines WHERE id = $1::uuid`,
+        first,
+      );
+      expect(stored?.token).toMatch(/^enc:v1:/);
+      expect(stored?.token).not.toContain('secret-token-1234');
 
       // A second default takes over: the first one is demoted. Names need not be unique.
       const second = idOf(await h.ok('POST', '/payment-machines', body));

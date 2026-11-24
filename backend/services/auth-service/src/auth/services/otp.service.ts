@@ -1,4 +1,4 @@
-import { randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import {
   BadRequestException,
   HttpException,
@@ -114,7 +114,7 @@ export class OtpService {
     const otp = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const ttlSeconds = this.config.get<number>('OTP_TTL_SECONDS') ?? 300;
 
-    await this.redis.setWithExpiry(this.getOtpKey(target), otp, ttlSeconds);
+    await this.redis.setWithExpiry(this.getOtpKey(target), this.hashCode(target, otp), ttlSeconds);
     await this.redis.delete(this.getAttemptsKey(target));
 
     if (this.canDeliver(target)) {
@@ -173,7 +173,7 @@ export class OtpService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    if (!otpMatches(storedOtp, input.otp)) {
+    if (!otpMatches(storedOtp, this.hashCode(target, input.otp))) {
       if (attempts >= MAX_FAILED_ATTEMPTS) await this.burnCode(target, attempts);
       throw new UnauthorizedException('Invalid or expired OTP');
     }
@@ -201,6 +201,16 @@ export class OtpService {
       },
       'otp_lockout',
     );
+  }
+
+  /**
+   * Redis keeps this, never the code. Keyed with the server secret: a plain hash of a 6-digit
+   * code is reversed by trying all million, so reading Redis must not be enough.
+   */
+  private hashCode(target: OtpTarget, code: string): string {
+    return createHmac('sha256', this.config.getOrThrow<string>('JWT_ACCESS_SECRET'))
+      .update(`otp:${target.channel}:${target.value}:${code}`)
+      .digest('hex');
   }
 
   private getCooldownKey(target: OtpTarget): string {

@@ -12,6 +12,8 @@ import { superAdminForRun } from './super-admin-for-run.js';
 export type Body = Record<string, unknown>;
 
 export const databaseUrl = process.env.DATABASE_URL_TEST;
+// Every suite runs with secrets sealed at rest, as production does (a fixed, test-only key).
+process.env.FIELD_ENCRYPTION_KEY ||= 'dGVzdC1vbmx5LWZpZWxkLWVuY3J5cHRpb24ta2V5ISE='; // gitleaks:allow
 // Two random characters on the clock: suites start in parallel and can share a millisecond.
 export const run = Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
 export const day = (offset: number) =>

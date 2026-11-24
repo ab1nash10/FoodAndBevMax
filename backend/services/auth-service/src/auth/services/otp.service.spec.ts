@@ -92,7 +92,7 @@ function otpService(
   };
   const { entries, redis } = fakeRedis();
   const service = new OtpService(
-    new ConfigService(env),
+    new ConfigService({ JWT_ACCESS_SECRET: 'test-access-secret', ...env }),
     mail as unknown as MailService,
     redis as unknown as RedisService,
     sms as unknown as SmsService,
@@ -127,6 +127,23 @@ test('a mobile number gets its code by SMS, an email by mail, and mobile wins wh
   assert.equal(mailSent[0]?.email, 'asha@max.in');
   assert.match(mailSent[0]?.otp ?? '', /^\d{6}$/);
   assert.equal(mailSent[0]?.minutes, 10, 'the mail states how long the code lasts');
+});
+
+test('Redis holds only a keyed hash of the code: reading it does not give the code away', async () => {
+  const { entries, service, smsSent } = otpService();
+  await service.send({ channel: 'mobile', value: '9876543210' });
+  const code = smsSent[0]?.otp ?? '';
+  const stored = entries.get('auth:otp:mobile:9876543210')?.value ?? '';
+  const { createHash } = await import('node:crypto');
+
+  assert.match(stored, /^[0-9a-f]{64}$/);
+  assert.notEqual(stored, code);
+  // A plain hash of a 6-digit code is reversed by trying all million of them.
+  assert.notEqual(stored, createHash('sha256').update(code).digest('hex'));
+  assert.deepEqual(await service.verify({ mobile: '9876543210', otp: code }), {
+    channel: 'mobile',
+    value: '9876543210',
+  });
 });
 
 test('the right code signs in exactly once; a wrong one does not', async () => {

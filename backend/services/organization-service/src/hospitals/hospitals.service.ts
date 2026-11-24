@@ -17,6 +17,7 @@ import { HospitalSortField, ListHospitalsQueryDto } from './dto/list-hospitals-q
 import { UpdateHospitalDto } from './dto/update-hospital.dto';
 import { HospitalsRepository } from './hospitals.repository';
 import { assertActiveLegalEntity } from '../legal-entities/legal-entity-guards';
+import { openField, sealField } from '../common/field-crypto';
 import { maskSecret, optionalText } from '../common/values';
 
 type HospitalClient = Prisma.TransactionClient;
@@ -47,11 +48,11 @@ function toHospitalResponse(hospital: Hospital) {
     longitude: hospital.longitude,
     onlinePaymentOption: hospital.onlinePaymentOption,
     payuClientId: hospital.payuClientId,
-    payuClientSecret: maskSecret(hospital.payuClientSecret),
+    payuClientSecret: maskSecret(openField(hospital.payuClientSecret)),
     payuMerchantId: hospital.payuMerchantId,
     postalCode: hospital.postalCode,
     razorpayKeyId: hospital.razorpayKeyId,
-    razorpayKeySecret: maskSecret(hospital.razorpayKeySecret),
+    razorpayKeySecret: maskSecret(openField(hospital.razorpayKeySecret)),
     state: hospital.state,
     title,
     visitingCardAddress: hospital.visitingCardAddress,
@@ -72,7 +73,11 @@ function paymentKeys(dto: Partial<Pick<CreateHospitalDto, (typeof paymentKeyFiel
   return Object.fromEntries(
     paymentKeyFields
       .filter((field) => dto[field] !== undefined)
-      .map((field) => [field, optionalText(dto[field]) ?? null]),
+      .map((field) => {
+        const value = optionalText(dto[field]) ?? null;
+
+        return [field, field.endsWith('Secret') ? sealField(value) : value];
+      }),
   );
 }
 

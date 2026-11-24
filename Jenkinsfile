@@ -91,6 +91,8 @@ pipeline {
         sh '''
           corepack enable
           pnpm install --frozen-lockfile
+          # Known high or critical advisories in what ships fail the build.
+          pnpm audit --prod --audit-level=high
           pnpm db:generate
           pnpm typecheck
           pnpm lint
@@ -221,7 +223,8 @@ pipeline {
           // REDIS_URL is optional: set it on the job (an environment variable, or a credential
           // bound under that name) to point the services at ElastiCache. Empty keeps each pod's
           // in-memory store, which needs one replica per service. infra/aws/README.md creates the
-          // cache and the aahar-redis-url credential to bind above.
+          // cache and the aahar-redis-url credential to bind above. FIELD_ENCRYPTION_KEY works the
+          // same way (openssl rand -base64 32); empty leaves gateway secrets unencrypted.
           sh '''
             aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
@@ -247,6 +250,7 @@ config:
     SMS_USERNAME: $(yq "$SMS_USERNAME")
     SMS_PASSWORD: $(yq "$SMS_PASSWORD")
     REDIS_URL: $(yq "${REDIS_URL:-}")
+    FIELD_ENCRYPTION_KEY: $(yq "${FIELD_ENCRYPTION_KEY:-}")
 EOF
 
             helm upgrade --install "$HELM_RELEASE" infra/helm/fandb $ENV_VALUES \

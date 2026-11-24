@@ -1,10 +1,11 @@
+import { openField } from '../common/field-crypto';
 import type { RestaurantWithRelations } from './restaurants.repository';
 
 export function toRestaurantResponse(restaurant: RestaurantWithRelations) {
   return {
     address: restaurant.address,
     b2cQrEnabled: restaurant.b2cQrEnabled,
-    accountNumber: restaurant.accountNumber,
+    accountNumber: openField(restaurant.accountNumber),
     atTableDining: restaurant.atTableDining,
     bankBranch: restaurant.bankBranch,
     bankName: restaurant.bankName,

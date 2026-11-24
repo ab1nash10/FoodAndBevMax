@@ -1,1 +1,5 @@
+# Refuse a commit that adds a key, token or password. A false alarm: add `gitleaks:allow` at the
+# end of that line, or its fingerprint to .gitleaksignore.
+command -v gitleaks >/dev/null 2>&1 || { echo "pre-commit: gitleaks is not installed (winget install Gitleaks.Gitleaks)"; exit 1; }
+gitleaks git --staged --redact --no-banner --log-level warn . || exit 1
 pnpm exec lint-staged

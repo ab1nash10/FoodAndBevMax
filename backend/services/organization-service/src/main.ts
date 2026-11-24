@@ -6,6 +6,8 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { encryptStoredSecrets } from './common/field-crypto';
+import { PrismaService } from './common/prisma/prisma.service';
 import { isImport, isJson } from './body-limits';
 
 // Payment providers are called over HTTPS. Trust the computer's own certificate store too, not only
@@ -41,6 +43,8 @@ async function bootstrap() {
     swaggerTitle: 'AAHAR Organization Service',
   });
 
+  // Secrets saved before FIELD_ENCRYPTION_KEY was set are sealed before any request reads them.
+  await encryptStoredSecrets(app.get(PrismaService));
   await (host ? app.listen(port, host) : app.listen(port));
 }
 

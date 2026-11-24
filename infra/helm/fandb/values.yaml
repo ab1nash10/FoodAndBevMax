@@ -48,6 +48,10 @@ config:
     DATABASE_URL: ''
     JWT_ACCESS_SECRET: ''
     JWT_REFRESH_SECRET: ''
+    # Seals gateway secrets and bank account numbers in the database (organization service):
+    # 32 bytes, base64 (openssl rand -base64 32). Keep a copy: without it those values must be
+    # entered again. Empty: they stay in plain text and the service logs field_encryption_off.
+    FIELD_ENCRYPTION_KEY: ''
     # Airtel IQ login: SMS_USERNAME is the customer ID. Left empty, mobile OTP sign-in is
     # refused; email OTP sign-in is unaffected.
     SMS_USERNAME: ''
