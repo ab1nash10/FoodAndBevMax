@@ -649,7 +649,9 @@ export function Modal({
         </div>
         <div
           className={cn(
-            'overflow-y-auto',
+            // relative: anything positioned inside (a label's hidden " (required)") is clipped
+            // here; placed by the dialog, it hung below it and the backdrop scrolled the title away.
+            'relative overflow-y-auto',
             // min-h-0: in the sheet, which sizes to its content, the body shrinks and scrolls.
             side
               ? 'min-h-0 flex-1 px-6 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]'
