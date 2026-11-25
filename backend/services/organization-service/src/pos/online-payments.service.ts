@@ -16,6 +16,7 @@ import {
   type PaymentProvider,
 } from './online-payment-providers';
 import { PosService } from './pos.service';
+import { confirmStaffDiscount } from './staff-discount-confirm';
 
 function toView(payment: OnlinePayment) {
   return {
@@ -101,7 +102,20 @@ export class OnlinePaymentsService {
       );
     }
 
-    const { grandTotal } = await this.pos.quoteBill(counter, dto);
+    const { discountTotal, grandTotal } = await this.pos.quoteBill(counter, dto);
+
+    // Checked, not used up: the bill made once it is paid uses it (PosService.billOrder).
+    if (discountTotal > 0 && context.actorId && dto.employeeCode) {
+      await confirmStaffDiscount(
+        this.prisma,
+        {
+          employeeCode: dto.employeeCode.trim(),
+          restaurantId: counter.restaurantId,
+          token: dto.employeeToken,
+        },
+        false,
+      );
+    }
 
     if (grandTotal <= 0) {
       throw new BadRequestException('There is nothing to pay on this bill.');

@@ -515,7 +515,7 @@ export class KitchenProductionsService {
     }
 
     if (chefUserId) {
-      const chef = await this.productions.findActiveChef(chefUserId, client);
+      const chef = await this.productions.findActiveChef(chefUserId, hospitalId, client);
 
       if (!chef) {
         throw new BadRequestException('Chef user not found or inactive');

@@ -8,6 +8,7 @@
 // Runs only with DATABASE_URL_TEST: a migrated and seeded database it may write to.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dateLabel } from './reports/report-builders.js';
+import { staffToken } from './testing/staff-token';
 import {
   databaseUrl,
   day,
@@ -276,7 +277,15 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
     await bill('upi', [B(3)], { paymentMode: 'UPI' }); // 60
     await bill('online', [B(1)], { onlinePaymentId: online!.id, paymentMode: 'UPI' }); // 20
     // 100 - 10% = 90, + 4.50 GST = 94.50, rounded to 95.
-    await bill('staff', [A(1)], { employeeCode: `RE${run}`, paymentMode: 'CASH' });
+    await bill('staff', [A(1)], {
+      employeeCode: `RE${run}`,
+      employeeToken: await staffToken(
+        (sql, ...values) => h.rawQuery(sql, ...values),
+        `RE${run}`,
+        fx.restaurantId,
+      ),
+      paymentMode: 'CASH',
+    });
     await bill('comp', [A(1)], { complimentaryReason: 'Duty doctor', isComplimentary: true });
     await bill('room', [B(1)], {
       bedNumber: 'B2',

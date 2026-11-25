@@ -27,7 +27,7 @@ type StoredProduction = {
 };
 
 // Location h1 has kitchens k1 and k2, h2 has k9. Thali and Dal are READYMADE and mapped to k1;
-// only Thali is mapped to k2. Chef u1 is active.
+// only Thali is mapped to k2. Chef u1 is active at h1; u3 is active, but at h2 only.
 function setup(productions: StoredProduction[] = []) {
   const balances = new Map<string, number>();
   const ledger: Array<Record<string, unknown>> = [];
@@ -53,7 +53,10 @@ function setup(productions: StoredProduction[] = []) {
       return Promise.resolve();
     },
     findActiveById: (id: string) => Promise.resolve(find(id) ?? null),
-    findActiveChef: (id: string) => Promise.resolve(id === 'u1' ? { id } : null),
+    findActiveChef: (id: string, hospitalId: string) =>
+      Promise.resolve(
+        ({ u1: 'h1', u3: 'h2' } as Record<string, string>)[id] === hospitalId ? { id } : null,
+      ),
     findActiveHospital: (id: string) => Promise.resolve({ id, isActive: true }),
     findActiveKitchen: (id: string) => Promise.resolve(kitchens[id] ?? null),
     findActiveKitchenMappings: (kitchenId: string, itemIds: string[]) =>
@@ -191,7 +194,7 @@ test("only items mapped to the production's kitchen can be produced there", asyn
   );
 });
 
-test("the kitchen belongs to the production's location, and a named chef must be active", async () => {
+test("the kitchen belongs to the production's location, and a named chef is active there", async () => {
   const { productions, service } = setup();
   const line = [{ itemId: 'thali', producedQty: 5 }];
 
@@ -205,6 +208,11 @@ test("the kitchen belongs to the production's location, and a named chef must be
   );
   await assert.rejects(
     service.create(production(line, { chefUserId: 'u2' }), actor),
+    refusedWith(/^Chef user not found or inactive$/),
+  );
+  // Another location's user: refused, so their email and mobile never come back on the record.
+  await assert.rejects(
+    service.create(production(line, { chefUserId: 'u3' }), actor),
     refusedWith(/^Chef user not found or inactive$/),
   );
   assert.equal(productions.length, 0);

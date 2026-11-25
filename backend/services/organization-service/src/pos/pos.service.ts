@@ -44,6 +44,7 @@ import { findCardMachine, plutusBaseUrl, providersAt } from './online-payment-pr
 import { isOnSale, priceBill, sellableMenu, siteBusinessDate } from './pos-pricing';
 import { computerName } from './computer-name';
 import { countersWithTill, shiftStates, shiftsOn, tally, userNames } from './shifts';
+import { confirmStaffDiscount } from './staff-discount-confirm';
 
 type Client = Prisma.TransactionClient | PrismaService;
 
@@ -899,17 +900,30 @@ export class PosService {
     return (await this.quote(this.prisma, counter, dto, new Date())).totals;
   }
 
-  /** The paid online payment a bill is made with: this counter's, unused, for its total. */
+  /**
+   * The paid online payment a bill is made with: this counter's, unused, for its total. A guest's
+   * QR or kiosk payment goes only on that order's own bill (`qr-<id>`, made by QrOrdersService):
+   * otherwise a cashier knowing its id could book a cash sale of the same total as that UPI, keep
+   * the cash, and leave the guest's order (or the refund owed for it) unbilled.
+   */
   private async paidOnline(
     tx: Prisma.TransactionClient,
     counterId: string,
     id: string,
     grandTotal: number,
+    clientOrderId: string,
   ) {
-    const payment = await tx.onlinePayment.findFirst({ where: { counterId, id } });
+    const payment = await tx.onlinePayment.findFirst({
+      include: { qrOrder: { select: { id: true } } },
+      where: { counterId, id },
+    });
 
     if (!payment) {
       throw new NotFoundException('This payment was not found at this counter.');
+    }
+
+    if (payment.qrOrder && clientOrderId !== `qr-${payment.qrOrder.id}`) {
+      throw new ConflictException('This payment is for a guest’s QR order and pays only that.');
     }
 
     if (payment.status !== 'PAID') {
@@ -1007,8 +1021,18 @@ export class PosService {
       dto,
       now,
     );
+    // A person at a till proves the staff discount with the employee's code; QR and kiosk orders
+    // are billed with no actor, their guest's mobile having proved it.
+    if (staffDiscount > 0 && totals.discountTotal > 0 && context.actorId && employeeCode) {
+      await confirmStaffDiscount(
+        tx,
+        { employeeCode, restaurantId: counter.restaurantId, token: dto.employeeToken },
+        true,
+      );
+    }
+
     const online = dto.onlinePaymentId
-      ? await this.paidOnline(tx, counter.id, dto.onlinePaymentId, totals.grandTotal)
+      ? await this.paidOnline(tx, counter.id, dto.onlinePaymentId, totals.grandTotal, clientOrderId)
       : null;
 
     if (!online && !isComplimentary && totals.grandTotal > 0) {

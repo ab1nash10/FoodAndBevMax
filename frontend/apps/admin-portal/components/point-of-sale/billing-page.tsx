@@ -213,6 +213,13 @@ export function BillingPageClient() {
   const [customerMobile, setCustomerMobile] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [employeeCode, setEmployeeCode] = useState('');
+  const [staffProof, setStaffProof] = useState<{
+    employeeCode: string;
+    otpId: string;
+    sentTo: string;
+    token?: string;
+  } | null>(null);
+  const [staffCode, setStaffCode] = useState('');
   const [isComplimentary, setIsComplimentary] = useState(false);
   const [complimentaryReason, setComplimentaryReason] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
@@ -361,7 +368,28 @@ export function BillingPageClient() {
     retry: false,
   });
   const employee = employeeLookup && employeeLookup === employeeCode.trim() ? employeeQuery : null;
-  const staffDiscount = !isComplimentary ? (employee?.data?.discountPercent ?? 0) : 0;
+  const offeredDiscount = !isComplimentary ? (employee?.data?.discountPercent ?? 0) : 0;
+  // A typed ID proves nothing: the discount comes off once the employee reads out the code sent
+  // to their mobile. Typing another ID drops the confirmation.
+  const proof = staffProof?.employeeCode === employeeCode.trim() ? staffProof : null;
+  const staffDiscount = proof?.token ? offeredDiscount : 0;
+  const sendStaffCode = useMutation({
+    mutationFn: async (code: string) =>
+      (await organizationApi.sendStaffDiscountOtp(counter!.id, code)).data,
+    onSuccess: ({ otpId, sentTo }, code) => {
+      setStaffCode('');
+      confirmStaffCode.reset();
+      setStaffProof({ employeeCode: code, otpId, sentTo });
+    },
+  });
+  const confirmStaffCode = useMutation({
+    mutationFn: async ({ code, otpId }: { code: string; otpId: string }) =>
+      (await organizationApi.verifyStaffDiscountOtp(counter!.id, otpId, code)).data,
+    onSuccess: ({ employeeToken }, { otpId }) =>
+      setStaffProof((current) =>
+        current?.otpId === otpId ? { ...current, token: employeeToken } : current,
+      ),
+  });
 
   const totals = previewBill(
     cart.map((line) => ({
@@ -409,6 +437,9 @@ export function BillingPageClient() {
     employeeCode.trim() &&
       employee?.isError &&
       'The Employee ID matches no employee here. Correct it or clear it.',
+    offeredDiscount > 0 &&
+      !proof?.token &&
+      'Confirm the staff discount with the code sent to the employee’s mobile, or clear the Employee ID.',
     isComplimentary && !complimentaryReason.trim() && 'Say why the meal is complimentary.',
     // Not yet known whether a card machine or UPI gateway takes it: sent now, it would go as a
     // typed card/UPI bill, which the server refuses where the counter collects online.
@@ -427,6 +458,8 @@ export function BillingPageClient() {
     setCustomerMobile('');
     setCustomerName('');
     setEmployeeCode('');
+    setStaffProof(null);
+    setStaffCode('');
     setIsComplimentary(false);
     setComplimentaryReason('');
     setPaymentMode('CASH');
@@ -551,6 +584,7 @@ export function BillingPageClient() {
         customerMobile: customerMobile || undefined,
         customerName: customerName.trim() || undefined,
         employeeCode: employeeCode.trim() || undefined,
+        employeeToken: staffDiscount > 0 ? proof?.token : undefined,
         instructions: instructions.trim() || undefined,
         isComplimentary,
         lines: cart.map((line) => ({
@@ -584,7 +618,13 @@ export function BillingPageClient() {
 
     if (onlineVia) {
       // The bill is made once the guest has paid, with the provider's payment on it.
-      const { channel: billChannel, counterId, employeeCode: code, lines } = order.payload;
+      const {
+        channel: billChannel,
+        counterId,
+        employeeCode: code,
+        employeeToken,
+        lines,
+      } = order.payload;
       setOnlinePayment({
         ...order,
         request: {
@@ -594,6 +634,7 @@ export function BillingPageClient() {
           customerMobile: order.payload.customerMobile,
           customerName: order.payload.customerName,
           employeeCode: code,
+          employeeToken,
           lines,
           provider: onlineVia,
         },
@@ -1129,6 +1170,78 @@ export function BillingPageClient() {
             <p className="-mt-1.5 text-xs text-ds-status-bad-fg" role="alert">
               {getApiErrorMessage(employee.error)}
             </p>
+          ) : null}
+          {offeredDiscount > 0 && proof?.token ? (
+            <p className="-mt-1.5 text-xs font-semibold text-ds-status-ok-fg" role="status">
+              Staff discount confirmed.
+            </p>
+          ) : offeredDiscount > 0 ? (
+            <div className="-mt-1.5 space-y-1.5 text-xs text-ds-text-3">
+              {proof ? (
+                <>
+                  <p role="status">Code sent to {proof.sentTo}.</p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <Label htmlFor="pos-staff-code">Code from the employee</Label>
+                      <Input
+                        autoComplete="one-time-code"
+                        id="pos-staff-code"
+                        inputMode="numeric"
+                        maxLength={6}
+                        onChange={(event) => setStaffCode(event.target.value.replace(/\D/g, ''))}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter') return;
+                          event.preventDefault();
+                          if (staffCode.length === 6) {
+                            confirmStaffCode.mutate({ code: staffCode, otpId: proof.otpId });
+                          }
+                        }}
+                        value={staffCode}
+                      />
+                    </div>
+                    <Button
+                      disabled={staffCode.length !== 6 || confirmStaffCode.isPending}
+                      onClick={() =>
+                        confirmStaffCode.mutate({ code: staffCode, otpId: proof.otpId })
+                      }
+                      size="sm"
+                      type="button"
+                    >
+                      Confirm
+                    </Button>
+                    <Button
+                      disabled={sendStaffCode.isPending}
+                      onClick={() => sendStaffCode.mutate(employeeCode.trim())}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Send again
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>
+                    The discount comes off once the employee confirms a code sent to their mobile.
+                  </span>
+                  <Button
+                    disabled={sendStaffCode.isPending}
+                    onClick={() => sendStaffCode.mutate(employeeCode.trim())}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Send code
+                  </Button>
+                </div>
+              )}
+              {sendStaffCode.isError || confirmStaffCode.isError ? (
+                <p className="text-ds-status-bad-fg" role="alert">
+                  {getApiErrorMessage(sendStaffCode.error ?? confirmStaffCode.error)}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {isComplimentary ? null : (

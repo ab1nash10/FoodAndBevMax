@@ -13,6 +13,7 @@ import type { AuditLogService } from '../common/audit/audit-log.service';
 import type { PrismaService } from '../common/prisma/prisma.service';
 import type { CreatePosOrderDto } from './dto/pos.dto';
 import { PosService } from './pos.service';
+import { sha256, unconfirmedStaffDiscount } from './staff-discount-confirm';
 
 // Thursday 22 Oct 2026, 13:00 in India: the business day is the 22nd.
 beforeAll(() => {
@@ -126,6 +127,7 @@ function serviceWith(
   } = {},
 ) {
   const orders: Stored[] = [];
+  const staffTokens = new Set([sha256('t-e100')]);
   const ledger: Array<Record<string, unknown>> = [];
   const balances = options.balances ?? [];
   const payments = options.payments ?? [];
@@ -219,6 +221,13 @@ function serviceWith(
     },
     paymentMachine: {
       findMany: () => options.machines ?? [],
+    },
+    // One confirmed staff discount (the code E100 read out at the till), used up by one bill.
+    staffDiscountOtp: {
+      updateMany: ({ where }: { where: { tokenHash: string } }) => {
+        const count = Number(staffTokens.delete(where.tokenHash));
+        return { count };
+      },
     },
     onlinePayment: {
       findFirst: ({ where }: { where: { id: string } }) =>
@@ -486,19 +495,31 @@ test('once the counter’s day is closed, a bill goes on the next business day',
 
 test('an employee’s discount comes off discountable items only', async () => {
   const { lookups, orders, service } = serviceWith();
-
-  const made = await service.createOrder(
+  const staffBill = (clientOrderId: string, employeeToken?: string) =>
     bill({
+      clientOrderId,
       employeeCode: ' e100 ',
+      employeeToken,
       lines: [
         { menuId: 'samosa', quantity: 2 },
         { menuId: 'chai', quantity: 1 },
       ],
-    }),
-    cashier,
-  );
+    });
 
-  assert.deepEqual(lookups, ['e100']);
+  // At the till a typed ID is not enough: the employee's confirmed code is.
+  await assert.rejects(
+    service.createOrder(staffBill('unconfirmed'), cashier),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.message === unconfirmedStaffDiscount,
+  );
+  const made = await service.createOrder(staffBill('till-1', 't-e100'), cashier);
+
+  assert.deepEqual(lookups, ['e100', 'e100'], 'trimmed, once per bill');
+  // Used up: the same confirmation does not discount a second bill.
+  await assert.rejects(
+    service.createOrder(staffBill('till-2', 't-e100'), cashier),
+    BadRequestException,
+  );
   assert.equal(made.discountPercent, 10);
   assert.equal(made.discountTotal, 11.43);
   assert.deepEqual(
@@ -662,6 +683,37 @@ test('a bill paid online takes a paid, unused payment for exactly its total', as
   assert.equal(made.paymentMode, 'UPI');
   assert.equal(made.paymentReference, 'pay_good');
   assert.equal(payments[3]!.orderId, made.id);
+});
+
+test('a guest’s QR payment pays only its own QR order’s bill, never one rung up at the till', async () => {
+  const { payments, service } = serviceWith({
+    payments: [
+      {
+        amount: decimal(120),
+        counterId: 'counter-1',
+        id: 'guest',
+        orderId: null,
+        paidReference: 'pay_guest',
+        provider: 'RAZORPAY',
+        qrOrder: { id: 'q1' },
+        status: 'PAID',
+      },
+    ],
+  });
+
+  // A cashier at the same counter, with a cash sale of the same total, cannot book it as this UPI.
+  await assert.rejects(
+    service.createOrder(bill({ clientOrderId: 'till-1', onlinePaymentId: 'guest' }), cashier),
+    (error: unknown) =>
+      error instanceof ConflictException && /guest’s QR order/.test(error.message),
+  );
+  assert.equal(payments[0]!.orderId, null, 'still the guest’s, billed or refunded later');
+
+  const made = await service.createOrder(
+    bill({ clientOrderId: 'qr-q1', onlinePaymentId: 'guest' }),
+    cashier,
+  );
+  assert.equal(payments[0]!.orderId, made.id);
 });
 
 test('a bill keeps who paid: as typed at the till, else as given when the payment started', async () => {

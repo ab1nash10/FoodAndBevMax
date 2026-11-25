@@ -125,6 +125,14 @@ export class CreatePosOrderDto {
   @MaxLength(50)
   employeeCode?: string;
 
+  @ApiPropertyOptional({
+    description: 'From POST /pos/employee/verify: confirms the staff discount at a till.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  employeeToken?: string;
+
   @ApiPropertyOptional({ description: 'Required for a room order.' })
   @ValidateIf((dto: CreatePosOrderDto) => dto.channel === OrderChannel.ROOM)
   @IsString()
@@ -191,6 +199,7 @@ export class StartOnlinePaymentDto extends PickType(CreatePosOrderDto, [
   'customerMobile',
   'customerName',
   'employeeCode',
+  'employeeToken',
   'lines',
 ] as const) {
   @ApiProperty({ enum: OnlinePaymentProvider })
@@ -287,6 +296,32 @@ export class EmployeeLookupQueryDto {
   @IsString()
   @MaxLength(50)
   @Matches(/\S/, { message: 'code is required' })
+  code!: string;
+}
+
+export class SendStaffOtpDto {
+  @ApiProperty()
+  @IsUUID()
+  counterId!: string;
+
+  @ApiProperty({ description: 'The Employee ID entered at the till.' })
+  @IsString()
+  @MaxLength(50)
+  @Matches(/\S/, { message: 'employeeCode is required' })
+  employeeCode!: string;
+}
+
+export class VerifyStaffOtpDto {
+  @ApiProperty()
+  @IsUUID()
+  counterId!: string;
+
+  @ApiProperty({ description: 'From POST /pos/employee/otp.' })
+  @IsUUID()
+  otpId!: string;
+
+  @ApiProperty({ description: 'The 6-digit code the employee reads out.' })
+  @Matches(/^\d{6}$/, { message: 'code must be 6 digits' })
   code!: string;
 }
 

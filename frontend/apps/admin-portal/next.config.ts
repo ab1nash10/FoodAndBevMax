@@ -3,14 +3,6 @@ import type { NextConfig } from 'next';
 
 import { BASE_PATH } from './lib/base-path';
 
-// Where the browser may send requests: this origin plus whichever API origins lib/api.ts
-// reads (unset in the cluster, where the API is same-origin; localhost ports in local dev).
-const apiOrigins = [
-  process.env.NEXT_PUBLIC_API_BASE_URL,
-  process.env.NEXT_PUBLIC_AUTH_API_URL,
-  process.env.NEXT_PUBLIC_ORGANIZATION_API_URL,
-  process.env.NEXT_PUBLIC_USER_API_URL,
-].flatMap((url) => (url && /^https?:\/\//.test(url) ? [new URL(url).origin] : []));
 // A phone opening the QR page reaches the dev server by this PC's address. Read once at start,
 // that list missed a network joined later (a phone hotspot, 2026-11-16), and the page reloaded
 // forever as its live-reload connection was refused: private ranges cover any such network.
@@ -24,48 +16,18 @@ const localDevOrigins = [
   '192.168.*.*',
 ];
 
-// Tokens live in localStorage, so this limits what an injected script could do with them: it
-// can send nothing to, or load anything from, another site (connect-src, img-src and the
-// rest are 'self'). ponytail: scripts still allow 'unsafe-inline' - Next's inline bootstrap
-// needs it unless every page is rendered per request with a nonce.
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
-  // The print frame (lib/print.ts) and component styles are inline.
-  "style-src 'self' 'unsafe-inline'",
-  // blob: previews a chosen restaurant image before upload.
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  ["connect-src 'self'", ...new Set(apiOrigins)].join(' '),
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join('; ');
-
-// The guest's QR order page alone opens Razorpay's checkout: its script, the payment window it
-// frames, and the calls that script makes. Every other page keeps the policy above.
-const razorpay = 'https://checkout.razorpay.com https://api.razorpay.com';
-const orderPagePolicy = contentSecurityPolicy
-  .replace(/script-src [^;]+/, (rule) => `${rule} https://checkout.razorpay.com`)
-  .replace(/connect-src [^;]+/, (rule) => `${rule} ${razorpay} https://lumberjack.razorpay.com`)
-  .replace(/img-src [^;]+/, (rule) => `${rule} https://cdn.razorpay.com`)
-  .concat(`; frame-src ${razorpay}`);
-
 const nextConfig: NextConfig = {
   // The prefix is baked into the bundle here, so it must be the same value the client
   // helper uses - both read it from lib/base-path.
   basePath: BASE_PATH,
   allowedDevOrigins: process.env.NODE_ENV === 'development' ? localDevOrigins : [],
   devIndicators: false,
-  // Tokens live in localStorage, so these are the portal's main line against injected scripts,
-  // clickjacking and content sniffing (uploads are served from /uploads).
+  // Clickjacking and content sniffing (uploads are served from /uploads). The script policy
+  // (Content-Security-Policy) is set per page request, with its nonce, by proxy.ts.
   headers() {
     return Promise.resolve([
       {
         headers: [
-          { key: 'Content-Security-Policy', value: contentSecurityPolicy },
           { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), microphone=()' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           // Same as the API sends. Browsers ignore it over HTTP or on a certificate error, so
@@ -75,11 +37,6 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
         source: '/:path*',
-      },
-      // Last match wins in Next.js: this replaces the policy above on the QR order page only.
-      {
-        headers: [{ key: 'Content-Security-Policy', value: orderPagePolicy }],
-        source: '/order/:path*',
       },
     ]);
   },

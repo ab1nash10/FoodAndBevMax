@@ -9,6 +9,7 @@ import {
   User,
   UserStatus,
 } from '@prisma/client';
+import { worksAt } from '../common/permission-holders';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { addStock } from '../common/stock-balances';
 
@@ -123,9 +124,16 @@ export class KitchenProductionsRepository {
     });
   }
 
-  async findActiveChef(id: string, client: KitchenProductionClient): Promise<User | null> {
+  /** A chef who works at the production's location: users are not narrowed by location scope,
+   * and the record returns the chef's email and mobile, so another location's user is refused. */
+  async findActiveChef(
+    id: string,
+    hospitalId: string,
+    client: KitchenProductionClient,
+  ): Promise<User | null> {
     return client.user.findFirst({
       where: {
+        ...worksAt(hospitalId),
         deletedAt: null,
         id,
         status: UserStatus.ACTIVE,

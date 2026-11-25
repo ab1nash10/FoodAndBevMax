@@ -7,7 +7,8 @@
 // Runs only with DATABASE_URL_TEST. Every record is this run's own (restaurant, counters, items,
 // employees, users), so it never touches existing data and needs no cleanup.
 import { randomInt, randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SmsService } from '@aahar/auth';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   databaseUrl,
   day,
@@ -962,16 +963,71 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     ]);
     expect((await lookup('  ')).status).toBe(400);
 
+    // At the till a typed Employee ID proves nothing: the discount needs the code sent to the
+    // employee's own mobile, confirmed there and used on one bill.
+    const staffLines = [
+      { menuId: sandwich.menuId, quantity: 1 },
+      { menuId: tea.menuId, quantity: 1 },
+    ];
+    const unconfirmed = await bill('staff-unconfirmed', {
+      employeeCode: staff.onRoll,
+      lines: staffLines,
+    });
+    expect([unconfirmed.status, unconfirmed.body.message]).toEqual([
+      400,
+      'The staff discount needs the code sent to the employee’s mobile. Send it, then enter it.',
+    ]);
+    const sent: Array<{ mobile: string; otp: string }> = [];
+    vi.spyOn(SmsService.prototype, 'isConfigured').mockReturnValue(true);
+    vi.spyOn(SmsService.prototype, 'sendOtp').mockImplementation((to, otp) => {
+      sent.push({ mobile: to, otp });
+      return Promise.resolve();
+    });
+    const sendCode = (employeeCode: string) =>
+      h.api('POST', '/pos/employee/otp', { counterId: fx.counterId, employeeCode });
+    const otp = await sendCode(` ${staff.onRoll.toLowerCase()} `);
+    expect([otp.status, otp.data.sentTo]).toEqual([201, `******${staff.onRollMobile.slice(-4)}`]);
+    expect(sent.map((entry) => entry.mobile)).toEqual([staff.onRollMobile]);
+    expect((await sendCode(staff.onRoll)).status).toBe(429);
+    // No discount here, so no code: the bill just keeps the ID.
+    const noDiscount = await sendCode(staff.outsourced);
+    expect([noDiscount.status, noDiscount.body.message]).toEqual([
+      400,
+      'This employee gets no staff discount here, so no code is needed.',
+    ]);
+    expect(sent).toHaveLength(1);
+
+    const verify = (code: string) =>
+      h.api('POST', '/pos/employee/verify', {
+        code,
+        counterId: fx.counterId,
+        otpId: otp.data.otpId,
+      });
+    const wrong = await verify(sent[0]!.otp === '123456' ? '654321' : '123456');
+    expect([wrong.status, wrong.body.message]).toEqual([400, 'That code is not right.']);
+    const confirmed = await verify(sent[0]!.otp);
+    expect(confirmed.status).toBe(201);
+    const employeeToken = confirmed.data.employeeToken as string;
+    expect(employeeToken).toMatch(/^[\w-]{43}$/);
+    expect((await verify(sent[0]!.otp)).status, 'a code confirms once').toBe(400);
+
     // Sandwich 99.90 - 10% = 89.91, GST 2 x 2.25 = 4.50; tea is not discountable: 25.
     // 123.70 - 9.99 + 5.70 = 119.41, rounds to 119. One sandwich comes from SOON.
     const staffBill = await bill('staff', {
       employeeCode: staff.onRoll,
-      lines: [
-        { menuId: sandwich.menuId, quantity: 1 },
-        { menuId: tea.menuId, quantity: 1 },
-      ],
+      employeeToken,
+      lines: staffLines,
     });
     expect(staffBill.status).toBe(201);
+    const reused = await bill('staff-reused', {
+      employeeCode: staff.onRoll,
+      employeeToken,
+      lines: staffLines,
+    });
+    expect([reused.status, reused.body.message]).toEqual([
+      400,
+      'The staff discount needs the code sent to the employee’s mobile. Send it, then enter it.',
+    ]);
     expect(staffBill.data).toMatchObject({
       discountPercent: 10,
       discountTotal: 9.99,

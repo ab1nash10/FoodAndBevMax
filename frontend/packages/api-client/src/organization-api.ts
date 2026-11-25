@@ -600,6 +600,19 @@ export function createOrganizationApi(options: ApiClientOptions) {
         query: { code, counterId },
       });
     },
+    /** Texts the employee a code; the staff discount needs it read out at the till. */
+    sendStaffDiscountOtp(counterId: string, employeeCode: string) {
+      return client.request<ApiResponse<{ otpId: string; sentTo: string }>>('/pos/employee/otp', {
+        body: { counterId, employeeCode },
+        method: 'POST',
+      });
+    },
+    verifyStaffDiscountOtp(counterId: string, otpId: string, code: string) {
+      return client.request<ApiResponse<{ employeeToken: string }>>('/pos/employee/verify', {
+        body: { code, counterId, otpId },
+        method: 'POST',
+      });
+    },
     listEmployeeDiscounts(query?: EmployeeDiscountListQuery) {
       return client.request<ApiResponse<ApiList<EmployeeDiscount>>>('/employee-discounts', {
         query,

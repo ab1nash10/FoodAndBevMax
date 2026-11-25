@@ -22,7 +22,7 @@ test('Add admin offers only active locations', async ({ page }) => {
 
   const dialog = page.getByRole('dialog', { name: 'Add admin' });
   const pickerList = page.waitForRequest(asksActiveOnly);
-  await dialog.getByRole('button', { name: 'Add location(s)' }).click();
+  await dialog.getByRole('button', { name: 'Add locations' }).click();
   await pickerList;
   await expect(page.getByRole('dialog', { name: 'Select locations' })).toBeVisible();
 });

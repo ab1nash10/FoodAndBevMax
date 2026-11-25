@@ -49,9 +49,12 @@ type Json = Record<string, unknown>;
 const text = (value: unknown) =>
   typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 
-/** A new link's url and id; a reply missing either is refused rather than saved as "undefined". */
+/**
+ * A new link's url and id; a reply missing either is refused rather than saved as "undefined".
+ * The guest's phone is sent to the url (and the QR holds it), so only an https page will do.
+ */
 function link(provider: OnlinePaymentProvider, paymentUrl: unknown, providerRef: unknown) {
-  if (!text(paymentUrl) || !text(providerRef)) {
+  if (!/^https:\/\/[^/]/i.test(text(paymentUrl)) || !text(providerRef)) {
     throw new BadGatewayException(
       `${providerLabels[provider]} did not send a payment link. Try again, or take the payment another way.`,
     );

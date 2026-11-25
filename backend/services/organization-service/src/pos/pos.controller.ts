@@ -25,10 +25,13 @@ import {
   PosCountersQueryDto,
   PosMenuQueryDto,
   PosSummaryQueryDto,
+  SendStaffOtpDto,
   SetMenuAvailabilityDto,
   SetStaffDiscountsDto,
+  VerifyStaffOtpDto,
 } from './dto/pos.dto';
 import { PosService } from './pos.service';
+import { StaffDiscountOtpService } from './staff-discount-otp.service';
 import { RequireTill, TillGuard, tillKeyOf, type TillRequest } from './till.guard';
 
 @ApiBearerAuth('access-token')
@@ -36,7 +39,10 @@ import { RequireTill, TillGuard, tillKeyOf, type TillRequest } from './till.guar
 @UseGuards(TillGuard)
 @Controller('pos')
 export class PosController {
-  constructor(private readonly pos: PosService) {}
+  constructor(
+    private readonly pos: PosService,
+    private readonly staffOtp: StaffDiscountOtpService,
+  ) {}
 
   @Get('counters')
   @Permissions('POS_ORDER_VIEW')
@@ -248,6 +254,26 @@ export class PosController {
   @ApiOkResponse({ description: 'Employee returned.' })
   async employee(@Query() query: EmployeeLookupQueryDto) {
     return { data: await this.pos.lookupEmployee(query), message: 'Success', success: true };
+  }
+
+  @Post('employee/otp')
+  @RequireTill({ from: 'body', kind: 'counterId' })
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Permissions('POS_ORDER_CREATE')
+  @ApiOperation({ summary: "Send a code to the employee's mobile to confirm their staff discount" })
+  @ApiOkResponse({ description: 'Code sent.' })
+  async sendStaffOtp(@Body() body: SendStaffOtpDto) {
+    return { data: await this.staffOtp.send(body), message: 'Success', success: true };
+  }
+
+  @Post('employee/verify')
+  @RequireTill({ from: 'body', kind: 'counterId' })
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Permissions('POS_ORDER_CREATE')
+  @ApiOperation({ summary: 'Check the code; right, a token the next bill uses up' })
+  @ApiOkResponse({ description: 'Staff discount confirmed.' })
+  async verifyStaffOtp(@Body() body: VerifyStaffOtpDto) {
+    return { data: await this.staffOtp.verify(body), message: 'Success', success: true };
   }
 
   @Get('staff-discounts/:restaurantId')

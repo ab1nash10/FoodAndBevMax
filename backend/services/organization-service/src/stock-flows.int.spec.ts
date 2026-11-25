@@ -11,6 +11,7 @@ import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { listOnTill, receiveStock } from './testing/int-harness.js';
 import { superAdminForRun } from './testing/super-admin-for-run.js';
+import { staffToken } from './testing/staff-token';
 
 type Body = Record<string, unknown>;
 interface Batch {
@@ -914,6 +915,7 @@ describe.skipIf(!databaseUrl)('stock and money paths (integration)', { timeout: 
       ...bill,
       clientOrderId: `staff-${run}`,
       employeeCode: `E${run}`,
+      employeeToken: await staffToken(rawQuery, `E${run}`, fx.restaurantId),
       lines: [{ menuId, quantity: 1 }],
     });
     expect(staffBill).toMatchObject({

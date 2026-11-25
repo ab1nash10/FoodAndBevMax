@@ -57,6 +57,29 @@ test('a new link without a url or id is refused, not saved as "undefined"', asyn
   );
 });
 
+test('a link that is not https is refused: the guest’s phone is sent to it', async () => {
+  for (const url of [
+    'javascript:alert(1)',
+    'http://rzp.io/i/abc',
+    'data:text/html,x',
+    '//rzp.io',
+  ]) {
+    answer = () => Response.json({ id: 'plink_1', short_url: url });
+    await assert.rejects(
+      provider('RAZORPAY').create({ amount: 10, description: 'x', reference: 'y' }),
+      (error: unknown) =>
+        error instanceof BadGatewayException &&
+        /Razorpay did not send a payment link/.test(error.message),
+      url,
+    );
+  }
+  answer = payuAnswer({ invoiceNumber: 'INV-9', paymentLink: 'javascript:alert(1)' });
+  await assert.rejects(
+    provider('PAYU').create({ amount: 10, description: 'x', reference: 'y' }),
+    BadGatewayException,
+  );
+});
+
 test('only providers with every key set are offered', () => {
   const offered = (values: Record<string, string>) => [
     ...paymentProviders(new ConfigService(values)).keys(),

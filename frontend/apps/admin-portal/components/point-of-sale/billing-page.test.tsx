@@ -40,7 +40,9 @@ const api = vi.hoisted(() => ({
   listPosCounters: vi.fn<Client['listPosCounters']>(),
   lookupPosEmployee: vi.fn<Client['lookupPosEmployee']>(),
   openPosShift: vi.fn<Client['openPosShift']>(),
+  sendStaffDiscountOtp: vi.fn<Client['sendStaffDiscountOtp']>(),
   startOnlinePayment: vi.fn<Client['startOnlinePayment']>(),
+  verifyStaffDiscountOtp: vi.fn<Client['verifyStaffDiscountOtp']>(),
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -536,7 +538,7 @@ describe('the bill', () => {
     expect(sent).not.toHaveProperty('onlinePaymentId');
   });
 
-  it('applies the staff discount of the employee whose ID is typed', async () => {
+  const staffEmployee = () =>
     api.lookupPosEmployee.mockImplementation(() =>
       reply({
         discountName: null,
@@ -546,6 +548,13 @@ describe('the bill', () => {
         employmentType: 'ON_ROLL',
       }),
     );
+
+  it('applies the staff discount once the employee reads out the code sent to their mobile', async () => {
+    staffEmployee();
+    api.sendStaffDiscountOtp.mockImplementation(() =>
+      reply({ otpId: 'otp-1', sentTo: '******3210' }),
+    );
+    api.verifyStaffDiscountOtp.mockImplementation(() => reply({ employeeToken: 'token-1' }));
     const { user } = renderScreen(<BillingPageClient />);
     await addTwoSandwiches(user);
 
@@ -556,8 +565,40 @@ describe('the bill', () => {
       'Neha Sharma · On roll · 10% staff discount',
     );
     expect(api.lookupPosEmployee).toHaveBeenCalledWith('counter-1', 'E100');
+    // A typed ID alone takes nothing off.
+    expect(screen.queryByText('Staff discount (10%)')).not.toBeInTheDocument();
+    expect(totalRow('Grand total')).toHaveTextContent('₹210.00');
+
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    expect(api.sendStaffDiscountOtp).toHaveBeenCalledWith('counter-1', 'E100');
+    expect(await screen.findByText('Code sent to ******3210.')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Code from the employee'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    expect(api.verifyStaffDiscountOtp).toHaveBeenCalledWith('counter-1', 'otp-1', '123456');
+    expect(await screen.findByText('Staff discount confirmed.')).toBeInTheDocument();
     expect(totalRow('Staff discount (10%)')).toHaveTextContent('−₹20.00');
     expect(totalRow('Grand total')).toHaveTextContent('₹189.00');
+
+    await complete(user);
+    expect(api.createPosBill).toHaveBeenCalledWith(
+      expect.objectContaining({ employeeCode: 'E100', employeeToken: 'token-1' }),
+    );
+  });
+
+  it('will not bill a staff discount the employee has not confirmed', async () => {
+    staffEmployee();
+    const { user } = renderScreen(<BillingPageClient />);
+    await addTwoSandwiches(user);
+
+    await user.type(screen.getByLabelText('Employee ID'), 'E100');
+    expect(await screen.findByText('Neha Sharma')).toBeInTheDocument();
+    await complete(user);
+
+    expect(
+      screen.getByText(/Confirm the staff discount with the code sent to the employee’s mobile/),
+    ).toBeInTheDocument();
+    expect(api.createPosBill).not.toHaveBeenCalled();
   });
 
   it('will not bill an Employee ID that matches no one', async () => {

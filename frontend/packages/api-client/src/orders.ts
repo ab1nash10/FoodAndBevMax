@@ -221,6 +221,8 @@ export interface PosBillInput {
   /** Who paid (optional); sent to Razorpay with an online payment, kept on the bill. */
   customerName?: string;
   employeeCode?: string;
+  /** From verifyStaffDiscountOtp: the employee confirmed their staff discount; one bill uses it. */
+  employeeToken?: string;
   instructions?: string;
   isComplimentary?: boolean;
   lines: PosBillLineInput[];
@@ -253,7 +255,13 @@ export interface OnlinePayment {
 /** The bill an online payment is for: the server prices it. */
 export type OnlinePaymentInput = Pick<
   PosBillInput,
-  'channel' | 'counterId' | 'customerMobile' | 'customerName' | 'employeeCode' | 'lines'
+  | 'channel'
+  | 'counterId'
+  | 'customerMobile'
+  | 'customerName'
+  | 'employeeCode'
+  | 'employeeToken'
+  | 'lines'
 > & { provider: OnlinePaymentProvider };
 
 export interface PosBillLine {
