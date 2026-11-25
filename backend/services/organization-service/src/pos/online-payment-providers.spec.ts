@@ -1,4 +1,5 @@
 import { strict as assert } from 'node:assert';
+import { createHash } from 'node:crypto';
 import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { test } from 'vitest';
@@ -12,6 +13,13 @@ const payuKeys = {
   PAYU_CLIENT_SECRET: 'payu-secret',
   PAYU_MERCHANT_ID: 'merchant-1',
   PAYU_TOKEN_URL: 'https://payu.example.test/oauth/token',
+};
+/** PayU's other API: the merchant key and salt sign each call (no sign-in step). */
+const payuInvoiceKeys = {
+  PAYU_INVOICE_EMAIL: 'payments@example.test',
+  PAYU_KEY: 'merchant-key',
+  PAYU_POSTSERVICE_URL: 'https://payu.example.test/merchant/postservice.php?form=2',
+  PAYU_SALT: 'merchant-salt',
 };
 
 interface Call {
@@ -90,6 +98,101 @@ test('only providers with every key set are offered', () => {
   assert.deepEqual(offered({ ...razorpayKeys, RAZORPAY_KEY_SECRET: '   ' }), []);
   assert.deepEqual(offered({ ...payuKeys, PAYU_MERCHANT_ID: '' }), []);
   assert.deepEqual(offered({ ...payuKeys, ...razorpayKeys }), ['RAZORPAY', 'PAYU']);
+  // The merchant key and salt are enough on their own; with both, they win.
+  assert.deepEqual(offered(payuInvoiceKeys), ['PAYU']);
+  assert.deepEqual(offered({ ...payuInvoiceKeys, PAYU_SALT: '' }), []);
+});
+
+/** PayU's key-and-salt API answers by command: the one in the last request's form. */
+const invoiceAnswer =
+  (
+    verifyStatus = 'pending',
+    create: unknown = { Status: 'Success', URL: 'https://secure.payu.example/i/1' },
+  ) =>
+  () => {
+    const command = new URLSearchParams(calls.at(-1)!.body).get('command');
+    const txnid = new URLSearchParams(calls.at(-1)!.body).get('var1') ?? '';
+    if (command === 'create_invoice') return Response.json(create);
+    if (command === 'verify_payment') {
+      return Response.json({
+        msg: '1 out of 1 Transactions Fetched Successfully',
+        status: 1,
+        transaction_details: { [txnid]: { mihpayid: '403993715', status: verifyStatus } },
+      });
+    }
+    return Response.json({ msg: 'Invoice expired', status: 1 });
+  };
+
+test('PayU with the merchant key and salt: a signed invoice link, read and expired', async () => {
+  calls = [];
+  const payu = paymentProviders(new ConfigService(payuInvoiceKeys)).get('PAYU')!;
+  answer = invoiceAnswer();
+
+  const link = await payu.create({
+    amount: 250.5,
+    customer: { mobile: '9876543210', name: 'Asha Rao' },
+    description: 'Cafe · Till 1',
+    reference: '1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9',
+  });
+  assert.equal(link.paymentUrl, 'https://secure.payu.example/i/1');
+  // PayU's order number: short and plain, from the payment's own id.
+  assert.equal(link.providerRef, 'fnb1b2c3d4e5f6047188293a4');
+
+  const [create] = calls;
+  const form = new URLSearchParams(create!.body);
+  assert.equal(create!.url, payuInvoiceKeys.PAYU_POSTSERVICE_URL);
+  assert.equal(create!.headers['content-type'], 'application/x-www-form-urlencoded');
+  assert.equal(form.get('key'), 'merchant-key');
+  assert.equal(form.get('command'), 'create_invoice');
+  // Signed: sha512(key|command|var1|salt).
+  assert.equal(
+    form.get('hash'),
+    createHash('sha512')
+      .update(['merchant-key', 'create_invoice', form.get('var1'), 'merchant-salt'].join('|'))
+      .digest('hex'),
+  );
+  assert.deepEqual(JSON.parse(form.get('var1')!), {
+    amount: '250.50',
+    email: 'payments@example.test',
+    firstname: 'Asha Rao',
+    phone: '9876543210',
+    productinfo: 'Cafe · Till 1',
+    send_email_now: '0',
+    send_sms: '0',
+    txnid: 'fnb1b2c3d4e5f6047188293a4',
+    validation_period: 1,
+  });
+
+  assert.deepEqual(await payu.read(link.providerRef), {
+    closed: false,
+    paid: false,
+    reference: null,
+  });
+  answer = invoiceAnswer('success');
+  assert.deepEqual(await payu.read(link.providerRef), {
+    closed: false,
+    paid: true,
+    reference: '403993715',
+  });
+
+  await payu.cancel(link.providerRef, 250.5);
+  const expire = new URLSearchParams(calls.at(-1)!.body);
+  assert.deepEqual(
+    [expire.get('command'), expire.get('var1')],
+    ['expire_invoice', link.providerRef],
+  );
+});
+
+test("PayU's reason for refusing a link reaches the cashier", async () => {
+  calls = [];
+  const payu = paymentProviders(new ConfigService(payuInvoiceKeys)).get('PAYU')!;
+  answer = invoiceAnswer('pending', 'Invalid email.');
+
+  await assert.rejects(
+    payu.create({ amount: 10, description: 'x', reference: 'y' }),
+    (error: unknown) =>
+      error instanceof BadGatewayException && /PayU refused it: Invalid email./.test(error.message),
+  );
 });
 
 test('Razorpay is asked for a link in paise, with Basic auth from the key id and secret', async () => {
@@ -279,7 +382,10 @@ test('PayU takes a client-credentials token once and reuses it for links in rupe
 
   const [token, create, read] = calls;
   assert.equal(token!.url, payuKeys.PAYU_TOKEN_URL);
-  assert.deepEqual(JSON.parse(token!.body), {
+  // Form-encoded, as OAuth asks: PayU's production sign-in refuses JSON ("unknown client"),
+  // which only its test server took.
+  assert.equal(token!.headers['content-type'], 'application/x-www-form-urlencoded');
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(token!.body)), {
     client_id: 'payu-client',
     client_secret: 'payu-secret',
     grant_type: 'client_credentials',

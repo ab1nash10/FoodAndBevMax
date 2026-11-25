@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { OnlinePaymentProvider, Prisma } from '@prisma/client';
@@ -207,14 +208,18 @@ function payu(settings: {
   let token: { expiresAt: number; value: string } | null = null;
   const headers = async () => {
     if (!token || token.expiresAt < Date.now() + 60_000) {
+      // Form-encoded, as OAuth asks: PayU's production sign-in refuses a JSON body.
       const body = await call('PAYU', settings.tokenUrl, {
-        body: JSON.stringify({
+        body: new URLSearchParams({
           client_id: settings.clientId,
           client_secret: settings.clientSecret,
           grant_type: 'client_credentials',
           scope: 'create_payment_links read_payment_links',
-        }),
-        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        }).toString(),
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
         method: 'POST',
       });
       token = {
@@ -267,6 +272,80 @@ function payu(settings: {
 }
 
 /** A counter's Pine Labs card machine, as set up under POS & Payment Machines. */
+/**
+ * PayU with the merchant key and salt: a payment link is a PayU invoice (create_invoice), read with
+ * verify_payment and closed with expire_invoice. Each call is signed, sha512(key|command|var1|salt),
+ * with no sign-in step to fail. PayU needs an email on every link (the till rarely has the guest's),
+ * so it gets F&B's own; PayU's emails and texts about the link are off.
+ */
+function payuInvoices(settings: {
+  email: string;
+  key: string;
+  salt: string;
+  url: string;
+}): PaymentProvider {
+  const post = (command: string, var1: string) =>
+    call('PAYU', settings.url, {
+      body: new URLSearchParams({
+        command,
+        hash: createHash('sha512')
+          .update([settings.key, command, var1, settings.salt].join('|'))
+          .digest('hex'),
+        key: settings.key,
+        var1,
+      }).toString(),
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      method: 'POST',
+    });
+
+  return {
+    async cancel(providerRef) {
+      await post('expire_invoice', providerRef);
+    },
+    async create({ amount, customer, description, reference }) {
+      // PayU's order number: short and plain, from the payment's own id.
+      const txnid = `fnb${reference.replace(/[^a-zA-Z0-9]/g, '').slice(0, 22)}`;
+      const reply: unknown = await post(
+        'create_invoice',
+        JSON.stringify({
+          amount: amount.toFixed(2),
+          email: settings.email,
+          firstname: customer?.name?.trim() || 'Guest',
+          ...(customer?.mobile ? { phone: customer.mobile } : {}),
+          productinfo: description,
+          send_email_now: '0',
+          send_sms: '0',
+          txnid,
+          validation_period: 1,
+        }),
+      );
+
+      // A refusal comes back as a bare message ("Invalid email.").
+      if (typeof reply === 'string') {
+        throw new BadGatewayException(`PayU refused it: ${reply}`);
+      }
+
+      return link('PAYU', (reply as Json).URL, txnid);
+    },
+    async read(providerRef) {
+      const body = await post('verify_payment', providerRef);
+      const details = (body.transaction_details as Json | undefined)?.[providerRef] as
+        Json | undefined;
+      const paid = text(details?.status).toLowerCase() === 'success';
+
+      // An unpaid invoice stays open: a failed try can be paid again, and the till cancels it.
+      return {
+        closed: false,
+        paid,
+        reference: paid ? text(details?.mihpayid) || providerRef : null,
+      };
+    },
+  };
+}
+
 export interface PinelabsMachine {
   imei: string;
   merchantId: string;
@@ -503,7 +582,17 @@ export function paymentProviders(config: ConfigService) {
     tokenUrl: value('PAYU_TOKEN_URL'),
   };
 
-  if (Object.values(payuSettings).every(Boolean)) {
+  // The merchant key and salt first: they sign each call, with no OAuth sign-in to fail.
+  const payuKeyAndSalt = {
+    email: value('PAYU_INVOICE_EMAIL'),
+    key: value('PAYU_KEY'),
+    salt: value('PAYU_SALT'),
+    url: value('PAYU_POSTSERVICE_URL'),
+  };
+
+  if (Object.values(payuKeyAndSalt).every(Boolean)) {
+    providers.set('PAYU', payuInvoices(payuKeyAndSalt));
+  } else if (Object.values(payuSettings).every(Boolean)) {
     providers.set('PAYU', payu(payuSettings));
   }
 
