@@ -235,4 +235,13 @@ describe('signing out after 8 hours without activity (the user, 2026-11-23)', ()
     expect(router.replace).not.toHaveBeenCalled();
     expect(authApi.logout).not.toHaveBeenCalled();
   });
+
+  it('signs out the POS back-office pages (Approvals) like any desk screen', async () => {
+    at('/pos/approvals');
+    storeSession(asha());
+    lastInput(9);
+    renderProvider();
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/auth/login?reason=idle'));
+  });
 });

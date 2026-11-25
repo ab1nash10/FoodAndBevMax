@@ -61,6 +61,8 @@ export interface AmendableBill {
   paymentMode: PaymentMode | null;
   paymentReference: string | null;
   placedAt: Date;
+  /** A Supervisor approved its shift's money check (pos/shift-reconciliation.ts). */
+  shiftApproved?: boolean;
   status: OrderStatus;
 }
 
@@ -90,6 +92,9 @@ export function billRefusal(bill: AmendableBill, now: Date | number): string | n
   }
   if (bill.erpSent)
     return 'This bill’s day has been sent to the ERP, so it can no longer be amended.';
+  if (bill.shiftApproved) {
+    return 'This bill’s shift is approved, so its payment mode can no longer be changed.';
+  }
 
   return null;
 }

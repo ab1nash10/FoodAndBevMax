@@ -5,6 +5,7 @@ import {
   OrderAmendmentType,
   OrderSource,
   QrOrderStatus,
+  ShiftReconciliationStatus,
   type PaymentMode,
   type Prisma,
 } from '@prisma/client';
@@ -64,6 +65,7 @@ const reportSelect = {
   restaurantId: true,
   roomNumber: true,
   roundOff: true,
+  shiftId: true,
   status: true,
   stewardId: true,
   subtotal: true,
@@ -164,7 +166,8 @@ export class OrderReportsService {
     const ids = orders.map((order) => order.id);
     const tillOf = (order: ReportOrder) => order.posDeviceId ?? order.counter?.posDeviceId ?? null;
     const deviceIds = [...new Set(orders.map(tillOf).filter(Boolean))] as string[];
-    const [devices, operators, kiosk, posted] = await Promise.all([
+    const shiftIds = [...new Set(orders.map((order) => order.shiftId).filter(Boolean))] as string[];
+    const [devices, operators, kiosk, posted, approved] = await Promise.all([
       deviceIds.length
         ? this.prisma.posDevice.findMany({
             select: { code: true, id: true, name: true },
@@ -195,7 +198,14 @@ export class OrderReportsService {
           status: ErpPostingStatus.SUCCESS,
         },
       }),
+      shiftIds.length
+        ? this.prisma.shiftReconciliation.findMany({
+            select: { shiftId: true },
+            where: { shiftId: { in: shiftIds }, status: ShiftReconciliationStatus.APPROVED },
+          })
+        : [],
     ]);
+    const approvedShifts = new Set(approved.map((entry) => entry.shiftId));
     const deviceById = new Map(devices.map((device) => [device.id, device]));
     const fromKiosk = new Set(kiosk.map((entry) => entry.billedOrderId));
     const sentDays = new Set(posted.map((post) => dayKey(post.restaurantId, post.businessDate)));
@@ -218,6 +228,7 @@ export class OrderReportsService {
         // Billed at the till itself; a kiosk or QR order was ordered elsewhere and billed there.
         posOrder: !fromKiosk.has(order.id),
         roundOff: money(order.roundOff),
+        shiftApproved: order.shiftId !== null && approvedShifts.has(order.shiftId),
         stewardAssigned: order.stewardId !== null,
         stewardName: order.stewardId ? (operators.get(order.stewardId) ?? null) : null,
         subtotal: money(order.subtotal),
@@ -379,7 +390,9 @@ export class OrderReportsService {
 
       if (!order) throw new NotFoundException('Bill not found.');
 
-      // Two admins amending at once: the second sees the first's change.
+      // Two admins amending at once: the second sees the first's change. The shift first (as a
+      // cancel does): a Supervisor approving it at the same moment either lands first or sees this.
+      if (order.shiftId) await lockRow(tx, 'counter_shifts', order.shiftId);
       await lockRow(tx, 'restaurant_orders', id);
       const current = await tx.restaurantOrder.findUniqueOrThrow({
         select: { hospitalId: true, paymentMode: true, paymentReference: true, status: true },
@@ -396,6 +409,13 @@ export class OrderReportsService {
           },
         })),
       );
+      const shiftApproved = Boolean(
+        order.shiftId &&
+        (await tx.shiftReconciliation.findFirst({
+          select: { id: true },
+          where: { shiftId: order.shiftId, status: ShiftReconciliationStatus.APPROVED },
+        })),
+      );
       const refusal = amendRefusal(
         {
           erpSent,
@@ -404,6 +424,7 @@ export class OrderReportsService {
           paymentMode: current.paymentMode,
           paymentReference: current.paymentReference,
           placedAt: order.placedAt,
+          shiftApproved,
           status: current.status,
         },
         dto,

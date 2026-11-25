@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ErpPostingStatus, type Prisma } from '@prisma/client';
+import { ErpPostingStatus, ShiftReconciliationStatus, type Prisma } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ReportRow } from '../reports/report-builders';
@@ -62,6 +62,23 @@ export class ErpPostingsService {
     private readonly config: ConfigService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
+
+  /** How many shifts with bills on the restaurant's day a Supervisor has not approved yet. */
+  private async unapprovedShifts(day: { businessDate: Date; restaurantId: string }) {
+    const shifts = await this.prisma.restaurantOrder.findMany({
+      distinct: ['shiftId'],
+      select: { shiftId: true },
+      where: { ...day, shiftId: { not: null } },
+    });
+    const ids = shifts.map((shift) => shift.shiftId!);
+    const approved = ids.length
+      ? await this.prisma.shiftReconciliation.count({
+          where: { shiftId: { in: ids }, status: ShiftReconciliationStatus.APPROVED },
+        })
+      : 0;
+
+    return ids.length - approved;
+  }
 
   private settings() {
     return {
@@ -148,6 +165,13 @@ export class ErpPostingsService {
     }
 
     const day = { businessDate: new Date(dto.businessDate), restaurantId: dto.restaurantId };
+    const waiting = await this.unapprovedShifts(day);
+
+    if (waiting > 0) {
+      throw new ConflictException(
+        `Approve every shift of this day before sending it to the ERP: ${waiting} ${waiting === 1 ? 'shift is' : 'shifts are'} not approved yet.`,
+      );
+    }
 
     await this.prisma.erpPosting.updateMany({
       data: { error: 'Stopped before the ERP answered.', status: ErpPostingStatus.FAILED },

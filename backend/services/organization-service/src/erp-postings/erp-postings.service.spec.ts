@@ -19,7 +19,14 @@ function setup({
   configured = true,
   rows = [line, { ...line, AFS_11: 'MAXJPE/2' }],
   sentBefore = false,
-}: { configured?: boolean; rows?: object[]; sentBefore?: boolean } = {}) {
+  shifts = { approved: 0, total: 0 },
+}: {
+  configured?: boolean;
+  rows?: object[];
+  sentBefore?: boolean;
+  /** The day's shifts with bills, and how many a Supervisor approved. */
+  shifts?: { approved: number; total: number };
+} = {}) {
   const saved: Array<Record<string, unknown>> = [];
   const prisma = {
     erpPosting: {
@@ -40,6 +47,14 @@ function setup({
       }),
       updateMany: vi.fn(() => Promise.resolve({ count: 0 })),
     },
+    restaurantOrder: {
+      findMany: vi.fn(() =>
+        Promise.resolve(
+          Array.from({ length: shifts.total }, (_, index) => ({ shiftId: `s${index}` })),
+        ),
+      ),
+    },
+    shiftReconciliation: { count: vi.fn(() => Promise.resolve(shifts.approved)) },
     restaurant: {
       findFirst: vi.fn(() => Promise.resolve({ restaurantName: 'LXF Food Trolley' })),
       findMany: vi.fn(() =>
@@ -73,6 +88,25 @@ test('not set up: nothing is sent and the admin is told why', async () => {
 
   assert.equal(service.enabled(), false);
   await assert.rejects(service.send(day, user), ServiceUnavailableException);
+});
+
+test('a day goes to the ERP only once a Supervisor approved every one of its shifts', async () => {
+  const fetch = vi.fn(() => Promise.resolve(new Response('{"success":true,"returnValue":1}')));
+  vi.stubGlobal('fetch', fetch);
+  const waiting = setup({ shifts: { approved: 1, total: 3 } });
+
+  await assert.rejects(
+    waiting.service.send(day, user),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message ===
+        'Approve every shift of this day before sending it to the ERP: 2 shifts are not approved yet.',
+  );
+  assert.equal(fetch.mock.calls.length, 0);
+  assert.equal(waiting.saved.length, 0);
+
+  const approved = setup({ shifts: { approved: 3, total: 3 } });
+  assert.equal((await approved.service.send(day, user)).status, 'SUCCESS');
 });
 
 test('a day is sent only once it is over', async () => {

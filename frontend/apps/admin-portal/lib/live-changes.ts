@@ -22,6 +22,8 @@ const billKeys = [
   ['qr-menu'],
   queryKeys.orderReports(),
   queryKeys.dashboard(),
+  // A bill, a payment-mode change or a decision (all under /pos) moves a shift's money check.
+  queryKeys.shiftReconciliations(),
 ];
 const stockKeys = [
   queryKeys.stockBalances(),

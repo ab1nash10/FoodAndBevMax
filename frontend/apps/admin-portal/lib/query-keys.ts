@@ -80,6 +80,8 @@ export const queryKeys = {
   posEmployee: key('pos-employee'),
   posMenu: key('pos-menu'),
   posSummary: key('pos-summary'),
+  // POS → Reconciliation and Approvals: a day's ended shifts with their money checks.
+  shiftReconciliations: key('shift-reconciliations'),
   paymentMachinePosDeviceOptions: key('payment-machine-pos-device-options'),
   paymentMachines: key('payment-machines'),
   posDevices: key('pos-devices'),

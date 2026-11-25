@@ -419,6 +419,7 @@ model Hospital {
   employeeDiscounts        EmployeeDiscount[]
   counterShifts            CounterShift[]
   counterDayCloses         CounterDayClose[]
+  shiftReconciliations     ShiftReconciliation[]
   onlinePayments           OnlinePayment[]
   qrOrders                 QrOrder[]
   orderAmendments          OrderAmendment[]
@@ -961,10 +962,51 @@ model CounterShift {
   orders        RestaurantOrder[]
   takenOverFrom CounterShift?     @relation("ShiftHandover", fields: [takenOverFromId], references: [id])
   takenOverBy   CounterShift?     @relation("ShiftHandover")
+  reconciliation ShiftReconciliation?
 
   @@index([counterId, status])
   @@index([hospitalId])
   @@map("counter_shifts")
+}
+
+/// Where a closed shift's money check stands once someone acted on it. A shift with no row has
+/// had no reasons sent yet (a matched one already waits for approval).
+enum ShiftReconciliationStatus {
+  /// The restaurant admin sent a reason for each difference: it waits for a Supervisor.
+  SUBMITTED
+  /// The Supervisor sent it back, with a comment, for other reasons.
+  SENT_BACK
+  /// The Supervisor approved it: its bills' payment modes are locked, and its day can go to ERP.
+  APPROVED
+}
+
+/// A closed shift's payment reconciliation (2026-11-26): the restaurant admin's reasons for its
+/// cash, UPI and card differences, and the Supervisor's decision. The figures themselves are
+/// worked out from the shift and its bills each time (pos/shift-reconciliation.ts), so a
+/// payment-mode change made before approval shows at once; approval keeps them as approved.
+model ShiftReconciliation {
+  id             String                    @id @default(uuid()) @db.Uuid
+  hospitalId     String                    @map("hospital_id") @db.Uuid
+  shiftId        String                    @unique @map("shift_id") @db.Uuid
+  status         ShiftReconciliationStatus
+  /// { CASH?: { reason, note }, UPI?: ..., CARD?: ... }: one per difference.
+  reasons        Json                      @default("{}")
+  submittedBy    String?                   @map("submitted_by") @db.Uuid
+  submittedAt    DateTime?                 @map("submitted_at")
+  /// The Supervisor's comment: required to send it back, optional on approval.
+  comment        String?
+  decidedBy      String?                   @map("decided_by") @db.Uuid
+  decidedAt      DateTime?                 @map("decided_at")
+  /// The money and differences as they were when approved.
+  approvedChecks Json?                     @map("approved_checks")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+
+  hospital Hospital     @relation(fields: [hospitalId], references: [id])
+  shift    CounterShift @relation(fields: [shiftId], references: [id])
+
+  @@index([hospitalId, status])
+  @@map("shift_reconciliations")
 }
 
 /// A UPI payment taken online at a counter before its bill is made: the till shows the

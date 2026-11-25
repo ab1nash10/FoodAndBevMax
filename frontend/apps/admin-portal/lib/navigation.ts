@@ -1,5 +1,6 @@
 import {
   ArrowRightLeft,
+  BadgeCheck,
   BadgePercent,
   BedDouble,
   BookOpenText,
@@ -29,6 +30,7 @@ import {
   PackageMinus,
   PackagePlus,
   Receipt,
+  Scale,
   ScrollText,
   Send,
   ShieldCheck,
@@ -248,6 +250,20 @@ export const navigationGroups: NavGroup[] = [
         icon: Wallet,
         label: 'Day summary',
         permissions: ['POS_ORDER_VIEW'],
+      },
+      // Back-office screens, not the till's (lib/pos-paths.ts): each closed shift's money check,
+      // the restaurant admin's reasons, and the Supervisor's approval (2026-11-26).
+      {
+        href: '/pos/reconciliation',
+        icon: Scale,
+        label: 'Reconciliation',
+        permissions: ['SHIFT_RECONCILE'],
+      },
+      {
+        href: '/pos/approvals',
+        icon: BadgeCheck,
+        label: 'Approvals',
+        permissions: ['SHIFT_APPROVE'],
       },
       {
         href: '/pos/menu',
@@ -638,8 +654,8 @@ export function homeHref(
   }
 
   if (!hasPermission(dashboardDataPermissions)) {
-    const workScreen = ['/pos/billing', '/inventory/today', '/deliveries'].find((href) =>
-      canOpenPath(href, hasPermission),
+    const workScreen = ['/pos/billing', '/inventory/today', '/deliveries', '/pos/approvals'].find(
+      (href) => canOpenPath(href, hasPermission),
     );
 
     if (workScreen) {

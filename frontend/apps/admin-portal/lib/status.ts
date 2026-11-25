@@ -1,5 +1,6 @@
 import type {
   KitchenProductionStatus,
+  ShiftCheckStatus,
   StockBalanceStatus,
   TransferAcknowledgementStatus,
   TransferStatus,
@@ -9,7 +10,11 @@ import type {
 export type StatusTone = 'bad' | 'info' | 'neutral' | 'ok' | 'pending';
 
 export type KnownStatus =
-  KitchenProductionStatus | StockBalanceStatus | TransferAcknowledgementStatus | TransferStatus;
+  | KitchenProductionStatus
+  | ShiftCheckStatus
+  | StockBalanceStatus
+  | TransferAcknowledgementStatus
+  | TransferStatus;
 
 export interface StatusPresentation {
   label: string;
@@ -42,6 +47,11 @@ const presentations: Record<KnownStatus, StatusPresentation> = {
   LOW_STOCK: { label: 'Low stock', tone: 'pending' },
   NEAR_EXPIRY: { label: 'Near expiry', tone: 'pending' },
   OUT_OF_STOCK: { label: 'Out of stock', tone: 'bad' },
+  // A closed shift's money check (POS → Reconciliation, Approvals)
+  APPROVED: { label: 'Approved', tone: 'ok' },
+  NEEDS_REASON: { label: 'Needs a reason', tone: 'pending' },
+  SENT_BACK: { label: 'Sent back', tone: 'bad' },
+  WAITING: { label: 'Waiting for approval', tone: 'info' },
 };
 
 function humanise(value: string): string {

@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderScreen, reply } from '@/test/harness';
 import { atLocation, ppg, saket } from '@/test/location';
+import { at } from '@/test/next-navigation';
 import { PosGate } from './pos-gate';
 import type * as ApiModule from '@/lib/api';
 
@@ -39,11 +40,24 @@ const gate = (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  at('/pos/billing');
   atLocation(ppg);
   api.posWhoAmI.mockImplementation(() => reply(till()));
 });
 
 describe('the POS gate', () => {
+  it('lets the back-office pages (Reconciliation, Approvals) open on any computer', async () => {
+    for (const path of ['/pos/reconciliation', '/pos/approvals']) {
+      at(path);
+      const { unmount } = renderScreen(gate);
+
+      expect(await screen.findByText('Billing')).toBeInTheDocument();
+      unmount();
+    }
+    // Not asked which till this is: there is none at a supervisor's desk.
+    expect(api.posWhoAmI).not.toHaveBeenCalled();
+  });
+
   it('opens the till for an assigned user at the till’s location', async () => {
     window.localStorage.setItem('aahar.pos.tillKey', 'key-1');
     renderScreen(gate);

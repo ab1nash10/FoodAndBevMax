@@ -44,6 +44,9 @@ import type {
   PosDaySummary,
   PosOwnShift,
   PosShift,
+  ShiftCheckStatus,
+  ShiftReasons,
+  ShiftReconciliation,
   OnlinePayment,
   OnlinePaymentInput,
   OnlinePaymentProvider,
@@ -679,6 +682,38 @@ export function createOrganizationApi(options: ApiClientOptions) {
       return client.request<
         ApiResponse<{ businessDate: string; closedAt: string; closedByName: string | null }>
       >('/pos/day-closes', { body: { counterId, date }, method: 'POST' });
+    },
+    /** A day's ended shifts, each with its money check and where it stands. */
+    listShiftReconciliations(query: {
+      date?: string;
+      hospitalId?: string;
+      status?: ShiftCheckStatus;
+    }) {
+      return client.request<ApiResponse<{ date: string; items: ShiftReconciliation[] }>>(
+        '/pos/shift-reconciliations',
+        { query },
+      );
+    },
+    /** The restaurant admin's reasons for a shift's differences; it then waits for approval. */
+    saveShiftReasons(shiftId: string, reasons: ShiftReasons) {
+      return client.request<ApiResponse<ShiftReconciliation>>(
+        `/pos/shift-reconciliations/${shiftId}/reasons`,
+        { body: { reasons }, method: 'PUT' },
+      );
+    },
+    /** A Supervisor approves a shift: its money is final. */
+    approveShift(shiftId: string, comment?: string) {
+      return client.request<ApiResponse<ShiftReconciliation>>(
+        `/pos/shift-reconciliations/${shiftId}/approve`,
+        { body: { comment: comment || undefined }, method: 'POST' },
+      );
+    },
+    /** A Supervisor sends a shift back to the restaurant admin, saying what to fix. */
+    sendBackShift(shiftId: string, comment: string) {
+      return client.request<ApiResponse<ShiftReconciliation>>(
+        `/pos/shift-reconciliations/${shiftId}/send-back`,
+        { body: { comment }, method: 'POST' },
+      );
     },
     getPosDaySummary(counterId: string, date?: string) {
       return client.request<ApiResponse<PosDaySummary>>('/pos/summary', {

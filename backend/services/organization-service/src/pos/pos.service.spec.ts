@@ -118,6 +118,8 @@ function serviceWith(
     /** Batches the location still owes the vendor (ERP returns waiting): on hold. */
     owedBatches?: string[];
     payments?: Array<Record<string, unknown>>;
+    /** A Supervisor approved the shift's money check: its bills are final. */
+    shiftApproved?: boolean;
     shiftEnded?: boolean;
     shiftEndedWhileBilling?: boolean;
     /** Another till's sale, landing between this bill reading the stock and taking it. */
@@ -162,6 +164,9 @@ function serviceWith(
           null
         );
       },
+    },
+    shiftReconciliation: {
+      findFirst: () => (options.shiftApproved ? { id: 'reconciliation-1' } : null),
     },
     counterShift: {
       findFirst: () => (options.noShift ? null : { id: 'shift-1' }),
@@ -955,6 +960,18 @@ test('a bill on a closed day can no longer be cancelled', async () => {
   await assert.rejects(
     closedDay.service.cancel('old', { reason: 'x' }, cashier),
     (error: unknown) => error instanceof ConflictException && /day is closed/.test(error.message),
+  );
+});
+
+test('a bill whose shift a Supervisor approved can no longer be cancelled', async () => {
+  const { service } = serviceWith({ shiftApproved: true });
+  const made = await service.createOrder(bill(), cashier);
+
+  await assert.rejects(
+    service.cancel(made.id, { reason: 'x' }, cashier),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message === 'This bill’s shift is approved, so it can no longer be cancelled.',
   );
 });
 

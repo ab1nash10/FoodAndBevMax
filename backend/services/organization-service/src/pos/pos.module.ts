@@ -10,6 +10,8 @@ import { PosService } from './pos.service';
 import { QrOrdersController } from './qr-orders.controller';
 import { QrOrdersService } from './qr-orders.service';
 import { StaffDiscountOtpService } from './staff-discount-otp.service';
+import { ShiftReconciliationController } from './shift-reconciliation.controller';
+import { ShiftReconciliationService } from './shift-reconciliation.service';
 import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
 
@@ -18,6 +20,7 @@ import { ShiftsService } from './shifts.service';
     PosController,
     KioskController,
     ShiftsController,
+    ShiftReconciliationController,
     OnlinePaymentsController,
     QrOrdersController,
   ],
@@ -27,6 +30,7 @@ import { ShiftsService } from './shifts.service';
     PosService,
     KioskService,
     ShiftsService,
+    ShiftReconciliationService,
     OnlinePaymentsService,
     QrOrdersService,
     StaffDiscountOtpService,

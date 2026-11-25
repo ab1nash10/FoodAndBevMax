@@ -138,6 +138,13 @@ const defaultPermissions = [
   ],
   ['POS_SHIFT_MANAGE', 'POS_SHIFT', 'MANAGE', 'Open, hand over and close shifts at a counter'],
   ['POS_DAY_CLOSE', 'POS_DAY', 'CLOSE', "Close a counter's business day, and end anyone's shift"],
+  [
+    'SHIFT_RECONCILE',
+    'SHIFT_RECONCILE',
+    'MANAGE',
+    "See each closed shift's money check and give reasons for its differences",
+  ],
+  ['SHIFT_APPROVE', 'SHIFT_RECONCILE', 'APPROVE', 'Approve closed shifts, or send them back'],
   ['REPORT_SALES', 'REPORT', 'SALES', 'Export the Sales Report'],
   ['REPORT_SALES_ADMIN', 'REPORT', 'SALES_ADMIN', 'Export the Admin Sales Report'],
   ['REPORT_APC', 'REPORT', 'APC', 'Export the APC Report'],
@@ -267,9 +274,12 @@ async function main() {
     await tx.rolePermission.createMany({
       data: permissions
         // Posting to the ERP is a finance decision: Super Admin only until granted on purpose.
+        // Approving shifts is the Supervisor's: an admin gives the reasons, so does not approve them.
         .filter(
           (permission) =>
-            !permission.code.endsWith('_DELETE') && permission.code !== 'ERP_POSTING_SEND',
+            !permission.code.endsWith('_DELETE') &&
+            permission.code !== 'ERP_POSTING_SEND' &&
+            permission.code !== 'SHIFT_APPROVE',
         )
         .map((permission) => ({
           permissionId: permission.id,

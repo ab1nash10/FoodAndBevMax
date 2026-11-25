@@ -18,6 +18,7 @@ import {
   OrderStatus,
   PaymentMode,
   Prisma,
+  ShiftReconciliationStatus,
   StockReferenceType,
   StockTransactionType,
 } from '@prisma/client';
@@ -1722,6 +1723,19 @@ export class PosService {
       ) {
         throw new ConflictException(
           'This bill’s day is closed at its counter, so it can no longer be cancelled.',
+        );
+      }
+
+      // An approved shift's money is final, like a closed day's.
+      if (
+        order.shiftId &&
+        (await tx.shiftReconciliation.findFirst({
+          select: { id: true },
+          where: { shiftId: order.shiftId, status: ShiftReconciliationStatus.APPROVED },
+        }))
+      ) {
+        throw new ConflictException(
+          'This bill’s shift is approved, so it can no longer be cancelled.',
         );
       }
 

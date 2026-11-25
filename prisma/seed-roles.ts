@@ -106,6 +106,14 @@ export const OPERATIONAL_ROLES: Array<{
     // My Deliveries: the room orders given to them, marked delivered at the bed.
     permissionCodes: ['ITEM_VIEW', 'ORDER_DELIVER', 'RESTAURANT_MENU_VIEW', 'RESTAURANT_VIEW'],
   },
+  {
+    description: "Approves each closed shift's money check at their location, or sends it back",
+    locationScope: LocationScope.SINGLE,
+    name: 'Supervisor',
+    // POS → Approvals (the user, 2026-11-26): every shift, matched or not, after the restaurant
+    // admin's reasons.
+    permissionCodes: ['COUNTER_VIEW', 'RESTAURANT_VIEW', 'SHIFT_APPROVE'],
+  },
 ];
 
 export async function seedOperationalRoles(tx: Prisma.TransactionClient): Promise<void> {

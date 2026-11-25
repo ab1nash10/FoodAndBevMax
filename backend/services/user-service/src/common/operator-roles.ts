@@ -7,6 +7,8 @@ export const OPERATOR_ROLES = [
   'Inventory Manager',
   'Kitchen Operator',
   'Restaurant/POS Operator',
+  // Approves each closed shift's money check (2026-11-26).
+  'Supervisor',
 ];
 
 export const isOperatorRole = (name: string) => OPERATOR_ROLES.includes(name);

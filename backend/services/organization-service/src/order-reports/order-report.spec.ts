@@ -144,6 +144,16 @@ describe('amendRefusal', () => {
     );
   });
 
+  it('refuses a bill whose shift a Supervisor approved: its money is final', () => {
+    expect(
+      amendRefusal(
+        { ...bill, shiftApproved: true },
+        { paymentMode: 'UPI', paymentReference: 'r1' },
+        now,
+      ),
+    ).toBe('This bill’s shift is approved, so its payment mode can no longer be changed.');
+  });
+
   it('needs a transaction ID for UPI and card, and a change', () => {
     expect(amendRefusal(bill, { paymentMode: 'CARD', paymentReference: '  ' }, now)).toBe(
       'Enter the transaction ID for a UPI or card payment.',

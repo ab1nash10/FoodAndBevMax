@@ -29,6 +29,18 @@ test('lands each role on the screen its permissions point to', () => {
   expect(canOpenPath('/deliveries', holding('ORDER_VIEW', 'ORDER_UPDATE'))).toBe(false);
 });
 
+test('Reconciliation is for whoever gives shift reasons, Approvals for the Supervisor', () => {
+  const admin = holding('SHIFT_RECONCILE', 'POS_ORDER_VIEW', 'TRANSFER_VIEW');
+  const supervisor = holding('SHIFT_APPROVE', 'COUNTER_VIEW', 'RESTAURANT_VIEW');
+
+  expect(canOpenPath('/pos/reconciliation', admin)).toBe(true);
+  expect(canOpenPath('/pos/approvals', admin)).toBe(false);
+  expect(canOpenPath('/pos/approvals', supervisor)).toBe(true);
+  expect(canOpenPath('/pos/reconciliation', supervisor)).toBe(false);
+  // The Supervisor's work is the approvals queue: that is where they land.
+  expect(homeHref(supervisor)).toBe('/pos/approvals');
+});
+
 test('a saved start page wins only while the user may still open it', () => {
   const cashier = holding('POS_ORDER_CREATE', 'POS_ORDER_VIEW');
 

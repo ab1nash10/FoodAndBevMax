@@ -15,6 +15,7 @@ import { isServiceUnavailable, serviceRetries, serviceRetryDelay } from '@/lib/q
 import { isAccessTokenExpired, sessionUserFromAccessToken, type SessionUser } from '@/lib/session';
 import { watchSession } from '@/lib/session-watch';
 import { idleTooLong, LAST_ACTIVITY_KEY, watchIdle } from '@/lib/idle-sign-out';
+import { isTillScreen } from '@/lib/pos-paths';
 import { useQueryClient } from '@tanstack/react-query';
 import { LogIn } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -29,8 +30,11 @@ import {
   type ReactNode,
 } from 'react';
 
-/** The POS till stays signed in however long it sits idle (the user, 2026-11-23). */
-const isPosScreen = (path: string) => path === '/pos' || path.startsWith('/pos/');
+/**
+ * The POS till stays signed in however long it sits idle (the user, 2026-11-23); its back-office
+ * pages (Reconciliation, Approvals) are desk screens and sign out like any other.
+ */
+const isPosScreen = isTillScreen;
 const IDLE_NOTICE = 'You were signed out after 8 hours without activity. Please login again.';
 
 interface AuthContextValue {

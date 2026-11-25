@@ -228,6 +228,9 @@ exports[`every prefix stays as it is 1`] = `
   "rooms": [
     "rooms",
   ],
+  "shiftReconciliations": [
+    "shift-reconciliations",
+  ],
   "staffDiscounts": [
     "staff-discounts",
   ],

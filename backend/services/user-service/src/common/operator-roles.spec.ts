@@ -7,4 +7,8 @@ describe('operator roles', () => {
     expect(isOperatorRole('POS Cashier')).toBe(false);
     expect(isOperatorRole('Admin')).toBe(false);
   });
+
+  it('lists the Supervisor, who approves shifts, on Operators', () => {
+    expect(isOperatorRole('Supervisor')).toBe(true);
+  });
 });

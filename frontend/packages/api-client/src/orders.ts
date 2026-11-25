@@ -401,6 +401,70 @@ export interface PosDaySummary extends PosTakings {
   shifts: PosShift[];
 }
 
+/**
+ * Where a closed shift's money check stands (POS → Reconciliation and Approvals): its
+ * differences need the restaurant admin's reasons, it waits for a Supervisor, or was decided.
+ */
+export type ShiftCheckStatus = 'APPROVED' | 'NEEDS_REASON' | 'SENT_BACK' | 'WAITING';
+
+export type ShiftCheckKey = 'CARD' | 'CASH' | 'UPI';
+
+/** One payment mode of a shift: what its bills say against what was received. */
+export interface ShiftMoneyRow {
+  /** For cash, the opening cash plus the cash bills. */
+  billed: number;
+  /** received − billed; null when nothing can be checked (not counted, or Other). */
+  difference: number | null;
+  mode: PaymentMode;
+  /** Cash counted at shift end; UPI and card confirmed by a gateway. */
+  received: number | null;
+}
+
+/** A difference that needs a reason. */
+export interface ShiftCheck {
+  /** Cash short/over: its size; UPI/card: received − billed; null when cash was not counted. */
+  amount: number | null;
+  /** UPI or card bills no gateway confirmed. */
+  bills: Array<{ amount: number; id: string; number: string }>;
+  key: ShiftCheckKey;
+  kind: 'not-counted' | 'over' | 'short' | 'unconfirmed';
+  /** Payments a gateway confirmed at the till with no bill made. */
+  payments: Array<{ amount: number; id: string; paidAt: string | null; reference: string | null }>;
+  /** The reasons that may be picked. */
+  reasons: string[];
+}
+
+export interface ShiftReasonEntry {
+  note?: string | null;
+  reason: string;
+}
+
+export type ShiftReasons = Partial<Record<ShiftCheckKey, ShiftReasonEntry>>;
+
+export interface ShiftReconciliation {
+  cashierName: string | null;
+  checks: ShiftCheck[];
+  closedAt: string | null;
+  /** The Supervisor's comment: why it was sent back, or a note on approval. */
+  comment: string | null;
+  counterName: string;
+  decidedAt: string | null;
+  decidedByName: string | null;
+  hospitalId: string;
+  money: ShiftMoneyRow[];
+  openedAt: string;
+  /** Cash in the till when the shift opened: part of the cash expected. */
+  openingCash: number;
+  reasons: ShiftReasons;
+  restaurantId: string;
+  restaurantName: string;
+  shiftId: string;
+  shiftName: string | null;
+  status: ShiftCheckStatus;
+  submittedAt: string | null;
+  submittedByName: string | null;
+}
+
 /** A counter's stock per item for one business day (every menu item, zeros included). */
 export interface PosStockSummary {
   counter: PosCounter;

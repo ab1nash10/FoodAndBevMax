@@ -3,12 +3,14 @@
 import { Button } from '@aahar/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, MonitorSmartphone } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocationContext } from '@/components/location-context';
 import { AppPageHeader } from '@/components/design-system';
 import { Skeleton } from '@/components/ui';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
 import { launchedComputerName } from '@/lib/pos-launch';
+import { isTillScreen } from '@/lib/pos-paths';
 import { queryKeys } from '@/lib/query-keys';
 import { saveTillKey, usePosTill } from './shared';
 
@@ -128,6 +130,11 @@ function TillSetup({ again = false }: Readonly<{ again?: boolean }>) {
  * says why; an admin can set the computer up there.
  */
 export function PosGate({ children }: Readonly<{ children: ReactNode }>) {
+  // Reconciliation and Approvals are done at a desk: no till to ask about.
+  return isTillScreen(usePathname()) ? <TillGate>{children}</TillGate> : children;
+}
+
+function TillGate({ children }: Readonly<{ children: ReactNode }>) {
   const till = usePosTill();
   const { availableLocations, isLoadingLocations, scopedHospitalId } = useLocationContext();
 
