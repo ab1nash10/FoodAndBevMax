@@ -186,6 +186,12 @@ machine's noise: not slower).
   (11 Nov 2026) leaves 6, all inside npm, which no container runs.
 - **Rollback:** revert the commit (both Dockerfiles, `package.json`, `pnpm-lock.yaml`) or
   redeploy the previous image tag. No schema, data or chart change.
+- **Backend part taken out (2026-11-25):** on Jenkins FANDB-API the Build Docker Image stage
+  went from about 3.5 min (#56, #57) to about 6.5 min (#58, #59), while Push to ECR (9 s) and
+  Helm Deploy (26–28 s) did not change. The `prod-deps` stage is gone and the runner copies
+  `node_modules` from the builder again (image back to about 1.19 GB). `prisma` and `tsx` stay
+  root dependencies, and the portal changes stay. Checked: `SERVICE=all` built, migrated and
+  seeded an empty Postgres 16, then answered health 200, 401 and 400, as uid 1000.
 
 ## Where the baseline time goes
 
