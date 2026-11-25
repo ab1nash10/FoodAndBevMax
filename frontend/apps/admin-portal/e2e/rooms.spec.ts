@@ -67,14 +67,17 @@ test('rooms import from a hospital room list, and a room QR orders to that room'
   await expect(result).toContainText(/2\s*added, 0\s*updated|0\s*added, 2\s*updated/);
   await result.getByRole('button', { name: 'Done' }).click();
 
-  // Edit: rename, then back.
+  // Edit: rename, then back. A new name each run: a run stopped between the two saves leaves
+  // its room renamed, and a fixed name would then be taken (409) and fail every run after it.
+  const renamed = `${beds[0]} ${Date.now().toString(36)}`;
   await page.getByRole('searchbox', { name: 'Search rooms' }).fill(beds[0]!);
-  await page.getByRole('button', { name: `Edit ${beds[0]}` }).click();
+  await page.getByRole('button', { exact: true, name: `Edit ${beds[0]}` }).click();
   const editor = page.getByRole('dialog', { name: 'Edit room' });
-  await editor.getByLabel('Room or bed').fill(`${beds[0]} X`);
+  await editor.getByLabel('Room or bed').fill(renamed);
   await editor.getByRole('button', { name: 'Save changes' }).click();
-  await page.getByRole('searchbox', { name: 'Search rooms' }).fill(`${beds[0]} X`);
-  await page.getByRole('button', { name: `Edit ${beds[0]} X` }).click();
+  await expect(editor).toBeHidden();
+  await page.getByRole('searchbox', { name: 'Search rooms' }).fill(renamed);
+  await page.getByRole('button', { name: `Edit ${renamed}` }).click();
   await editor.getByLabel('Room or bed').fill(beds[0]!);
   await editor.getByRole('button', { name: 'Save changes' }).click();
   await expect(editor).toBeHidden();
@@ -92,8 +95,10 @@ test('rooms import from a hospital room list, and a room QR orders to that room'
   expect(exported).toMatch(new RegExp(`${beds[0]}.*Active.*/order/room/[0-9a-f-]{36}`));
 
   // The room's QR holds its ordering link.
-  await page.getByRole('button', { name: `QR code for ${beds[0]}` }).click();
-  await expect(page.getByRole('img', { name: `QR code for ${beds[0]}` })).toBeVisible();
+  await page.getByRole('button', { exact: true, name: `QR code for ${beds[0]}` }).click();
+  await expect(
+    page.getByRole('img', { exact: true, name: `QR code for ${beds[0]}` }),
+  ).toBeVisible();
   const link = await page.getByLabel('Ordering link').inputValue();
   expect(link).toMatch(/\/order\/room\/[0-9a-f-]{36}$/);
 

@@ -2,7 +2,7 @@
 
 import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { SlideIndicator, useSlidingIndicator } from '@/components/swiss-motion';
 import { getActiveNavHref, navigationGroups, type NavBadge, type NavGroup } from '@/lib/navigation';
 import { usePrefetchOnIntent } from '@/lib/prefetch';
@@ -70,19 +70,35 @@ function Count({ value }: Readonly<{ value: number }>) {
 /**
  * The link just clicked shows as chosen at once (its pill or underline slides to it, Swiss
  * motion) until its page arrives; from then on the page's own link is chosen. aria-current stays
- * on the page actually shown.
+ * on the page actually shown. A click whose page stops loading without opening (another click
+ * first, Back, a failed load) gives the choice back to the page shown, so the row's links report
+ * their loading through `report`.
  */
-function usePicked(current: string | null | undefined) {
-  const [picked, setPicked] = useState<{ from: string | null | undefined; to: string } | null>(
-    null,
-  );
+function usePicked(current: string | null | undefined, onPending?: OnPending) {
+  const [picked, setPicked] = useState<{
+    from: string | null | undefined;
+    loaded: boolean;
+    to: string;
+  } | null>(null);
   const chosen = picked && picked.from === current ? picked.to : current;
+  const report = useCallback(
+    (change: 1 | -1) => {
+      onPending?.(change);
+      setPicked((now) => {
+        if (!now) return now;
+        if (change === 1) return { ...now, loaded: true };
+        return now.loaded ? null : now;
+      });
+    },
+    [onPending],
+  );
 
   return {
     chosen,
     pick: (event: MouseEvent, to: string) => {
-      if (opensHere(event)) setPicked({ from: current, to });
+      if (opensHere(event)) setPicked({ from: current, loaded: false, to });
     },
+    report,
   };
 }
 
@@ -100,7 +116,7 @@ export function ModulePills({
 }>) {
   const { active, modules } = useModules(hasPermission);
   const prefetchProps = usePrefetchOnIntent();
-  const { chosen, pick } = usePicked(active?.group.label);
+  const { chosen, pick, report } = usePicked(active?.group.label, onPending);
   const { box, rowRef, slides } = useSlidingIndicator<HTMLUListElement>('[data-chosen]', chosen);
 
   return (
@@ -135,7 +151,7 @@ export function ModulePills({
               >
                 {pillLabel(group)}
                 {waiting > 0 ? <Count value={waiting} /> : null}
-                <LinkPending onPending={onPending} />
+                <LinkPending onPending={report} />
               </Link>
             </li>
           ) : null;
@@ -195,7 +211,7 @@ function ModuleTabRow({
   pages: ReturnType<typeof useModules>['modules'][number]['pages'];
 }>) {
   const prefetchProps = usePrefetchOnIntent();
-  const { chosen, pick } = usePicked(activeHref);
+  const { chosen, pick, report } = usePicked(activeHref, onPending);
   const { box, rowRef, slides } = useSlidingIndicator<HTMLUListElement>('[data-chosen]', chosen);
 
   return (
@@ -224,7 +240,7 @@ function ModuleTabRow({
               >
                 {page.label}
                 {count > 0 ? <Count value={count} /> : null}
-                <LinkPending onPending={onPending} />
+                <LinkPending onPending={report} />
               </Link>
             </li>
           );

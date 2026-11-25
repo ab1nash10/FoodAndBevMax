@@ -116,6 +116,33 @@ describe('the portal shell', () => {
     expect(main.queryByRole('heading', { name: 'Items page' })).not.toBeInTheDocument();
   });
 
+  it('gives the module pill back when the page it was clicked for never opens', async () => {
+    const { rerender, user } = renderShell();
+    // A new element each time, so the shell renders again and reads the links' status.
+    const shell = () => (
+      <ThemeProvider>
+        <AdminShell>
+          <h1>Items page</h1>
+        </AdminShell>
+      </ThemeProvider>
+    );
+    const pills = within(screen.getByRole('navigation', { name: 'Modules' }));
+
+    await user.click(pills.getByRole('link', { name: 'Access' }));
+    // Chosen at once, before its page arrives.
+    expect(pills.getByRole('link', { name: 'Access' })).toHaveAttribute('data-chosen');
+
+    // Its page starts loading, then the navigation is dropped (another click, Back, a failed
+    // load): the address never changed, so the module shown is still the one chosen.
+    linkStatus.pending = true;
+    rerender(shell());
+    linkStatus.pending = false;
+    rerender(shell());
+
+    expect(pills.getByRole('link', { name: 'Access' })).not.toHaveAttribute('data-chosen');
+    expect(pills.getByRole('link', { name: 'Item & menu' })).toHaveAttribute('data-chosen');
+  });
+
   it('leaves the page up when no menu link is waiting (a prefetched page opens at once)', () => {
     renderShell();
 
