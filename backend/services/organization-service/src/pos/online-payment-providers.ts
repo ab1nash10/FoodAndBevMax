@@ -134,7 +134,7 @@ function razorpay(keyId: string, keySecret: string): PaymentProvider {
     async cancel(providerRef) {
       // ponytail: Razorpay has no cancel for an order, so a checkout still open can be paid after
       // this. AAHAR asks first (cancel checks before it lets go), and the QR sweep asks again for
-      // 30 minutes (QrOrdersService.sweep); a payment later than that is not seen.
+      // 30 minutes after the cancel (QrOrdersService.sweep); a payment later than that is not seen.
       if (isOrder(providerRef)) return;
       await call('RAZORPAY', `${base}/${providerRef}/cancel`, { headers, method: 'POST' });
     },
@@ -412,7 +412,8 @@ export function pinelabs(baseUrl: string, machine: PinelabsMachine): PaymentProv
         ...credentials,
         AllowedPaymentMode: '1',
         Amount: Math.round(amount * 100),
-        AutoCancelDurationInMinutes: 5,
+        // The machine gives up on its own at 3 minutes too, if no till or server cancels it.
+        AutoCancelDurationInMinutes: 3,
         SequenceNumber: 1,
         // Our payment's id, short: Plutus refuses long bill numbers.
         TransactionNumber: reference.replaceAll('-', '').slice(0, 20),

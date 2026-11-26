@@ -7,6 +7,7 @@ import { CheckCircle2, CreditCard, Loader2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from '@/components/ui-controls';
 import { getApiErrorMessage, organizationApi } from '@/lib/api';
+import { PAYMENT_WINDOW_MS, paymentCheckEvery } from '@/lib/payment-checks';
 import { formatMoney, UpiQr } from './shared';
 
 export const providerLabels: Record<OnlinePaymentProvider, string> = {
@@ -17,9 +18,10 @@ export const providerLabels: Record<OnlinePaymentProvider, string> = {
 
 /**
  * Takes a bill's payment online: asks the provider for a payment link (the server prices the
- * bill), shows it as a QR, checks every 2 s until the guest has paid, then hands the paid
- * payment back. For Pine Labs the amount goes to the counter's card machine instead, and the
- * guest pays by card there. Nothing here is the till's: a kiosk can use it with the same request.
+ * bill), shows it as a QR, checks it (lib/payment-checks) until the guest has paid, then hands
+ * the paid payment back; unpaid after 3 minutes, it is cancelled. For Pine Labs the amount goes
+ * to the counter's card machine instead, and the guest pays by card there. Nothing here is the
+ * till's: a kiosk can use it with the same request.
  */
 export function OnlinePaymentDialog({
   onClose,
@@ -51,17 +53,36 @@ export function OnlinePaymentDialog({
       if (checked.status !== 'PAID') close();
     },
   });
+  // Unpaid at 3 minutes: cancelled, and the dialog stays to say so. A cancel that finds it paid
+  // brings it back PAID, and the bill completes as usual.
+  const timeoutMutation = useMutation({
+    mutationFn: async (id: string) => (await organizationApi.cancelOnlinePayment(id)).data,
+    onSuccess: setPayment,
+  });
+  // When this payment started waiting, for the check schedule and the 3 minutes.
+  const startedAt = useRef(0);
   const statusQuery = useQuery({
     enabled: payment?.status === 'PENDING',
     queryFn: async () => (await organizationApi.checkOnlinePayment(payment!.id)).data,
     queryKey: ['online-payment', payment?.id],
     // Paid, expired or cancelled is final: nothing more to check.
     refetchInterval: (query) =>
-      (query.state.data?.status ?? 'PENDING') === 'PENDING' ? 2000 : false,
+      (query.state.data?.status ?? 'PENDING') === 'PENDING'
+        ? paymentCheckEvery(Date.now() - startedAt.current)
+        : false,
   });
   // While pending, the latest check wins; once settled (a cancel found it paid), the payment does.
   const current = payment?.status === 'PENDING' ? (statusQuery.data ?? payment) : payment;
   const { mutate: start, reset: resetStart } = startMutation;
+  const { mutate: giveUp, reset: resetTimeout } = timeoutMutation;
+  const waitingId = current?.status === 'PENDING' ? current.id : null;
+
+  useEffect(() => {
+    if (!waitingId) return undefined;
+    startedAt.current = Date.now();
+    const timer = window.setTimeout(() => giveUp(waitingId), PAYMENT_WINDOW_MS);
+    return () => window.clearTimeout(timer);
+  }, [giveUp, waitingId]);
 
   // A new bill starts a new payment; closed, the last one is forgotten.
   useEffect(() => {
@@ -71,11 +92,12 @@ export function OnlinePaymentDialog({
     } else {
       setPayment(null);
       resetStart();
+      resetTimeout();
     }
     return () => {
       openFor.current = null;
     };
-  }, [request, resetStart, start]);
+  }, [request, resetStart, resetTimeout, start]);
 
   useEffect(() => {
     if (current?.status === 'PAID' && handedBack.current !== current.id) {
@@ -87,6 +109,7 @@ export function OnlinePaymentDialog({
   function close() {
     setPayment(null);
     resetStart();
+    resetTimeout();
     onClose();
   }
 
@@ -189,7 +212,9 @@ export function OnlinePaymentDialog({
             <p className="text-sm text-ds-text-2" role="status">
               {current.status === 'EXPIRED'
                 ? `${provider} closed this payment unpaid. Take payment again.`
-                : 'Payment cancelled.'}
+                : timeoutMutation.isSuccess
+                  ? 'Not paid within 3 minutes, so it was cancelled. Take payment again.'
+                  : 'Payment cancelled.'}
             </p>
           </>
         )}

@@ -495,7 +495,7 @@ test('Pine Labs: a payment goes to the machine in paise, for cards, under a shor
   assert.deepEqual(sent(), {
     AllowedPaymentMode: '1',
     Amount: 10550,
-    AutoCancelDurationInMinutes: 5,
+    AutoCancelDurationInMinutes: 3,
     IMEI: 'TEST-IMEI',
     MerchantID: '29610',
     MerchantStorePosCode: '1221258437',

@@ -87,6 +87,7 @@ const location = {
 
 function serviceWith(grandTotal = 105, settings = config, machines: Machine[] = []) {
   const payments: OnlinePayment[] = [];
+  const queries: Array<{ where: Record<string, unknown> }> = [];
   const prisma = {
     hospital: { findFirst: () => location },
     counter: {
@@ -113,6 +114,16 @@ function serviceWith(grandTotal = 105, settings = config, machines: Machine[] = 
       },
       findFirst: ({ where }: { where: { id: string } }) =>
         payments.find((payment) => payment.id === where.id) ?? null,
+      // Waiting payments by age (a relation filter such as qrOrder is kept, not applied).
+      findMany: (args: {
+        where: { createdAt: { gte: Date; lt: Date }; status: string } & Record<string, unknown>;
+      }) => {
+        queries.push(args);
+        const { gte, lt } = args.where.createdAt;
+        return payments
+          .filter((p) => p.status === args.where.status && p.createdAt >= gte && p.createdAt < lt)
+          .map(({ id }) => ({ id }));
+      },
       updateMany: ({
         data,
         where,
@@ -141,6 +152,7 @@ function serviceWith(grandTotal = 105, settings = config, machines: Machine[] = 
   return {
     audits,
     payments,
+    queries,
     service: new OnlinePaymentsService(
       settings,
       pos as unknown as PosService,
@@ -361,4 +373,45 @@ test('a Razorpay order paid after it was cancelled is found, marked paid and fla
   // Settled: asked again, nothing moves and nothing more is said.
   assert.equal(await service.paidAfterCancel('late-1'), false);
   assert.equal(audits.length, 1);
+});
+
+test('the server cancels a till payment still waiting 30 s past its 3 minutes; one found paid is flagged for a refund', async () => {
+  const { audits, payments, queries, service } = serviceWith();
+  const now = Date.now();
+  const waiting = (id: string, waitedMs: number) => {
+    payments.push({
+      amount: new Prisma.Decimal(105),
+      createdAt: new Date(now - waitedMs),
+      hospitalId: 'hospital-1',
+      id,
+      paidReference: null,
+      provider: 'RAZORPAY',
+      providerRef: 'plink_1',
+      status: 'PENDING',
+    } as unknown as OnlinePayment);
+    return payments.at(-1)!;
+  };
+  link = { status: 'created' };
+  cancelRefused = false;
+  // Its till cancels it at 3 minutes; the server gives the till 30 s to do so.
+  const tillStillThere = waiting('pay-recent', 3 * 60_000);
+  const tillGone = waiting('pay-left', 3 * 60_000 + 31_000);
+
+  await service.cancelAbandoned(now);
+
+  assert.equal(tillGone.status, 'CANCELLED');
+  assert.equal(tillStillThere.status, 'PENDING');
+  const { where } = queries.at(-1)!;
+  // QR and kiosk orders' payments are their own sweep's; not looked at again after a day.
+  assert.deepEqual(where.qrOrder, { is: null });
+  assert.equal((where.createdAt as { gte: Date }).gte.valueOf(), now - 24 * 60 * 60_000);
+
+  // The guest paid before the server's last check: kept as paid, on no bill, flagged.
+  const paidLate = waiting('pay-late', 4 * 60_000);
+  link = { payments: [{ payment_id: 'pay_LATE' }], status: 'paid' };
+  await service.cancelAbandoned(now);
+  link = { status: 'created' };
+
+  assert.equal(paidLate.status, 'PAID');
+  assert.equal(audits.at(-1), 'RAZORPAY payment of 105 paid, but no till billed it: refund it');
 });

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { getApiErrorMessage, publicOrganizationApi } from '@/lib/api';
 import { withBasePath } from '@/lib/base-path';
 import { newClientId as newClientOrderId } from '@/lib/client-id';
+import { PAYMENT_WINDOW_MS, paymentCheckEvery } from '@/lib/payment-checks';
 import { reconcile, setQuantity, type KioskCartLine } from '@/lib/kiosk';
 import { useBoardTheme, useWakeLock } from '@/lib/order-board/live';
 import { fetchQrOrigin } from '@/lib/qr-order';
@@ -25,7 +26,7 @@ const WARNING_MS = 15_000;
 /** The order number (and its take-away QR) stays up this long, then the kiosk is ready again. */
 const DONE_MS = 45_000;
 /** A payment left this long is given up: the QR (or card machine) is cancelled. */
-const PAY_MS = 4 * 60_000;
+const PAY_MS = PAYMENT_WINDOW_MS;
 
 function isInvalidLink(error: unknown): boolean {
   return error instanceof ApiClientError && (error.status === 404 || error.status === 400);
@@ -158,10 +159,12 @@ function Paying({
   const [qr, setQr] = useState<string | null>(null);
   const [left, setLeft] = useState(PAY_MS / 1000);
   const [cancelling, setCancelling] = useState(false);
+  // When the payment started waiting, for the check schedule and the countdown.
+  const [startedAt] = useState(Date.now);
   const statusQuery = useQuery({
     queryFn: async () => (await publicOrganizationApi.getQrOrder(order.id, order.key)).data,
     queryKey: ['kiosk-payment', order.id],
-    refetchInterval: 2500,
+    refetchInterval: () => paymentCheckEvery(Date.now() - startedAt),
   });
   const view = statusQuery.data ?? order;
 
@@ -191,16 +194,15 @@ function Paying({
   }, [onBilled, onClosed, onNotBilled, order.id, order.key]);
 
   useEffect(() => {
-    const started = Date.now();
     const timer = window.setInterval(() => {
-      const remaining = Math.ceil((PAY_MS - (Date.now() - started)) / 1000);
+      const remaining = Math.ceil((PAY_MS - (Date.now() - startedAt)) / 1000);
       if (remaining <= 0) {
         window.clearInterval(timer);
         void cancel();
       } else setLeft(remaining);
     }, 500);
     return () => window.clearInterval(timer);
-  }, [cancel]);
+  }, [cancel, startedAt]);
 
   const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
 

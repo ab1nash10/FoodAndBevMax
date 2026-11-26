@@ -765,8 +765,13 @@ function settling(
       ? Promise.resolve({ status })
       : Promise.reject(new Error('Razorpay did not answer.'));
   };
+  const abandoned: number[] = [];
   const onlinePayments = {
     cancel: ask('cancel'),
+    cancelAbandoned: (now: number) => {
+      abandoned.push(now);
+      return Promise.resolve();
+    },
     check: ask('check'),
     paidAfterCancel: (id: string) => Promise.resolve(options.paidLate?.includes(id) ?? false),
   };
@@ -794,15 +799,15 @@ function settling(
     auditLog as unknown as AuditLogService,
   );
 
-  return { asked, audits, bills, codes, queries, service, writes };
+  return { abandoned, asked, audits, bills, codes, queries, service, writes };
 }
 
 const keyOf = (id: string) =>
   createHmac('sha256', 'secret').update(`qr-order:${id}`).digest('base64url');
 
 test("the sweeper settles what the guest's page left: oldest first, a batch at a time, each on its own", async () => {
-  const { asked, bills, queries, service, writes } = settling(
-    [waiting('paid', 5), waiting('down', 4), waiting('lapsed', 3), waiting('stale', 31)],
+  const { abandoned, asked, bills, queries, service, writes } = settling(
+    [waiting('paid', 2.5), waiting('down', 2), waiting('lapsed', 1.6), waiting('stale', 3.1)],
     { lapsed: 'EXPIRED', paid: 'PAID', stale: 'CANCELLED' },
   );
 
@@ -824,7 +829,7 @@ test("the sweeper settles what the guest's page left: oldest first, a batch at a
   assert.ok(between(query.where.createdAt.lt, 90_000));
   assert.ok(between(query.where.createdAt.gte, 24 * 60 * 60_000));
 
-  // Asked as status() asks; still unpaid after 30 minutes, let go as the kiosk's Cancel does.
+  // Asked as status() asks; still unpaid after 3 minutes, let go as the kiosk's Cancel does.
   assert.deepEqual(asked, [
     'check payment-paid',
     'check payment-down',
@@ -833,6 +838,8 @@ test("the sweeper settles what the guest's page left: oldest first, a batch at a
   ]);
   // Paid: billed at its counter. One whose gateway did not answer waits for the next sweep.
   assert.deepEqual(bills, ['qr-paid']);
+  // The till's payments get the same 3 minutes, from the same sweep.
+  assert.equal(abandoned.length, 1);
   assert.deepEqual(
     writes.map(({ data, where }) => [where.id, data.status]),
     [

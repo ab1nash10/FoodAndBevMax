@@ -561,6 +561,30 @@ describe('a placed QR order', () => {
     expect(api.getQrOrder).toHaveBeenCalledWith('order-1', 'key-1');
   });
 
+  // The server gives the payment up at 3 minutes; the page keeps checking until it says so.
+  it('checks a waiting payment every 5 s for 30 s, then every 10 s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.getQrOrder.mockImplementation(() =>
+        reply(view({ kitchenStatus: null, status: 'AWAITING_PAYMENT' })),
+      );
+      open();
+      await screen.findByText('Waiting for your payment');
+      const checks = () => api.getQrOrder.mock.calls.length;
+      const first = checks();
+
+      await act(() => vi.advanceTimersByTimeAsync(29_000));
+      expect(checks() - first).toBe(5);
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(checks() - first).toBe(8);
+      // Past 3 minutes, still every 10 s until the server's answer arrives.
+      await act(() => vi.advanceTimersByTimeAsync(150_000));
+      expect(checks() - first).toBe(23);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows why Razorpay could not open', async () => {
     const checkout = {
       amount: 21_000,

@@ -142,9 +142,42 @@ describe('taking a payment online', () => {
       renderScreen(<OnlinePaymentDialog onClose={vi.fn()} onPaid={vi.fn()} request={request()} />);
       await within(dialog()).findByText(/closed this payment unpaid/);
 
-      await act(() => vi.advanceTimersByTimeAsync(4500));
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
 
       expect(api.checkOnlinePayment).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('checks every 5 s for 30 s, then every 10 s, and cancels a payment unpaid after 3 minutes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.cancelOnlinePayment.mockImplementation(() => reply(payment({ status: 'CANCELLED' })));
+      const onClose = vi.fn();
+      renderScreen(<OnlinePaymentDialog onClose={onClose} onPaid={vi.fn()} request={request()} />);
+      await within(dialog()).findByText(/The guest scans to pay/);
+      const checks = () => api.checkOnlinePayment.mock.calls.length;
+
+      // At once, then at 5, 10, 15, 20 and 25 s.
+      await act(() => vi.advanceTimersByTimeAsync(29_000));
+      expect(checks()).toBe(6);
+      // At 30, 40 and 50 s.
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(checks()).toBe(9);
+
+      await act(() => vi.advanceTimersByTimeAsync(119_000));
+      expect(api.cancelOnlinePayment).not.toHaveBeenCalled();
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+
+      expect(api.cancelOnlinePayment).toHaveBeenCalledWith('pay-1');
+      expect(
+        await within(dialog()).findByText(
+          'Not paid within 3 minutes, so it was cancelled. Take payment again.',
+        ),
+      ).toBeInTheDocument();
+      // The cashier sees why: the dialog stays until they close it.
+      expect(onClose).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '@aahar/logging';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnlinePaymentStatus, type OnlinePayment } from '@prisma/client';
@@ -17,6 +18,16 @@ import {
 } from './online-payment-providers';
 import { PosService } from './pos.service';
 import { confirmStaffDiscount } from './staff-discount-confirm';
+
+/**
+ * A waiting payment is given up (cancelled) this long after it started, on every screen and
+ * gateway (the user, 2026-11-26); the screens check it every 5 s, then every 10 s, until then.
+ */
+export const PAYMENT_WINDOW_MS = 3 * 60_000;
+/** The server's backup leaves a till payment to its till this much longer (its own cancel). */
+const TILL_GRACE_MS = 30_000;
+/** One the backup cannot settle (its gateway refusing it, say) stops being tried after this. */
+const ABANDONED_WINDOW_MS = 24 * 60 * 60_000;
 
 function toView(payment: OnlinePayment) {
   return {
@@ -233,6 +244,49 @@ export class OnlinePaymentsService {
     }
 
     return toView(await this.find(id));
+  }
+
+  /**
+   * The till's server backup: a till payment still waiting 30 s past its 3 minutes (its till was
+   * closed, reloaded or lost before its own cancel) is cancelled, after a last check. Found paid,
+   * no till billed it: it is kept as paid and flagged for a refund. QR and kiosk orders' payments
+   * are QrOrdersService.sweep's, which calls this on each run. The oldest first, 20 per run.
+   */
+  async cancelAbandoned(now = Date.now()) {
+    const waiting = await this.prisma.onlinePayment.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+      take: 20,
+      where: {
+        createdAt: {
+          gte: new Date(now - ABANDONED_WINDOW_MS),
+          lt: new Date(now - PAYMENT_WINDOW_MS - TILL_GRACE_MS),
+        },
+        qrOrder: { is: null },
+        status: OnlinePaymentStatus.PENDING,
+      },
+    });
+
+    for (const { id } of waiting) {
+      try {
+        const settled = await this.cancel(id);
+
+        if (settled.status === OnlinePaymentStatus.PAID) {
+          const payment = await this.find(id);
+          void this.auditLog?.record({
+            action: 'STATUS_CHANGE',
+            entityId: id,
+            entityName: 'online_payments',
+            hospitalId: payment.hospitalId,
+            newValue: { status: OnlinePaymentStatus.PAID },
+            oldValue: { status: OnlinePaymentStatus.PENDING },
+            summary: `${payment.provider} payment of ${toNumber(payment.amount)} paid, but no till billed it: refund it`,
+          });
+        }
+      } catch (error) {
+        logger.warn({ err: error, onlinePaymentId: id }, 'online_payment_abandon_failed');
+      }
+    }
   }
 
   /**

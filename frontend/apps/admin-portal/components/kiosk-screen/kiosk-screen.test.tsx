@@ -437,7 +437,36 @@ describe('paying at the kiosk', () => {
       'src',
       'data:image/png;base64,QR',
     );
-    expect(screen.getByText(/Waiting for payment · [34]:\d\d/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for payment · [23]:\d\d/)).toBeInTheDocument();
+  });
+
+  it('checks every 5 s for 30 s, then every 10 s, and gives the payment up after 3 minutes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.cancelGuestOrder.mockImplementation(() => reply(order({ status: 'CLOSED' })));
+      const { user } = renderScreen(<KioskScreen restaurantId="r1" token="t" />);
+      const sheet = await toCart(user);
+      await signIn(user);
+      await user.click(within(sheet).getByRole('button', { name: 'Pay by UPI' }));
+      await screen.findByText('Scan to pay by UPI');
+      const checks = () => api.getQrOrder.mock.calls.length;
+      const first = checks();
+
+      // At 5, 10, 15, 20 and 25 s.
+      await act(() => vi.advanceTimersByTimeAsync(29_000));
+      expect(checks() - first).toBe(5);
+      // At 30, 40 and 50 s.
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(checks() - first).toBe(8);
+
+      await act(() => vi.advanceTimersByTimeAsync(119_000));
+      expect(api.cancelGuestOrder).not.toHaveBeenCalled();
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+
+      expect(api.cancelGuestOrder).toHaveBeenCalledWith('abcdef123456', 'key-1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('asks for the card machine when paying by card', async () => {

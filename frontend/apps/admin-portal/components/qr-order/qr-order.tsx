@@ -65,6 +65,7 @@ import {
   type StepState,
 } from '@/lib/qr-order';
 import { newClientId } from '@/lib/client-id';
+import { paymentCheckEvery } from '@/lib/payment-checks';
 import { loadRazorpay, openRazorpayCheckout } from '@/lib/razorpay-checkout';
 import { cn } from '@/lib/utils';
 
@@ -1497,12 +1498,18 @@ function OrderProgress({
   order: { id: string; key: string };
 }>) {
   const [payError, setPayError] = useState('');
+  const [shownAt] = useState(Date.now);
   const orderQuery = useQuery({
     queryFn: async () => (await publicOrganizationApi.getQrOrder(order.id, order.key)).data,
     queryKey: ['qr-order', order.id],
+    // A waiting payment on the payment schedule; the server gives it up at 3 minutes, and this
+    // page keeps checking until it hears so. Paid, the kitchen's progress every 4 s.
     refetchInterval: (query) => {
       const data = query.state.data;
-      return data && isSettled(data) ? false : 4000;
+      if (data && isSettled(data)) return false;
+      return !data || data.status === 'AWAITING_PAYMENT'
+        ? paymentCheckEvery(Date.now() - shownAt)
+        : 4000;
     },
   });
   const view = orderQuery.data;

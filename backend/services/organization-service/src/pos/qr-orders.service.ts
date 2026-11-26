@@ -44,7 +44,7 @@ import type {
 import { providersAt } from './online-payment-providers';
 
 type PaymentProviderName = 'PAYU' | 'PINELABS' | 'RAZORPAY';
-import { OnlinePaymentsService } from './online-payments.service';
+import { OnlinePaymentsService, PAYMENT_WINDOW_MS } from './online-payments.service';
 import { sellableMenu, siteBusinessDate } from './pos-pricing';
 import { PosService, servedOn } from './pos.service';
 
@@ -58,12 +58,12 @@ const DAY_SECONDS = 24 * 60 * 60;
 const GUEST_SESSION_MS = 30 * 24 * 60 * 60_000;
 const signInFirst = 'Confirm your mobile number with an OTP to order.';
 
-/** Waiting orders are settled this often without the guest's page (sweep). */
-const SWEEP_EVERY_MS = 60_000;
+/** Waiting orders (and the tills' payments) are settled this often without their screen. */
+const SWEEP_EVERY_MS = 10_000;
 /** The guest's own page checks every few seconds: the sweep leaves an order to it this long. */
 const SWEEP_AFTER_MS = 90_000;
 /** Still unpaid this long after it was placed, an order is let go as the kiosk's Cancel does. */
-const GIVE_UP_AFTER_MS = 30 * 60_000;
+const GIVE_UP_AFTER_MS = PAYMENT_WINDOW_MS;
 /** One the sweep cannot settle (its gateway refusing it, say) stops being tried after this. */
 const SWEEP_WINDOW_MS = 24 * 60 * 60_000;
 /** A cancelled Razorpay order is asked again this long: an open checkout can still be paid. */
@@ -128,7 +128,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
     this.secret = config.getOrThrow<string>('JWT_ACCESS_SECRET');
   }
 
-  /** Settles waiting orders every minute, so a paid one is billed even after its guest left. */
+  /** Settles waiting orders every 10 s, so a paid one is billed even after its guest left. */
   onApplicationBootstrap() {
     // Integration tests settle orders through status() themselves; a timer would race them.
     if (this.config.get<string>('NODE_ENV') === 'test') return;
@@ -890,7 +890,8 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
   /**
    * Settles waiting orders without the guest's page, as status() does: billed once paid (so the
    * kitchen hears of it after the guest closed the page), closed once the payment ended, and let
-   * go as the kiosk's Cancel does when still unpaid after 30 minutes. Then Razorpay orders
+   * go as the kiosk's Cancel does when still unpaid after 3 minutes; the tills' payments the same
+   * (OnlinePaymentsService.cancelAbandoned). Then Razorpay orders
    * cancelled lately are asked again. The oldest first, a batch per run, never two runs at once
    * here; an order that fails is logged and tried on the next run.
    *
@@ -927,6 +928,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
         }
       }
 
+      await this.onlinePayments.cancelAbandoned(now);
       await this.recheckCancelled(now);
     } catch (error) {
       logger.error({ err: error }, 'qr_order_sweep_failed');
