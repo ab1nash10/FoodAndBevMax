@@ -15,6 +15,8 @@ const sources: Record<ShiftMoneyRow['mode'], string> = {
   CARD: 'Confirmed by Pine Labs',
   CASH: 'Counted at shift end',
   OTHER: 'Typed in at the till',
+  // Not money yet: a Pay later bill counts in the shift that collects it, in the mode paid by.
+  PAY_LATER: 'Collected later at a till',
   UPI: 'Confirmed by Razorpay or PayU',
 };
 

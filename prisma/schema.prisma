@@ -103,6 +103,8 @@ enum PaymentMode {
   UPI
   CASH
   OTHER
+  /// A room order billed now and paid later at a till (the user, 2026-11-26): see collected*.
+  PAY_LATER
 }
 
 /// Where a guest order came from.
@@ -885,6 +887,13 @@ model RestaurantOrder {
   createdBy           String?       @map("created_by") @db.Uuid
   /// The cashier's shift it was billed in.
   shiftId             String?       @map("shift_id") @db.Uuid
+  /// A Pay later bill's payment, taken later at a till: how, its reference, when, by whom, and
+  /// the shift whose money it counts in (the collecting counter's). Null while it is due.
+  collectedMode       PaymentMode?  @map("collected_mode")
+  collectedReference  String?       @map("collected_reference")
+  collectedAt         DateTime?     @map("collected_at")
+  collectedBy         String?       @map("collected_by") @db.Uuid
+  collectedShiftId    String?       @map("collected_shift_id") @db.Uuid
 
   counter       Counter?              @relation(fields: [counterId], references: [id], onDelete: Restrict)
   shift         CounterShift?         @relation(fields: [shiftId], references: [id], onDelete: Restrict)
@@ -902,6 +911,7 @@ model RestaurantOrder {
   @@index([restaurantId, status, placedAt])
   @@index([counterId, businessDate])
   @@index([shiftId])
+  @@index([collectedShiftId])
   @@map("restaurant_orders")
 }
 
@@ -957,11 +967,11 @@ model CounterShift {
   note            String?
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
-  counter       Counter           @relation(fields: [counterId], references: [id])
-  hospital      Hospital          @relation(fields: [hospitalId], references: [id])
-  orders        RestaurantOrder[]
-  takenOverFrom CounterShift?     @relation("ShiftHandover", fields: [takenOverFromId], references: [id])
-  takenOverBy   CounterShift?     @relation("ShiftHandover")
+  counter        Counter              @relation(fields: [counterId], references: [id])
+  hospital       Hospital             @relation(fields: [hospitalId], references: [id])
+  orders         RestaurantOrder[]
+  takenOverFrom  CounterShift?        @relation("ShiftHandover", fields: [takenOverFromId], references: [id])
+  takenOverBy    CounterShift?        @relation("ShiftHandover")
   reconciliation ShiftReconciliation?
 
   @@index([counterId, status])

@@ -32,6 +32,37 @@ export interface ShiftBill {
   paymentMode: PaymentMode | null;
 }
 
+/** A bill as loaded for a shift: also when a Pay later one was collected, and in which shift. */
+export interface LoadedShiftBill extends ShiftBill {
+  collectedMode: PaymentMode | null;
+  collectedShiftId: string | null;
+  shiftId: string | null;
+}
+
+/**
+ * A shift's bills for its money: those billed in it (a Pay later one, still due there, is no
+ * money), and the Pay later bills collected in it, as sales in the mode they were paid by.
+ */
+export function shiftBills(shiftId: string, bills: LoadedShiftBill[]): ShiftBill[] {
+  const sale = ({
+    collectedMode: _mode,
+    collectedShiftId: _shift,
+    shiftId: _billedIn,
+    ...bill
+  }: LoadedShiftBill): ShiftBill => bill;
+
+  return [
+    ...bills.filter((bill) => bill.shiftId === shiftId).map(sale),
+    ...bills
+      .filter((bill) => bill.collectedShiftId === shiftId && bill.collectedMode)
+      .map((bill) => ({
+        ...sale(bill),
+        number: `${bill.number} (collected)`,
+        paymentMode: bill.collectedMode,
+      })),
+  ];
+}
+
 /** A payment a gateway confirmed at the till during the shift that no bill was made with. */
 export interface UnbilledPayment {
   amount: number;

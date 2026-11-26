@@ -140,7 +140,12 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
       ),
     );
     const restaurant = (name: string, hospitalId = fx.hospitalId) =>
-      h.ok('POST', '/restaurants', { hospitalId, restaurantName: `${name} ${run}` });
+      // In-room dining on: the till bills room orders only there.
+      h.ok('POST', '/restaurants', {
+        hospitalId,
+        inRoomDiningEnabled: true,
+        restaurantName: `${name} ${run}`,
+      });
     fx.restaurantId = idOf(await restaurant('Int Pos'));
     fx.categoryId = idOf(
       await h.ok('POST', '/item-categories', { categoryName: `Int Pos ${run}` }),
@@ -396,6 +401,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
         "id": "string",
         "restaurant": {
           "id": "string",
+          "inRoomDiningEnabled": "boolean",
           "legalName": null,
           "restaurantCode": "string",
           "restaurantName": "string",
@@ -459,6 +465,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
             "id": "string",
             "restaurant": {
               "id": "string",
+              "inRoomDiningEnabled": "boolean",
               "legalName": null,
               "restaurantCode": "string",
               "restaurantName": "string",
@@ -566,6 +573,9 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
           "cashierCode": "string",
           "cashierName": "string",
           "channel": "string",
+          "collectedAt": null,
+          "collectedMode": null,
+          "collectedReference": null,
           "complimentaryReason": null,
           "counter": {
             "counterCode": "string",
@@ -733,9 +743,9 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
     expect(messages).toMatchInlineSnapshot(`
       {
         "bad-mobile": "customerMobile must be a 10-digit Indian mobile number",
-        "credit": "paymentMode must be one of the following values: CARD, UPI, CASH, OTHER",
+        "credit": "paymentMode must be one of the following values: CARD, UPI, CASH, OTHER, PAY_LATER",
         "empty": "lines must contain at least 1 elements",
-        "no-mode": "paymentMode must be one of the following values: CARD, UPI, CASH, OTHER",
+        "no-mode": "paymentMode must be one of the following values: CARD, UPI, CASH, OTHER, PAY_LATER",
         "no-room": "roomNumber must be shorter than or equal to 50 characters, roomNumber must be a string",
         "zero": "lines.0.quantity must not be less than 1",
       }
@@ -1141,6 +1151,8 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
               "businessDate": "string",
               "cancelReason": null,
               "channel": "string",
+              "collectedAt": null,
+              "collectedMode": null,
               "complimentaryReason": "string",
               "counter": {
                 "counterCode": "string",
@@ -1216,6 +1228,9 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
           "cashierCode": "string",
           "cashierName": "string",
           "channel": "string",
+          "collectedAt": null,
+          "collectedMode": null,
+          "collectedReference": null,
           "complimentaryReason": null,
           "counter": {
             "counterCode": "string",
@@ -1410,6 +1425,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
             "id": "string",
             "restaurant": {
               "id": "string",
+              "inRoomDiningEnabled": "boolean",
               "legalName": null,
               "restaurantCode": "string",
               "restaurantName": "string",
@@ -1470,6 +1486,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
             "id": "string",
             "restaurant": {
               "id": "string",
+              "inRoomDiningEnabled": "boolean",
               "legalName": null,
               "restaurantCode": "string",
               "restaurantName": "string",
@@ -1542,10 +1559,10 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
       status: 'CLOSED',
     });
     expect((ended.data.countedCash as number) - (ended.data.expectedCash as number)).toBe(-13.5);
-    expect({
-      ...(ended.data.summary as Body),
-      byPaymentMode: byMode((ended.data.summary as Body).byPaymentMode),
-    }).toEqual(takings);
+    const { collected, ...shiftTakings } = ended.data.summary as Body;
+    expect({ ...shiftTakings, byPaymentMode: byMode(shiftTakings.byPaymentMode) }).toEqual(takings);
+    // No Pay later bill's payment was collected in this shift.
+    expect(collected).toEqual([]);
     expect(shape(ended.body)).toMatchInlineSnapshot(`
       {
         "data": {
@@ -1576,6 +1593,7 @@ describe.skipIf(!databaseUrl)('point of sale (integration)', { timeout: 30_000 }
               "amount": "number",
               "count": "number",
             },
+            "collected": [],
             "complimentary": {
               "amount": "number",
               "count": "number",

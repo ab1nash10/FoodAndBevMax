@@ -28,9 +28,9 @@ import { siteBusinessDate } from './pos-pricing';
 import {
   reasonRefusal,
   reconciliationStatus,
+  shiftBills,
   shiftMoney,
   type Reasons,
-  type ShiftBill,
   type UnbilledPayment,
 } from './shift-reconciliation';
 import { userNames } from './shifts';
@@ -50,6 +50,9 @@ type LoadedShift = Prisma.CounterShiftGetPayload<{ include: typeof shiftInclude 
 
 const billSelect = {
   billNumber: true,
+  // A Pay later bill counts in the shift that collected it (shiftBills).
+  collectedMode: true,
+  collectedShiftId: true,
   grandTotal: true,
   id: true,
   isComplimentary: true,
@@ -285,7 +288,10 @@ export class ShiftReconciliationService {
       Math.max(...shifts.map((shift) => (shift.closedAt ?? new Date()).valueOf())),
     );
     const [bills, payments, names] = await Promise.all([
-      client.restaurantOrder.findMany({ select: billSelect, where: { shiftId: { in: ids } } }),
+      client.restaurantOrder.findMany({
+        select: billSelect,
+        where: { OR: [{ shiftId: { in: ids } }, { collectedShiftId: { in: ids } }] },
+      }),
       // Taken at a till (by a cashier, not a guest's QR or the kiosk) with no bill made.
       client.onlinePayment.findMany({
         select: {
@@ -317,7 +323,7 @@ export class ShiftReconciliationService {
     return shifts.map((shift) =>
       toView(
         shift,
-        bills.filter((bill) => bill.shiftId === shift.id),
+        bills.filter((bill) => bill.shiftId === shift.id || bill.collectedShiftId === shift.id),
         payments.filter(
           (payment) =>
             payment.counterId === shift.counterId &&
@@ -344,15 +350,21 @@ function toView(
   names: Map<string, string>,
 ) {
   const { checks, money } = shiftMoney({
-    bills: bills.map((bill): ShiftBill => ({
-      amount: bill.grandTotal === null ? 0 : toNumber(bill.grandTotal),
-      cancelled: bill.status === OrderStatus.CANCELLED,
-      complimentary: bill.isComplimentary,
-      confirmed: bill.onlinePayment?.status === OnlinePaymentStatus.PAID,
-      id: bill.id,
-      number: bill.billNumber ?? bill.orderNumber,
-      paymentMode: bill.paymentMode,
-    })),
+    bills: shiftBills(
+      shift.id,
+      bills.map((bill) => ({
+        amount: bill.grandTotal === null ? 0 : toNumber(bill.grandTotal),
+        cancelled: bill.status === OrderStatus.CANCELLED,
+        collectedMode: bill.collectedMode,
+        collectedShiftId: bill.collectedShiftId,
+        complimentary: bill.isComplimentary,
+        confirmed: bill.onlinePayment?.status === OnlinePaymentStatus.PAID,
+        id: bill.id,
+        number: bill.billNumber ?? bill.orderNumber,
+        paymentMode: bill.paymentMode,
+        shiftId: bill.shiftId,
+      })),
+    ),
     countedCash: shift.countedCash === null ? null : toNumber(shift.countedCash),
     openingCash: toNumber(shift.openingCash),
     unbilled: payments.map((payment): UnbilledPayment => ({

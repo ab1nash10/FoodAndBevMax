@@ -155,6 +155,8 @@ describe.skipIf(!databaseUrl)('reports and dashboard (integration)', { timeout: 
 
     const restaurant = await ok('POST', '/restaurants', {
       hospitalId: fx.hospitalId,
+      // In-room dining on: its room bills are billed only there.
+      inRoomDiningEnabled: true,
       restaurantName: `Int Cafe ${run}`,
       storeId: fx.storeId,
     });

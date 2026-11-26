@@ -35,6 +35,7 @@ export const paymentModeLabels: Record<PaymentMode, string> = {
   CARD: 'Card',
   CASH: 'Cash',
   OTHER: 'Other',
+  PAY_LATER: 'Pay later',
   UPI: 'UPI',
 };
 

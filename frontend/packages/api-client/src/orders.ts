@@ -39,6 +39,18 @@ export const UNDELIVERED_REASONS = [
 
 export type UndeliveredReason = (typeof UNDELIVERED_REASONS)[number];
 
+/** An open room order on Room deliveries: where it is from, and who has it. */
+export type RoomDelivery = RestaurantOrder & { hospitalId: string; restaurantName: string };
+
+/** Room deliveries, for those who run them (stewards have My deliveries). */
+export interface RoomDeliveries {
+  /** Room orders handed over at the bed today. */
+  deliveredToday: number;
+  orders: RoomDelivery[];
+  /** Delivery Operators and the locations they work at: an order goes to one of its own. */
+  stewards: Array<{ employeeCode: string; hospitalIds: string[]; id: string; name: string }>;
+}
+
 /** One of a steward's room orders today: to take, delivered, or given back. */
 export type Delivery = RestaurantOrder & {
   deliveredAt: string | null;
@@ -86,7 +98,8 @@ export type PosChannel = 'COUNTER' | 'ROOM';
 /** What a bill or order can be: the till's channels, or TABLE (a dine-in table's QR order). */
 export type OrderChannel = PosChannel | 'TABLE';
 
-export type PaymentMode = 'CARD' | 'CASH' | 'OTHER' | 'UPI';
+/** PAY_LATER: a room order billed now, its payment collected later at a till (collected*). */
+export type PaymentMode = 'CARD' | 'CASH' | 'OTHER' | 'PAY_LATER' | 'UPI';
 
 export interface PosCounter {
   counterCode: string;
@@ -102,6 +115,8 @@ export interface PosCounter {
   id: string;
   restaurant: {
     id: string;
+    /** Takes room orders (In-room dining): the till offers Room only then. */
+    inRoomDiningEnabled: boolean;
     legalName: string | null;
     restaurantCode: string;
     restaurantName: string;
@@ -252,17 +267,32 @@ export interface OnlinePayment {
   status: 'CANCELLED' | 'EXPIRED' | 'PAID' | 'PENDING';
 }
 
-/** The bill an online payment is for: the server prices it. */
+/**
+ * The bill an online payment is for: the server prices it. Or, with orderId, a Pay later bill
+ * whose payment it is, for that bill's own total (no channel or lines).
+ */
 export type OnlinePaymentInput = Pick<
   PosBillInput,
-  | 'channel'
-  | 'counterId'
-  | 'customerMobile'
-  | 'customerName'
-  | 'employeeCode'
-  | 'employeeToken'
-  | 'lines'
-> & { provider: OnlinePaymentProvider };
+  'counterId' | 'customerMobile' | 'customerName' | 'employeeCode' | 'employeeToken'
+> &
+  Partial<Pick<PosBillInput, 'channel' | 'lines'>> & {
+    orderId?: string;
+    provider: OnlinePaymentProvider;
+  };
+
+/** A Pay later bill's payment, taken at a till: a mode (and reference), or a paid online one. */
+export interface PosCollectInput {
+  counterId: string;
+  onlinePaymentId?: string;
+  paymentMode?: Exclude<PaymentMode, 'PAY_LATER'>;
+  paymentReference?: string;
+}
+
+/** A Pay later bill's payment, once a till collected it; null while it is due. */
+export interface PosCollected {
+  collectedAt: string | null;
+  collectedMode: PaymentMode | null;
+}
 
 export interface PosBillLine {
   /** Staff discount on the line; taxableAmount is after it. */
@@ -285,8 +315,9 @@ export interface PosBillLine {
   unitPrice: number;
 }
 
-export interface PosBill {
+export interface PosBill extends PosCollected {
   bedNumber: string | null;
+  collectedReference: string | null;
   billNumber: string;
   businessDate: string;
   cancelledAt: string | null;
@@ -342,7 +373,7 @@ export interface PosBill {
   subtotal: number;
 }
 
-export interface PosBillSummary {
+export interface PosBillSummary extends PosCollected {
   billNumber: string;
   businessDate: string;
   cancelReason: string | null;
@@ -384,6 +415,8 @@ export interface PosBillListQuery extends ListQuery {
   from?: string;
   hospitalId?: string;
   isComplimentary?: boolean;
+  /** Pay later bills no till has collected yet. */
+  paymentDue?: boolean;
   paymentMode?: PaymentMode;
   restaurantId?: string;
   sortBy?: 'billNumber' | 'grandTotal' | 'placedAt';

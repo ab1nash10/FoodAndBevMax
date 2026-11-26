@@ -163,3 +163,42 @@ describe('amendRefusal', () => {
     );
   });
 });
+
+describe('Pay later room bills', () => {
+  const later = { ...paidCash, channel: 'ROOM' as const, paymentMode: 'PAY_LATER' as const };
+
+  it('are unpaid until collected, then paid when collected', () => {
+    expect(reportFacts(later)).toMatchObject({
+      finalStatus: 'Payment due',
+      paid: false,
+      paidAt: null,
+    });
+    expect(reportFacts({ ...later, collectedAt: at('18:30:00') })).toMatchObject({
+      finalStatus: 'Paid',
+      paid: true,
+      paidAt: at('18:30:00'),
+    });
+    // Cancelled before anything was collected: nothing to refund.
+    expect(reportFacts({ ...later, status: 'CANCELLED' }).refunded).toBe(false);
+  });
+
+  it('are collected at the till, never amended; nor is a bill amended to Pay later', () => {
+    const bill: AmendableBill = {
+      erpSent: false,
+      isComplimentary: false,
+      onlinePaid: false,
+      paymentMode: 'PAY_LATER',
+      paymentReference: null,
+      placedAt: at('13:59:30'),
+      status: 'COLLECTED',
+    };
+    const now = at('20:00:00');
+
+    expect(amendRefusal(bill, { paymentMode: 'CASH' }, now)).toBe(
+      'A Pay later bill’s payment is collected at the till (Bill history), not amended.',
+    );
+    expect(amendRefusal({ ...bill, paymentMode: 'CASH' }, { paymentMode: 'PAY_LATER' }, now)).toBe(
+      'Pay later is chosen when a room order is billed, not afterwards.',
+    );
+  });
+});

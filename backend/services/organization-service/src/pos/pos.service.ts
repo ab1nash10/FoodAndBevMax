@@ -33,6 +33,7 @@ import { addStock } from '../common/stock-balances';
 import { optionalText, toDateOnly, toNumber } from '../common/values';
 import type {
   CancelPosOrderDto,
+  CollectPaymentDto,
   CreatePosOrderDto,
   EmployeeLookupQueryDto,
   ListPosOrdersQueryDto,
@@ -102,6 +103,8 @@ const counterSelect = {
   restaurant: {
     select: {
       id: true,
+      // Whether it takes room orders: the till offers Room only then (quote() refuses the rest).
+      inRoomDiningEnabled: true,
       legalName: true,
       restaurantCode: true,
       restaurantName: true,
@@ -173,6 +176,10 @@ function toOrderResponse(
     cashierCode: cashier?.employeeCode ?? null,
     cashierName: cashier?.name ?? null,
     channel: order.channel,
+    // A Pay later bill's payment, once a till collected it; null while due.
+    collectedAt: order.collectedAt,
+    collectedMode: order.collectedMode,
+    collectedReference: order.collectedReference,
     complimentaryReason: order.complimentaryReason,
     counter: order.counter,
     customerMobile: order.customerMobile,
@@ -622,6 +629,27 @@ export class PosService {
     });
   }
 
+  /**
+   * The beds (and rooms) of the counter's location, as Rooms & tables holds them: a room order
+   * at the till goes to one of these, as a bed QR's order does. A restaurant's tables are not.
+   */
+  async beds(counterId: string) {
+    const counter = await this.findCounter(counterId);
+
+    // ponytail: every bed at once (about 600 at the largest location), searched on the till.
+    return this.prisma.room.findMany({
+      orderBy: { roomName: 'asc' },
+      select: { id: true, roomName: true },
+      take: 5000,
+      where: {
+        deletedAt: null,
+        hospitalId: counter.hospitalId,
+        isActive: true,
+        restaurantId: null,
+      },
+    });
+  }
+
   async findCounter(id: string, client: Client = this.prisma) {
     const counter = await client.counter.findFirst({
       select: counterSelect,
@@ -788,6 +816,14 @@ export class PosService {
       throw new ForbiddenException('You do not have access to bill room orders.');
     }
 
+    // Pay later (the user, 2026-11-26): a room order billed now, its payment collected later.
+    if (
+      dto.paymentMode === PaymentMode.PAY_LATER &&
+      (dto.channel !== OrderChannel.ROOM || dto.onlinePaymentId)
+    ) {
+      throw new BadRequestException('Pay later is for room orders only.');
+    }
+
     if (dto.isComplimentary && !context.permissions?.includes('POS_COMPLIMENTARY_APPROVE')) {
       throw new ForbiddenException('You cannot approve a complimentary meal.');
     }
@@ -838,6 +874,14 @@ export class PosService {
     dto: Pick<CreatePosOrderDto, 'channel' | 'employeeCode' | 'isComplimentary' | 'lines'>,
     now: Date,
   ) {
+    // Rooms are served only where In-room dining is on (the user, 2026-11-26): checked here, so
+    // neither a bill nor an online payment for one (quoteBill) gets past it.
+    if (dto.channel === OrderChannel.ROOM && !counter.restaurant.inRoomDiningEnabled) {
+      throw new BadRequestException(
+        `${counter.restaurant.restaurantName} does not take room orders: turn on In-room dining for it first.`,
+      );
+    }
+
     const menuIds = [...new Set(dto.lines.map((line) => line.menuId))];
     const menus = await client.restaurantMenu.findMany({
       include: { item: { select: { hsnCode: true, itemName: true } } },
@@ -1108,7 +1152,7 @@ export class PosService {
             : dto.paymentMode,
         paymentReference: online
           ? online.paidReference
-          : isComplimentary
+          : isComplimentary || dto.paymentMode === PaymentMode.PAY_LATER
             ? null
             : optionalText(dto.paymentReference),
         restaurantId: counter.restaurantId,
@@ -1440,6 +1484,109 @@ export class PosService {
     return this.staffDiscounts(restaurantId);
   }
 
+  /**
+   * Takes a Pay later bill's payment at a till (the user, 2026-11-26): in cash, by a typed mode
+   * where the counter takes none online, or with a gateway or card-machine payment made for it
+   * (for its total). Once, at a counter of the bill's location, into that counter's open shift,
+   * whose money counts it. The bill stays Pay later: the shift it was billed in took no money.
+   */
+  async collect(id: string, dto: CollectPaymentDto, context: ActorContext) {
+    await this.prisma.$transaction(async (tx) => {
+      const counter = await this.findCounter(dto.counterId, tx);
+      const bill = await tx.restaurantOrder.findFirst({
+        select: {
+          collectedAt: true,
+          grandTotal: true,
+          hospitalId: true,
+          paymentMode: true,
+          status: true,
+        },
+        where: { id, source: OrderSource.COUNTER },
+      });
+
+      if (!bill) throw new NotFoundException('Bill not found.');
+      if (bill.paymentMode !== PaymentMode.PAY_LATER) {
+        throw new ConflictException('This bill was paid when it was made: nothing to collect.');
+      }
+      if (bill.status === OrderStatus.CANCELLED) {
+        throw new ConflictException('This bill is cancelled: nothing to collect.');
+      }
+      if (bill.collectedAt)
+        throw new ConflictException('This bill’s payment is already collected.');
+      if (bill.hospitalId !== counter.hospitalId) {
+        throw new ConflictException('Collect it at a till of the bill’s own location.');
+      }
+      if (!dto.onlinePaymentId && (!dto.paymentMode || dto.paymentMode === PaymentMode.PAY_LATER)) {
+        throw new BadRequestException('Choose how the guest paid: cash, UPI, card or other.');
+      }
+
+      const openShift = await tx.counterShift.findFirst({
+        select: { id: true },
+        where: { counterId: counter.id, status: CounterShiftStatus.OPEN },
+      });
+
+      if (!openShift) {
+        throw new BadRequestException('Open a shift at this counter before collecting a payment.');
+      }
+      // As a bill: ending the shift takes this lock to count it.
+      await lockRow(tx, 'counter_shifts', openShift.id);
+
+      const amount = toNumber(bill.grandTotal ?? 0);
+      const online = dto.onlinePaymentId
+        ? await this.paidOnline(tx, counter.id, dto.onlinePaymentId, amount, `collect-${id}`)
+        : null;
+
+      if (!online) await this.requireOnlineProof(tx, counter, dto.paymentMode);
+
+      const mode = online
+        ? online.provider === 'PINELABS'
+          ? PaymentMode.CARD
+          : PaymentMode.UPI
+        : dto.paymentMode!;
+      const { count } = await tx.restaurantOrder.updateMany({
+        data: {
+          collectedAt: new Date(),
+          collectedBy: context.actorId ?? null,
+          collectedMode: mode,
+          collectedReference: online
+            ? online.paidReference
+            : mode === PaymentMode.CASH
+              ? null
+              : (optionalText(dto.paymentReference) ?? null),
+          collectedShiftId: openShift.id,
+        },
+        where: { collectedAt: null, id, status: { not: OrderStatus.CANCELLED } },
+      });
+
+      if (count === 0) {
+        throw new ConflictException('Someone just collected or cancelled this bill. Refresh it.');
+      }
+      if (online) {
+        // The payment is this bill's now: no other bill can be made with it.
+        await tx.onlinePayment.updateMany({
+          data: { orderId: id },
+          where: { id: online.id, orderId: null },
+        });
+      }
+
+      await this.auditLog.record(
+        {
+          action: 'PAYMENT_COLLECT',
+          actorId: context.actorId,
+          entityId: id,
+          entityName: 'restaurant_orders',
+          hospitalId: bill.hospitalId,
+          ipAddress: context.ipAddress,
+          newValue: { amount, collectedMode: mode, collectedShiftId: openShift.id },
+          summary: `Pay later payment of ${amount} collected by ${mode.toLowerCase()}`,
+        },
+        tx,
+      );
+    });
+
+    return this.detail(id);
+  }
+
   async detail(id: string) {
     const order = await this.prisma.restaurantOrder.findFirst({
       include: orderDetailInclude,
@@ -1472,6 +1619,13 @@ export class PosService {
       ...(query.counterId ? { counterId: query.counterId } : {}),
       ...(query.channel ? { channel: query.channel } : {}),
       ...(query.paymentMode ? { paymentMode: query.paymentMode } : {}),
+      ...(query.paymentDue
+        ? {
+            collectedAt: null,
+            paymentMode: PaymentMode.PAY_LATER,
+            status: { not: OrderStatus.CANCELLED },
+          }
+        : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.isComplimentary !== undefined ? { isComplimentary: query.isComplimentary } : {}),
       ...(query.from || query.to
@@ -1524,6 +1678,9 @@ export class PosService {
           orderNumber: true,
           paymentMode: true,
           paymentReference: true,
+          // A Pay later bill: due until a till collects it.
+          collectedAt: true,
+          collectedMode: true,
           placedAt: true,
           restaurant: { select: { id: true, restaurantName: true } },
           roomNumber: true,
@@ -1693,6 +1850,7 @@ export class PosService {
       const order = await tx.restaurantOrder.findFirst({
         select: {
           businessDate: true,
+          collectedShiftId: true,
           counterId: true,
           hospitalId: true,
           id: true,
@@ -1726,12 +1884,16 @@ export class PosService {
         );
       }
 
-      // An approved shift's money is final, like a closed day's.
+      // An approved shift's money is final, like a closed day's: the shift it was billed in, and
+      // the one a Pay later bill's payment was collected in.
+      const shiftIds = [order.shiftId, order.collectedShiftId].filter(
+        (shiftId): shiftId is string => Boolean(shiftId),
+      );
       if (
-        order.shiftId &&
+        shiftIds.length &&
         (await tx.shiftReconciliation.findFirst({
           select: { id: true },
-          where: { shiftId: order.shiftId, status: ShiftReconciliationStatus.APPROVED },
+          where: { shiftId: { in: shiftIds }, status: ShiftReconciliationStatus.APPROVED },
         }))
       ) {
         throw new ConflictException(

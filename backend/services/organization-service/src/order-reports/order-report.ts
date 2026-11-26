@@ -5,6 +5,8 @@ export interface ReportSource {
   acceptedAt: Date | null;
   cancelledAt: Date | null;
   channel: OrderChannel | null;
+  /** When a Pay later bill's payment was taken at a till; null while it is due. */
+  collectedAt?: Date | null;
   deliveredAt: Date | null;
   discountTotal: number;
   isComplimentary: boolean;
@@ -28,7 +30,9 @@ const reached = (status: OrderStatus, steps: OrderStatus[]) => steps.includes(st
  */
 export function reportFacts(order: ReportSource) {
   const cancelled = order.status === 'CANCELLED';
-  const paid = !order.isComplimentary && order.paymentMode !== null;
+  // A Pay later room bill is paid once a till collects it.
+  const due = order.paymentMode === 'PAY_LATER' && !order.collectedAt;
+  const paid = !order.isComplimentary && order.paymentMode !== null && !due;
 
   return {
     accepted:
@@ -37,14 +41,20 @@ export function reportFacts(order: ReportSource) {
     delivered: order.deliveredAt !== null || order.status === 'COLLECTED',
     deliveryMinutes: minutesBetween(order.readyAt, order.deliveredAt),
     discounted: order.discountTotal > 0,
-    finalStatus: cancelled ? 'Cancelled' : order.isComplimentary ? 'Complimentary' : 'Paid',
+    finalStatus: cancelled
+      ? 'Cancelled'
+      : order.isComplimentary
+        ? 'Complimentary'
+        : due
+          ? 'Payment due'
+          : 'Paid',
     ihc: order.isComplimentary,
     inRoom: order.channel === 'ROOM',
     kitchenMinutes: minutesBetween(order.acceptedAt, order.readyAt),
     online: order.onlinePaidAt !== null,
     orderMinutes: minutesBetween(order.placedAt, order.acceptedAt),
     paid,
-    paidAt: paid ? (order.onlinePaidAt ?? order.placedAt) : null,
+    paidAt: paid ? (order.onlinePaidAt ?? order.collectedAt ?? order.placedAt) : null,
     ready: order.readyAt !== null || reached(order.status, ['READY', 'COLLECTED']),
     refunded: cancelled && paid,
     totalMinutes: minutesBetween(order.placedAt, order.deliveredAt),
@@ -72,6 +82,7 @@ const modeLabels: Record<PaymentMode, string> = {
   CARD: 'Card',
   CASH: 'Cash',
   OTHER: 'Other',
+  PAY_LATER: 'Pay later',
   UPI: 'UPI',
 };
 
@@ -84,6 +95,9 @@ export function referenceFor(paymentMode: PaymentMode, reference?: string | null
 export function billRefusal(bill: AmendableBill, now: Date | number): string | null {
   if (bill.status === 'CANCELLED') return 'A cancelled bill cannot be amended.';
   if (bill.isComplimentary) return 'A complimentary bill has no payment mode to change.';
+  if (bill.paymentMode === 'PAY_LATER') {
+    return 'A Pay later bill’s payment is collected at the till (Bill history), not amended.';
+  }
   if (now.valueOf() - bill.placedAt.valueOf() > AMEND_WINDOW_MS) {
     return 'A bill can be amended only within 48 hours of billing.';
   }
@@ -108,6 +122,9 @@ export function amendRefusal(
   const refused = billRefusal(bill, now);
 
   if (refused) return refused;
+  if (change.paymentMode === 'PAY_LATER') {
+    return 'Pay later is chosen when a room order is billed, not afterwards.';
+  }
 
   const reference = referenceFor(change.paymentMode, change.paymentReference);
 

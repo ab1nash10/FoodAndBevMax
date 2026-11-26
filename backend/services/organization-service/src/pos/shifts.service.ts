@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   CounterShiftStatus,
+  OrderStatus,
   PaymentMode,
   Prisma,
   ShiftMode,
@@ -233,8 +234,18 @@ export class ShiftsService {
         where: { shiftId: id },
       }),
     );
-    const cashSales =
-      summary.byPaymentMode.find((entry) => entry.mode === PaymentMode.CASH)?.amount ?? 0;
+    // Pay later bills collected in this shift (billed here or earlier), in the mode paid by.
+    const collected = tally(
+      (
+        await tx.restaurantOrder.findMany({
+          select: { collectedMode: true, grandTotal: true, isComplimentary: true, status: true },
+          where: { collectedShiftId: id, status: { not: OrderStatus.CANCELLED } },
+        })
+      ).map(({ collectedMode, ...bill }) => ({ ...bill, paymentMode: collectedMode })),
+    );
+    const cashIn = (taken: typeof summary) =>
+      taken.byPaymentMode.find((entry) => entry.mode === PaymentMode.CASH)?.amount ?? 0;
+    const cashSales = cashIn(summary) + cashIn(collected);
     const ended = await tx.counterShift.update({
       data: {
         closedAt: new Date(),
@@ -244,7 +255,8 @@ export class ShiftsService {
         handoverStock: dto.handover ? await counterStockNow(tx, existing.counterId) : Prisma.DbNull,
         note: optionalText(dto.note) ?? null,
         status: dto.handover ? CounterShiftStatus.HANDED_OVER : CounterShiftStatus.CLOSED,
-        summary,
+        // Pay later payments taken in this shift, by mode: its money, not its sales.
+        summary: { ...summary, collected: collected.byPaymentMode },
       },
       where: { id },
     });

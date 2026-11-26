@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type OnlinePayment } from '@prisma/client';
 import { test } from 'vitest';
@@ -85,11 +85,15 @@ const location = {
   razorpayKeySecret: null,
 };
 
+/** A Pay later bill, as the till collects it: its total, location and whether still due. */
+let dueBill: Record<string, unknown> | null = null;
+
 function serviceWith(grandTotal = 105, settings = config, machines: Machine[] = []) {
   const payments: OnlinePayment[] = [];
   const queries: Array<{ where: Record<string, unknown> }> = [];
   const prisma = {
     hospital: { findFirst: () => location },
+    restaurantOrder: { findFirst: () => dueBill },
     counter: {
       findFirst: () => ({ posDeviceId: 'pos-device-1' }),
     },
@@ -414,4 +418,27 @@ test('the server cancels a till payment still waiting 30 s past its 3 minutes; o
 
   assert.equal(paidLate.status, 'PAID');
   assert.equal(audits.at(-1), 'RAZORPAY payment of 105 paid, but no till billed it: refund it');
+});
+
+test('a Pay later bill’s payment is started for its own total, while it is still due here', async () => {
+  // The menu would price it at 999 now: the bill's own total is what is owed.
+  const { service } = serviceWith(999);
+  link = { status: 'created' };
+  dueBill = {
+    collectedAt: null,
+    grandTotal: new Prisma.Decimal(150),
+    hospitalId: 'hospital-1',
+    paymentMode: 'PAY_LATER',
+    status: 'COLLECTED',
+  };
+  const collect = { counterId: 'counter-1', orderId: 'bill-1', provider: 'RAZORPAY' } as never;
+
+  assert.equal((await service.start(collect, {})).amount, 150);
+
+  dueBill = { ...dueBill, collectedAt: new Date() };
+  await assert.rejects(
+    service.start(collect, {}),
+    (error: unknown) => error instanceof ConflictException && /no payment due/.test(error.message),
+  );
+  dueBill = null;
 });

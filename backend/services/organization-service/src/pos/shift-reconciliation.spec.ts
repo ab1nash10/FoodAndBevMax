@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   reasonRefusal,
   reconciliationStatus,
+  shiftBills,
   shiftMoney,
   type ShiftBill,
   type ShiftMoneyInput,
@@ -169,4 +170,45 @@ test('reasons must cover every difference, from its list, with a note for Other'
     }),
     null,
   );
+});
+
+test('a shift’s money takes a Pay later bill when it is collected there, not when it is billed', () => {
+  const later = {
+    amount: 250,
+    cancelled: false,
+    collectedMode: null,
+    collectedShiftId: null,
+    complimentary: false,
+    confirmed: false,
+    id: 'due',
+    number: 'MAX/1',
+    paymentMode: 'PAY_LATER' as const,
+    shiftId: 'shift-1',
+  };
+  const bills = shiftBills('shift-1', [
+    later,
+    { ...later, amount: 100, id: 'cash', paymentMode: 'CASH' },
+    // Billed in an earlier shift, collected in this one.
+    {
+      ...later,
+      amount: 150,
+      collectedMode: 'CASH',
+      collectedShiftId: 'shift-1',
+      id: 'collected',
+      number: 'MAX/0',
+      shiftId: 'earlier',
+    },
+  ]);
+
+  assert.deepEqual(
+    bills.map((bill) => [bill.number, bill.paymentMode]),
+    [
+      ['MAX/1', 'PAY_LATER'],
+      ['MAX/1', 'CASH'],
+      ['MAX/0 (collected)', 'CASH'],
+    ],
+  );
+  const { money } = shiftMoney({ bills, countedCash: 750, openingCash: 500, unbilled: [] });
+  // 500 opening + 100 billed in cash + 150 collected in cash; the 250 still due is no money.
+  assert.deepEqual(money[0], { billed: 750, difference: 0, mode: 'CASH', received: 750 });
 });

@@ -39,7 +39,13 @@ const counter = {
   },
   hospitalId: 'hospital-1',
   id: 'counter-1',
-  restaurant: { id: 'restaurant-1', restaurantName: 'Cafe', staffDiscountApplicable: true },
+  restaurant: {
+    id: 'restaurant-1',
+    // Takes room orders (In-room dining on).
+    inRoomDiningEnabled: true,
+    restaurantName: 'Cafe',
+    staffDiscountApplicable: true,
+  },
   restaurantId: 'restaurant-1',
 };
 
@@ -118,6 +124,8 @@ function serviceWith(
     /** Batches the location still owes the vendor (ERP returns waiting): on hold. */
     owedBatches?: string[];
     payments?: Array<Record<string, unknown>>;
+    /** In-room dining off at the counter's restaurant: no room orders. */
+    roomDiningOff?: boolean;
     /** A Supervisor approved the shift's money check: its bills are final. */
     shiftApproved?: boolean;
     shiftEnded?: boolean;
@@ -153,7 +161,11 @@ function serviceWith(
       findFirst: () => ({
         ...counter,
         posDeviceId: 'device-1',
-        restaurant: { ...counter.restaurant, upiId: options.upiId ?? null },
+        restaurant: {
+          ...counter.restaurant,
+          inRoomDiningEnabled: !options.roomDiningOff,
+          upiId: options.upiId ?? null,
+        },
       }),
     },
     counterDayClose: {
@@ -288,6 +300,23 @@ function serviceWith(
           orders.find((order) => order.id === where.id)!,
           data,
         ),
+      // A collection: only onto a bill still due.
+      updateMany: ({
+        data,
+        where,
+      }: {
+        data: Record<string, unknown>;
+        where: { collectedAt?: null; id: string };
+      }) => {
+        const order = orders.find(
+          (entry) =>
+            entry.id === where.id &&
+            (where.collectedAt !== null || !entry.collectedAt) &&
+            entry.status !== 'CANCELLED',
+        );
+        if (order) Object.assign(order, data);
+        return { count: order ? 1 : 0 };
+      },
     },
     stockBalance: {
       create: ({ data }: { data: Balance }) => {
@@ -432,6 +461,24 @@ test('a room order is billed at the room price, and counter-only items are refus
     ),
     BadRequestException,
   );
+});
+
+test('a restaurant without In-room dining takes no room order: not billed, not sent for payment', async () => {
+  const { orders, service } = serviceWith({ roomDiningOff: true });
+  const roomCashier = { ...cashier, permissions: ['POS_ROOM_ORDER'] };
+  const roomBill = bill({ channel: 'ROOM', lines: [{ menuId: 'soup', quantity: 1 }] });
+  const refused = (error: unknown) =>
+    error instanceof BadRequestException &&
+    error.message === 'Cafe does not take room orders: turn on In-room dining for it first.';
+
+  await assert.rejects(service.createOrder(roomBill, roomCashier), refused);
+  assert.equal(orders.length, 0);
+  // Nor priced for an online payment, so no guest pays for a bill that cannot be made.
+  const atCounter = await service.findCounter('counter-1');
+  await assert.rejects(service.quoteBill(atCounter, roomBill), refused);
+  // Counter orders go on as before.
+  await service.createOrder(bill(), cashier);
+  assert.equal(orders.length, 1);
 });
 
 test('a counter bills only while a shift is open there', async () => {
@@ -1337,4 +1384,120 @@ test('a till whose restaurants or location were deleted is no till: the computer
     deleted.location = true;
   });
   assert.equal(noLocation.till, null);
+});
+
+test('the till offers the beds of its own location (Rooms & tables) for a room order', async () => {
+  const asked: Array<Record<string, unknown>> = [];
+  const prisma = {
+    counter: { findFirst: () => Promise.resolve(counter) },
+    room: {
+      findMany: (args: Record<string, unknown>) => {
+        asked.push(args);
+        return Promise.resolve([{ id: 'bed-1', roomName: 'SMT-ICU-1-6' }]);
+      },
+    },
+  };
+  const service = new PosService(
+    { record: () => Promise.resolve() } as unknown as AuditLogService,
+    prisma as unknown as PrismaService,
+  );
+
+  assert.deepEqual(await service.beds('counter-1'), [{ id: 'bed-1', roomName: 'SMT-ICU-1-6' }]);
+  // Active beds and rooms of the counter's location; a restaurant's tables are not beds.
+  assert.deepEqual(asked[0]?.where, {
+    deletedAt: null,
+    hospitalId: counter.hospitalId,
+    isActive: true,
+    restaurantId: null,
+  });
+});
+
+const roomCashier = { ...cashier, permissions: ['POS_ORDER_CREATE', 'POS_ROOM_ORDER'] };
+const payLater = (clientOrderId = 'till-later') =>
+  bill({
+    channel: 'ROOM',
+    clientOrderId,
+    lines: [{ menuId: 'soup', quantity: 1 }],
+    paymentMode: 'PAY_LATER',
+    paymentReference: 'ignored',
+  });
+
+test('Pay later is for room orders only: billed with nothing paid yet', async () => {
+  const { orders, service } = serviceWith();
+
+  const due = await service.createOrder(payLater(), roomCashier);
+
+  assert.equal(due.paymentMode, 'PAY_LATER');
+  assert.equal(orders[0]!.paymentReference, null);
+  assert.equal(orders[0]!.collectedAt ?? null, null);
+  await assert.rejects(
+    service.createOrder(bill({ clientOrderId: 'till-2', paymentMode: 'PAY_LATER' }), cashier),
+    (error: unknown) =>
+      error instanceof BadRequestException &&
+      error.message === 'Pay later is for room orders only.',
+  );
+});
+
+test('a Pay later bill is collected once, at a till of its location, into that till’s shift', async () => {
+  const { orders, service } = serviceWith();
+  const due = await service.createOrder(payLater(), roomCashier);
+  const paid = await service.createOrder(bill({ clientOrderId: 'till-2' }), cashier);
+  const at = { counterId: 'counter-1' };
+
+  await assert.rejects(
+    service.collect(paid.id, { ...at, paymentMode: 'CASH' }, cashier),
+    (error: unknown) =>
+      error instanceof ConflictException && /nothing to collect/.test(error.message),
+  );
+  // Pay later is how it was billed, not a way to pay it.
+  await assert.rejects(
+    service.collect(due.id, { ...at, paymentMode: 'PAY_LATER' }, cashier),
+    BadRequestException,
+  );
+  const stored = orders.find((order) => order.id === due.id)!;
+  stored.hospitalId = 'hospital-2';
+  await assert.rejects(
+    service.collect(due.id, { ...at, paymentMode: 'CASH' }, cashier),
+    (error: unknown) => error instanceof ConflictException && /own location/.test(error.message),
+  );
+  stored.hospitalId = 'hospital-1';
+
+  const collected = await service.collect(
+    due.id,
+    { ...at, paymentMode: 'CASH', paymentReference: 'x' },
+    cashier,
+  );
+
+  assert.equal(collected.collectedMode, 'CASH');
+  assert.equal(stored.collectedReference, null);
+  assert.equal(stored.collectedShiftId, 'shift-1');
+  assert.equal(stored.collectedBy, 'cashier-1');
+  assert.ok(stored.collectedAt);
+  // Still a Pay later bill: the shift it was billed in took no money for it.
+  assert.equal(stored.paymentMode, 'PAY_LATER');
+  await assert.rejects(
+    service.collect(due.id, { ...at, paymentMode: 'CASH' }, cashier),
+    (error: unknown) =>
+      error instanceof ConflictException && /already collected/.test(error.message),
+  );
+});
+
+test('a Pay later bill collected through the gateway takes that payment, for its total', async () => {
+  const payment = {
+    amount: decimal(150),
+    id: 'pay-1',
+    orderId: null as string | null,
+    paidReference: 'pay_X',
+    provider: 'RAZORPAY',
+    status: 'PAID',
+  };
+  const { orders, service } = serviceWith({ payments: [payment] });
+  const due = await service.createOrder(payLater(), roomCashier);
+
+  await service.collect(due.id, { counterId: 'counter-1', onlinePaymentId: 'pay-1' }, cashier);
+
+  const stored = orders.find((order) => order.id === due.id)!;
+  assert.equal(stored.collectedMode, 'UPI');
+  assert.equal(stored.collectedReference, 'pay_X');
+  assert.equal(payment.orderId, due.id);
 });

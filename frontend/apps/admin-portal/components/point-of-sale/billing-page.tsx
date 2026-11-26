@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Banknote,
+  Clock,
   CheckCircle2,
   CreditCard,
   History,
@@ -61,6 +62,7 @@ import {
   UpiQr,
   usePosCounter,
 } from './shared';
+import { BedPicker } from './bed-picker';
 import { OnlinePaymentDialog, providerLabels } from './online-payment-dialog';
 import { onlineProvider } from './payment-collection';
 import { ShiftChip, ShiftStartPanel } from './shift-controls';
@@ -77,9 +79,12 @@ const paymentIcons: Record<PaymentMode, LucideIcon> = {
   CARD: CreditCard,
   CASH: Banknote,
   OTHER: Wallet,
+  PAY_LATER: Clock,
   UPI: QrCode,
 };
 const paymentModes: PaymentMode[] = ['CASH', 'UPI', 'CARD', 'OTHER'];
+// A room order may also be paid later, collected from Bill history (the user, 2026-11-26).
+const roomPaymentModes: PaymentMode[] = [...paymentModes, 'PAY_LATER'];
 const allFoodTypes: FoodType[] = ['VEG', 'NON_VEG', 'EGGETARIAN'];
 const foodTypeLabels: Record<FoodType, string> = {
   EGGETARIAN: 'Egg',
@@ -192,11 +197,15 @@ export function BillingPageClient() {
   const { counter, counters, query: countersQuery, setCounterId } = usePosCounter();
   const { currentUser, hasPermission } = useAuth();
   // Operator access: without these the till bills counter orders only, never complimentary.
-  const canBillRooms = hasPermission('POS_ROOM_ORDER');
+  // Rooms also need the restaurant to deliver to them (In-room dining on).
+  const canBillRooms =
+    hasPermission('POS_ROOM_ORDER') && Boolean(counter?.restaurant.inRoomDiningEnabled);
   const canApproveComplimentary = hasPermission('POS_COMPLIMENTARY_APPROVE');
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const [channel, setChannel] = useState<PosChannel>('COUNTER');
+  const [chosenChannel, setChannel] = useState<PosChannel>('COUNTER');
+  // A counter whose restaurant takes no room orders bills counter orders, whatever was chosen.
+  const channel = canBillRooms ? chosenChannel : 'COUNTER';
   const [search, setSearch] = useState('');
   // null: the category tiles; ALL_ITEMS or a category's id: its items.
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -207,8 +216,10 @@ export function BillingPageClient() {
   useEffect(() => {
     cartRef.current = cart;
   }, [cart]);
+  // A room order's bed (Rooms & tables), kept as the room number, as a bed QR's order is.
   const [roomNumber, setRoomNumber] = useState('');
-  const [bedNumber, setBedNumber] = useState('');
+  // A new one starts the bed search again after each bill.
+  const [bedSearch, setBedSearch] = useState(0);
   const [instructions, setInstructions] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -222,7 +233,10 @@ export function BillingPageClient() {
   const [staffCode, setStaffCode] = useState('');
   const [isComplimentary, setIsComplimentary] = useState(false);
   const [complimentaryReason, setComplimentaryReason] = useState('');
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
+  const [chosenPaymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
+  // Pay later is a room order's only: back on the counter, cash.
+  const paymentMode =
+    chosenPaymentMode === 'PAY_LATER' && channel !== 'ROOM' ? 'CASH' : chosenPaymentMode;
   const [paymentReference, setPaymentReference] = useState('');
   // Cash the guest handed over, for the change due; never sent with the bill.
   const [cashReceived, setCashReceived] = useState(0);
@@ -432,7 +446,7 @@ export function BillingPageClient() {
   const collectsOnline = onlineVia !== null;
   const problems = [
     cart.length === 0 && 'Add at least one item.',
-    channel === 'ROOM' && !roomNumber.trim() && 'Enter the room number.',
+    channel === 'ROOM' && !roomNumber.trim() && 'Choose the bed.',
     customerMobile && !mobilePattern.test(customerMobile) && 'Customer mobile must be 10 digits.',
     employeeCode.trim() &&
       employee?.isError &&
@@ -453,7 +467,7 @@ export function BillingPageClient() {
   function resetBill() {
     setCart([]);
     setRoomNumber('');
-    setBedNumber('');
+    setBedSearch((search) => search + 1);
     setInstructions('');
     setCustomerMobile('');
     setCustomerName('');
@@ -576,7 +590,6 @@ export function BillingPageClient() {
 
     const order = {
       payload: {
-        bedNumber: channel === 'ROOM' ? bedNumber.trim() || undefined : undefined,
         channel,
         clientOrderId,
         complimentaryReason: isComplimentary ? complimentaryReason.trim() : undefined,
@@ -593,7 +606,10 @@ export function BillingPageClient() {
           quantity: line.quantity,
         })),
         paymentMode: isComplimentary ? undefined : paymentMode,
-        paymentReference: isComplimentary ? undefined : paymentReference.trim() || undefined,
+        paymentReference:
+          isComplimentary || paymentMode === 'PAY_LATER'
+            ? undefined
+            : paymentReference.trim() || undefined,
         roomNumber: channel === 'ROOM' ? roomNumber.trim() : undefined,
       } satisfies PosBillInput,
       summary: cart.map((line) => `${line.quantity} × ${line.item.itemName}`).join(', '),
@@ -827,27 +843,13 @@ export function BillingPageClient() {
             ))}
           </div>
         ) : null}
-        {channel === 'ROOM' ? (
-          <div className="flex gap-2">
-            <Input
-              aria-label="Room number"
-              className="h-9 w-32"
-              id="pos-room"
-              maxLength={20}
-              onChange={(event) => setRoomNumber(event.target.value)}
-              placeholder="Room no. *"
-              value={roomNumber}
-            />
-            <Input
-              aria-label="Bed number"
-              className="h-9 w-24"
-              id="pos-bed"
-              maxLength={20}
-              onChange={(event) => setBedNumber(event.target.value)}
-              placeholder="Bed"
-              value={bedNumber}
-            />
-          </div>
+        {channel === 'ROOM' && counterId ? (
+          <BedPicker
+            counterId={counterId}
+            key={bedSearch}
+            onChange={setRoomNumber}
+            value={roomNumber}
+          />
         ) : null}
         {/* Green when on, as the blue of a switch would vanish into the strip. */}
         <div
@@ -1252,7 +1254,7 @@ export function BillingPageClient() {
                 className="grid grid-cols-4 gap-1 rounded-control-lg bg-ds-subtle p-1"
                 role="group"
               >
-                {paymentModes.map((mode) => {
+                {(channel === 'ROOM' ? roomPaymentModes : paymentModes).map((mode) => {
                   const Icon = paymentIcons[mode];
 
                   return (
@@ -1260,6 +1262,8 @@ export function BillingPageClient() {
                       aria-pressed={paymentMode === mode}
                       className={cn(
                         'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-primary pointer-coarse:h-11',
+                        // A row of its own under the four ways to pay now.
+                        mode === 'PAY_LATER' && 'col-span-4',
                         paymentMode === mode
                           ? 'bg-ds-primary text-white shadow-md shadow-ds-primary/25'
                           : 'text-ds-text-2 hover:bg-ds-surface hover:text-ds-text',
@@ -1289,7 +1293,7 @@ export function BillingPageClient() {
                 // A counter with a card machine takes cards on it only: never typed in.
                 <p className="text-xs text-ds-text-3">Card machine · {cardMachine.name}</p>
               ) : null}
-              {paymentMode === 'CASH' || collectsOnline ? null : (
+              {paymentMode === 'CASH' || paymentMode === 'PAY_LATER' || collectsOnline ? null : (
                 <Input
                   aria-label="Payment reference"
                   className="h-9"
@@ -1581,8 +1585,10 @@ export function BillingPageClient() {
             <p className="text-sm text-ds-text-2">
               {completed.isComplimentary
                 ? 'Complimentary'
-                : `Paid by ${completed.paymentMode ? paymentModeLabels[completed.paymentMode] : '—'}`}
-              {completed.roomNumber ? ` · Room ${completed.roomNumber}` : ''}
+                : completed.paymentMode === 'PAY_LATER'
+                  ? 'Pay later: collect it in Bill history'
+                  : `Paid by ${completed.paymentMode ? paymentModeLabels[completed.paymentMode] : '—'}`}
+              {completed.roomNumber ? ` · Bed ${completed.roomNumber}` : ''}
             </p>
             <p className="text-sm text-ds-muted">
               Order number{' '}

@@ -36,6 +36,7 @@ const api = vi.hoisted(() => ({
   endPosShift: vi.fn<Client['endPosShift']>(),
   getCardMachine: vi.fn<Client['getCardMachine']>(),
   getPosMenu: vi.fn<Client['getPosMenu']>(),
+  listPosBeds: vi.fn<Client['listPosBeds']>(),
   listOnlinePaymentProviders: vi.fn<Client['listOnlinePaymentProviders']>(),
   listPosCounters: vi.fn<Client['listPosCounters']>(),
   lookupPosEmployee: vi.fn<Client['lookupPosEmployee']>(),
@@ -83,6 +84,7 @@ const counter = (patch: Partial<PosCounter> = {}): PosCounter => ({
   id: 'counter-1',
   restaurant: {
     id: 'r1',
+    inRoomDiningEnabled: true,
     legalName: null,
     restaurantCode: 'R1',
     restaurantName: 'Cafe Max',
@@ -161,6 +163,7 @@ beforeEach(() => {
   api.getPosMenu.mockImplementation(() =>
     reply({ counter: counter(), items: [sandwich, chai, omelette, thali] }),
   );
+  api.listPosBeds.mockImplementation(() => reply([]));
   api.listOnlinePaymentProviders.mockImplementation(() => reply([]));
   api.getCardMachine.mockImplementation(() => reply(null));
   api.createPosBill.mockImplementation(() => reply(savedBill()));
@@ -670,28 +673,111 @@ describe('what the till offers by the cashier’s rights', () => {
     expect(screen.queryByText('Complimentary meal')).not.toBeInTheDocument();
   });
 
-  it('bills a room with its room and bed, priced from the room menu', async () => {
+  it('bills a room order to a bed searched from the location’s beds, priced from the room menu', async () => {
     signedIn(['POS_SHIFT_MANAGE', 'POS_ROOM_ORDER']);
-    api.createPosBill.mockImplementation(() => reply(savedBill({ roomNumber: '412' })));
+    api.listPosBeds.mockImplementation(() =>
+      reply([
+        { id: 'b1', roomName: 'SMT-ICU-1-6' },
+        { id: 'b2', roomName: 'SMT-ICU-1-7' },
+        { id: 'b3', roomName: '1635-D' },
+      ]),
+    );
+    api.createPosBill.mockImplementation(() => reply(savedBill({ roomNumber: 'SMT-ICU-1-6' })));
     const { user } = renderScreen(<BillingPageClient />);
     await screen.findByRole('list', { name: 'Categories' });
 
     await user.click(screen.getByRole('button', { name: 'Room' }));
     expect(api.getPosMenu).toHaveBeenLastCalledWith('counter-1', 'ROOM');
+    // Only the bed: no room number to type.
+    expect(screen.queryByLabelText('Room number')).not.toBeInTheDocument();
     await addTwoSandwiches(user);
     await complete(user);
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter the room number.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose the bed.');
 
-    await user.type(screen.getByLabelText('Room number'), '412');
-    await user.type(screen.getByLabelText('Bed number'), 'B');
+    // Any case finds it, from the beds of this counter's location.
+    const bed = screen.getByRole('combobox', { name: 'Bed number' });
+    await user.type(bed, 'icu-1');
+    const matches = within(await screen.findByRole('listbox', { name: 'Matching beds' }));
+    expect(matches.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'SMT-ICU-1-6',
+      'SMT-ICU-1-7',
+    ]);
+    expect(api.listPosBeds).toHaveBeenCalledWith('counter-1');
+    await user.click(matches.getByRole('option', { name: 'SMT-ICU-1-6' }));
+    expect(bed).toHaveValue('SMT-ICU-1-6');
     await complete(user);
 
     expect(api.createPosBill).toHaveBeenCalledWith(
-      expect.objectContaining({ bedNumber: 'B', channel: 'ROOM', roomNumber: '412' }),
+      expect.objectContaining({ channel: 'ROOM', roomNumber: 'SMT-ICU-1-6' }),
     );
     expect(await screen.findByRole('dialog', { name: 'Bill completed' })).toHaveTextContent(
-      'Paid by Cash · Room 412',
+      'Paid by Cash · Bed SMT-ICU-1-6',
     );
+  });
+
+  it('bills a room order Pay later: nothing taken now, collected later from Bill history', async () => {
+    signedIn(['POS_SHIFT_MANAGE', 'POS_ROOM_ORDER']);
+    api.listPosBeds.mockImplementation(() => reply([{ id: 'b3', roomName: '1635-D' }]));
+    api.createPosBill.mockImplementation(() =>
+      reply(savedBill({ paymentMode: 'PAY_LATER', roomNumber: '1635-D' })),
+    );
+    const { user } = renderScreen(<BillingPageClient />);
+    await screen.findByRole('list', { name: 'Categories' });
+    const modes = () => within(screen.getByRole('group', { name: 'Payment mode' }));
+
+    // Counter orders are paid there and then: no Pay later.
+    expect(modes().queryByRole('button', { name: /Pay later/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Room' }));
+    await user.click(modes().getByRole('button', { name: /Pay later/ }));
+    await user.type(screen.getByRole('combobox', { name: 'Bed number' }), '1635-d{Enter}');
+    await addTwoSandwiches(user);
+    // Nothing to tender.
+    expect(screen.queryByText('RECEIVED')).not.toBeInTheDocument();
+    await complete(user);
+
+    expect(api.createPosBill).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'ROOM', paymentMode: 'PAY_LATER', roomNumber: '1635-D' }),
+    );
+    expect(await screen.findByRole('dialog', { name: 'Bill completed' })).toHaveTextContent(
+      'Pay later: collect it in Bill history · Bed 1635-D',
+    );
+  });
+
+  it('takes a typed bed only when it is on the list: Enter picks the first match', async () => {
+    signedIn(['POS_SHIFT_MANAGE', 'POS_ROOM_ORDER']);
+    api.listPosBeds.mockImplementation(() => reply([{ id: 'b3', roomName: '1635-D' }]));
+    const { user } = renderScreen(<BillingPageClient />);
+    await screen.findByRole('list', { name: 'Categories' });
+    await user.click(screen.getByRole('button', { name: 'Room' }));
+    const bed = screen.getByRole('combobox', { name: 'Bed number' });
+
+    await user.type(bed, '9999');
+    expect(await screen.findByText('No bed here matches “9999”.')).toBeInTheDocument();
+    await addTwoSandwiches(user);
+    await complete(user);
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose the bed.');
+
+    await user.clear(bed);
+    await user.type(bed, '1635-d{Enter}');
+    expect(bed).toHaveValue('1635-D');
+  });
+
+  it('offers Room only where the restaurant has In-room dining on', async () => {
+    signedIn(['POS_SHIFT_MANAGE', 'POS_ROOM_ORDER']);
+    api.listPosCounters.mockImplementation(() =>
+      reply([
+        counter({
+          restaurant: { ...counter().restaurant, inRoomDiningEnabled: false },
+        }),
+      ]),
+    );
+    renderScreen(<BillingPageClient />);
+    await screen.findByRole('list', { name: 'Categories' });
+
+    // Room access, but this restaurant does not deliver to rooms: counter orders only.
+    expect(screen.queryByRole('group', { name: 'Order type' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Room' })).not.toBeInTheDocument();
+    expect(api.getPosMenu).toHaveBeenLastCalledWith('counter-1', 'COUNTER');
   });
 
   it('makes a complimentary bill only with a reason, and with no payment', async () => {

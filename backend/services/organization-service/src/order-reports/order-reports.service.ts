@@ -47,6 +47,9 @@ const reportSelect = {
   complimentaryReason: true,
   counter: { select: { counterCode: true, counterName: true, posDeviceId: true } },
   createdBy: true,
+  // A Pay later bill's payment, once a till collected it (paid from then; its mode).
+  collectedAt: true,
+  collectedMode: true,
   deliveredAt: true,
   discountTotal: true,
   grandTotal: true,

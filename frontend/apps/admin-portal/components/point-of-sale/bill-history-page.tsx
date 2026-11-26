@@ -1,15 +1,21 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { Button } from '@aahar/ui';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useState } from 'react';
 import type {
   OrderChannel,
   OrderStatus,
   PaymentMode,
   PosBillListQuery,
+  PosBillSummary,
   SortOrder,
 } from '@aahar/api-client';
+import { useAuth } from '@/components/auth-provider';
 import { ClearFiltersButton } from '@/components/clear-filters-button';
+import { CollectPaymentDialog } from '@/components/point-of-sale/collect-payment-dialog';
+import { useToast } from '@/components/toast-provider';
 import { AppPageHeader, ListPager, StatusChip, tableStyles } from '@/components/design-system';
 import {
   FilterField,
@@ -47,7 +53,10 @@ import { useListLimit } from '@/lib/list-limit';
 
 const billStatuses: OrderStatus[] = ['PLACED', 'PREPARING', 'READY', 'COLLECTED', 'CANCELLED'];
 const channels: OrderChannel[] = ['COUNTER', 'ROOM', 'TABLE'];
-const paymentModes: PaymentMode[] = ['CARD', 'UPI', 'CASH', 'OTHER'];
+const paymentModes: PaymentMode[] = ['CARD', 'UPI', 'CASH', 'OTHER', 'PAY_LATER'];
+// The payment filter's own choice: Pay later bills no till has collected yet.
+const DUE = 'DUE';
+const paymentChoices = [...paymentModes, DUE] as const;
 const sortFields = ['placedAt', 'billNumber', 'grandTotal'] as const;
 
 const placedDate = new Intl.DateTimeFormat('en-IN', {
@@ -77,11 +86,16 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
   const [to, setTo] = useUrlParam('to', today);
   const [counterFilter, setCounterFilter] = useUrlParam('counter');
   const [channelFilter, setChannelFilter] = useUrlParam<'' | OrderChannel>('channel', '', channels);
-  const [paymentFilter, setPaymentFilter] = useUrlParam<'' | PaymentMode>(
+  const [paymentFilter, setPaymentFilter] = useUrlParam<'' | PaymentMode | typeof DUE>(
     'payment',
     '',
-    paymentModes,
+    paymentChoices,
   );
+  const { hasPermission } = useAuth();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  // The Pay later bill whose payment is being collected at this till.
+  const [collecting, setCollecting] = useState<PosBillSummary | null>(null);
   const [statusFilter, setStatusFilter] = useUrlParam<'' | OrderStatus>('view', '', billStatuses);
   const [sortBy, setSortBy] = useUrlParam<(typeof sortFields)[number]>(
     'sortBy',
@@ -104,7 +118,8 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
     from,
     hospitalId: scopedHospitalId,
     isComplimentary: complimentary || undefined,
-    paymentMode: payment || undefined,
+    paymentDue: payment === DUE || undefined,
+    paymentMode: payment && payment !== DUE ? payment : undefined,
     search,
     to,
   };
@@ -244,7 +259,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
               <FilterField label="Payment mode">
                 <Select
                   onChange={(event) => {
-                    setPaymentFilter(event.target.value as '' | PaymentMode);
+                    setPaymentFilter(event.target.value as '' | PaymentMode | typeof DUE);
                     setPage(1);
                   }}
                   value={paymentFilter}
@@ -255,6 +270,7 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                       {paymentModeLabels[mode]}
                     </option>
                   ))}
+                  <option value={DUE}>Pay later, due</option>
                 </Select>
               </FilterField>
             )}
@@ -435,6 +451,31 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
                               {bill.paymentReference}
                             </p>
                           ) : null}
+                          {/* A Pay later room bill: due until a till collects it. */}
+                          {bill.paymentMode === 'PAY_LATER' && !isCancelled ? (
+                            bill.collectedMode ? (
+                              <p className="truncate text-[12px] text-ds-status-ok-fg">
+                                Collected · {paymentModeLabels[bill.collectedMode]}
+                              </p>
+                            ) : (
+                              <>
+                                <p className="text-[12px] font-semibold text-ds-status-pending-fg">
+                                  Due
+                                </p>
+                                {hasPermission('POS_ORDER_CREATE') ? (
+                                  <Button
+                                    className="mt-1"
+                                    onClick={() => setCollecting(bill)}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                  >
+                                    Collect payment
+                                  </Button>
+                                ) : null}
+                              </>
+                            )
+                          ) : null}
                         </td>
                       )}
                       <td className={tableStyles.td}>
@@ -471,6 +512,20 @@ export function BillHistoryPageClient({ complimentary = false }: { complimentary
         />
       </Panel>
       <PosBillPanel billId={billId || null} onClose={() => setUrlParams({ id: null })} />
+      {collecting ? (
+        <CollectPaymentDialog
+          bill={collecting}
+          onClose={() => setCollecting(null)}
+          onCollected={() => {
+            setCollecting(null);
+            showToast({
+              title: `Payment collected for ${collecting.billNumber}`,
+              variant: 'success',
+            });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.posBills() });
+          }}
+        />
+      ) : null}
     </section>
   );
 }

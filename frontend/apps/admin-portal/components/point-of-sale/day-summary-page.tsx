@@ -24,7 +24,8 @@ import { RefreshButton } from '@/components/list-toolbar';
 import { useUrlParam } from '@/lib/use-url-state';
 import { cn } from '@/lib/utils';
 
-const paymentModes: PaymentMode[] = ['CARD', 'UPI', 'CASH', 'OTHER'];
+// Pay later: room bills billed that day whose payment a till collects later.
+const paymentModes: PaymentMode[] = ['CARD', 'UPI', 'CASH', 'OTHER', 'PAY_LATER'];
 
 function modeTotals(summary: PosDaySummary) {
   return paymentModes.map(

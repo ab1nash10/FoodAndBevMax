@@ -18,11 +18,13 @@ import { Throttle } from '@nestjs/throttler';
 import { getActorId, getIpAddress, type RequestContextLike } from '../common/request-context';
 import {
   CancelPosOrderDto,
+  CollectPaymentDto,
   CreatePosOrderDto,
   EnrollTillDto,
   EmployeeLookupQueryDto,
   ListPosOrdersQueryDto,
   PosCountersQueryDto,
+  PosBedsQueryDto,
   PosMenuQueryDto,
   PosSummaryQueryDto,
   SendStaffOtpDto,
@@ -144,6 +146,15 @@ export class PosController {
     };
   }
 
+  @Get('beds')
+  @RequireTill({ from: 'query', kind: 'counterId' })
+  @Permissions('POS_ORDER_CREATE')
+  @ApiOperation({ summary: "The beds of a counter's location (Rooms & tables), for room orders" })
+  @ApiOkResponse({ description: 'Beds returned.' })
+  async beds(@Query() query: PosBedsQueryDto) {
+    return { data: await this.pos.beds(query.counterId), message: 'Success', success: true };
+  }
+
   @Get('menu')
   @RequireTill({ from: 'query', kind: 'counterId' })
   @Permissions('POS_ORDER_VIEW')
@@ -235,6 +246,28 @@ export class PosController {
   ) {
     return {
       data: await this.pos.cancel(id, body, {
+        actorId: getActorId(user),
+        ipAddress: getIpAddress(request),
+        permissions: user?.permissions,
+      }),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Post('orders/:id/collect')
+  @RequireTill({ from: 'body', kind: 'counterId' })
+  @Permissions('POS_ORDER_CREATE')
+  @ApiOperation({ summary: "Collect a Pay later room bill's payment at this till" })
+  @ApiOkResponse({ description: 'Payment collected.' })
+  async collect(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CollectPaymentDto,
+    @CurrentUser() user: JwtRequestUser | undefined,
+    @Req() request: RequestContextLike,
+  ) {
+    return {
+      data: await this.pos.collect(id, body, {
         actorId: getActorId(user),
         ipAddress: getIpAddress(request),
         permissions: user?.permissions,

@@ -191,8 +191,12 @@ function serviceWith(
       findFirstOrThrow: () => ({ shiftMode: state.shiftMode ?? 'CASHIER', shiftTimings: timings }),
     },
     restaurantOrder: {
-      findMany: ({ where }: { where: { shiftId: string } }) =>
-        (state.orders ?? []).filter((order) => order.shiftId === where.shiftId),
+      findMany: ({ where }: { where: { collectedShiftId?: string; shiftId?: string } }) =>
+        (state.orders ?? []).filter((order: Record<string, unknown>) =>
+          where.collectedShiftId
+            ? order.collectedShiftId === where.collectedShiftId && order.status !== 'CANCELLED'
+            : order.shiftId === where.shiftId,
+        ),
     },
     stockBalance: {
       groupBy: () =>
@@ -440,4 +444,41 @@ test('a day closes only once, with no shift open, and never ahead of time', asyn
     service.closeDay({ counterId: counter.id, date: '2026-10-22' }, admin),
     (error: unknown) => error instanceof ConflictException && /already closed/.test(error.message),
   );
+});
+
+test('a shift’s expected cash takes the Pay later bills collected in it in cash, not those billed', async () => {
+  const order = (amount: number, extra: Record<string, unknown>) => ({
+    grandTotal: decimal(amount),
+    isComplimentary: false,
+    paymentMode: PaymentMode.CASH,
+    shiftId: 'shift-1',
+    status: OrderStatus.PLACED,
+    ...extra,
+  });
+  const { service } = serviceWith({
+    orders: [
+      order(100, {}),
+      // Billed here as Pay later, still due: no money yet.
+      order(250, { paymentMode: PaymentMode.PAY_LATER }),
+      // Billed in an earlier shift, collected here: in cash, and by UPI.
+      order(150, {
+        collectedMode: PaymentMode.CASH,
+        collectedShiftId: 'shift-1',
+        paymentMode: PaymentMode.PAY_LATER,
+        shiftId: 'earlier',
+      }),
+      order(80, {
+        collectedMode: PaymentMode.UPI,
+        collectedShiftId: 'shift-1',
+        paymentMode: PaymentMode.PAY_LATER,
+        shiftId: 'earlier',
+      }),
+    ],
+    shifts: [shift({ openingCash: decimal(500) })],
+  });
+
+  const ended = await service.end('shift-1', { countedCash: 750, handover: false }, cashier);
+
+  // 500 + 100 cash billed + 150 cash collected.
+  assert.equal(ended!.expectedCash, 750);
 });

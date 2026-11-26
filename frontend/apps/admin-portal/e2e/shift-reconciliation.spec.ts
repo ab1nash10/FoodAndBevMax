@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import signIn from './sign-in';
+
+// A fresh session: another spec's sign-in (pos.spec.ts) ends the one saved at the start.
+test.beforeAll(() => signIn());
 
 /**
  * POS → Reconciliation and Approvals (the user, 2026-11-26) in a real browser: both open from the

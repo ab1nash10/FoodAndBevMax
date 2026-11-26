@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '@aahar/logging';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OnlinePaymentStatus, type OnlinePayment } from '@prisma/client';
+import { OnlinePaymentStatus, OrderStatus, PaymentMode, type OnlinePayment } from '@prisma/client';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ActorContext } from '../common/request-context';
@@ -113,7 +118,10 @@ export class OnlinePaymentsService {
       );
     }
 
-    const { discountTotal, grandTotal } = await this.pos.quoteBill(counter, dto);
+    // A Pay later bill's payment is for its own total; any other, the bill priced here now.
+    const { discountTotal, grandTotal } = dto.orderId
+      ? await this.dueTotal(dto.orderId, counter.hospitalId)
+      : await this.pos.quoteBill(counter, { ...dto, channel: dto.channel!, lines: dto.lines! });
 
     // Checked, not used up: the bill made once it is paid uses it (PosService.billOrder).
     if (discountTotal > 0 && context.actorId && dto.employeeCode) {
@@ -180,6 +188,32 @@ export class OnlinePaymentsService {
     });
 
     return created;
+  }
+
+  /** A Pay later bill's total, while its payment is still due at this location. */
+  private async dueTotal(orderId: string, hospitalId: string) {
+    const bill = await this.prisma.restaurantOrder.findFirst({
+      select: {
+        collectedAt: true,
+        grandTotal: true,
+        hospitalId: true,
+        paymentMode: true,
+        status: true,
+      },
+      where: { id: orderId },
+    });
+
+    if (
+      !bill ||
+      bill.paymentMode !== PaymentMode.PAY_LATER ||
+      bill.collectedAt ||
+      bill.status === OrderStatus.CANCELLED ||
+      bill.hospitalId !== hospitalId
+    ) {
+      throw new ConflictException('This bill has no payment due at this location.');
+    }
+
+    return { discountTotal: 0, grandTotal: toNumber(bill.grandTotal ?? 0) };
   }
 
   /** Asks the provider while it is pending; paid or closed, it is settled for good. */

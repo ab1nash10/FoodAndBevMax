@@ -38,6 +38,7 @@ import type {
   PosBillInput,
   KioskMenu,
   PosBillListQuery,
+  PosCollectInput,
   PosBillSummary,
   PosChannel,
   PosCounter,
@@ -60,6 +61,7 @@ import type {
   StaffDiscountSettings,
   RestaurantOrder,
   Delivery,
+  RoomDeliveries,
   UndeliveredReason,
   PaidNotBilled,
   QrChannel,
@@ -507,6 +509,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
         method: 'POST',
       });
     },
+    /** The beds of the counter's location (Rooms & tables), for a room order's bed. */
+    listPosBeds(counterId: string) {
+      return client.request<ApiResponse<Array<{ id: string; roomName: string }>>>('/pos/beds', {
+        query: { counterId },
+      });
+    },
     getPosMenu(counterId: string, channel: PosChannel) {
       return client.request<ApiResponse<PosMenu>>('/pos/menu', { query: { channel, counterId } });
     },
@@ -589,6 +597,13 @@ export function createOrganizationApi(options: ApiClientOptions) {
     cancelOnlinePayment(id: string) {
       return client.request<ApiResponse<OnlinePayment>>(`/pos/online-payments/${id}/cancel`, {
         body: {},
+        method: 'POST',
+      });
+    },
+    /** Takes a Pay later bill's payment at this till, into its open shift. */
+    collectPosBillPayment(id: string, body: PosCollectInput) {
+      return client.request<ApiResponse<PosBill>>(`/pos/orders/${id}/collect`, {
+        body,
         method: 'POST',
       });
     },
@@ -731,6 +746,12 @@ export function createOrganizationApi(options: ApiClientOptions) {
         '/restaurant-orders/stewards',
         { query: { restaurantId } },
       );
+    },
+    /** Open room orders at a location (left out: all of the user's) and who has them. */
+    listRoomDeliveries(hospitalId?: string) {
+      return client.request<ApiResponse<RoomDeliveries>>('/restaurant-orders/room-deliveries', {
+        query: { hospitalId },
+      });
     },
     /** Gives an order to a steward, or (null) takes it off them. */
     setOrderSteward(id: string, stewardId: string | null) {

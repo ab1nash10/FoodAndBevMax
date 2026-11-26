@@ -130,6 +130,64 @@ beforeEach(() => {
   api.getPosBill.mockImplementation(() => reply(bill()));
 });
 
+describe('Pay later room bills in bill history', () => {
+  const later = (patch: Partial<PosBillSummary> = {}) =>
+    summary({
+      collectedAt: null,
+      collectedMode: null,
+      paymentMode: 'PAY_LATER',
+      paymentReference: null,
+      ...patch,
+    });
+
+  it('shows a due one as due, with Collect payment at the till', async () => {
+    signedIn(['POS_ORDER_CREATE']);
+    api.listPosBills.mockImplementation((query) =>
+      query?.limit === 0 ? list([], { total: 1 }) : list([later()]),
+    );
+    const { user } = renderScreen(<BillHistoryPageClient />);
+
+    const row = (await screen.findByRole('link', { name: 'PPG/2026/0042' })).closest('tr')!;
+    expect(row).toHaveTextContent('Pay laterDue');
+    await user.click(within(row).getByRole('button', { name: 'Collect payment' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Collect payment' })).toHaveTextContent(
+      'PPG/2026/0042',
+    );
+  });
+
+  it('shows a collected one with how it was paid, and nothing more to collect', async () => {
+    signedIn(['POS_ORDER_CREATE']);
+    api.listPosBills.mockImplementation((query) =>
+      query?.limit === 0
+        ? list([], { total: 1 })
+        : list([later({ collectedAt: '2026-11-19T09:00:00.000Z', collectedMode: 'CASH' })]),
+    );
+    renderScreen(<BillHistoryPageClient />);
+
+    const row = (await screen.findByRole('link', { name: 'PPG/2026/0042' })).closest('tr')!;
+    expect(row).toHaveTextContent('Pay laterCollected · Cash');
+    expect(within(row).queryByRole('button', { name: 'Collect payment' })).not.toBeInTheDocument();
+  });
+
+  it('finds the bills still due with the payment filter', async () => {
+    const { user } = renderScreen(<BillHistoryPageClient />);
+    await screen.findByRole('link', { name: 'PPG/2026/0042' });
+
+    await user.click(screen.getByRole('button', { name: /Filters/ }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /Payment mode/ }),
+      'Pay later, due',
+    );
+
+    await waitFor(() =>
+      expect(api.listPosBills).toHaveBeenLastCalledWith(
+        expect.objectContaining({ paymentDue: true, paymentMode: undefined }),
+      ),
+    );
+  });
+});
+
 describe('bill history', () => {
   it('lists today’s bills at the location with what a reviewer scans for', async () => {
     renderScreen(<BillHistoryPageClient />);

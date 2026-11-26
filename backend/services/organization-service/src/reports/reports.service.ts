@@ -352,6 +352,8 @@ export class ReportsService {
           },
         },
         onlinePayment: { select: { provider: true } },
+        // A Pay later bill is received in the mode a till collected it by.
+        collectedMode: true,
         paymentMode: true,
         paymentReference: true,
         placedAt: true,
@@ -438,10 +440,15 @@ export class ReportsService {
         operatorCode: order.createdBy
           ? (userById.get(order.createdBy)?.employeeCode ?? null)
           : null,
-        paidVia:
-          order.paymentMode === 'UPI' && order.onlinePayment
-            ? 'ONLINE'
-            : (order.paymentMode ?? null),
+        // A Pay later bill: as collected, else still due (no account received into yet).
+        paidVia: ((mode) =>
+          mode === 'PAY_LATER'
+            ? null
+            : mode === 'UPI' && order.onlinePayment
+              ? 'ONLINE'
+              : (mode ?? null))(
+          order.paymentMode === 'PAY_LATER' ? order.collectedMode : order.paymentMode,
+        ),
         paymentReference: order.paymentReference,
         placedAt: order.placedAt,
         restaurant: order.restaurant.restaurantName,

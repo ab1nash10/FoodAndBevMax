@@ -65,6 +65,12 @@ export class PosMenuQueryDto {
   channel!: OrderChannel;
 }
 
+export class PosBedsQueryDto {
+  @ApiProperty()
+  @IsUUID()
+  counterId!: string;
+}
+
 export class PosOrderLineDto {
   @ApiProperty({ description: 'The restaurant menu item.' })
   @IsUUID()
@@ -194,17 +200,59 @@ export class CreatePosOrderDto {
 
 /** The bill an online UPI payment is for: priced on the server, never by the till. */
 export class StartOnlinePaymentDto extends PickType(CreatePosOrderDto, [
-  'channel',
   'counterId',
   'customerMobile',
   'customerName',
   'employeeCode',
   'employeeToken',
-  'lines',
 ] as const) {
   @ApiProperty({ enum: OnlinePaymentProvider })
   @IsEnum(OnlinePaymentProvider)
   provider!: OnlinePaymentProvider;
+
+  @ApiPropertyOptional({
+    description: 'A Pay later bill whose payment this is: its own total, no lines needed.',
+  })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  // The bill to price, as CreatePosOrderDto's; left out for a Pay later bill's payment.
+  @ApiPropertyOptional({ enum: tillChannels })
+  @ValidateIf((dto: StartOnlinePaymentDto) => !dto.orderId)
+  @IsIn(tillChannels)
+  channel?: OrderChannel;
+
+  @ApiPropertyOptional({ type: [PosOrderLineDto] })
+  @ValidateIf((dto: StartOnlinePaymentDto) => !dto.orderId)
+  @ArrayMaxSize(100)
+  @ArrayMinSize(1)
+  @Type(() => PosOrderLineDto)
+  @ValidateNested({ each: true })
+  lines?: PosOrderLineDto[];
+}
+
+/** A Pay later bill's payment, taken at a till: in cash or a typed mode, or a paid online one. */
+export class CollectPaymentDto {
+  @ApiProperty({ description: 'The till counter collecting it: its open shift counts the money.' })
+  @IsUUID()
+  counterId!: string;
+
+  @ApiPropertyOptional({ enum: PaymentMode })
+  @ValidateIf((dto: CollectPaymentDto) => !dto.onlinePaymentId)
+  @IsEnum(PaymentMode)
+  paymentMode?: PaymentMode;
+
+  @ApiPropertyOptional({ description: 'Card slip, UPI reference or what "Other" was.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  paymentReference?: string;
+
+  @ApiPropertyOptional({ description: 'A gateway or card-machine payment made for this bill.' })
+  @IsOptional()
+  @IsUUID()
+  onlinePaymentId?: string;
 }
 
 export const posOrderSortFields = ['billNumber', 'grandTotal', 'placedAt'] as const;
@@ -255,6 +303,12 @@ export class ListPosOrdersQueryDto extends StatusCountsQueryDto {
   @IsOptional()
   @Transform(({ value }) => toOptionalBoolean(value))
   isComplimentary?: boolean;
+
+  @ApiPropertyOptional({ description: 'Pay later bills whose payment no till has collected yet.' })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => toOptionalBoolean(value))
+  paymentDue?: boolean;
 
   @ApiPropertyOptional({ enum: posOrderSortFields })
   @IsIn(posOrderSortFields)
