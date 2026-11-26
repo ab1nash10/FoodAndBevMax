@@ -544,6 +544,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
 
     const employee = await this.prisma.employee.findFirst({
       select: { employeeCode: true },
+      // case matters: none, a mobile is digits only.
       where: { deletedAt: null, isActive: true, mobile: { endsWith: mobile } },
     });
 
@@ -951,6 +952,7 @@ export class QrOrdersService implements OnApplicationBootstrap, OnApplicationShu
       take: SWEEP_BATCH,
       where: {
         // Neither can be cancelled at the provider: a Razorpay order, a PayU payment link.
+        // case matters: Razorpay's own id prefix, not a search.
         OR: [{ provider: 'RAZORPAY', providerRef: { startsWith: 'order_' } }, { provider: 'PAYU' }],
         status: OnlinePaymentStatus.CANCELLED,
         updatedAt: { gte: new Date(now - RECHECK_CANCELLED_MS) },

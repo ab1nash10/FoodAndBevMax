@@ -93,6 +93,7 @@ export async function encryptStoredSecrets(prisma: PrismaClient): Promise<number
     const table = (prisma as unknown as Record<string, SealedTable>)[model]!;
     const rows = await table.findMany({
       select: { id: true, updatedAt: true, ...Object.fromEntries(fields.map((f) => [f, true])) },
+      // case matters: the sealed-value prefix is exact, not a search.
       where: { OR: fields.map((field) => ({ [field]: { not: { startsWith: PREFIX } } })) },
     });
 
