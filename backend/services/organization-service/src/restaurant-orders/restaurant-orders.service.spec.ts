@@ -24,6 +24,8 @@ function setUp(row: Partial<OrderRow> = {}, matches = 1) {
   const queries: Array<Record<string, unknown>> = [];
   /** What a findMany returns (the steward's list). */
   const listed: unknown[] = [];
+  /** Each count's where. */
+  const counted: Array<Record<string, unknown>> = [];
   const prisma = {
     // Orders pushed with a restaurant's own order key.
     posDevice: { findFirst: () => Promise.resolve(null) },
@@ -52,6 +54,10 @@ function setUp(row: Partial<OrderRow> = {}, matches = 1) {
         queries.push(where);
         return Promise.resolve(listed);
       },
+      count: ({ where }: { where: Record<string, unknown> }) => {
+        counted.push(where);
+        return Promise.resolve(37);
+      },
       findUnique: () => Promise.resolve({ status: order.status }),
       update: ({ data }: { data: Record<string, unknown> }) => {
         updates.push(data);
@@ -76,7 +82,17 @@ function setUp(row: Partial<OrderRow> = {}, matches = 1) {
     timeSlot: { findMany: () => Promise.resolve([]) },
     user: {
       findFirst: () => Promise.resolve({ id: 'steward-1' }),
-      findMany: () => Promise.resolve([{ id: 'steward-1', name: 'Kunal' }]),
+      // A Delivery Operator at the order's location, also given a second one.
+      findMany: () =>
+        Promise.resolve([
+          {
+            assignedHospitals: [{ hospitalId: 'hospital-2' }],
+            employeeCode: 'EMP221',
+            hospitalId: 'hospital-1',
+            id: 'steward-1',
+            name: 'Kunal',
+          },
+        ]),
     },
   };
   const service = new RestaurantOrdersService(
@@ -84,7 +100,7 @@ function setUp(row: Partial<OrderRow> = {}, matches = 1) {
     prisma as unknown as PrismaService,
   );
 
-  return { conditions, listed, queries, service, updates };
+  return { conditions, counted, listed, queries, service, updates };
 }
 
 const admin = { actorId: 'admin' };
@@ -274,4 +290,59 @@ test('a steward is given only on the order as it was read: a change in between i
     (error) =>
       error instanceof ConflictException && /Someone else just updated/.test(error.message),
   );
+});
+
+test('room deliveries: every open room order at the location, who has it, and who could take it', async () => {
+  const { counted, listed, queries, service } = setUp();
+  listed.push(
+    {
+      hospitalId: 'hospital-1',
+      id: 'order-1',
+      orderNumber: '1042',
+      restaurant: { restaurantName: 'Cafe Max' },
+      stewardId: null,
+      undeliveredReason: 'Patient not in room',
+    },
+    {
+      hospitalId: 'hospital-1',
+      id: 'order-2',
+      orderNumber: '1043',
+      restaurant: { restaurantName: 'Cafe Max' },
+      stewardId: 'steward-1',
+      undeliveredReason: null,
+    },
+  );
+
+  const result = await service.roomDeliveries('hospital-1');
+
+  // Open room orders at the picked location only.
+  assert.equal(queries[0]?.channel, 'ROOM');
+  assert.equal(queries[0]?.hospitalId, 'hospital-1');
+  assert.deepEqual(queries[0]?.status, { in: ['PLACED', 'PREPARING', 'READY'] });
+  assert.deepEqual(
+    result.orders.map((order) => [order.orderNumber, order.restaurantName, order.stewardName]),
+    [
+      ['1042', 'Cafe Max', null],
+      ['1043', 'Cafe Max', 'Kunal'],
+    ],
+  );
+  // Today's room orders handed over at the bed, at the same location.
+  assert.equal(result.deliveredToday, 37);
+  assert.equal(counted[0]?.channel, 'ROOM');
+  assert.equal(counted[0]?.hospitalId, 'hospital-1');
+  assert.equal(counted[0]?.status, 'COLLECTED');
+  assert.ok(counted[0]?.deliveredAt);
+  // Who an order can be given to: Delivery Operators, with every location they work at.
+  assert.deepEqual(result.stewards, [
+    {
+      employeeCode: 'EMP221',
+      hospitalIds: ['hospital-1', 'hospital-2'],
+      id: 'steward-1',
+      name: 'Kunal',
+    },
+  ]);
+
+  // All locations in the header: every location the user may see (the scope narrows the rest).
+  await service.roomDeliveries(undefined);
+  assert.equal('hospitalId' in queries.at(-1)!, false);
 });

@@ -353,6 +353,60 @@ export class RestaurantOrdersService {
     return updated;
   }
 
+  /**
+   * Room deliveries for those who run them (admins, the kitchen; stewards have My deliveries):
+   * every open room order at the location (left out, every location the user may see), whose
+   * steward has it, the Delivery Operators an order could go to, and today's delivered count.
+   */
+  async roomDeliveries(hospitalId?: string) {
+    // Today in India time, for what was delivered.
+    const today = new Date(`${istDay(new Date())}T00:00:00+05:30`);
+    const where = { channel: OrderChannel.ROOM, ...(hospitalId ? { hospitalId } : {}) };
+    const [orders, deliveredToday] = await Promise.all([
+      this.prisma.restaurantOrder.findMany({
+        orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
+        select: {
+          ...kitchenSelect,
+          hospitalId: true,
+          restaurant: { select: { restaurantName: true } },
+        },
+        take: 300,
+        where: { ...where, placedAt: { gte: activeSince() }, status: { in: ACTIVE_STATUSES } },
+      }),
+      this.prisma.restaurantOrder.count({
+        where: { ...where, deliveredAt: { gte: today }, status: OrderStatus.COLLECTED },
+      }),
+    ]);
+    const hospitalIds = [...new Set(orders.map((order) => order.hospitalId))];
+    const stewards = hospitalIds.length
+      ? await this.prisma.user.findMany({
+          orderBy: { name: 'asc' },
+          select: {
+            assignedHospitals: { select: { hospitalId: true }, where: { deletedAt: null } },
+            employeeCode: true,
+            hospitalId: true,
+            id: true,
+            name: true,
+          },
+          where: { OR: hospitalIds.map(stewardsAt) },
+        })
+      : [];
+
+    return {
+      deliveredToday,
+      orders: (await this.withStewardNames(orders)).map(({ restaurant, ...order }) => ({
+        ...order,
+        restaurantName: restaurant.restaurantName,
+      })),
+      stewards: stewards.map(({ assignedHospitals, hospitalId: home, ...steward }) => ({
+        ...steward,
+        hospitalIds: [
+          ...new Set([home, ...assignedHospitals.map((assigned) => assigned.hospitalId)]),
+        ].filter(Boolean),
+      })),
+    };
+  }
+
   /** A steward's own room orders today, at any restaurant: ready ones to take, and what is coming. */
   async myDeliveries(stewardId: string) {
     // Today in India time, for what they delivered or gave back.

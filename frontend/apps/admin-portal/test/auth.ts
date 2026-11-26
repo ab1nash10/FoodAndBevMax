@@ -16,8 +16,13 @@ export function useAuth() {
     accessToken: 'test-token',
     currentUser: { id: 'user-1', name: 'Test Admin', roles: state.roles },
     dismissSessionNotice: vi.fn(),
+    // As the real one: "role:<name>" is held by anyone with that role.
     hasPermission: (wanted: string | string[]) =>
-      (Array.isArray(wanted) ? wanted : [wanted]).some((code) => state.permissions.includes(code)),
+      (Array.isArray(wanted) ? wanted : [wanted]).some(
+        (code) =>
+          state.permissions.includes(code) ||
+          (code.startsWith('role:') && state.roles.includes(code.slice(5))),
+      ),
     isAuthenticated: true,
     isReady: true,
     login: vi.fn(),

@@ -8,6 +8,13 @@ export class ListRestaurantOrdersQueryDto {
   restaurantId!: string;
 }
 
+export class RoomDeliveriesQueryDto {
+  @ApiPropertyOptional({ description: "The header's location; left out, all of the user's." })
+  @IsOptional()
+  @IsUUID()
+  hospitalId?: string;
+}
+
 export class UpdateOrderStatusDto {
   @ApiProperty({ enum: OrderStatus })
   @IsEnum(OrderStatus)

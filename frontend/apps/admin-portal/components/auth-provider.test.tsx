@@ -64,6 +64,8 @@ function Probe() {
         {auth.hasPermission(['USER_EDIT', 'ITEM_VIEW']) ? 'may see items' : 'may not see items'}
       </p>
       <p>{auth.hasPermission('USER_EDIT') ? 'may edit users' : 'may not edit users'}</p>
+      <p>{auth.hasPermission('role:Store Manager') ? 'a store manager' : 'not a store manager'}</p>
+      <p>{auth.hasPermission('role:Delivery Operator') ? 'a steward' : 'not a steward'}</p>
       <button
         onClick={() => auth.signIn({ accessToken: asha(), refreshToken: 'refresh-2' })}
         type="button"
@@ -110,6 +112,9 @@ describe('the signed-in session', () => {
     // Any one of a list of permissions is enough.
     expect(screen.getByText('may see items')).toBeInTheDocument();
     expect(screen.getByText('may not edit users')).toBeInTheDocument();
+    // "role:<name>" is held by anyone with that role (My deliveries is the steward role's).
+    expect(screen.getByText('a store manager')).toBeInTheDocument();
+    expect(screen.getByText('not a steward')).toBeInTheDocument();
     expect(refreshStoredSession).not.toHaveBeenCalled();
   });
 

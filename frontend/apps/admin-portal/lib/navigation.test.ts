@@ -24,9 +24,21 @@ test('lands each role on the screen its permissions point to', () => {
   expect(homeHref(holding('STOCK_VIEW', 'TRANSFER_VIEW'))).toBe('/dashboard');
   expect(homeHref(holding('USER_VIEW'))).toBe('/dashboard');
   // A steward (Delivery Operator) opens on the room orders given to them.
-  expect(homeHref(holding('ORDER_DELIVER', 'RESTAURANT_VIEW'))).toBe('/deliveries');
-  expect(canOpenPath('/deliveries', holding('ORDER_DELIVER'))).toBe(true);
+  const steward = holding('role:Delivery Operator', 'ORDER_DELIVER', 'RESTAURANT_VIEW');
+  expect(homeHref(steward)).toBe('/deliveries');
+  expect(canOpenPath('/deliveries', steward)).toBe(true);
   expect(canOpenPath('/deliveries', holding('ORDER_VIEW', 'ORDER_UPDATE'))).toBe(false);
+});
+
+test('My deliveries is a steward’s own screen; whoever runs orders gets Room deliveries', () => {
+  // Admins hold every permission, ORDER_DELIVER included: still not a steward's phone screen.
+  const admin = holding('ORDER_DELIVER', 'ORDER_VIEW', 'ORDER_STEWARD_ASSIGN');
+  const steward = holding('role:Delivery Operator', 'ORDER_DELIVER');
+
+  expect(canOpenPath('/deliveries', admin)).toBe(false);
+  expect(canOpenPath('/kitchen/deliveries', admin)).toBe(true);
+  expect(canOpenPath('/deliveries', steward)).toBe(true);
+  expect(canOpenPath('/kitchen/deliveries', steward)).toBe(false);
 });
 
 test('Reconciliation is for whoever gives shift reasons, Approvals for the Supervisor', () => {

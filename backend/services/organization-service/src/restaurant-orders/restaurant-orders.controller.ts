@@ -21,6 +21,7 @@ import {
   ListRestaurantOrdersQueryDto,
   MarkDeliveredDto,
   NotDeliveredDto,
+  RoomDeliveriesQueryDto,
   SetQrCounterDto,
   SetStewardDto,
   UpdateOrderStatusDto,
@@ -99,6 +100,21 @@ export class RestaurantOrdersController {
   async list(@Query() query: ListRestaurantOrdersQueryDto) {
     return {
       data: await this.orders.listActive(query.restaurantId),
+      message: 'Success',
+      success: true,
+    };
+  }
+
+  @Get('restaurant-orders/room-deliveries')
+  @ApiBearerAuth('access-token')
+  @Permissions('ORDER_VIEW')
+  @ApiOperation({
+    summary: 'Room deliveries: open room orders at a location, their stewards, delivered today',
+  })
+  @ApiOkResponse({ description: 'Room deliveries returned.' })
+  async roomDeliveries(@Query() query: RoomDeliveriesQueryDto) {
+    return {
+      data: await this.orders.roomDeliveries(query.hospitalId),
       message: 'Success',
       success: true,
     };

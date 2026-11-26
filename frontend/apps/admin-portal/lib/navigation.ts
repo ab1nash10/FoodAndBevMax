@@ -382,11 +382,19 @@ export const navigationGroups: NavGroup[] = [
         permissions: ['KITCHEN_STOCK_VIEW'],
       },
       {
-        // A steward's room orders, marked delivered at the bed.
+        // Every open room order and the steward taking it, for those who run them.
+        href: '/kitchen/deliveries',
+        icon: BedDouble,
+        label: 'Room deliveries',
+        permissions: ['ORDER_VIEW'],
+      },
+      {
+        // A steward's own room orders, marked delivered at the bed: the Delivery Operator role's
+        // phone screen. By role, not permission: admins hold ORDER_DELIVER too (they hold all).
         href: '/deliveries',
         icon: BedDouble,
         label: 'My deliveries',
-        permissions: ['ORDER_DELIVER'],
+        permissions: ['role:Delivery Operator'],
       },
     ],
     label: 'Kitchen',

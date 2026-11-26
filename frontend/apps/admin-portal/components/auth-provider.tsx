@@ -320,11 +320,15 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         return true;
       }
 
-      return requestedPermissions.some((requestedPermission) =>
-        permissions.includes(requestedPermission),
+      // "role:<name>" is held by anyone with that role: a screen that is one role's own, whatever
+      // permissions others hold (admins hold them all), such as a steward's My deliveries.
+      return requestedPermissions.some(
+        (requestedPermission) =>
+          permissions.includes(requestedPermission) ||
+          (requestedPermission.startsWith('role:') && roles.includes(requestedPermission.slice(5))),
       );
     },
-    [permissions],
+    [permissions, roles],
   );
   const isAuthenticated = Boolean(auth?.accessToken && currentUser);
 
