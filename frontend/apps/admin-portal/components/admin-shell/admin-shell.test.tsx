@@ -97,6 +97,15 @@ describe('the portal shell', () => {
     expect(pills.getByRole('link', { current: 'page' })).toHaveTextContent('Item & menu');
   });
 
+  it('keeps the menus from being selected or copied like page text', async () => {
+    const { user } = renderShell();
+
+    expect(screen.getByRole('banner')).toHaveClass('select-none');
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }));
+    expect(screen.getByRole('complementary')).toHaveClass('select-none');
+    expect(screen.getByRole('heading', { name: 'Items page' }).closest('.select-none')).toBeNull();
+  });
+
   it('gives a steward’s phone screen the whole phone: no top bar', () => {
     signedIn(['ORDER_DELIVER'], ['Delivery Operator']);
     at('/deliveries');

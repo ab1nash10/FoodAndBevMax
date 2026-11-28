@@ -65,7 +65,7 @@ export function MobileTabBar({
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-30 flex h-[68px] border-t border-ds-border bg-ds-surface pb-[env(safe-area-inset-bottom)] nav:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex h-[68px] select-none border-t border-ds-border bg-ds-surface pb-[env(safe-area-inset-bottom)] nav:hidden"
     >
       {items.map(({ group, href, icon: Icon, label }) => {
         const isActive = group === activeGroup;

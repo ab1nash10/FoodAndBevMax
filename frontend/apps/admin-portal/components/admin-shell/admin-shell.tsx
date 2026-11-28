@@ -207,7 +207,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
             type="button"
           />
           <aside
-            className="nav-scope drawer-in relative flex h-full w-[min(17rem,86vw)] flex-col bg-ds-surface text-ds-text shadow-xl"
+            className="nav-scope drawer-in relative flex h-full w-[min(17rem,86vw)] select-none flex-col bg-ds-surface text-ds-text shadow-xl"
             onTouchEnd={(event) => {
               const startX = swipeStartX.current;
               swipeStartX.current = null;
@@ -250,7 +250,8 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       <header
         // Solid, not blurred glass: a blur behind a bar that stays put is redrawn on every scroll
         // frame, and Zen (Firefox) scrolled "sticky as hell" under it (2026-11-22).
-        className="sticky top-0 z-30 border-b border-ds-border/70 bg-ds-surface"
+        // select-none: menus are clicked, not copied (a drag over them selected the labels).
+        className="sticky top-0 z-30 select-none border-b border-ds-border/70 bg-ds-surface"
         ref={trackHeaderHeight}
       >
         {/* The same width as <main>, so the logo, the modules, the tabs and the page title share
